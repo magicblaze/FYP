@@ -6,4 +6,4 @@ $db = "fypdb";
 $mysqli = mysqli_connect($hostname, $user, $pwd, $db)
 			or die (mysqli_connect_error());
 
-?>adasd
+?>
