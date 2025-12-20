@@ -135,13 +135,19 @@ $mainImg = '../design_image.php?id=' . (int)$design['designid'];
                     </div>
 
                     <div class="detail-stats">
-                        <div class="likes-count"><?= (int)$design['likes'] ?> Likes</div>
+                        <div class="likes-count">
+                            <span class="heart-icon" id="likeHeart" data-designid="<?= (int)$design['designid'] ?>">♡</span>
+                            <span id="likeCount"><?= (int)$design['likes'] ?></span> Likes
+                        </div>
                         <div><?= (int)$commentCount ?> Comments</div>
                     </div>
 
                     <div class="detail-actions">
                         <a class="btn btn-primary btn-lg" href="order.php?designid=<?= (int)$design['designid'] ?>" aria-label="Order this design now">
                             Order Now
+                        </a>
+                        <a class="btn btn-success btn-lg" href="../chat.php?designerid=<?= (int)$design['designerid'] ?>" aria-label="Chat with designer">
+                            Chat
                         </a>
                     </div>
 
@@ -189,9 +195,68 @@ $mainImg = '../design_image.php?id=' . (int)$design['designid'];
 
     <script>
     function handleBack() {
-            window.location.href = '../design_dashboard.php';
+        window.location.href = '../design_dashboard.php';
+    }
+
+    // Heart like functionality
+    document.addEventListener('DOMContentLoaded', function() {
+        const likeHeart = document.getElementById('likeHeart');
+        const likeCount = document.getElementById('likeCount');
+        const designId = likeHeart.getAttribute('data-designid');
+        
+        // Check if user has already liked this design
+        const likedDesigns = JSON.parse(localStorage.getItem('likedDesigns') || '{}');
+        if (likedDesigns[designId]) {
+            likeHeart.classList.add('liked');
+            likeHeart.textContent = '♥'; // Filled heart
         }
-    
+        
+        likeHeart.addEventListener('click', function(e) {
+            e.preventDefault();
+            
+            // Toggle liked state
+            const isLiked = likeHeart.classList.contains('liked');
+            
+            // Send AJAX request to update likes
+            fetch('../api/update_likes.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    designid: designId,
+                    action: isLiked ? 'unlike' : 'like'
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Update UI
+                    if (isLiked) {
+                        likeHeart.classList.remove('liked');
+                        likeHeart.textContent = '♡'; // Empty heart
+                        likedDesigns[designId] = false;
+                    } else {
+                        likeHeart.classList.add('liked');
+                        likeHeart.textContent = '♥'; // Filled heart
+                        likedDesigns[designId] = true;
+                    }
+                    
+                    // Update like count
+                    likeCount.textContent = data.likes;
+                    
+                    // Save to localStorage
+                    localStorage.setItem('likedDesigns', JSON.stringify(likedDesigns));
+                } else {
+                    alert('Failed to update like. Please try again.');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred. Please try again.');
+            });
+        });
+    });
     </script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>

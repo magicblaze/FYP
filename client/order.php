@@ -306,6 +306,69 @@ if (!empty($clientData['ctel'])) {
                                 <textarea class="form-control" id="requirements" name="requirements" rows="4" placeholder="Any specific requirements, preferences, or notes for the designer..." maxlength="255"></textarea>
                             </div>
                         </div>
+
+                        <!-- Payment Method Section -->
+                        <div class="order-section">
+                            <h3 class="section-title">Payment Method</h3>
+                            <div class="payment-methods">
+                                <div class="payment-option">
+                                    <input type="radio" id="alipayHK" name="payment_method" value="alipay_hk" checked>
+                                    <label for="alipayHK" class="payment-label">
+                                        <i class="fab fa-alipay"></i>
+                                        <span>AlipayHK</span>
+                                    </label>
+                                </div>
+                                <div class="payment-option">
+                                    <input type="radio" id="paypal" name="payment_method" value="paypal">
+                                    <label for="paypal" class="payment-label">
+                                        <i class="fab fa-paypal"></i>
+                                        <span>PayPal</span>
+                                    </label>
+                                </div>
+                                <div class="payment-option">
+                                    <input type="radio" id="fps" name="payment_method" value="fps">
+                                    <label for="fps" class="payment-label">
+                                        <i class="fas fa-mobile-alt"></i>
+                                        <span>FPS</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- AlipayHK Form -->
+                            <div class="payment-form" id="alipayHKForm">
+                                <h4 class="payment-form-title">AlipayHK Information</h4>
+                                <div class="mb-3">
+                                    <label for="alipayHKEmail" class="form-label">AlipayHK Account Email</label>
+                                    <input type="email" class="form-control" id="alipayHKEmail" name="alipay_hk_email" placeholder="your.email@example.com">
+                                </div>
+                                <div class="mb-3">
+                                    <label for="alipayHKPhone" class="form-label">AlipayHK Phone Number</label>
+                                    <input type="tel" class="form-control" id="alipayHKPhone" name="alipay_hk_phone" placeholder="+852 XXXX XXXX">
+                                </div>
+                            </div>
+
+                            <!-- PayPal Form -->
+                            <div class="payment-form" id="paypalForm" style="display: none;">
+                                <h4 class="payment-form-title">PayPal Information</h4>
+                                <div class="mb-3">
+                                    <label for="paypalEmail" class="form-label">PayPal Email</label>
+                                    <input type="email" class="form-control" id="paypalEmail" name="paypal_email" placeholder="your.email@example.com">
+                                </div>
+                            </div>
+
+                            <!-- FPS Form -->
+                            <div class="payment-form" id="fpsForm" style="display: none;">
+                                <h4 class="payment-form-title">FPS Information</h4>
+                                <div class="mb-3">
+                                    <label for="fpsId" class="form-label">FPS ID</label>
+                                    <input type="text" class="form-control" id="fpsId" name="fps_id" placeholder="Your FPS ID (Phone/Email/ID Number)">
+                                </div>
+                                <div class="mb-3">
+                                    <label for="fpsName" class="form-label">Account Holder Name</label>
+                                    <input type="text" class="form-control" id="fpsName" name="fps_name" placeholder="John Doe">
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Right Column - Order Summary -->
@@ -340,6 +403,33 @@ if (!empty($clientData['ctel'])) {
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        // Payment method form switching
+        document.addEventListener('DOMContentLoaded', function() {
+            const paymentRadios = document.querySelectorAll('input[name="payment_method"]');
+            const alipayHKForm = document.getElementById('alipayHKForm');
+            const paypalForm = document.getElementById('paypalForm');
+            const fpsForm = document.getElementById('fpsForm');
+
+            function updatePaymentForm() {
+                const selectedMethod = document.querySelector('input[name="payment_method"]:checked').value;
+                alipayHKForm.style.display = 'none';
+                paypalForm.style.display = 'none';
+                fpsForm.style.display = 'none';
+                if (selectedMethod === 'alipay_hk') {
+                    alipayHKForm.style.display = 'block';
+                } else if (selectedMethod === 'paypal') {
+                    paypalForm.style.display = 'block';
+                } else if (selectedMethod === 'fps') {
+                    fpsForm.style.display = 'block';
+                }
+            }
+
+            paymentRadios.forEach(radio => {
+                radio.addEventListener('change', updatePaymentForm);
+            });
+        });
+
+        // File upload functionality
         document.addEventListener('DOMContentLoaded', function() {
             const fileInput = document.getElementById('floorplanUpload');
             const uploadArea = document.getElementById('uploadArea');
