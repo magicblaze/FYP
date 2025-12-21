@@ -26,6 +26,8 @@ $stmt->execute();
 $product = $stmt->get_result()->fetch_assoc();
 if (!$product) { http_response_code(404); die('Product not found.'); }
 
+
+
 // Get other products from the same supplier
 $other_sql = "SELECT productid, pname, price FROM Product WHERE supplierid=? AND productid<>? LIMIT 6";
 $other_stmt = $mysqli->prepare($other_sql);
@@ -95,7 +97,37 @@ $mainImg = '../supplier/product_image.php?id=' . (int)$product['productid'];
             font-size: 1.8rem;
             color: #e74c3c;
             font-weight: 700;
+            margin-bottom: 1rem;
+        }
+
+        .product-stats {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
             margin-bottom: 1.5rem;
+            color: #7f8c8d;
+            font-size: 0.95rem;
+        }
+
+        .likes-count {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .heart-icon {
+            font-size: 1.5rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            user-select: none;
+        }
+
+        .heart-icon:hover {
+            transform: scale(1.2);
+        }
+
+        .heart-icon.liked {
+            color: #e74c3c;
         }
 
         .product-meta {
@@ -104,6 +136,7 @@ $mainImg = '../supplier/product_image.php?id=' . (int)$product['productid'];
             margin-bottom: 1.5rem;
             padding-bottom: 1.5rem;
             border-bottom: 1px solid #ecf0f1;
+            margin-top: 1.5rem;
         }
 
         .product-meta div {
@@ -142,6 +175,8 @@ $mainImg = '../supplier/product_image.php?id=' . (int)$product['productid'];
 
 
 
+
+
         @media (max-width: 768px) {
             .product-detail-wrapper {
                 flex-direction: column;
@@ -156,6 +191,11 @@ $mainImg = '../supplier/product_image.php?id=' . (int)$product['productid'];
 
             .product-panel {
                 padding: 1.5rem;
+            }
+
+            .product-stats {
+                flex-direction: column;
+                gap: 1rem;
             }
         }
     </style>
@@ -207,6 +247,13 @@ $mainImg = '../supplier/product_image.php?id=' . (int)$product['productid'];
 
                 <div class="product-title"><?= htmlspecialchars($product['pname']) ?></div>
                 <div class="product-price">HK$<?= number_format((float)$product['price']) ?></div>
+
+                <div class="product-stats">
+                    <div class="likes-count">
+                        <span class="heart-icon" id="likeHeart" data-productid="<?= (int)$product['productid'] ?>">♡</span>
+                        <span id="likeCount"><?= (int)$product['likes'] ?></span> Likes
+                    </div>
+                </div>
 
                 <div class="product-meta">
                     <div><i class="fas fa-store me-2"></i><strong>Supplier:</strong> <?= htmlspecialchars($product['sname']) ?></div>
@@ -262,6 +309,66 @@ $mainImg = '../supplier/product_image.php?id=' . (int)$product['productid'];
             window.location.href = '../design_dashboard.php';
         }
     }
+
+    // Heart like functionality
+    document.addEventListener('DOMContentLoaded', function() {
+        const likeHeart = document.getElementById('likeHeart');
+        const likeCount = document.getElementById('likeCount');
+        const productId = likeHeart.getAttribute('data-productid');
+        
+        // Check if user has already liked this product
+        const likedProducts = JSON.parse(localStorage.getItem('likedProducts') || '{}');
+        if (likedProducts[productId]) {
+            likeHeart.classList.add('liked');
+            likeHeart.textContent = '♥'; // Filled heart
+        }
+        
+        likeHeart.addEventListener('click', function(e) {
+            e.preventDefault();
+            
+            // Toggle liked state
+            const isLiked = likeHeart.classList.contains('liked');
+            
+            // Send AJAX request to update likes
+            fetch('../api/update_product_likes.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    productid: productId,
+                    action: isLiked ? 'unlike' : 'like'
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Update UI
+                    if (isLiked) {
+                        likeHeart.classList.remove('liked');
+                        likeHeart.textContent = '♡'; // Empty heart
+                        likedProducts[productId] = false;
+                    } else {
+                        likeHeart.classList.add('liked');
+                        likeHeart.textContent = '♥'; // Filled heart
+                        likedProducts[productId] = true;
+                    }
+                    
+                    // Update like count
+                    likeCount.textContent = data.likes;
+                    
+                    // Save to localStorage
+                    localStorage.setItem('likedProducts', JSON.stringify(likedProducts));
+                } else {
+                    alert('Failed to update like. Please try again.');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred. Please try again.');
+            });
+        });
+    });
     </script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>

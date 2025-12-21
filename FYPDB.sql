@@ -28,7 +28,7 @@ DROP TABLE IF EXISTS `Order`;
 DROP TABLE IF EXISTS `OrderProduct`;
 DROP TABLE IF EXISTS `Order_Contractors`;
 DROP TABLE IF EXISTS `Design`;
-DROP TABLE IF EXISTS `Comment`;
+DROP TABLE IF EXISTS `Comment_design`;
 DROP TABLE IF EXISTS `Schedule`;
 DROP TABLE IF EXISTS `ChatRoom`;
 DROP TABLE IF EXISTS `ChatRoomMember`;
@@ -137,21 +137,21 @@ INSERT INTO `Design` (`designid`,`design`,`price`,`tag`,`likes`,`designerid`) VA
 (1, 'design.jpg',500 , 'full house,modern','200',1),
 (2, 'design2.jpg',1000, 'kitchen remodel,minimalist','20',1);
 
--- Comment table
-CREATE TABLE `Comment` (
-  `commentid` int NOT NULL AUTO_INCREMENT,
+-- Comment_design table
+CREATE TABLE `Comment_design` (
+  `comment_designid` int NOT NULL AUTO_INCREMENT,
   `clientid` int NOT NULL,
   `content` varchar(255) DEFAULT NULL,
   `timestamp` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `designid` int NOT NULL,
-  PRIMARY KEY (`commentid`),
+  PRIMARY KEY (`comment_designid`),
   KEY `designid_pk2` (`designid`),
-  KEY `clientid_pk2` (`clientid`),
-  CONSTRAINT `Comment_designid_fk` FOREIGN KEY (`designid`) REFERENCES `Design` (`designid`),
-  CONSTRAINT `Comment_clientid_fk` FOREIGN KEY (`clientid`) REFERENCES `Client` (`clientid`)
+  KEY `comment_design_clientid_pk2` (`clientid`),
+  CONSTRAINT `fk_comment_design_designid` FOREIGN KEY (`designid`) REFERENCES `Design` (`designid`),
+  CONSTRAINT `fk_comment_design_clientid` FOREIGN KEY (`clientid`) REFERENCES `Client` (`clientid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-INSERT INTO `Comment` (`commentid`,`clientid`,`content`,`designid`) VALUES
+INSERT INTO `Comment_design` (`comment_designid`,`clientid`,`content`,`designid`) VALUES
 (1, 2,'abc',1),
 (2, 1,'123',1);
 
@@ -161,6 +161,7 @@ CREATE TABLE `Product` (
   `pname` varchar(255) NOT NULL,
   `image` varchar(500) DEFAULT NULL,
   `price` int NOT NULL,
+  `likes` int NOT NULL,
   `category` varchar(100) NOT NULL,
   `description` text,
   `size` varchar(100) DEFAULT NULL,
@@ -173,11 +174,11 @@ CREATE TABLE `Product` (
   CONSTRAINT `fk_product_supplier` FOREIGN KEY (`supplierid`) REFERENCES `Supplier` (`supplierid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-INSERT INTO `Product` (`productid`,`pname`, `image`, `price`, `category`, `description`, `size`, `color`, `material`, `supplierid`) VALUES
-(1, 'Modern Sofa', 'sofa.jpg', 2000, 'Furniture', 'A comfortable modern sofa.', '200cm*80cm', 'Grey, Blue', 'Fabric, Wood', 1),
-(2, 'Oak Chair', 'chair.jpg', 800, 'Furniture', 'Solid wood chair.', '50cm*50cm', 'Natural Wood', 'Oak', 1),
-(3, 'Brick', 'brick.jpg', 200, 'Material', 'A brick.', null, null, null, 1),
-(4, 'Wood', 'wood.jpg', 800, 'Material', 'A wood.', null, null, null, 2);
+INSERT INTO `Product` (`productid`,`pname`, `image`, `price`, `likes`, `category`, `description`, `size`, `color`, `material`, `supplierid`) VALUES
+(1, 'Modern Sofa', 'sofa.jpg', 2000, 100, 'Furniture', 'A comfortable modern sofa.', '200cm*80cm', 'Grey, Blue', 'Fabric, Wood', 1),
+(2, 'Oak Chair', 'chair.jpg', 800, 50, 'Furniture', 'Solid wood chair.', '50cm*50cm', 'Natural Wood', 'Oak', 1),
+(3, 'Brick', 'brick.jpg', 200, 25, 'Material', 'A brick.', null, null, null, 1),
+(4, 'Wood', 'wood.jpg', 800, 75, 'Material', 'A wood.', null, null, null, 2);
 
 
 -- Order table
