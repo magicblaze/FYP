@@ -1,11 +1,12 @@
 <?php
 // ==============================
-// File: detail.php (updated to use design_image.php)
+// File: design_detail.php (UPDATED for new like system)
+// Purpose: Display design details with new unified like system
 // ==============================
 require_once __DIR__ . '/../config.php';
 session_start();
 
-// 檢查用戶是否已登錄，如果未登錄則重定向到登錄頁面
+// Check if user is logged in
 if (empty($_SESSION['user'])) {
     $redirect = 'client/design_detail.php' . (isset($_GET['designid']) ? ('?designid=' . urlencode((string)$_GET['designid'])) : '');
     header('Location: ../login.php?redirect=' . urlencode($redirect));
@@ -33,7 +34,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['comment'])) {
         if ($clientId <= 0) {
             $err = 'Invalid session. Please sign in again.';
         } else {
-            $cstmt = $mysqli->prepare("INSERT INTO Comment (clientid, content, designid) VALUES (?,?,?)");
+            $cstmt = $mysqli->prepare("INSERT INTO Comment_design (clientid, content, designid) VALUES (?,?,?)");
             $cstmt->bind_param("isi", $clientId, $content, $designid);
             if ($cstmt->execute()) {
                 header("Location: design_detail.php?designid=".$designid);
@@ -48,7 +49,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['comment'])) {
 }
 
 $cmsql = "SELECT c.content, c.timestamp, u.cname
-          FROM Comment c
+          FROM Comment_design c
           JOIN Client u ON u.clientid = c.clientid
           WHERE c.designid = ?
           ORDER BY c.timestamp DESC";
@@ -66,6 +67,24 @@ $o->bind_param("ii", $design['designerid'], $designid);
 $o->execute();
 $others = $o->get_result();
 
+// Check if current user has liked this design
+$clientid = (int)($_SESSION['user']['clientid'] ?? 0);
+$liked = false;
+if ($clientid > 0) {
+    $like_check_sql = "SELECT COUNT(*) as count FROM DesignLike WHERE clientid = ? AND designid = ?";
+    $like_check_stmt = $mysqli->prepare($like_check_sql);
+    $like_check_stmt->bind_param("ii", $clientid, $designid);
+    $like_check_stmt->execute();
+    $like_result = $like_check_stmt->get_result()->fetch_assoc();
+    $liked = $like_result['count'] > 0;
+}
+
+// Determine back button destination based on referrer
+$backUrl = '../design_dashboard.php'; // Default destination
+if (isset($_GET['from']) && $_GET['from'] === 'my_likes') {
+    $backUrl = 'my_likes.php';
+}
+
 // Use DB-driven image endpoint
 $mainImg = '../design_image.php?id=' . (int)$design['designid'];
 ?>
@@ -78,6 +97,196 @@ $mainImg = '../design_image.php?id=' . (int)$design['designid'];
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="../css/styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .design-detail-wrapper {
+            display: flex;
+            gap: 2rem;
+            align-items: stretch;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem 1rem;
+        }
+
+        .design-image-wrapper {
+            flex: 0 0 auto;
+            width: 500px;
+            height: 500px;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .design-image-wrapper img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .design-panel {
+            flex: 0 0 400px;
+            background-color: white;
+            border-radius: 15px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .back-button {
+            margin-bottom: 1.5rem;
+        }
+
+        .design-title {
+            font-size: 1.8rem;
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 0.5rem;
+        }
+
+        .design-price {
+            font-size: 1.8rem;
+            color: #e74c3c;
+            font-weight: 700;
+            margin-bottom: 1rem;
+        }
+
+        .design-stats {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+            color: #7f8c8d;
+            font-size: 0.95rem;
+        }
+
+        .likes-count {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .heart-icon {
+            font-size: 1.5rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            user-select: none;
+            background: none;
+            border: none;
+            padding: 0;
+            color: #7f8c8d;
+        }
+
+        .heart-icon:hover {
+            transform: scale(1.2);
+        }
+
+        .heart-icon.liked {
+            color: #e74c3c;
+        }
+
+        .design-meta {
+            color: #7f8c8d;
+            font-size: 0.95rem;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid #ecf0f1;
+            margin-top: 1.5rem;
+        }
+
+        .design-meta div {
+            margin-bottom: 0.5rem;
+        }
+
+        .design-tags {
+            margin-bottom: 1.5rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid #ecf0f1;
+        }
+
+        .design-tags h6 {
+            color: #2c3e50;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .tag {
+            display: inline-block;
+            background-color: #ecf0f1;
+            color: #2c3e50;
+            padding: 0.3rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            margin-right: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .comments-section {
+            margin-top: 2rem;
+            padding-top: 2rem;
+            border-top: 2px solid #ecf0f1;
+        }
+
+        .comments-section h5 {
+            color: #2c3e50;
+            font-weight: 600;
+            margin-bottom: 1rem;
+        }
+
+        .comment-form {
+            margin-bottom: 1.5rem;
+        }
+
+        .comment-form textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .comment-item {
+            background-color: #f8f9fa;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+
+        .comment-author {
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 0.5rem;
+        }
+
+        .comment-time {
+            font-size: 0.85rem;
+            color: #95a5a6;
+        }
+
+        .comment-content {
+            color: #5a6c7d;
+            line-height: 1.6;
+            margin-top: 0.5rem;
+        }
+
+        @media (max-width: 768px) {
+            .design-detail-wrapper {
+                flex-direction: column;
+                gap: 1.5rem;
+            }
+
+            .design-image-wrapper {
+                width: 100%;
+                max-width: 400px;
+                margin: 0 auto;
+            }
+
+            .design-panel {
+                padding: 1.5rem;
+            }
+
+            .design-stats {
+                flex-direction: column;
+                gap: 1rem;
+            }
+        }
+    </style>
 </head>
 <body>
     <header class="bg-white shadow p-3 d-flex justify-content-between align-items-center">
@@ -99,91 +308,94 @@ $mainImg = '../design_image.php?id=' . (int)$design['designid'];
                             <i class="fas fa-user me-1"></i>Hello <?= htmlspecialchars($_SESSION['user']['name'] ?? 'User') ?>
                         </a>
                     </li>
+                    <li class="nav-item"><a class="nav-link" href="../client/my_likes.php">My Likes</a></li>
                     <li class="nav-item"><a class="nav-link" href="order_history.php">Order History</a></li>
+                    <li class="nav-item"><a class="nav-link" href="my_likes.php">My Likes</a></li>
                     <li class="nav-item"><a class="nav-link" href="../chat.php">Chatroom</a></li>
                     <li class="nav-item"><a class="nav-link" href="../logout.php">Logout</a></li>
                 <?php else: ?>
-                      <li class="nav-item"><a class="nav-link" href="../login.php">Login</a></li>>
+                    <li class="nav-item"><a class="nav-link" href="../login.php">Login</a></li>
                 <?php endif; ?>
             </ul>
         </nav>
     </header>
 
-    <main class="detail-main">
-        <div class="detail-container">
-            <div class="mb-2">
-                <button type="button" class="btn btn-light" onclick="handleBack()" aria-label="Back">
-                    ← Back
-                </button>
+    <main>
+        <div class="design-detail-wrapper">
+            <!-- Design Image -->
+            <div class="design-image-wrapper">
+                <img src="<?= htmlspecialchars($mainImg) ?>" alt="<?= htmlspecialchars($design['dname']) ?>">
             </div>
 
-            <div class="detail-content">
-                <div class="detail-image-section">
-                    <img src="<?= htmlspecialchars($mainImg) ?>" alt="Design image">
+            <!-- Design Information Panel -->
+            <div class="design-panel">
+                <div class="back-button">
+                    <button type="button" class="btn btn-light" onclick="window.location.href='<?= htmlspecialchars($backUrl) ?>'" aria-label="Back">
+                        ← Back
+                    </button>
                 </div>
-                <div class="detail-info-section">
-                    <div class="designer-info">
-                        <div class="designer-name"><?= htmlspecialchars($design['dname']) ?></div>
-                        <div class="price">$<?= number_format((float)$design['price'], 0) ?></div>
-                        <?php if (!empty($tags)): ?>
-                        <div class="mt-2">
-                            <?php foreach ($tags as $tg): ?>
-                                <span class="badge bg-light text-dark me-1"><?= htmlspecialchars($tg) ?></span>
-                            <?php endforeach; ?>
-                        </div>
-                        <?php endif; ?>
+
+                <div class="design-title"><?= htmlspecialchars($design['dname']) ?></div>
+                <div class="design-price">HK$<?= number_format((float)$design['price']) ?></div>
+
+                <div class="design-stats">
+                    <div class="likes-count">
+                        <button class="heart-icon <?= $liked ? 'liked' : '' ?>" id="likeHeart" data-designid="<?= (int)$design['designid'] ?>" title="Like this design">
+                            <?= $liked ? '♥' : '♡' ?>
+                        </button>
+                        <span id="likeCount"><?= (int)$design['likes'] ?></span> Likes
                     </div>
-
-                    <div class="detail-stats">
-                        <div class="likes-count">
-                            <span class="heart-icon" id="likeHeart" data-designid="<?= (int)$design['designid'] ?>">♡</span>
-                            <span id="likeCount"><?= (int)$design['likes'] ?></span> Likes
-                        </div>
-                        <div><?= (int)$commentCount ?> Comments</div>
-                    </div>
-
-                    <div class="detail-actions">
-                        <a class="btn btn-primary btn-lg" href="order.php?designid=<?= (int)$design['designid'] ?>" aria-label="Order this design now">
-                            Order Now
-                        </a>
-                        <a class="btn btn-success btn-lg" href="../chat.php?designerid=<?= (int)$design['designerid'] ?>" aria-label="Chat with designer">
-                            Chat
-                        </a>
-                    </div>
-
-                    <div class="detail-comments-section">
-                        <div class="comments-header">Comments</div>
-                        <?php if ($err): ?>
-                            <div class="alert alert-danger py-2"><?= htmlspecialchars($err) ?></div>
-                        <?php endif; ?>
-
-                        <div class="detail-comments-list">
-                            <?php if ($commentCount === 0): ?>
-                                <div class="detail-comment-text">No comments yet.</div>
-                            <?php endif; ?>
-                            <?php while ($c = $comments->fetch_assoc()): ?>
-                                <div class="detail-comment">
-                                    <strong><?= htmlspecialchars($c['cname']) ?>:</strong>
-                                    <div class="detail-comment-text"><?= htmlspecialchars($c['content']) ?></div>
-                                </div>
-                            <?php endwhile; ?>
-                        </div>
-
-                        <form method="post" class="comment-input-group" autocomplete="off">
-                            <div style="display:flex;gap:0.5rem">
-                                <input class="form-control form-control-lg" type="text" name="comment" placeholder="Write a comment..." maxlength="255">
-                                <button class="btn btn-success btn-lg" type="submit">Post</button>
-                            </div>
-                        </form>
-                    </div>
-
                 </div>
+
+                <div class="design-meta">
+                    <div><i class="fas fa-user me-2"></i><strong>Designer:</strong> <?= htmlspecialchars($design['dname']) ?></div>
+                </div>
+
+                <?php if (!empty($tags)): ?>
+                <div class="design-tags">
+                    <h6>Tags</h6>
+                    <?php foreach ($tags as $tag): ?>
+                        <span class="tag"><?= htmlspecialchars($tag) ?></span>
+                    <?php endforeach; ?>
+                </div>
+                <?php endif; ?>
             </div>
+        </div>
+
+        <!-- Comments Section -->
+        <div class="comments-section" style="max-width: 1200px; margin: 0 auto; padding: 0 1rem;">
+            <h5><i class="fas fa-comments me-2"></i>Comments (<?= $commentCount ?>)</h5>
+
+            <?php if (!empty($err)): ?>
+                <div class="alert alert-danger" role="alert"><?= htmlspecialchars($err) ?></div>
+            <?php endif; ?>
+
+            <!-- Comment Form -->
+            <form method="POST" class="comment-form">
+                <div class="mb-3">
+                    <textarea class="form-control" name="comment" placeholder="Share your thoughts about this design..." required></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary">Post Comment</button>
+            </form>
+
+            <!-- Comments List -->
+            <?php if ($commentCount > 0): ?>
+                <?php while ($comment = $comments->fetch_assoc()): ?>
+                    <div class="comment-item">
+                        <div class="comment-author"><?= htmlspecialchars($comment['cname']) ?></div>
+                        <div class="comment-time"><?= htmlspecialchars($comment['timestamp']) ?></div>
+                        <div class="comment-content"><?= htmlspecialchars($comment['content']) ?></div>
+                    </div>
+                <?php endwhile; ?>
+            <?php else: ?>
+                <p class="text-muted">No comments yet. Be the first to comment!</p>
+            <?php endif; ?>
         </div>
     </main>
 
-    <section class="detail-gallery" aria-label="This Designer's Other Designs">
-        <h3>This Designer's Other Designs</h3>
+    <?php if ($others->num_rows > 0): ?>
+    <section class="detail-gallery" aria-label="Other Designs from This Designer" style="max-width: 1200px; margin: 2rem auto; padding: 0 1rem;">
+        <h3 style="color: #2c3e50; font-weight: 600; margin-bottom: 1rem; font-size: 1.3rem;">Other Designs from <?= htmlspecialchars($design['dname']) ?></h3>
         <div class="detail-gallery-images">
             <?php while ($r = $others->fetch_assoc()): ?>
                 <a href="design_detail.php?designid=<?= (int)$r['designid'] ?>">
@@ -192,72 +404,47 @@ $mainImg = '../design_image.php?id=' . (int)$design['designid'];
             <?php endwhile; ?>
         </div>
     </section>
+    <?php endif; ?>
 
     <script>
-    function handleBack() {
-        window.location.href = '../design_dashboard.php';
-    }
+    // Heart like functionality - Updated for new system
+    document.getElementById('likeHeart').addEventListener('click', function(e) {
+        e.preventDefault();
+        
+        const designid = this.dataset.designid;
+        const heart = this;
+        
+        const formData = new FormData();
+        formData.append('action', 'toggle_like');
+        formData.append('type', 'design');
+        formData.append('id', designid);
 
-    // Heart like functionality
-    document.addEventListener('DOMContentLoaded', function() {
-        const likeHeart = document.getElementById('likeHeart');
-        const likeCount = document.getElementById('likeCount');
-        const designId = likeHeart.getAttribute('data-designid');
-        
-        // Check if user has already liked this design
-        const likedDesigns = JSON.parse(localStorage.getItem('likedDesigns') || '{}');
-        if (likedDesigns[designId]) {
-            likeHeart.classList.add('liked');
-            likeHeart.textContent = '♥'; // Filled heart
-        }
-        
-        likeHeart.addEventListener('click', function(e) {
-            e.preventDefault();
-            
-            // Toggle liked state
-            const isLiked = likeHeart.classList.contains('liked');
-            
-            // Send AJAX request to update likes
-            fetch('../api/update_likes.php', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    designid: designId,
-                    action: isLiked ? 'unlike' : 'like'
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    // Update UI
-                    if (isLiked) {
-                        likeHeart.classList.remove('liked');
-                        likeHeart.textContent = '♡'; // Empty heart
-                        likedDesigns[designId] = false;
-                    } else {
-                        likeHeart.classList.add('liked');
-                        likeHeart.textContent = '♥'; // Filled heart
-                        likedDesigns[designId] = true;
-                    }
-                    
-                    // Update like count
-                    likeCount.textContent = data.likes;
-                    
-                    // Save to localStorage
-                    localStorage.setItem('likedDesigns', JSON.stringify(likedDesigns));
+        fetch('../api/handle_like.php', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Update heart icon
+                if (data.liked) {
+                    heart.classList.add('liked');
+                    heart.textContent = '♥';
                 } else {
-                    alert('Failed to update like. Please try again.');
+                    heart.classList.remove('liked');
+                    heart.textContent = '♡';
                 }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('An error occurred. Please try again.');
-            });
+                // Update like count
+                document.getElementById('likeCount').textContent = data.likes;
+            } else {
+                alert('Error: ' + (data.message || 'Failed to update like'));
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred while updating the like.');
         });
     });
     </script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

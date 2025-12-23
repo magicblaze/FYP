@@ -33,6 +33,8 @@ DROP TABLE IF EXISTS `Schedule`;
 DROP TABLE IF EXISTS `ChatRoom`;
 DROP TABLE IF EXISTS `ChatRoomMember`;
 DROP TABLE IF EXISTS `Message`;
+DROP TABLE IF EXISTS `ProductLike`;
+DROP TABLE IF EXISTS `DesignLike`;
 
 -- Client table
 CREATE TABLE `Client` (
@@ -315,6 +317,37 @@ CREATE TABLE `Message` (
 INSERT INTO `Message` (`messageid`, `sender_type`, `sender_id`, `recipient_type`, `recipient_id`, `content`,`message_type`,`attachment`,`ChatRoomid`) VALUES
 (1, 'manager', 1, 'designer', 1, 'hi','text',null,2),
 (2, 'designer', 1, 'client', 1, 'hello','text',null,2);
+
+CREATE TABLE `ProductLike` (
+  `productlikeid` INT NOT NULL AUTO_INCREMENT,
+  `clientid` INT NOT NULL,
+  `productid` INT NOT NULL,
+  PRIMARY KEY (`productlikeid`),
+  UNIQUE KEY `unique_client_product` (`clientid`, `productid`),
+  KEY `idx_clientid` (`clientid`),
+  KEY `idx_productid` (`productid`),
+  CONSTRAINT `fk_productlike_clientid` FOREIGN KEY (`clientid`) REFERENCES `Client` (`clientid`) ON DELETE CASCADE,
+  CONSTRAINT `fk_productlike_productid` FOREIGN KEY (`productid`) REFERENCES `Product` (`productid`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO `ProductLike` (`productlikeid`, `clientid`, `productid`) VALUES
+(1, 1, 1),
+(2, 2, 2);
+
+CREATE TABLE `DesignLike` (
+  `designlikeid` INT NOT NULL AUTO_INCREMENT,
+  `clientid` INT NOT NULL,
+  `designid` INT NOT NULL,
+  PRIMARY KEY (`designlikeid`),
+  UNIQUE KEY `unique_client_design` (`clientid`, `designid`),
+  KEY `idx_clientid` (`clientid`),
+  KEY `idx_designid` (`designid`),
+  CONSTRAINT `fk_designlike_clientid` FOREIGN KEY (`clientid`) REFERENCES `Client` (`clientid`) ON DELETE CASCADE,
+  CONSTRAINT `fk_designlike_designid` FOREIGN KEY (`designid`) REFERENCES `Design` (`designid`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+INSERT INTO `DesignLike` (`designlikeid`, `clientid`, `designid`) VALUES
+(1, 1, 1),
+(2, 2, 2);
 
 
 -- Re-enable Foreign Key Checks

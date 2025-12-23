@@ -198,6 +198,7 @@ $orders = $stmt->get_result();
                             <i class="fas fa-user me-1"></i>Hello <?= htmlspecialchars($clientData['cname'] ?? $_SESSION['user']['name'] ?? 'User') ?>
                         </a>
                     </li>
+                    <li class="nav-item"><a class="nav-link" href="../client/my_likes.php">My Likes</a></li>
                     <li class="nav-item"><a class="nav-link active" href="../client/order_history.php">Order History</a></li>
                     <li class="nav-item"><a class="nav-link" href="../chat.php">Chatroom</a></li>
                     <li class="nav-item"><a class="nav-link" href="../logout.php">Logout</a></li>
