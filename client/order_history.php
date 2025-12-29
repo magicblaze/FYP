@@ -61,10 +61,13 @@ $orders = $stmt->get_result();
             margin-bottom: 1rem;
             border: 1px solid #ecf0f1;
             transition: all 0.3s ease;
+            cursor: pointer;
         }
         .order-card:hover {
             box-shadow: 0 4px 15px rgba(0,0,0,0.1);
             transform: translateY(-2px);
+            background: #ffffff;
+            border-color: #3498db;
         }
         .order-header {
             display: flex;
@@ -176,6 +179,23 @@ $orders = $stmt->get_result();
         .floor-plan-link:hover {
             text-decoration: underline;
         }
+        .view-details-btn {
+            display: inline-block;
+            margin-top: 0.75rem;
+            padding: 0.5rem 1rem;
+            background-color: #3498db;
+            color: white;
+            border-radius: 6px;
+            text-decoration: none;
+            font-size: 0.85rem;
+            font-weight: 500;
+            transition: background-color 0.3s ease;
+        }
+        .view-details-btn:hover {
+            background-color: #2980b9;
+            color: white;
+            text-decoration: none;
+        }
     </style>
 </head>
 <body>
@@ -230,7 +250,7 @@ $orders = $stmt->get_result();
                         $statusClass = 'status-cancelled';
                     }
                     ?>
-                    <div class="order-card">
+                    <div class="order-card" onclick="window.location.href='order_detail.php?orderid=<?= (int)$order['orderid'] ?>'">
                         <div class="order-header">
                             <div>
                                 <span class="order-id">Order #<?= (int)$order['orderid'] ?></span>
@@ -258,7 +278,7 @@ $orders = $stmt->get_result();
                                     <?php endforeach; ?>
                                 </div>
                                 <?php if (!empty($order['Floor_Plan'])): ?>
-                                    <a href="<?= htmlspecialchars($order['Floor_Plan']) ?>" class="floor-plan-link" target="_blank">
+                                    <a href="<?= htmlspecialchars($order['Floor_Plan']) ?>" class="floor-plan-link" target="_blank" onclick="event.stopPropagation();">
                                         <i class="fas fa-file-image me-1"></i>View Floor Plan
                                     </a>
                                 <?php endif; ?>
@@ -274,6 +294,11 @@ $orders = $stmt->get_result();
                                 <?= htmlspecialchars($order['Requirements']) ?>
                             </div>
                         <?php endif; ?>
+                        <div style="margin-top: 0.75rem;">
+                            <a href="order_detail.php?orderid=<?= (int)$order['orderid'] ?>" class="view-details-btn" onclick="event.stopPropagation();">
+                                <i class="fas fa-arrow-right me-1"></i>View Details
+                            </a>
+                        </div>
                     </div>
                 <?php endwhile; ?>
             <?php else: ?>

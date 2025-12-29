@@ -359,6 +359,16 @@ $mainImg = '../design_image.php?id=' . (int)$design['designid'];
                     <?php endforeach; ?>
                 </div>
                 <?php endif; ?>
+
+                <!-- Action Buttons -->
+                <div class="design-actions">
+                    <button type="button" class="btn btn-primary btn-order" onclick="handleOrder(<?= (int)$design['designid'] ?>)">
+                        <i class="fas fa-shopping-cart me-2"></i>Order
+                    </button>
+                    <button type="button" class="btn btn-info btn-chat" onclick="handleChat(<?= (int)$design['designerid'] ?>)" >
+                        <i class="fas fa-comments me-2"></i>Chat
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -407,6 +417,18 @@ $mainImg = '../design_image.php?id=' . (int)$design['designid'];
     <?php endif; ?>
 
     <script>
+    // Handle Order Button Click
+    function handleOrder(designid) {
+        // Redirect to order page or open order modal
+        window.location.href = 'order.php?designid=' + designid;
+    }
+
+    // Handle Chat Button Click
+    function handleChat(designerid) {
+        // Redirect to chat page with designer
+        window.location.href = '../chat.php?designerid=' + designerid;
+    }
+
     // Heart like functionality - Updated for new system
     document.getElementById('likeHeart').addEventListener('click', function(e) {
         e.preventDefault();

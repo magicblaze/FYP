@@ -749,3 +749,70 @@ main {
     border-color: #27ae60;
     box-shadow: 0 0 0 0.2rem rgba(39, 174, 96, 0.25);
 }
+
+
+/* Design Action Buttons - Order and Chat */
+.design-actions {
+    display: flex;
+    gap: 1rem;
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid #ecf0f1;
+}
+
+.design-actions .btn {
+    flex: 1;
+    padding: 0.875rem 1.5rem;
+    font-size: 1rem;
+    font-weight: 600;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border: none;
+    cursor: pointer;
+}
+
+.btn-order {
+    background-color: #27ae60;
+    color: white;
+}
+
+.btn-order:hover {
+    background-color: #219a52;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(39, 174, 96, 0.3);
+}
+
+.btn-order:active {
+    transform: translateY(0);
+}
+
+.btn-chat {
+    background-color: #3498db;
+    color: white;
+}
+
+.btn-chat:hover {
+    background-color: #2980b9;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+}
+
+.btn-chat:active {
+    transform: translateY(0);
+}
+
+/* Responsive Design for Action Buttons */
+@media (max-width: 768px) {
+    .design-actions {
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .design-actions .btn {
+        width: 100%;
+    }
+}
