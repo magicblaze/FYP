@@ -1,7 +1,5 @@
 <?php
 require_once __DIR__ . '/Chatfunction.php';
-
-// AJAX router
 $action = $_GET['action'] ?? $_POST['action'] ?? null;
 if ($action) {
     if ($action === 'get_agents') {
@@ -145,13 +143,7 @@ if ($action) {
       initApp({
         userId: 'anon',
         items: [
-          {likes:277, price:'$50', title:'Modern Living Set'},
-          {likes:198, price:'$50', title:'Modern Living Set'},
-          {likes:126, price:'$50', title:'Modern Living Set'},
-          {likes:524, price:'$100', title:'Modern Living Set'},
-          {likes:213, price:'$75', title:'Modern Living Set'},
-          {likes:126, price:'$50', title:'Modern Living Set'},
-          {likes:456, price:'$50', title:'Modern Living Set'}
+          {likes:277, price:'$50', title:'Modern Living Set'},//php later fetch from DB
         ]
       });
     });

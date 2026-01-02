@@ -1,5 +1,4 @@
 <?php
-// api.php — simple router
 require_once './config.php';
 
 $action = $_GET['action'] ?? '';
@@ -26,12 +25,10 @@ switch ($action) {
 
   case 'sendMessage':
     $data = json_decode(file_get_contents('php://input'), true);
-    $stmt = $pdo->prepare("INSERT INTO Message (sender_type,sender_id,recipient_type,recipient_id,content,ChatRoomid) VALUES (?,?,?,?,?,?)");
+    $stmt = $pdo->prepare("INSERT INTO Message (sender_type,sender_id,content,ChatRoomid) VALUES (?,?,?,?)");
     $stmt->execute([
       $data['sender_type'],
       $data['sender_id'],
-      $data['recipient_type'],
-      $data['recipient_id'],
       $data['content'],
       $data['room']
     ]);

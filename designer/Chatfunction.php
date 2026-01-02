@@ -1,9 +1,4 @@
 <?php
-// --- CONFIG: update with your credentials
-define('DB_DSN', 'mysql:host=127.0.0.1;dbname=happydesign;charset=utf8mb4');
-define('DB_USER', 'happydesign_user');
-define('DB_PASS', 'secure_password');
-
 // --- DB connection (singleton)
 function get_db(): PDO {
     static $pdo = null;
@@ -64,4 +59,29 @@ function json_response($data, int $status = 200): void {
     header('Content-Type: application/json; charset=utf-8');
     echo json_encode($data);
     exit;
+}
+
+/**
+ * Parse a sender string like "user:123" or "designer_5" into type and id.
+ * Returns ['type' => string, 'id' => int|null].
+ */
+function parse_sender(string $sender): array {
+    $sender = trim(strtolower($sender));
+    // Match formats like "type:123", "type_123", or "type123"
+    if (preg_match('/^([a-z]+)[_:]?([0-9]+)$/i', $sender, $m)) {
+        return ['type' => strtolower($m[1]), 'id' => (int)$m[2]];
+    }
+    // If there's a colon with non-numeric id (e.g., "user:abc"), keep type only
+    if (preg_match('/^([a-z]+)[:_].+$/i', $sender, $m)) {
+        return ['type' => strtolower($m[1]), 'id' => null];
+    }
+    // Otherwise treat the whole string as the type
+    return ['type' => $sender, 'id' => null];
+}
+
+function role_applies_to_sender(string $role, string $sender): bool {
+    $role = strtolower($role);
+    $info = parse_sender($sender);
+    $sender_type = $info['type'];
+    return ($role === 'user' && $sender_type === 'user') || ($role === 'agent' && $sender_type !== 'user');
 }

@@ -300,8 +300,6 @@ CREATE TABLE `Message` (
   `messageid` int NOT NULL AUTO_INCREMENT,
   `sender_type` ENUM('client', 'designer','manager','Contractors','supplier') NOT NULL,
   `sender_id` int NOT NULL,
-  `recipient_type` ENUM('client', 'designer','manager','Contractors','supplier') NOT NULL,
-  `recipient_id` int NOT NULL,
   `content` text  NOT NULL,
   `message_type` ENUM('text', 'image', 'file') DEFAULT 'text',
   `attachment` VARCHAR(500) NULL,
@@ -310,13 +308,12 @@ CREATE TABLE `Message` (
   PRIMARY KEY (`messageid`),
   KEY `idx_room` (`ChatRoomid`),
   KEY `idx_sender` (`sender_type`, `sender_id`),
-  KEY `idx_recipient` (`recipient_type`, `recipient_id`),
   CONSTRAINT `fk_message_room` FOREIGN KEY (`ChatRoomid`) REFERENCES `ChatRoom` (`ChatRoomid`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-INSERT INTO `Message` (`messageid`, `sender_type`, `sender_id`, `recipient_type`, `recipient_id`, `content`,`message_type`,`attachment`,`ChatRoomid`) VALUES
-(1, 'manager', 1, 'designer', 1, 'hi','text',null,2),
-(2, 'designer', 1, 'client', 1, 'hello','text',null,2);
+INSERT INTO `Message` (`messageid`, `sender_type`, `sender_id`, `content`,`message_type`,`attachment`,`ChatRoomid`) VALUES
+(1, 'manager', 1, 'hi','text',null,2),
+(2, 'designer', 1, 'hello','text',null,2);
 
 CREATE TABLE `ProductLike` (
   `productlikeid` INT NOT NULL AUTO_INCREMENT,
