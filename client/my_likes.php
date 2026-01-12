@@ -363,10 +363,22 @@ $total_count = $products_count + $designs_count;
                 <i class="fas fa-shopping-bag"></i> Liked Products (<?= $products_count ?>)
             </div>
             <div class="likes-grid">
-                <?php while ($product = $liked_products->fetch_assoc()): ?>
+                <?php while ($product = $liked_products->fetch_assoc()): 
+                    // Determine image URL based on color
+                    $productImageUrl = '../uploads/products/' . $product['image'];
+                    if (!empty($product['color'])) {
+                        // If product has colors, use first color's image
+                        $productColors = array_map('trim', explode(',', $product['color']));
+                        $productFirstColor = reset($productColors);
+                        $productColorLower = strtolower(str_replace(' ', '_', $productFirstColor));
+                        $productBaseImageName = pathinfo($product['image'], PATHINFO_FILENAME);
+                        $productImageExtension = pathinfo($product['image'], PATHINFO_EXTENSION);
+                        $productImageUrl = '../uploads/products/' . $productBaseImageName . '_' . $productColorLower . '.' . $productImageExtension;
+                    }
+                ?>
                 <div class="like-card">
-                    <div class="like-card-image no-image">
-                        <i class="fas fa-image"></i>
+                    <div class="like-card-image">
+                        <img src="<?= htmlspecialchars($productImageUrl) ?>" alt="<?= htmlspecialchars($product['pname']) ?>">
                     </div>
                     <div class="like-card-body">
                         <div class="like-card-title" title="<?= htmlspecialchars($product['pname']) ?>">
@@ -401,8 +413,8 @@ $total_count = $products_count + $designs_count;
             <div class="likes-grid">
                 <?php while ($design = $liked_designs->fetch_assoc()): ?>
                 <div class="like-card">
-                    <div class="like-card-image no-image">
-                        <i class="fas fa-image"></i>
+                    <div class="like-card-image">
+                        <img src="../uploads/designs/<?= htmlspecialchars($design['design']) ?>" alt="<?= htmlspecialchars($design['dname']) ?>">
                     </div>
                     <div class="like-card-body">
                         <div class="like-card-title" title="<?= htmlspecialchars($design['dname']) ?>">

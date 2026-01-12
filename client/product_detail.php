@@ -1,7 +1,7 @@
 <?php
 // ==============================
-// File: product-detail.php (UPDATED for new like system)
-// Purpose: Display product details with new unified like system
+// File: product-detail.php (UPDATED with Color Selection Feature - Visual Color Blocks)
+// Purpose: Display product details with color selection functionality showing color blocks
 // ==============================
 require_once __DIR__ . '/../config.php';
 session_start();
@@ -26,8 +26,16 @@ $stmt->execute();
 $product = $stmt->get_result()->fetch_assoc();
 if (!$product) { http_response_code(404); die('Product not found.'); }
 
+// Parse colors from database
+$colors = [];
+if (!empty($product['color'])) {
+    // Split colors by comma and trim whitespace
+    $colorArray = array_map('trim', explode(',', $product['color']));
+    $colors = array_filter($colorArray); // Remove empty values
+}
+
 // Get other products from the same supplier
-$other_sql = "SELECT productid, pname, price FROM Product WHERE supplierid=? AND productid<>? LIMIT 6";
+$other_sql = "SELECT productid, pname, price, image, color FROM Product WHERE supplierid=? AND productid<>? LIMIT 6";
 $other_stmt = $mysqli->prepare($other_sql);
 $other_stmt->bind_param("ii", $product['supplierid'], $productid);
 $other_stmt->execute();
@@ -64,8 +72,96 @@ if (isset($_GET['from']) && $_GET['from'] === 'my_likes') {
     }
 }
 
-// Use DB-driven image endpoint
-$mainImg = '../supplier/product_image.php?id=' . (int)$product['productid'];
+// Generate image URL based on first color (if available) or default
+if (!empty($colors)) {
+    // Use first color's image
+    $firstColor = $colors[0];
+    $colorLower = strtolower(str_replace(' ', '_', $firstColor));
+    $baseImageName = pathinfo($product['image'], PATHINFO_FILENAME);
+    $imageExtension = pathinfo($product['image'], PATHINFO_EXTENSION);
+    $mainImg = '../uploads/products/' . $baseImageName . '_' . $colorLower . '.' . $imageExtension;
+} else {
+    // Use default image endpoint if no colors
+    $mainImg = '../supplier/product_image.php?id=' . (int)$product['productid'];
+}
+
+// Function to convert color name to hex code
+function colorNameToHex($colorName) {
+    $colorMap = [
+        'red' => '#FF0000',
+        'blue' => '#0000FF',
+        'green' => '#008000',
+        'yellow' => '#FFFF00',
+        'black' => '#000000',
+        'white' => '#FFFFFF',
+        'gray' => '#808080',
+        'grey' => '#808080',
+        'orange' => '#FFA500',
+        'purple' => '#800080',
+        'pink' => '#FFC0CB',
+        'brown' => '#A52A2A',
+        'navy' => '#000080',
+        'teal' => '#008080',
+        'cyan' => '#00FFFF',
+        'magenta' => '#FF00FF',
+        'silver' => '#C0C0C0',
+        'gold' => '#FFD700',
+        'beige' => '#F5F5DC',
+        'khaki' => '#F0E68C',
+        'maroon' => '#800000',
+        'olive' => '#808000',
+        'lime' => '#00FF00',
+        'aqua' => '#00FFFF',
+        'turquoise' => '#40E0D0',
+        'coral' => '#FF7F50',
+        'salmon' => '#FA8072',
+        'peach' => '#FFDAB9',
+        'lavender' => '#E6E6FA',
+        'plum' => '#DDA0DD',
+        'indigo' => '#4B0082',
+        'violet' => '#EE82EE',
+        'tan' => '#D2B48C',
+        'cream' => '#FFFDD0',
+        'ivory' => '#FFFFF0',
+        'linen' => '#FAF0E6',
+        'natural wood' => '#8B7355',
+        'oak' => '#8B7355',
+        'walnut' => '#5C4033',
+        'cherry' => '#8B0000',
+        'maple' => '#A0826D',
+        'birch' => '#D2B48C',
+        'pine' => '#A0826D',
+        'ash' => '#B2BEB5',
+        'ebony' => '#3B2F2F',
+        'mahogany' => '#C04000',
+        'teak' => '#B8860B',
+        'bamboo' => '#6B8E23',
+        'light gray' => '#D3D3D3',
+        'light grey' => '#D3D3D3',
+        'dark gray' => '#A9A9A9',
+        'dark grey' => '#A9A9A9',
+        'charcoal' => '#36454F',
+        'slate' => '#708090',
+        'cream white' => '#FFFDD0',
+        'off-white' => '#F5F5F5',
+        'warm white' => '#FFF8DC',
+        'cool white' => '#F0F8FF',
+        'midnight' => '#191970',
+        'forest' => '#228B22',
+        'sea' => '#2E8B57',
+        'sky' => '#87CEEB',
+        'sand' => '#C2B280',
+        'stone' => '#928E85',
+        'concrete' => '#A7A9AC',
+        'metal' => '#757575',
+        'copper' => '#B87333',
+        'bronze' => '#CD7F32',
+        'brass' => '#B5A642',
+    ];
+    
+    $colorLower = strtolower(trim($colorName));
+    return isset($colorMap[$colorLower]) ? $colorMap[$colorLower] : '#999999';
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -188,6 +284,94 @@ $mainImg = '../supplier/product_image.php?id=' . (int)$product['productid'];
             font-size: 0.95rem;
         }
 
+        /* Color Selection Styles */
+        .color-selection-section {
+            margin-bottom: 1.5rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid #ecf0f1;
+        }
+
+        .color-selection-label {
+            display: block;
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 0.75rem;
+            font-size: 0.95rem;
+        }
+
+        .color-options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+        }
+
+        .color-button {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border: 2px solid #ecf0f1;
+            background-color: #f8f9fa;
+            color: #2c3e50;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.9rem;
+            font-weight: 500;
+            min-width: fit-content;
+            text-align: center;
+        }
+
+        .color-button:hover {
+            border-color: #3498db;
+            background-color: #e3f2fd;
+            transform: translateY(-2px);
+            box-shadow: 0 2px 8px rgba(52, 152, 219, 0.2);
+        }
+
+        .color-button.selected {
+            background-color: #e3f2fd;
+            color: #2c3e50;
+            border-color: #3498db;
+            box-shadow: 0 2px 8px rgba(52, 152, 219, 0.3);
+        }
+
+        .color-swatch {
+            width: 24px;
+            height: 24px;
+            border-radius: 4px;
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            flex-shrink: 0;
+            display: inline-block;
+        }
+
+        .color-swatch.circle {
+            border-radius: 50%;
+        }
+
+        .color-name {
+            display: inline-block;
+        }
+
+        .color-select-dropdown {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #bdc3c7;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            color: #2c3e50;
+            background-color: white;
+            cursor: pointer;
+        }
+
+        .color-select-dropdown:focus {
+            outline: none;
+            border-color: #3498db;
+            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+        }
+
+
+
         .product-description {
             margin-bottom: 1.5rem;
             padding-bottom: 1.5rem;
@@ -225,6 +409,15 @@ $mainImg = '../supplier/product_image.php?id=' . (int)$product['productid'];
             .product-stats {
                 flex-direction: column;
                 gap: 1rem;
+            }
+
+            .color-options {
+                gap: 0.5rem;
+            }
+
+            .color-button {
+                flex: 1 1 calc(50% - 0.375rem);
+                min-width: auto;
             }
         }
     </style>
@@ -293,13 +486,53 @@ $mainImg = '../supplier/product_image.php?id=' . (int)$product['productid'];
                     <div><i class="fas fa-tag me-2"></i><strong>Category:</strong> <?= htmlspecialchars($product['category']) ?></div>
                 </div>
 
-                <?php if (!empty($product['size']) || !empty($product['color']) || !empty($product['material'])): ?>
+                <!-- Color Selection Section (if colors are available) -->
+                <?php if (!empty($colors)): ?>
+                <div class="color-selection-section">
+                    <label class="color-selection-label">
+                        <i class="fas fa-palette me-2"></i>Select Color:
+                    </label>
+                    
+                    <?php if (count($colors) <= 5): ?>
+                        <!-- Display as buttons for 5 or fewer colors -->
+                        <div class="color-options" id="colorOptions">
+                            <?php foreach ($colors as $index => $color): 
+                                $hexColor = colorNameToHex($color);
+                            ?>
+                                <button type="button" 
+                                        class="color-button <?= $index === 0 ? 'selected' : '' ?>" 
+                                        data-color="<?= htmlspecialchars($color) ?>"
+                                        data-hex="<?= htmlspecialchars($hexColor) ?>"
+                                        onclick="selectColor(this)">
+                                    <span class="color-swatch" style="background-color: <?= htmlspecialchars($hexColor) ?>;"></span>
+                                    <span class="color-name"><?= htmlspecialchars($color) ?></span>
+                                </button>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php else: ?>
+                        <!-- Display as dropdown for more than 5 colors -->
+                        <select class="color-select-dropdown" id="colorSelect" onchange="selectColorDropdown(this)">
+                            <option value="">-- Choose a color --</option>
+                            <?php foreach ($colors as $color): 
+                                $hexColor = colorNameToHex($color);
+                            ?>
+                                <option value="<?= htmlspecialchars($color) ?>" data-hex="<?= htmlspecialchars($hexColor) ?>">
+                                    <?= htmlspecialchars($color) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    <?php endif; ?>
+                    
+
+                    <input type="hidden" id="selectedColor" value="<?= htmlspecialchars($colors[0]) ?>">
+                    <input type="hidden" id="selectedColorHex" value="<?= htmlspecialchars(colorNameToHex($colors[0])) ?>">
+                </div>
+                <?php endif; ?>
+
+                <?php if (!empty($product['size']) || !empty($product['material'])): ?>
                 <div class="product-specs">
                     <?php if (!empty($product['size'])): ?>
                         <div><i class="fas fa-ruler me-2"></i><strong>Size:</strong> <?= htmlspecialchars($product['size']) ?></div>
-                    <?php endif; ?>
-                    <?php if (!empty($product['color'])): ?>
-                        <div><i class="fas fa-palette me-2"></i><strong>Color:</strong> <?= htmlspecialchars($product['color']) ?></div>
                     <?php endif; ?>
                     <?php if (!empty($product['material'])): ?>
                         <div><i class="fas fa-cube me-2"></i><strong>Material:</strong> <?= htmlspecialchars($product['material']) ?></div>
@@ -321,9 +554,21 @@ $mainImg = '../supplier/product_image.php?id=' . (int)$product['productid'];
     <section class="detail-gallery" aria-label="Other Products from This Supplier" style="max-width: 1200px; margin: 2rem auto; padding: 0 1rem;">
         <h3 style="color: #2c3e50; font-weight: 600; margin-bottom: 1rem; font-size: 1.3rem;">Other Products from <?= htmlspecialchars($product['sname']) ?></h3>
         <div class="detail-gallery-images">
-            <?php while ($r = $others->fetch_assoc()): ?>
+            <?php while ($r = $others->fetch_assoc()): 
+                // Determine image URL based on color
+                $otherImageUrl = '../uploads/products/' . $r['image'];
+                if (!empty($r['color'])) {
+                    // If product has colors, use first color's image
+                    $otherColors = array_map('trim', explode(',', $r['color']));
+                    $otherFirstColor = reset($otherColors);
+                    $otherColorLower = strtolower(str_replace(' ', '_', $otherFirstColor));
+                    $otherBaseImageName = pathinfo($r['image'], PATHINFO_FILENAME);
+                    $otherImageExtension = pathinfo($r['image'], PATHINFO_EXTENSION);
+                    $otherImageUrl = '../uploads/products/' . $otherBaseImageName . '_' . $otherColorLower . '.' . $otherImageExtension;
+                }
+            ?>
                 <a href="product_detail.php?id=<?= (int)$r['productid'] ?>">
-                    <img src="../supplier/product_image.php?id=<?= (int)$r['productid'] ?>" alt="<?= htmlspecialchars($r['pname']) ?>">
+                    <img src="<?= htmlspecialchars($otherImageUrl) ?>" alt="<?= htmlspecialchars($r['pname']) ?>">
                 </a>
             <?php endwhile; ?>
         </div>
@@ -331,6 +576,54 @@ $mainImg = '../supplier/product_image.php?id=' . (int)$product['productid'];
     <?php endif; ?>
 
     <script>
+    // Function to update product image based on selected color
+    function updateProductImage(colorName) {
+        const baseImageName = '<?= htmlspecialchars(pathinfo($product['image'], PATHINFO_FILENAME)) ?>';
+        const imageExtension = '<?= htmlspecialchars(pathinfo($product['image'], PATHINFO_EXTENSION)) ?>';
+        const colorLower = colorName.toLowerCase().replace(/\s+/g, '_');
+        
+        // Load image with color suffix
+        const colorImageName = baseImageName + '_' + colorLower + '.' + imageExtension;
+        const imageUrl = '../uploads/products/' + colorImageName;
+        
+        // Update image directly
+        document.querySelector('.product-image-wrapper img').src = imageUrl;
+    }
+    
+    // Color selection function for button-based selection
+    function selectColor(button) {
+        // Remove selected class from all buttons
+        const allButtons = document.querySelectorAll('.color-button');
+        allButtons.forEach(btn => btn.classList.remove('selected'));
+        
+        // Add selected class to clicked button
+        button.classList.add('selected');
+        
+        // Update hidden inputs
+        const selectedColor = button.dataset.color;
+        const selectedHex = button.dataset.hex;
+        document.getElementById('selectedColor').value = selectedColor;
+        document.getElementById('selectedColorHex').value = selectedHex;
+        
+        // Update product image
+        updateProductImage(selectedColor);
+    }
+
+    // Color selection function for dropdown-based selection
+    function selectColorDropdown(select) {
+        const selectedColor = select.value;
+        if (selectedColor) {
+            const selectedOption = select.options[select.selectedIndex];
+            const selectedHex = selectedOption.dataset.hex;
+            
+            document.getElementById('selectedColor').value = selectedColor;
+            document.getElementById('selectedColorHex').value = selectedHex;
+            
+            // Update product image
+            updateProductImage(selectedColor);
+        }
+    }
+
     function handleBack() {
         // Use the back URL determined by the server
         window.location.href = '<?= htmlspecialchars($backUrl) ?>';
@@ -374,6 +667,16 @@ $mainImg = '../supplier/product_image.php?id=' . (int)$product['productid'];
             alert('An error occurred while updating the like.');
         });
     });
+
+    // Function to get selected color (useful for order placement)
+    function getSelectedColor() {
+        return document.getElementById('selectedColor').value;
+    }
+
+    // Function to get selected color hex code
+    function getSelectedColorHex() {
+        return document.getElementById('selectedColorHex').value;
+    }
     </script>
 </body>
 </html>

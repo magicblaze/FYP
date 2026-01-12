@@ -178,7 +178,7 @@ CREATE TABLE `Product` (
 
 INSERT INTO `Product` (`productid`,`pname`, `image`, `price`, `likes`, `category`, `description`, `size`, `color`, `material`, `supplierid`) VALUES
 (1, 'Modern Sofa', 'sofa.jpg', 2000, 100, 'Furniture', 'A comfortable modern sofa.', '200cm*80cm', 'Grey, Blue', 'Fabric, Wood', 1),
-(2, 'Oak Chair', 'chair.jpg', 800, 50, 'Furniture', 'Solid wood chair.', '50cm*50cm', 'Natural Wood', 'Oak', 1),
+(2, 'Oak Chair', 'chair.jpg', 800, 50, 'Furniture', 'Solid wood chair.', '50cm*50cm', 'Brown,white', 'Oak', 1),
 (3, 'Brick', 'brick.jpg', 200, 25, 'Material', 'A brick.', null, null, null, 1),
 (4, 'Wood', 'wood.jpg', 800, 75, 'Material', 'A wood.', null, null, null, 2);
 

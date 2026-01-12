@@ -106,11 +106,23 @@ $result = $stmt->get_result();
         <!-- Results Grid -->
         <div class="row g-4">
             <?php if ($result->num_rows > 0): ?>
-                <?php while ($prod = $result->fetch_assoc()): ?>
+                <?php while ($prod = $result->fetch_assoc()): 
+                    // Determine image URL based on color
+                    $imageUrl = 'supplier/product_image.php?id=' . (int)$prod['productid'];
+                    if (!empty($prod['color'])) {
+                        // If product has colors, use first color's image
+                        $colors = array_map('trim', explode(',', $prod['color']));
+                        $firstColor = reset($colors);
+                        $colorLower = strtolower(str_replace(' ', '_', $firstColor));
+                        $baseImageName = pathinfo($prod['image'], PATHINFO_FILENAME);
+                        $imageExtension = pathinfo($prod['image'], PATHINFO_EXTENSION);
+                        $imageUrl = 'uploads/products/' . $baseImageName . '_' . $colorLower . '.' . $imageExtension;
+                    }
+                ?>
                 <div class="col-lg-4 col-md-6 col-sm-12">
                     <a href="client/product_detail.php?id=<?= htmlspecialchars($prod['productid']) ?>" style="text-decoration: none;">
                         <div class="card h-100">
-                            <img src="supplier/product_image.php?id=<?= (int)$prod['productid'] ?>" class="card-img-top" alt="<?= htmlspecialchars($prod['pname']) ?>">
+                            <img src="<?= htmlspecialchars($imageUrl) ?>" class="card-img-top" alt="<?= htmlspecialchars($prod['pname']) ?>">
                             <div class="card-body text-center">
                                 <h5 class="card-title"><?= htmlspecialchars($prod['pname']) ?></h5>
                                 <p class="text-muted mb-2">
