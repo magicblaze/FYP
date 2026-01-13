@@ -85,13 +85,12 @@ $result = $stmt->get_result();
             </div>
             <div class="col-md-4">
                 <div class="stat-card d-flex align-items-center justify-content-center flex-column">
-                    <a href="#" class="btn btn-success btn-lg w-100" onclick="alert('Add Product feature coming soon!')">
+                    <a href="Addpoduct.php" class="btn btn-success btn-lg w-100">
                         <i class="fas fa-plus me-2"></i>Add New Product
                     </a>
                 </div>
             </div>
         </div>
-
         <div class="card shadow-sm border-0">
             <div class="card-header bg-white py-3">
                 <h5 class="mb-0"><i class="fas fa-boxes me-2"></i>My Products List</h5>
