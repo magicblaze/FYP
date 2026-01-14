@@ -1,5 +1,5 @@
 <?php
-require("config.php");
+require_once __DIR__ . '/../../config.php';
 
 // 根据数据库结构修正查询，ostatus在Order表中
 $sql = "SELECT o.orderid, o.odate, o.budget, o.Requirements, o.ostatus,

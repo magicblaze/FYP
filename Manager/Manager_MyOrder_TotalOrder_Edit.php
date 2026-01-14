@@ -1,5 +1,5 @@
 <?php
-require("config.php");
+require_once __DIR__ . '/../../config.php';
 
 $orderid = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
