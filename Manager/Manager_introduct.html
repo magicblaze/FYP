@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Worker Homepage</title>
+</head>
+<body>
+    <nav>
+        <a href="Manager_introduct.html">Introduct</a> |
+        <a href="Manager_MyOrder.html">MyOrder</a> |
+        <a href="Manager_Massage.html">Massage</a> |
+        <a href="Manager_Schedule.html">Schedule</a>
+    </nav>
+
+    <h1>Homepage</h1>
+    
+    <div id="personal-info">
+        <h2>Personal:</h2>
+        <div class="field">
+            <label for="worker-name">Name:</label>
+            <input type="text" id="worker-name" placeholder="(enter the Name)">
+        </div>
+        
+        <div class="field">
+            <label for="email">Email address:</label>
+            <input type="email" id="email" placeholder="xxxx@xxxx.com">
+        </div>
+        
+        <hr>
+        
+        <div class="field">
+            <label for="telephone">Telephone Number:</label>
+            <div class="telephone-input">
+                <select id="phone_num" name="phone_num">
+                            <option value="HK">+ 852</option>
+                            <option value="Cn">+ 86</option>
+                            <option value="AA">+ 01</option>
+                            <option value="BB">+ 02</option>
+                            <option value="CC">+ 03</option>
+                <input type="tel" id="telephone" placeholder="1111 2222">
+            </div>
+        </div>
+        
+        <div class="field">
+            <label for="password">Password:</label>
+            <input type="password" id="password" placeholder="123456">
+        </div>
+        
+        <div class="field">
+            <label for="company">Company Name:</label>
+            <input type="text" id="company">
+        </div>
+    </div>
+    <button id="update-button">Update</button>
+</body>
+</html>
