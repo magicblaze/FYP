@@ -1,7 +1,7 @@
 <?php
 
 // Include database connection file
-require_once __DIR__ . '/../../config.php';
+require_once dirname(__DIR__) . '/config.php';
 
 // 获取订单ID
 $order_id = isset($_GET['id']) ? intval($_GET['id']) : 0;

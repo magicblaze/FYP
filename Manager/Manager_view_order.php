@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/../../config.php';
+require_once dirname(__DIR__) . '/config.php';
 
 if(isset($_GET['id'])) {
     $orderid = mysqli_real_escape_string($conn, $_GET['id']);

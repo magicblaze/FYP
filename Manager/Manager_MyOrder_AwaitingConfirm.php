@@ -1,6 +1,6 @@
 <?php
 // Include database connection file
-require_once __DIR__ . '/../../config.php';
+require_once dirname(__DIR__) . '/config.php';
 
 // 获取搜索参数
 $search = isset($_GET['search']) ? mysqli_real_escape_string($conn, $_GET['search']) : '';
