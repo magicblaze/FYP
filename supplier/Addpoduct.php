@@ -2,8 +2,11 @@
 require_once __DIR__ . '/../config.php';
 session_start();
 // Check if supplier is logged in
+
 if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'supplier') {
 	header('Location: ../login.php');
+	exit;
+}
 $supplierId = $_SESSION['user']['supplierid'];
 
 $success = false;
