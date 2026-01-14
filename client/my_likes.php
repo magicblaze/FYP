@@ -364,17 +364,7 @@ $total_count = $products_count + $designs_count;
             </div>
             <div class="likes-grid">
                 <?php while ($product = $liked_products->fetch_assoc()): 
-                    // Determine image URL based on color
                     $productImageUrl = '../uploads/products/' . $product['image'];
-                    if (!empty($product['color'])) {
-                        // If product has colors, use first color's image
-                        $productColors = array_map('trim', explode(',', $product['color']));
-                        $productFirstColor = reset($productColors);
-                        $productColorLower = strtolower(str_replace(' ', '_', $productFirstColor));
-                        $productBaseImageName = pathinfo($product['image'], PATHINFO_FILENAME);
-                        $productImageExtension = pathinfo($product['image'], PATHINFO_EXTENSION);
-                        $productImageUrl = '../uploads/products/' . $productBaseImageName . '_' . $productColorLower . '.' . $productImageExtension;
-                    }
                 ?>
                 <div class="like-card">
                     <div class="like-card-image">

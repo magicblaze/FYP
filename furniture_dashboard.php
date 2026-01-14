@@ -1,13 +1,19 @@
 <?php
 // ==============================
-// File: furniture_dashboard.php
-// 用途：顯示供應商的傢俱 (Furniture) 列表
+// File: furniture_dashboard.php (Enhanced with Filters)
+// 用途：顯示供應商的傢俱 (Furniture) 列表，含進階過濾功能
 // ==============================
 require_once __DIR__ . '/config.php';
 session_start();
 
-// --- 1. 處理搜尋邏輯 ---
+// --- 1. 處理過濾邏輯 ---
 $search = trim($_GET['search'] ?? '');
+$min_price = isset($_GET['min_price']) && is_numeric($_GET['min_price']) ? (int)$_GET['min_price'] : 0;
+$max_price = isset($_GET['max_price']) && is_numeric($_GET['max_price']) ? (int)$_GET['max_price'] : 999999;
+$supplier_id = isset($_GET['supplier_id']) && is_numeric($_GET['supplier_id']) ? (int)$_GET['supplier_id'] : '';
+$color = trim($_GET['color'] ?? '');
+$size = trim($_GET['size'] ?? '');
+$sort_by = isset($_GET['sort_by']) ? $_GET['sort_by'] : 'recent';
 
 $sql = "SELECT p.*, s.sname FROM Product p 
         JOIN Supplier s ON p.supplierid = s.supplierid 
@@ -23,7 +29,51 @@ if (!empty($search)) {
     $types .= "ss";
 }
 
-$sql .= " ORDER BY p.productid ASC";
+// 價格範圍過濾
+if ($min_price > 0 || $max_price < 999999) {
+    $sql .= " AND p.price BETWEEN ? AND ?";
+    $params[] = $min_price;
+    $params[] = $max_price;
+    $types .= "ii";
+}
+
+// 供應商過濾
+if (!empty($supplier_id)) {
+    $sql .= " AND p.supplierid = ?";
+    $params[] = $supplier_id;
+    $types .= "i";
+}
+
+// 顏色過濾
+if (!empty($color)) {
+    $sql .= " AND p.color LIKE ?";
+    $params[] = "%$color%";
+    $types .= "s";
+}
+
+// 尺寸過濾
+if (!empty($size)) {
+    $sql .= " AND p.size LIKE ?";
+    $params[] = "%$size%";
+    $types .= "s";
+}
+
+// 排序
+switch ($sort_by) {
+    case 'price_low':
+        $sql .= " ORDER BY p.price ASC";
+        break;
+    case 'price_high':
+        $sql .= " ORDER BY p.price DESC";
+        break;
+    case 'likes':
+        $sql .= " ORDER BY p.likes DESC";
+        break;
+    case 'recent':
+    default:
+        $sql .= " ORDER BY p.productid DESC";
+        break;
+}
 
 $stmt = $mysqli->prepare($sql);
 if (!empty($params)) {
@@ -31,6 +81,23 @@ if (!empty($params)) {
 }
 $stmt->execute();
 $result = $stmt->get_result();
+
+// 獲取所有供應商用於過濾下拉菜單
+$supplier_sql = "SELECT DISTINCT s.supplierid, s.sname FROM Supplier s 
+                 JOIN Product p ON s.supplierid = p.supplierid 
+                 WHERE p.category = 'Furniture' ORDER BY s.sname ASC";
+$supplier_result = $mysqli->query($supplier_sql);
+if (!$supplier_result) die('Query error: ' . $mysqli->error);
+
+// 獲取所有顏色用於過濾下拉菜單
+$color_sql = "SELECT DISTINCT color FROM Product WHERE category = 'Furniture' AND color IS NOT NULL ORDER BY color ASC";
+$color_result = $mysqli->query($color_sql);
+if (!$color_result) die('Query error: ' . $mysqli->error);
+
+// 獲取所有尺寸用於過濾下拉菜單
+$size_sql = "SELECT DISTINCT size FROM Product WHERE category = 'Furniture' AND size IS NOT NULL ORDER BY size ASC";
+$size_result = $mysqli->query($size_sql);
+if (!$size_result) die('Query error: ' . $mysqli->error);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -47,6 +114,7 @@ $result = $stmt->get_result();
             border-radius: 10px;
             padding: 1rem 1.5rem;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+            margin-bottom: 2rem;
         }
         .search-section .form-control {
             border: 2px solid #ecf0f1;
@@ -61,6 +129,110 @@ $result = $stmt->get_result();
             font-weight: 600;
             margin-bottom: 1.5rem;
             font-size: 1.8rem;
+        }
+        .filter-panel {
+            background: #fff;
+            border-radius: 10px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+            margin-bottom: 2rem;
+            height: fit-content;
+            position: sticky;
+            top: 20px;
+        }
+        .filter-panel h5 {
+            color: #2c3e50;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            font-size: 1.1rem;
+        }
+        .filter-group {
+            margin-bottom: 1.5rem;
+        }
+        .filter-group label {
+            font-weight: 500;
+            color: #34495e;
+            margin-bottom: 0.5rem;
+            display: block;
+        }
+        .filter-group .form-control,
+        .filter-group .form-select {
+            border: 2px solid #ecf0f1;
+            border-radius: 8px;
+            padding: 0.5rem 0.75rem;
+        }
+        .filter-group .form-control:focus,
+        .filter-group .form-select:focus {
+            border-color: #3498db;
+            box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25);
+        }
+        .price-inputs {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+        .price-inputs .form-control {
+            flex: 1;
+        }
+        .price-separator {
+            color: #7f8c8d;
+            font-weight: 600;
+        }
+        .filter-buttons {
+            display: flex;
+            gap: 0.5rem;
+        }
+        .filter-buttons button {
+            flex: 1;
+        }
+        .btn-apply-filter {
+            background: #3498db;
+            border: none;
+            color: white;
+            font-weight: 600;
+            padding: 0.6rem 1rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        .btn-apply-filter:hover {
+            background: #2980b9;
+            color: white;
+        }
+        .btn-clear-filter {
+            background: #ecf0f1;
+            border: none;
+            color: #7f8c8d;
+            font-weight: 600;
+            padding: 0.6rem 1rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        .btn-clear-filter:hover {
+            background: #bdc3c7;
+        }
+        .results-info {
+            color: #7f8c8d;
+            font-size: 0.95rem;
+            margin-bottom: 1rem;
+        }
+        .container-with-filter {
+            display: grid;
+            grid-template-columns: 250px 1fr;
+            gap: 2rem;
+        }
+        @media (max-width: 768px) {
+            .container-with-filter {
+                grid-template-columns: 1fr;
+            }
+            .filter-panel {
+                order: 2;
+                position: static;
+            }
+            .main-content {
+                order: 1;
+            }
         }
     </style>
 </head>
@@ -97,52 +269,106 @@ $result = $stmt->get_result();
 
     <main class="container-lg mt-4">
         <!-- Search Bar -->
-        <div class="search-section mb-3">
+        <div class="search-section">
             <form method="GET" aria-label="Search">
-                <input type="text" name="search" class="form-control form-control-lg" placeholder="Search furniture..." value="<?= htmlspecialchars($search) ?>">
+                <div class="input-group">
+                    <input type="text" name="search" class="form-control form-control-lg" placeholder="Search furniture..." value="<?= htmlspecialchars($search) ?>">
+                    <button class="btn btn-outline-secondary" type="submit">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
             </form>
         </div>
+
         <div class="page-title">Furniture</div>
-        <!-- Results Grid -->
-        <div class="row g-4">
-            <?php if ($result->num_rows > 0): ?>
-                <?php while ($prod = $result->fetch_assoc()): 
-                    // Determine image URL based on color
-                    $imageUrl = 'supplier/product_image.php?id=' . (int)$prod['productid'];
-                    if (!empty($prod['color'])) {
-                        // If product has colors, use first color's image
-                        $colors = array_map('trim', explode(',', $prod['color']));
-                        $firstColor = reset($colors);
-                        $colorLower = strtolower(str_replace(' ', '_', $firstColor));
-                        $baseImageName = pathinfo($prod['image'], PATHINFO_FILENAME);
-                        $imageExtension = pathinfo($prod['image'], PATHINFO_EXTENSION);
-                        $imageUrl = 'uploads/products/' . $baseImageName . '_' . $colorLower . '.' . $imageExtension;
-                    }
-                ?>
-                <div class="col-lg-4 col-md-6 col-sm-12">
-                    <a href="client/product_detail.php?id=<?= htmlspecialchars($prod['productid']) ?>" style="text-decoration: none;">
-                        <div class="card h-100">
-                            <img src="<?= htmlspecialchars($imageUrl) ?>" class="card-img-top" alt="<?= htmlspecialchars($prod['pname']) ?>">
-                            <div class="card-body text-center">
-                                <h5 class="card-title"><?= htmlspecialchars($prod['pname']) ?></h5>
-                                <p class="text-muted mb-2">
-                                    <i class="fas fa-store me-1"></i><?= htmlspecialchars($prod['sname']) ?>
-                                </p>
-                                <p class="h6 mb-0" style="color: #e74c3c; font-weight: 700;">HK$<?= number_format($prod['price']) ?></p>
+
+        <div class="container-with-filter">
+            <!-- Filter Panel -->
+            <aside class="filter-panel">
+                <h5><i class="fas fa-filter me-2"></i>Filters</h5>
+                <form method="GET" action="furniture_dashboard.php" id="filterForm">
+                    <!-- Search (Hidden) -->
+                    <input type="hidden" name="search" value="<?= htmlspecialchars($search) ?>">
+
+                    <!-- Price Range Filter -->
+                    <div class="filter-group">
+                        <label>Price Range (HK$)</label>
+                        <div class="price-inputs">
+                            <input type="number" name="min_price" class="form-control" placeholder="Min" value="<?= $min_price > 0 ? $min_price : '' ?>" min="0">
+                            <span class="price-separator">-</span>
+                            <input type="number" name="max_price" class="form-control" placeholder="Max" value="<?= $max_price < 999999 ? $max_price : '' ?>" min="0">
+                        </div>
+                    </div>
+
+                    <!-- Supplier Filter -->
+                    <div class="filter-group">
+                        <label for="supplier_id">Supplier</label>
+                        <select name="supplier_id" id="supplier_id" class="form-select">
+                            <option value="">All Suppliers</option>
+                            <?php while ($supplier = $supplier_result->fetch_assoc()): ?>
+                                <option value="<?= $supplier['supplierid'] ?>" <?= $supplier_id == $supplier['supplierid'] ? 'selected' : '' ?>>
+                                    <?= htmlspecialchars($supplier['sname']) ?>
+                                </option>
+                            <?php endwhile; ?>
+                        </select>
+                    </div>
+
+                    <!-- Sort By -->
+                    <div class="filter-group">
+                        <label for="sort_by">Sort By</label>
+                        <select name="sort_by" id="sort_by" class="form-select">
+                            <option value="recent" <?= $sort_by === 'recent' ? 'selected' : '' ?>>Newest</option>
+                            <option value="price_low" <?= $sort_by === 'price_low' ? 'selected' : '' ?>>Price: Low to High</option>
+                            <option value="price_high" <?= $sort_by === 'price_high' ? 'selected' : '' ?>>Price: High to Low</option>
+                            <option value="likes" <?= $sort_by === 'likes' ? 'selected' : '' ?>>Most Liked</option>
+                        </select>
+                    </div>
+
+                    <!-- Filter Buttons -->
+                    <div class="filter-buttons">
+                        <button type="submit" class="btn-apply-filter">
+                            <i class="fas fa-check me-1"></i>Apply
+                        </button>
+                        <a href="furniture_dashboard.php" class="btn-clear-filter" style="text-align: center; text-decoration: none;">
+                            <i class="fas fa-times me-1"></i>Clear
+                        </a>
+                    </div>
+                </form>
+            </aside>
+
+            <!-- Main Content -->
+            <div class="main-content">
+
+                <!-- Results Grid -->
+                <div class="row g-4">
+                    <?php if ($result->num_rows > 0): ?>
+                        <?php while ($prod = $result->fetch_assoc()): ?>
+                        <div class="col-lg-4 col-md-6 col-sm-12">
+                            <a href="client/product_detail.php?id=<?= htmlspecialchars($prod['productid']) ?>" style="text-decoration: none;">
+                                <div class="card h-100">
+                                    <img src="supplier/product_image.php?id=<?= (int)$prod['productid'] ?>" class="card-img-top" alt="<?= htmlspecialchars($prod['pname']) ?>">
+                                    <div class="card-body text-center">
+                                        <h5 class="card-title"><?= htmlspecialchars($prod['pname']) ?></h5>
+                                        <p class="text-muted mb-2">
+                                            <i class="fas fa-store me-1"></i><?= htmlspecialchars($prod['sname']) ?>
+                                        </p>
+                                        <p class="h6 mb-0" style="color: #e74c3c; font-weight: 700;">HK$<?= number_format($prod['price']) ?></p>
+                                    </div>
+                                </div>
+                            </a>
+                        </div>
+                        <?php endwhile; ?>
+                    <?php else: ?>
+                        <div class="col-12">
+                            <div class="text-center py-5" style="color: #7f8c8d;">
+                                <i class="fas fa-couch" style="font-size: 4rem; margin-bottom: 1rem; color: #bdc3c7;"></i>
+                                <h3>No Furniture Found</h3>
+                                <p>Try adjusting your filters to find what you're looking for.</p>
                             </div>
                         </div>
-                    </a>
+                    <?php endif; ?>
                 </div>
-                <?php endwhile; ?>
-            <?php else: ?>
-                <div class="col-12">
-                    <div class="text-center py-5" style="color: #7f8c8d;">
-                        <i class="fas fa-couch" style="font-size: 4rem; margin-bottom: 1rem; color: #bdc3c7;"></i>
-                        <h3>No Furniture Found</h3>
-                        <p>Try adjusting your search to find what you're looking for.</p>
-                    </div>
-                </div>
-            <?php endif; ?>
+            </div>
         </div>
     </main>
 

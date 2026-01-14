@@ -35,7 +35,7 @@ if (!empty($product['color'])) {
 }
 
 // Get other products from the same supplier
-$other_sql = "SELECT productid, pname, price, image, color FROM Product WHERE supplierid=? AND productid<>? LIMIT 6";
+$other_sql = "SELECT productid, pname, price FROM Product WHERE supplierid=? AND productid<>? LIMIT 6";
 $other_stmt = $mysqli->prepare($other_sql);
 $other_stmt->bind_param("ii", $product['supplierid'], $productid);
 $other_stmt->execute();
@@ -72,18 +72,8 @@ if (isset($_GET['from']) && $_GET['from'] === 'my_likes') {
     }
 }
 
-// Generate image URL based on first color (if available) or default
-if (!empty($colors)) {
-    // Use first color's image
-    $firstColor = $colors[0];
-    $colorLower = strtolower(str_replace(' ', '_', $firstColor));
-    $baseImageName = pathinfo($product['image'], PATHINFO_FILENAME);
-    $imageExtension = pathinfo($product['image'], PATHINFO_EXTENSION);
-    $mainImg = '../uploads/products/' . $baseImageName . '_' . $colorLower . '.' . $imageExtension;
-} else {
-    // Use default image endpoint if no colors
-    $mainImg = '../supplier/product_image.php?id=' . (int)$product['productid'];
-}
+// Use DB-driven image endpoint
+$mainImg = '../supplier/product_image.php?id=' . (int)$product['productid'];
 
 // Function to convert color name to hex code
 function colorNameToHex($colorName) {
@@ -554,21 +544,9 @@ function colorNameToHex($colorName) {
     <section class="detail-gallery" aria-label="Other Products from This Supplier" style="max-width: 1200px; margin: 2rem auto; padding: 0 1rem;">
         <h3 style="color: #2c3e50; font-weight: 600; margin-bottom: 1rem; font-size: 1.3rem;">Other Products from <?= htmlspecialchars($product['sname']) ?></h3>
         <div class="detail-gallery-images">
-            <?php while ($r = $others->fetch_assoc()): 
-                // Determine image URL based on color
-                $otherImageUrl = '../uploads/products/' . $r['image'];
-                if (!empty($r['color'])) {
-                    // If product has colors, use first color's image
-                    $otherColors = array_map('trim', explode(',', $r['color']));
-                    $otherFirstColor = reset($otherColors);
-                    $otherColorLower = strtolower(str_replace(' ', '_', $otherFirstColor));
-                    $otherBaseImageName = pathinfo($r['image'], PATHINFO_FILENAME);
-                    $otherImageExtension = pathinfo($r['image'], PATHINFO_EXTENSION);
-                    $otherImageUrl = '../uploads/products/' . $otherBaseImageName . '_' . $otherColorLower . '.' . $otherImageExtension;
-                }
-            ?>
+            <?php while ($r = $others->fetch_assoc()): ?>
                 <a href="product_detail.php?id=<?= (int)$r['productid'] ?>">
-                    <img src="<?= htmlspecialchars($otherImageUrl) ?>" alt="<?= htmlspecialchars($r['pname']) ?>">
+                    <img src="../supplier/product_image.php?id=<?= (int)$r['productid'] ?>" alt="<?= htmlspecialchars($r['pname']) ?>">
                 </a>
             <?php endwhile; ?>
         </div>
@@ -576,20 +554,6 @@ function colorNameToHex($colorName) {
     <?php endif; ?>
 
     <script>
-    // Function to update product image based on selected color
-    function updateProductImage(colorName) {
-        const baseImageName = '<?= htmlspecialchars(pathinfo($product['image'], PATHINFO_FILENAME)) ?>';
-        const imageExtension = '<?= htmlspecialchars(pathinfo($product['image'], PATHINFO_EXTENSION)) ?>';
-        const colorLower = colorName.toLowerCase().replace(/\s+/g, '_');
-        
-        // Load image with color suffix
-        const colorImageName = baseImageName + '_' + colorLower + '.' + imageExtension;
-        const imageUrl = '../uploads/products/' + colorImageName;
-        
-        // Update image directly
-        document.querySelector('.product-image-wrapper img').src = imageUrl;
-    }
-    
     // Color selection function for button-based selection
     function selectColor(button) {
         // Remove selected class from all buttons
@@ -604,9 +568,6 @@ function colorNameToHex($colorName) {
         const selectedHex = button.dataset.hex;
         document.getElementById('selectedColor').value = selectedColor;
         document.getElementById('selectedColorHex').value = selectedHex;
-        
-        // Update product image
-        updateProductImage(selectedColor);
     }
 
     // Color selection function for dropdown-based selection
@@ -618,9 +579,6 @@ function colorNameToHex($colorName) {
             
             document.getElementById('selectedColor').value = selectedColor;
             document.getElementById('selectedColorHex').value = selectedHex;
-            
-            // Update product image
-            updateProductImage(selectedColor);
         }
     }
 
