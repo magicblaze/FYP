@@ -13,7 +13,7 @@ $sql = "SELECT o.orderid, o.odate, o.budget, o.Requirements, o.ostatus,
         WHERE o.ostatus = 'Completed' OR o.ostatus = 'completed'
         ORDER BY s.FinishDate DESC";
 
-$result = mysqli_query($conn, $sql);
+$result = mysqli_query($mysqli, $sql);
 ?>
 
 <!DOCTYPE html>
@@ -103,7 +103,7 @@ $result = mysqli_query($conn, $sql);
     
     <?php
     if(!$result){
-        echo "<p style='color: #dc3545;'>Error: " . mysqli_error($conn) . "</p>";
+        echo "<p style='color: #dc3545;'>Error: " . mysqli_error($mysqli) . "</p>";
     } elseif(mysqli_num_rows($result) == 0){
         echo "<p>No completed orders found.</p>";
     } else {
@@ -118,7 +118,7 @@ $result = mysqli_query($conn, $sql);
         $budget_sql = "SELECT SUM(o.budget) as total_budget 
                        FROM `Order` o 
                        WHERE o.ostatus = 'Completed' OR o.ostatus = 'completed'";
-        $budget_result = mysqli_query($conn, $budget_sql);
+        $budget_result = mysqli_query($mysqli, $budget_sql);
         $budget_row = mysqli_fetch_assoc($budget_result);
         $total_budget = $budget_row['total_budget'] ?? 0;
         
@@ -193,7 +193,7 @@ $result = mysqli_query($conn, $sql);
     }
     
     mysqli_free_result($result);
-    mysqli_close($conn);
+    mysqli_close($mysqli);
     ?>
     
     <script>

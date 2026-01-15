@@ -34,16 +34,16 @@ require_once dirname(__DIR__) . '/config.php';
     
     if($status_filter != 'all') {
         // 使用预处理语句防止SQL注入
-        $status_filter = mysqli_real_escape_string($conn, $status_filter);
+        $status_filter = mysqli_real_escape_string($mysqli, $status_filter);
         $sql .= " WHERE o.ostatus = '$status_filter'";
     }
     
     $sql .= " ORDER BY o.odate DESC";
     
-    $result = mysqli_query($conn, $sql);
+    $result = mysqli_query($mysqli, $sql);
     
     if(!$result){
-        echo '<p>Error: ' . mysqli_error($conn) . '</p>';
+        echo '<p>Error: ' . mysqli_error($mysqli) . '</p>';
     } else {
         $total_orders = mysqli_num_rows($result);
         echo "<p>Total Orders: " . $total_orders . "</p>";
@@ -116,7 +116,7 @@ require_once dirname(__DIR__) . '/config.php';
             <td>
                 <a href="Manager_MyOrder_TotalOrder_Edit.php?id=<?php echo $row["orderid"]; ?>">Edit</a>
                 |
-                <button onclick="viewOrder(<?php echo json_encode($row['orderid']); ?>)">View</button>
+                <button onclick="viewOrder('<?php echo htmlspecialchars($row['orderid']); ?>')">View</button>
             </td>
         </tr>
         <?php
@@ -128,7 +128,7 @@ require_once dirname(__DIR__) . '/config.php';
     }
     
     mysqli_free_result($result);
-    mysqli_close($conn);
+    mysqli_close($mysqli);
     ?>
     
     <script>

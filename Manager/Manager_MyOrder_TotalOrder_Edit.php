@@ -14,7 +14,7 @@ $sql = "SELECT o.orderid, o.odate, o.budget, o.Requirements, o.Floor_Plan, o.ost
         LEFT JOIN `Schedule` s ON o.orderid = s.orderid
         WHERE o.orderid = ?";
         
-$stmt = mysqli_prepare($conn, $sql);
+$stmt = mysqli_prepare($mysqli, $sql);
 mysqli_stmt_bind_param($stmt, "i", $orderid);
 mysqli_stmt_execute($stmt);
 $result = mysqli_stmt_get_result($stmt);
@@ -25,13 +25,13 @@ $edit_order = isset($_GET['edit']) && $_GET['edit'] == 'order';
 
 if($_SERVER['REQUEST_METHOD'] == 'POST') {
     if(isset($_POST['update_status'])) {
-        $new_status = mysqli_real_escape_string($conn, $_POST['ostatus']);
-        $finish_date = mysqli_real_escape_string($conn, $_POST['FinishDate']);
+        $new_status = mysqli_real_escape_string($mysqli, $_POST['ostatus']);
+        $finish_date = mysqli_real_escape_string($mysqli, $_POST['FinishDate']);
         
         // 更新Order表的ostatus
         $update_order_status_sql = "UPDATE `Order` SET ostatus = '$new_status' WHERE orderid = $orderid";
         
-        if(mysqli_query($conn, $update_order_status_sql)) {
+        if(mysqli_query($mysqli, $update_order_status_sql)) {
             // 更新或插入Schedule表的FinishDate
             if($order['scheduleid']) {
                 $update_schedule_sql = "UPDATE `Schedule` SET FinishDate = '$finish_date' WHERE scheduleid = '{$order['scheduleid']}'";
@@ -40,7 +40,7 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
                 $update_schedule_sql = "INSERT INTO `Schedule` (managerid, FinishDate, orderid) 
                                        VALUES (1, '$finish_date', '$orderid')";
             }
-            mysqli_query($conn, $update_schedule_sql);
+            mysqli_query($mysqli, $update_schedule_sql);
             
             header("Location: Manager_MyOrder_TotalOrder.php");
             exit();
@@ -49,7 +49,7 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
     
     if(isset($_POST['update_order'])) {
         $budget = floatval($_POST['budget']);
-        $requirements = mysqli_real_escape_string($conn, $_POST['Requirements']);
+        $requirements = mysqli_real_escape_string($mysqli, $_POST['Requirements']);
         $clientid = intval($_POST['clientid']);
         $designid = intval($_POST['designid']);
         
@@ -60,7 +60,7 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
                             designid = $designid
                             WHERE orderid = $orderid";
         
-        if(mysqli_query($conn, $update_order_sql)) {
+        if(mysqli_query($mysqli, $update_order_sql)) {
             header("Location: Manager_MyOrder_TotalOrder.php");
             exit();
         }
@@ -235,7 +235,7 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
                                         <option value="">Select Client</option>
                                         <?php
                                         $client_sql = "SELECT clientid, cname, cemail FROM Client ORDER BY cname";
-                                        $client_result = mysqli_query($conn, $client_sql);
+                                        $client_result = mysqli_query($mysqli, $client_sql);
                                         while($client = mysqli_fetch_assoc($client_result)){
                                             $selected = ($client['clientid'] == $order['clientid']) ? 'selected' : '';
                                             echo '<option value="' . $client['clientid'] . '" ' . $selected . '>' . 
@@ -254,7 +254,7 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
                                         <option value="">Select Design</option>
                                         <?php
                                         $design_sql = "SELECT designid, price, tag FROM Design ORDER BY designid";
-                                        $design_result = mysqli_query($conn, $design_sql);
+                                        $design_result = mysqli_query($mysqli, $design_sql);
                                         while($design = mysqli_fetch_assoc($design_result)){
                                             $selected = ($design['designid'] == $order['designid']) ? 'selected' : '';
                                             echo '<option value="' . $design['designid'] . '" ' . $selected . '>' . 
@@ -288,7 +288,7 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
     
     <?php
     if(isset($result)) mysqli_free_result($result);
-    mysqli_close($conn);
+    mysqli_close($mysqli);
     ?>
     
     <br><br>

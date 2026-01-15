@@ -24,7 +24,7 @@ $sql = "SELECT o.orderid, o.odate, o.budget, o.Requirements, o.Floor_Plan, o.ost
         LEFT JOIN `Manager` m ON s.managerid = m.managerid
         WHERE o.orderid = $order_id";
         
-$result = mysqli_query($conn, $sql);
+$result = mysqli_query($mysqli, $sql);
 $order = mysqli_fetch_assoc($result);
 
 if(!$order) {
@@ -34,19 +34,19 @@ if(!$order) {
 
 // 处理表单提交
 if($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_approval'])) {
-    $status = mysqli_real_escape_string($conn, $_POST['status']);
-    $manager_reply = mysqli_real_escape_string($conn, $_POST['manager_reply']);
-    $additional_notes = mysqli_real_escape_string($conn, $_POST['additional_notes']);
-    $estimated_completion = mysqli_real_escape_string($conn, $_POST['estimated_completion']);
+    $status = mysqli_real_escape_string($mysqli, $_POST['status']);
+    $manager_reply = mysqli_real_escape_string($mysqli, $_POST['manager_reply']);
+    $additional_notes = mysqli_real_escape_string($mysqli, $_POST['additional_notes']);
+    $estimated_completion = mysqli_real_escape_string($mysqli, $_POST['estimated_completion']);
     
     // 开始事务
-    mysqli_begin_transaction($conn);
+    mysqli_begin_transaction($mysqli);
     
     try {
         // 1. 更新订单状态
         $update_order_sql = "UPDATE `Order` SET ostatus = '$status' WHERE orderid = $order_id";
-        if(!mysqli_query($conn, $update_order_sql)) {
-            throw new Exception("Failed to update order status: " . mysqli_error($conn));
+        if(!mysqli_query($mysqli, $update_order_sql)) {
+            throw new Exception("Failed to update order status: " . mysqli_error($mysqli));
         }
         
         // 2. 如果有回复消息，更新到Requirements中
@@ -58,10 +58,10 @@ if($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_approval'])) {
                          (!empty($additional_notes) ? "Additional Notes: " . $additional_notes . "\n" : "");
             
             $update_reply_sql = "UPDATE `Order` SET Requirements = CONCAT(IFNULL(Requirements, ''), ?) WHERE orderid = ?";
-            $stmt = mysqli_prepare($conn, $update_reply_sql);
+            $stmt = mysqli_prepare($mysqli, $update_reply_sql);
             mysqli_stmt_bind_param($stmt, "si", $reply_note, $order_id);
             if(!mysqli_stmt_execute($stmt)) {
-                throw new Exception("Failed to update order requirements: " . mysqli_error($conn));
+                throw new Exception("Failed to update order requirements: " . mysqli_error($mysqli));
             }
         }
         
@@ -70,7 +70,7 @@ if($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_approval'])) {
         
         if(!empty($estimated_completion)) {
             $check_schedule_sql = "SELECT scheduleid FROM `Schedule` WHERE orderid = $order_id";
-            $schedule_result = mysqli_query($conn, $check_schedule_sql);
+            $schedule_result = mysqli_query($mysqli, $check_schedule_sql);
             
             if(mysqli_num_rows($schedule_result) > 0) {
                 $update_schedule_sql = "UPDATE `Schedule` SET FinishDate = '$estimated_completion', managerid = $manager_id WHERE orderid = $order_id";
@@ -78,13 +78,13 @@ if($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_approval'])) {
                 $update_schedule_sql = "INSERT INTO `Schedule` (managerid, FinishDate, orderid) VALUES ($manager_id, '$estimated_completion', $order_id)";
             }
             
-            if(!mysqli_query($conn, $update_schedule_sql)) {
-                throw new Exception("Failed to update schedule: " . mysqli_error($conn));
+            if(!mysqli_query($mysqli, $update_schedule_sql)) {
+                throw new Exception("Failed to update schedule: " . mysqli_error($mysqli));
             }
         }
         
         // 提交事务
-        mysqli_commit($conn);
+        mysqli_commit($mysqli);
         
         // 发送邮件给客户
         $email_sent = sendApprovalEmail($order, $status, $manager_reply, $additional_notes, $estimated_completion);
@@ -102,7 +102,7 @@ if($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_approval'])) {
         
     } catch (Exception $e) {
         // 回滚事务
-        mysqli_rollback($conn);
+        mysqli_rollback($mysqli);
         $error_message = $e->getMessage();
     }
 }

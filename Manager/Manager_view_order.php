@@ -2,7 +2,7 @@
 require_once dirname(__DIR__) . '/config.php';
 
 if(isset($_GET['id'])) {
-    $orderid = mysqli_real_escape_string($conn, $_GET['id']);
+    $orderid = mysqli_real_escape_string($mysqli, $_GET['id']);
     
     $sql = "SELECT o.*, c.*, d.*, s.*
             FROM `Order` o
@@ -11,7 +11,7 @@ if(isset($_GET['id'])) {
             LEFT JOIN `Schedule` s ON o.orderid = s.orderid
             WHERE o.orderid = '$orderid'";
     
-    $result = mysqli_query($conn, $sql);
+    $result = mysqli_query($mysqli, $sql);
     $order = mysqli_fetch_assoc($result);
 }
 ?>
@@ -86,7 +86,7 @@ if(isset($_GET['id'])) {
     
     <?php
     if(isset($result)) mysqli_free_result($result);
-    mysqli_close($conn);
+    mysqli_close($mysqli);
     ?>
 
 </body>

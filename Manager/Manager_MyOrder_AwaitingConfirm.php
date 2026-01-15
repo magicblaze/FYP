@@ -3,7 +3,7 @@
 require_once dirname(__DIR__) . '/config.php';
 
 // 获取搜索参数
-$search = isset($_GET['search']) ? mysqli_real_escape_string($conn, $_GET['search']) : '';
+$search = isset($_GET['search']) ? mysqli_real_escape_string($mysqli, $_GET['search']) : '';
 
 // 构建查询条件
 $where_conditions = array("o.ostatus = 'Pending' OR o.ostatus = 'pending'");
@@ -32,11 +32,11 @@ $sql = "SELECT o.orderid, o.odate, o.budget, o.Requirements, o.ostatus,
         $where_clause
         ORDER BY o.odate DESC";
 
-$result = mysqli_query($conn, $sql);
+$result = mysqli_query($mysqli, $sql);
 
 // 如果还有错误，显示错误信息
 if(!$result) {
-    die("Database Error: " . mysqli_error($conn));
+    die("Database Error: " . mysqli_error($mysqli));
 }
 
 // Calculate statistics
@@ -46,7 +46,7 @@ $stats_sql = "SELECT
                 AVG(o.budget) as avg_budget
               FROM `Order` o
               WHERE o.ostatus = 'Pending' OR o.ostatus = 'pending'";
-$stats_result = mysqli_query($conn, $stats_sql);
+$stats_result = mysqli_query($mysqli, $stats_sql);
 $stats = mysqli_fetch_assoc($stats_result);
 ?>
 
@@ -260,7 +260,7 @@ $stats = mysqli_fetch_assoc($stats_result);
     }
     
     mysqli_free_result($result);
-    mysqli_close($conn);
+    mysqli_close($mysqli);
     ?>
     
     <script>
