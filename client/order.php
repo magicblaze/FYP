@@ -71,7 +71,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt = $mysqli->prepare("INSERT INTO `Order` (odate, clientid, budget, Floor_Plan, Requirements, designid, ostatus) VALUES (NOW(), ?, ?, ?, ?, ?, 'Designing')");
         $stmt->bind_param("iissi", $clientId, $budget, $uploadPath, $requirements, $designid);
         if ($stmt->execute()) {
-            $success = 'Order created successfully. Order ID: ' . $stmt->insert_id;
+            $orderId = $stmt->insert_id;
+            $success = 'Order created successfully. Order ID: ' . $orderId;
+            // Redirect to order detail page after 1 second
+            header('Refresh: 1; url=order_detail.php?orderid=' . $orderId);
         } else {
             $error = 'Failed to create order: ' . $stmt->error;
         }
