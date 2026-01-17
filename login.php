@@ -82,7 +82,10 @@ function findUserByEmailAcrossRoles(mysqli $mysqli, string $email, array $roleCo
         $res = $stmt->get_result();
         $user = $res->fetch_assoc();
         if ($user) {
+            // Include role metadata so caller can set role-specific session keys
             $user['role'] = $cfg['role'];
+            $user['id_col'] = $cfg['id_col'];
+            $user['table']  = $cfg['table'];
             return $user;
         }
     }
@@ -102,31 +105,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // Plain-text passwords in the current DB; compare directly
         if ($user && $password === $user['password']) {
+            // Base session payload
             $_SESSION['user'] = [
                 'id'    => (int)$user['id'],
                 'name'  => $user['name'],
                 'email' => $user['email'],
                 'role'  => $user['role'],
             ];
-            
-            // Important: client pages need clientid for comments/orders
-            if ($user['role'] === 'client') {
-                $_SESSION['user']['clientid'] = (int)$user['id'];
-            }
-            // Add supplierid to session if user is supplier
-            if ($user['role'] === 'supplier') {
-                $_SESSION['user']['supplierid'] = (int)$user['id'];
+
+            // Store the role-specific id column (e.g. clientid, designerid, managerid, etc.)
+            if (!empty($user['id_col'])) {
+                $_SESSION['user'][$user['id_col']] = (int)$user['id'];
             }
 
-            // Redirect logic
-            if ($user['role'] === 'client') {
-                header('Location: ' . (!empty($redirect) ? $redirect : 'design_dashboard.php'));
-            } elseif ($user['role'] === 'supplier') {
-                header('Location: supplier/dashboard.php'); 
-            } else {
-                // For other roles, adjust to your dashboards when available
-                header('Location: login.php');
+            // Role-aware redirect destinations (adjust paths as needed)
+            switch ($user['role']) {
+                case 'client':
+                    $dest = !empty($redirect) ? $redirect : 'design_dashboard.php';
+                    break;
+                case 'supplier':
+                    $dest = 'supplier/dashboard.php';
+                    break;
+                case 'designer':
+                    $dest = 'designer/profile.php';
+                    break;
+                case 'manager':
+                    $dest = 'Manager/Manager_MyOrder.html';
+                    break;
+                case 'contractors':
+                    // No dedicated contractors UI in repo; send to design dashboard by default
+                    $dest = 'design_dashboard.php';
+                    break;
+                default:
+                    $dest = 'design_dashboard.php';
             }
+
+            header('Location: ' . $dest);
             exit;
         } else {
             $error = 'Invalid email or password.';

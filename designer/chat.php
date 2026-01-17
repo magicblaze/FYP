@@ -1,4 +1,12 @@
 <?php
+session_start();
+
+if (!isset($_SESSION['user'])) {
+    $redirect = urlencode($_SERVER['REQUEST_URI'] ?? 'designer/chat.php');
+    header('Location: ../login.php?redirect=' . $redirect);
+    exit;
+}
+
 require_once __DIR__ . '/Chatfunction.php';
 $action = $_GET['action'] ?? $_POST['action'] ?? null;
 if ($action) {
@@ -37,7 +45,7 @@ if ($action) {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>HappyDesign — Chat + Catalog</title>
+  <title>HappyDesign</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
     :root{--bg:#f5f7fb;--muted:#7b8492;--radius:12px}
@@ -58,7 +66,6 @@ if ($action) {
       <button class="btn btn-outline-primary d-lg-none" id="openCatalogBtn" type="button" aria-controls="catalogOffcanvas">☰ Agents / Catalog</button>
     </div>
     <input type="text" id="globalSearch" class="form-control w-50 d-none d-md-block" placeholder="Search...">
-    <nav><ul class="nav"><li><a class="nav-link" href="#">Login</a></li></ul></nav>
   </header>
 
   <div class="container my-4">
@@ -67,19 +74,12 @@ if ($action) {
         <div class="card shadow-sm catalog-card">
           <div class="card-body p-3 d-flex flex-column" style="min-height:680px;">
             <div class="d-flex align-items-center mb-2">
-              <div class="h6 mb-0">Chats</div>
-              <div class="ms-auto small text-muted">Select to chat</div>
+              <div class="h6 mb-0">Chat Lists</div>
             </div>
 
             <div id="agentsList" class="list-group mb-3 overflow-auto" style="max-height:240px"></div>
 
-            <div class="d-flex align-items-center mb-3 campaign-row">
-              <label for="campaignInput" class="form-label mb-0 me-2 fw-semibold">Campaign</label>
-              <input id="campaignInput" type="text" class="form-control form-control-sm me-2" placeholder="e.g., Sale..." style="min-width:160px">
-              <a href="#" id="campaignHelp" class="text-primary small">Help</a>
-            </div>
-
-            <div class="small text-muted mb-2">Featured designs</div>
+            <div class="small text-muted mb-2">Saved designs</div>
             <div id="cardsGrid" class="row g-2 overflow-auto" style="max-height:520px"></div>
           </div>
         </div>
@@ -90,10 +90,8 @@ if ($action) {
           <div class="card-body d-flex flex-column p-3" style="height:680px;">
             <div class="d-flex align-items-start justify-content-between mb-2 border-bottom pb-2">
               <div>
-                <div class="chat-title h6 mb-0">Design Support</div>
-                <div class="chat-sub text-muted small">Select an agent to begin</div>
+                <div class="chat-title h6 mb-0" id="chat-name"></div>
               </div>
-              <div class="small text-success align-self-center" id="connectionStatus">Not connected</div>
             </div>
 
             <div id="messages" class="flex-grow-1 overflow-auto mb-3 px-1" aria-live="polite"></div>
@@ -140,12 +138,14 @@ if ($action) {
   <script src="Chatfunction.js"></script>
   <script>
     document.addEventListener('DOMContentLoaded', function () {
-      initApp({
-        userId: 'anon',
-        items: [
-          {likes:277, price:'$50', title:'Modern Living Set'},//php later fetch from DB
-        ]
-      });
+          initApp({
+            apiPath: 'ChatApi.php?action=',
+            userType: 'client',
+            userId: 1,
+            items: [
+              {likes:277, price:'$50', title:'Modern Living Set'},//php later fetch from DB
+            ]
+          });
     });
   </script>
 </body>

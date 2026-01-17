@@ -1,6 +1,7 @@
 function initApp(config = {}) {
   const API = config.apiPath || (location.pathname + '?action=');
-  const userId = config.userId || 'anon';
+  const userId = config.userId ?? 0;
+  const userType = config.userType || 'client';
   const items = config.items || [];
 
   const elements = {
@@ -66,10 +67,12 @@ function initApp(config = {}) {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'list-group-item list-group-item-action d-flex align-items-center';
-      btn.dataset.agentId = a.id;
-      btn.innerHTML = `<div class="me-2"><div class="rounded-circle bg-secondary text-white d-inline-flex align-items-center justify-content-center" style="width:36px;height:36px">${escapeHtml((a.name||'')[0]||'A')}</div></div>
-        <div class="flex-grow-1 text-start"><div class="fw-semibold">${escapeHtml(a.name)}</div><div class="small text-muted">${escapeHtml(a.title||'')}</div></div>
-        <div class="ms-2"><span class="badge ${a.is_online? 'bg-success':'bg-secondary'}">${a.is_online? 'Online':'Offline'}</span></div>`;
+      // ChatApi returns ChatRoom rows; map fields
+      btn.dataset.roomId = a.ChatRoomid || a.ChatRoomId || a.id;
+      const name = a.roomname || a.name || `Room ${btn.dataset.roomId}`;
+      const title = a.description || a.title || '';
+      btn.innerHTML = `<div class="me-2"><div class="rounded-circle bg-secondary text-white d-inline-flex align-items-center justify-content-center" style="width:36px;height:36px">${escapeHtml((name||'')[0]||'R')}</div></div>
+        <div class="flex-grow-1 text-start"><div class="fw-semibold">${escapeHtml(name)}</div><div class="small text-muted">${escapeHtml(title)}</div></div>`;
       btn.addEventListener('click', () => {
         selectAgent(a);
         if (isOff && bsOff) bsOff.hide();
@@ -79,23 +82,27 @@ function initApp(config = {}) {
   }
 
   function loadAgents() {
-    return apiGet('get_agents').then(data => {
-      const agents = data.agents || [];
-      renderAgents(agents, elements.agentsList, false);
-      renderAgents(agents, elements.agentsListOff, true);
-      return agents;
-    }).catch(err => { console.error('Failed to load agents', err); return []; });
+    // Use ChatApi listRooms endpoint
+    return apiGet('listRooms').then(data => {
+      const rooms = Array.isArray(data) ? data : (data.rooms || []);
+      renderAgents(rooms, elements.agentsList, false);
+      renderAgents(rooms, elements.agentsListOff, true);
+      return rooms;
+    }).catch(err => { console.error('Failed to load rooms', err); return []; });
   }
 
-  function conversationIdFor(agentId) { return `user:${userId}:agent:${agentId}`; }
+  function conversationIdFor(agentId) { return agentId; }
 
-  function loadMessages(agentId) {
-    const conv = conversationIdFor(agentId);
+  function loadMessages(roomId) {
     if (elements.messages) elements.messages.innerHTML = '';
-    return apiGet('get_messages&conversation=' + encodeURIComponent(conv)).then(data => {
-      (data.messages || []).forEach(m => appendMessageToUI(m, m.sender === 'user' ? 'me' : 'them'));
+    return apiGet('getMessages&room=' + encodeURIComponent(roomId)).then(data => {
+      const messages = Array.isArray(data) ? data : (data.messages || []);
+      messages.forEach(m => {
+        const who = (m.sender_type === userType && String(m.sender_id) == String(userId)) ? 'me' : 'them';
+        appendMessageToUI({ body: m.content || m.body || '', campaign: m.campaign || null, created_at: m.timestamp || m.created_at || new Date().toISOString() }, who);
+      });
       if (elements.messages) elements.messages.scrollTop = elements.messages.scrollHeight;
-      return data.messages || [];
+      return messages;
     }).catch(err => { console.error(err); return []; });
   }
 
@@ -113,11 +120,12 @@ function initApp(config = {}) {
 
   function selectAgent(agent) {
     currentAgent = agent;
-    if (elements.connectionStatus) elements.connectionStatus.textContent = `Connected to ${agent.name}`;
+    if (elements.connectionStatus) elements.connectionStatus.textContent = `Connected to ${agent.roomname || agent.name}`;
     document.querySelectorAll('#agentsList .list-group-item, #agentsListOffcanvas .list-group-item').forEach(el => {
-      el.classList.toggle('active', el.dataset.agentId == agent.id);
+      el.classList.toggle('active', el.dataset.roomId == (agent.ChatRoomid || agent.id));
     });
-    return loadMessages(agent.id);
+    const roomId = agent.ChatRoomid || agent.id || agent.roomId;
+    return loadMessages(roomId);
   }
 
   function sendMessage() {
@@ -125,8 +133,8 @@ function initApp(config = {}) {
     const text = (elements.input && elements.input.value || '').trim();
     if (!text) return;
     const campaignVal = (elements.campaign && elements.campaign.value.trim()) || null;
-    const conv = conversationIdFor(currentAgent.id);
-    return apiPost('send_message', { conversation: conv, sender: 'user', body: text, campaign: campaignVal }).then(resp => {
+    const roomId = currentAgent?.ChatRoomid || currentAgent?.id || currentAgent?.roomId;
+    return apiPost('sendMessage', { sender_type: userType, sender_id: userId, content: text, room: roomId }).then(resp => {
       if (resp.ok) {
         appendMessageToUI({ body: text, campaign: campaignVal, created_at: new Date().toISOString() }, 'me');
         if (elements.input) elements.input.value = '';
@@ -147,8 +155,8 @@ function initApp(config = {}) {
     const campaign = campaignVal ? `Campaign: ${campaignVal} · ` : '';
     const previewHtml = `<div class="product-preview d-flex align-items-center"><div class="thumb me-2">Living room</div><div><div class="fw-bold">${escapeHtml(title)}</div><div class="text-muted small">${escapeHtml(campaign)}${likes} Likes · <span class="fw-semibold">${price}</span></div></div></div>`;
     if (currentAgent) {
-      const conv = conversationIdFor(currentAgent.id);
-      apiPost('send_message', { conversation: conv, sender: 'user', body: previewHtml, campaign: campaignVal || null }).then(resp => {
+      const roomId = currentAgent?.ChatRoomid || currentAgent?.id || currentAgent?.roomId;
+      apiPost('sendMessage', { sender_type: userType, sender_id: userId, content: previewHtml, room: roomId }).then(resp => {
         if (resp.ok) appendMessageToUI({ body: previewHtml, campaign: campaignVal, created_at: new Date().toISOString() }, 'me');
       }).catch(console.error);
     } else {

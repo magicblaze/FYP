@@ -315,6 +315,38 @@ INSERT INTO `Message` (`messageid`, `sender_type`, `sender_id`, `content`,`messa
 (1, 'manager', 1, 'hi','text',null,2),
 (2, 'designer', 1, 'hello','text',null,2);
 
+-- Additional MessageRead seeds for later messages/rooms
+INSERT INTO `MessageRead` (`messagereadid`, `messageid`, `ChatRoomMemberid`, `is_read`, `read_at`) VALUES
+(5, 3, 3, 1, '2025-07-01 09:01:00'),
+(6, 3, 4, 0, NULL),
+(7, 4, 3, 0, NULL),
+(8, 4, 4, 1, '2025-07-01 09:05:00'),
+(9, 5, 5, 1, '2025-06-01 08:00:00');
+
+-- Per-member read/unread status for messages
+CREATE TABLE `MessageRead` (
+  `messagereadid` INT NOT NULL AUTO_INCREMENT,
+  `messageid` INT NOT NULL,
+  `ChatRoomMemberid` INT NOT NULL,
+  `is_read` TINYINT(1) NOT NULL DEFAULT 0,
+  `read_at` TIMESTAMP NULL DEFAULT NULL,
+  PRIMARY KEY (`messagereadid`),
+  UNIQUE KEY `uniq_msg_member` (`messageid`, `ChatRoomMemberid`),
+  KEY `idx_message` (`messageid`),
+  KEY `idx_member` (`ChatRoomMemberid`),
+  CONSTRAINT `fk_messageread_message` FOREIGN KEY (`messageid`) REFERENCES `Message` (`messageid`) ON DELETE CASCADE,
+  CONSTRAINT `fk_messageread_member` FOREIGN KEY (`ChatRoomMemberid`) REFERENCES `ChatRoomMember` (`ChatRoomMemberid`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Seed read status: for each message add rows for members of that chatroom
+-- Message 1 (room 2): manager (memberid 1) is sender -> read, designer (memberid 2) unread
+-- Message 2 (room 2): designer (memberid 2) is sender -> read, manager (memberid 1) unread
+INSERT INTO `MessageRead` (`messagereadid`, `messageid`, `ChatRoomMemberid`, `is_read`, `read_at`) VALUES
+(1, 1, 1, 1, '2025-01-01 10:00:00'),
+(2, 1, 2, 0, NULL),
+(3, 2, 1, 0, NULL),
+(4, 2, 2, 1, '2025-01-01 10:05:00');
+
 CREATE TABLE `ProductLike` (
   `productlikeid` INT NOT NULL AUTO_INCREMENT,
   `clientid` INT NOT NULL,
@@ -349,6 +381,49 @@ INSERT INTO `DesignLike` (`designlikeid`, `clientid`, `designid`) VALUES
 
 -- Re-enable Foreign Key Checks
 SET FOREIGN_KEY_CHECKS = 1;
+
+-- Additional test data for stakeholders (clients, managers, contractors, designers, suppliers),
+-- plus sample chat rooms/messages and an order with related entries.
+INSERT INTO `Client` (`clientid`,`cname`,`ctel`,`cemail`,`cpassword`,`address`,`remember_token`) VALUES
+(3, 'Sara Lee', 98765432, 'sara@example.com', 'Pass123', 'Green Road', NULL),
+(4, 'Mark Li', 87654321, 'markli@example.com', 'Pass456', 'Blue Ave', NULL);
+
+INSERT INTO `Manager` (`managerid`,`mname`,`mtel`,`memail`,`mpassword`,`remember_token`) VALUES
+(3, 'Sam Manager', 55512345, 'sam.manager@example.com', 'manager321', NULL);
+
+INSERT INTO `Contractors` (`contractorid`,`cname`,`ctel`,`cemail`,`cpassword`,`price`,`introduction`,`certification`,`managerid`,`remember_token`) VALUES
+(3, 'Delta Contractors', 44455566, 'delta@contractors.com', 'Cont12345', 800, 'Experienced team', NULL, 1, NULL);
+
+INSERT INTO `Designer` (`designerid`,`dname`,`dtel`,`demail`,`dpassword`,`managerid`,`remember_token`) VALUES
+(3, 'Lily Chan', 33445566, 'lily@example.com', 'designer321', 2, NULL);
+
+INSERT INTO `Supplier` (`supplierid`,`sname`,`stel`,`semail`,`spassword`,`remember_token`) VALUES
+(3, 'Easy Supplies', 32132132, 'easy@supplies.com', 'supply123', NULL);
+
+INSERT INTO `ChatRoom` (`ChatRoomid`, `roomname`, `description`, `room_type`, `created_by_type`, `created_by_id`) VALUES
+(3, 'project-room', 'discussion for project X', 'group', 'client',2);
+
+INSERT INTO `ChatRoomMember` (`ChatRoomMemberid`, `ChatRoomid`, `member_type`, `memberid`) VALUES
+(3, 3, 'client', 2),
+(4, 3, 'supplier', 3),
+(5, 1, 'designer', 2);
+
+INSERT INTO `Message` (`messageid`, `sender_type`, `sender_id`, `content`,`message_type`,`attachment`,`ChatRoomid`) VALUES
+(3, 'client', 2, 'Hi team, starting project', 'text', NULL, 3),
+(4, 'supplier', 3, 'We can supply materials next week', 'text', NULL, 3),
+(5, 'designer', 2, 'I will prepare the plan', 'text', NULL, 1);
+
+INSERT INTO `Order` (`orderid`, `odate`, `clientid`, `budget`, `Floor_Plan`, `Requirements`,`designid`,`ostatus`) VALUES
+(3, '2025-07-01 09:00:00', 3, 1500, NULL, 'Need quick remodel', 1, 'Pending');
+
+INSERT INTO `OrderProduct` (`orderproductid`, `productid`, `quantity`, `orderid`, `managerid`) VALUES
+(3, 3, 50, 3, 1);
+
+INSERT INTO `Order_Contractors` (`order_Contractorid`, `contractorid`, `orderid`, `managerid`) VALUES
+(3, 3, 3, 1);
+
+INSERT INTO `Schedule` (`scheduleid`,`managerid`,`FinishDate`,`orderid`) VALUES
+(3,1,'2025-08-01 17:00:00',3);
 
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
