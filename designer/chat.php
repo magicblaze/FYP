@@ -77,7 +77,9 @@ if ($action) {
               <div class="h6 mb-0">Chat Lists</div>
             </div>
 
-            <div id="agentsList" class="list-group mb-3 overflow-auto" style="max-height:240px"></div>
+            <div id="agentsList" class="list-group mb-3 overflow-auto" style="max-height:240px">
+              <?php include __DIR__ . '/chat_list.php'; ?>
+            </div>
 
             <div class="small text-muted mb-2">Saved designs</div>
             <div id="cardsGrid" class="row g-2 overflow-auto" style="max-height:520px"></div>
@@ -120,7 +122,9 @@ if ($action) {
           <div class="ms-auto small text-muted">Select to chat</div>
         </div>
 
-        <div id="agentsListOffcanvas" class="list-group mb-3 overflow-auto" style="max-height:240px"></div>
+        <div id="agentsListOffcanvas" class="list-group mb-3 overflow-auto" style="max-height:240px">
+          <?php include __DIR__ . '/chat_list.php'; ?>
+        </div>
 
         <div class="d-flex align-items-center mb-3 campaign-row">
           <label for="campaignInputOff" class="form-label mb-0 me-2 fw-semibold">Campaign</label>
@@ -139,13 +143,13 @@ if ($action) {
   <script>
     document.addEventListener('DOMContentLoaded', function () {
           initApp({
-            apiPath: 'ChatApi.php?action=',
-            userType: 'client',
-            userId: 1,
-            items: [
-              {likes:277, price:'$50', title:'Modern Living Set'},//php later fetch from DB
-            ]
-          });
+                  apiPath: 'ChatApi.php?action=',
+                  userType: 'client',
+                  userId: 1,
+                  items: [
+                    {likes:277, price:'$50', title:'Modern Living Set'},//php later fetch from DB
+                  ]
+                });
     });
   </script>
 </body>

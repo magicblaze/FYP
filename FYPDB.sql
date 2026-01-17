@@ -295,6 +295,8 @@ CREATE TABLE `ChatRoomMember` (
 INSERT INTO `ChatRoomMember` (`ChatRoomMemberid`, `ChatRoomid`, `member_type`, `memberid`) VALUES
 (1, 2, 'manager', 1),
 (2, 2, 'designer', 1);
+-- added membership for test designer (Lily, designerid=3)
+(6, 3, 'designer', 3);
 
 -- Message table
 CREATE TABLE `Message` (
@@ -315,14 +317,6 @@ CREATE TABLE `Message` (
 INSERT INTO `Message` (`messageid`, `sender_type`, `sender_id`, `content`,`message_type`,`attachment`,`ChatRoomid`) VALUES
 (1, 'manager', 1, 'hi','text',null,2),
 (2, 'designer', 1, 'hello','text',null,2);
-
--- Additional MessageRead seeds for later messages/rooms
-INSERT INTO `MessageRead` (`messagereadid`, `messageid`, `ChatRoomMemberid`, `is_read`, `read_at`) VALUES
-(5, 3, 3, 1, '2025-07-01 09:01:00'),
-(6, 3, 4, 0, NULL),
-(7, 4, 3, 0, NULL),
-(8, 4, 4, 1, '2025-07-01 09:05:00'),
-(9, 5, 5, 1, '2025-06-01 08:00:00');
 
 -- Per-member read/unread status for messages
 CREATE TABLE `MessageRead` (
@@ -413,6 +407,16 @@ INSERT INTO `Message` (`messageid`, `sender_type`, `sender_id`, `content`,`messa
 (3, 'client', 2, 'Hi team, starting project', 'text', NULL, 3),
 (4, 'supplier', 3, 'We can supply materials next week', 'text', NULL, 3),
 (5, 'designer', 2, 'I will prepare the plan', 'text', NULL, 1);
+
+-- MessageRead rows for messages in ChatRoom 3 (room members: ChatRoomMemberid 3=client2,4=supplier3,6=designer3)
+INSERT INTO `MessageRead` (`messagereadid`, `messageid`, `ChatRoomMemberid`, `is_read`, `read_at`) VALUES
+(5, 3, 3, 1, '2025-07-01 09:01:00'),
+(6, 3, 4, 0, NULL),
+(7, 3, 6, 0, NULL),
+(8, 4, 3, 0, NULL),
+(9, 4, 4, 1, '2025-07-01 09:05:00'),
+(10,4,6,0,NULL),
+(11,5,5,1,'2025-06-01 08:00:00');
 
 INSERT INTO `Order` (`orderid`, `odate`, `clientid`, `budget`, `Floor_Plan`, `Requirements`,`designid`,`ostatus`) VALUES
 (3, '2025-07-01 09:00:00', 3, 1500, NULL, 'Need quick remodel', 1, 'Pending');

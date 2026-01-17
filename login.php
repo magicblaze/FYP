@@ -5,19 +5,33 @@ session_start();
 
 $error = '';
 
-// If already logged in, redirect by role
+// If already logged in, redirect by role (use same destinations as post-login switch)
 if (isset($_SESSION['user'])) {
     $role = $_SESSION['user']['role'] ?? 'client';
     $redirect = $_GET['redirect'] ?? '';
-    
-    if ($role === 'client') {
-        header('Location: ' . (!empty($redirect) ? $redirect : 'design_dashboard.php'));
-    } elseif ($role === 'supplier') {
-        header('Location: supplier/dashboard.php');
-    } else {
-        // For other roles, adjust as needed (e.g., designer_dashboard.php)
-        header('Location: login.php');
+
+    switch ($role) {
+        case 'client':
+            $dest = !empty($redirect) ? $redirect : 'design_detail.php'; //need adjust
+            break;
+        case 'supplier':
+            $dest = 'supplier/dashboard.php';
+            break;
+        case 'designer':
+            $dest = 'designer/dashboard.php';
+            break;
+        case 'manager':
+            $dest = 'Manager/Manager_MyOrder.html';
+            break;
+        case 'contractors':
+            // need edit
+            $dest = '';
+            break;
+        default:
+            $dest = 'login.php';
     }
+
+    header('Location: ' . $dest);
     exit;
 }
 
@@ -127,17 +141,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $dest = 'supplier/dashboard.php';
                     break;
                 case 'designer':
-                    $dest = 'designer/profile.php';
+                    $dest = 'designer/dashboard.php';
                     break;
                 case 'manager':
                     $dest = 'Manager/Manager_MyOrder.html';
                     break;
                 case 'contractors':
                     // No dedicated contractors UI in repo; send to design dashboard by default
-                    $dest = 'design_dashboard.php';
+                    $dest = '';
                     break;
                 default:
-                    $dest = 'design_dashboard.php';
+                    $dest = 'login.php';
             }
 
             header('Location: ' . $dest);
