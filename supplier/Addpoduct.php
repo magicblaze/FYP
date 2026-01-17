@@ -19,8 +19,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 	$description = trim($_POST['description'] ?? '');
 	$size = trim($_POST['size'] ?? '');
 	$material = trim($_POST['material'] ?? '');
+	// Handle color picker (array of hex values)
 	$colors = $_POST['color'] ?? [];
-	$colorStr = is_array($colors) ? implode(", ", $colors) : $colors;
+	if (!is_array($colors)) {
+		$colors = [$colors];
+	}
+	$colorStr = implode(", ", $colors);
 
 	// Handle image upload
 	$imageName = null;
@@ -53,67 +57,177 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 	<meta charset="UTF-8">
 	<title>Add New Product</title>
 	<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
+	<style>
+		.form-section {
+			background: #f8fafd;
+			border-radius: 12px;
+			box-shadow: 0 2px 8px rgba(44, 62, 80, 0.07);
+			padding: 1.25rem 1.5rem 1rem 1.5rem;
+			margin-bottom: 1.25rem;
+			transition: box-shadow 0.2s;
+		}
+		.form-section:hover {
+			box-shadow: 0 4px 16px rgba(52, 152, 219, 0.13);
+		}
+		.form-section label {
+			font-weight: 500;
+		}
+		.form-section input,
+		.form-section textarea,
+		.form-section select {
+			background: #fff;
+			border-radius: 8px;
+		}
+	</style>
 </head>
 <body>
-	<div class="container mt-5">
-		<h2 class="mb-4">Add New Product</h2>
-		<?php if ($success): ?>
-			<div class="alert alert-success">Product added successfully! <a href="dashboard.php">Back to Dashboard</a></div>
-		<?php elseif ($error): ?>
-			<div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
-		<?php endif; ?>
-		<form method="post" enctype="multipart/form-data" class="row g-3">
-			<div class="col-md-6">
-				<label class="form-label">Product Name *</label>
-				<input type="text" name="pname" class="form-control" required>
+	<div class="container mb-5">
+		<div class="dashboard-header text-center mb-4" style="background: linear-gradient(135deg, #2c3e50, #3498db); color: white; padding: 2rem 0; border-radius: 0 0 15px 15px;">
+			<h2 class="mb-1"><i class="fas fa-plus-circle me-2"></i>Add New Product</h2>
+			<p class="mb-0">Fill in the details to add a new product to your inventory</p>
+		</div>
+		<div class="row justify-content-center">
+			<div class="col-lg-10">
+				<div class="card shadow-sm border-0">
+					<div class="card-body p-4">
+						<?php if ($success): ?>
+							<div class="alert alert-success">Product added successfully! <a href="dashboard.php">Back to Dashboard</a></div>
+						<?php elseif ($error): ?>
+							<div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
+						<?php endif; ?>
+						<form method="post" enctype="multipart/form-data">
+							<div class="row g-3 mb-2">
+								<div class="col-md-6">
+									<div class="form-section">
+										<label class="form-label"><i class="fas fa-box"></i> Product Name *</label>
+										<input type="text" name="pname" class="form-control" required>
+									</div>
+								</div>
+								<div class="col-md-6">
+									<div class="form-section">
+										<label class="form-label"><i class="fas fa-image"></i> Image *</label>
+										<input type="file" name="image" class="form-control" accept="image/*" required>
+									</div>
+								</div>
+								<div class="col-md-4">
+									<div class="form-section">
+										<label class="form-label"><i class="fas fa-dollar-sign"></i> Price (HK$) *</label>
+										<input type="number" name="price" class="form-control" min="1" required>
+									</div>
+								</div>
+								<div class="col-md-4">
+									<div class="form-section">
+										<label class="form-label"><i class="fas fa-list"></i> Category *</label>
+										<select name="category" class="form-select" required>
+											<option value="">Select</option>
+											<option value="Furniture">Furniture</option>
+											<option value="Material">Material</option>
+										</select>
+									</div>
+								</div>
+							</div>
+							<div class="row mb-2">
+								<div class="col-md-4" id="material-field" style="display:none;">
+									<div class="form-section">
+										<label class="form-label"><i class="fas fa-cube"></i> Material</label>
+										<input type="text" name="material" class="form-control">
+									</div>
+								</div>
+							</div>
+							<div class="row g-3 mb-2">
+								<div class="col-md-6">
+									<div class="form-section">
+										<label class="form-label"><i class="fas fa-align-left"></i> Description</label>
+										<textarea name="description" class="form-control"></textarea>
+									</div>
+								</div>
+								<div class="col-md-6">
+									<div class="form-section">
+										<label class="form-label"><i class="fas fa-ruler-combined"></i> Size</label>
+										<input type="text" name="size" class="form-control">
+									</div>
+								</div>
+							</div>
+							<div class="row mb-2">
+								<div class="col-md-12">
+									<div class="form-section">
+										<label class="form-label"><i class="fas fa-palette"></i> Colors <span class="text-muted">(Pick one or more)</span></label>
+										<div class="d-flex align-items-center gap-2 mb-2">
+											<input type="color" id="main-color-picker" class="form-control form-control-color" value="#C0392B" style="width:48px; height:48px;">
+											<button type="button" class="btn btn-outline-primary btn-sm" id="add-main-color-btn">
+												<i class="fas fa-plus"></i> Add Color
+											</button>
+										</div>
+										<input type="hidden" name="color[]" id="color-hidden-input">
+										<div class="form-text">Click "+" to add a color. You can pick multiple colors for each product. Selected colors will appear below.</div>
+										<div id="selected-colors-preview" class="d-flex flex-wrap gap-2 mt-2"></div>
+									</div>
+								</div>
+							</div>
+							<div class="row">
+								<div class="col-12 d-flex gap-2 justify-content-end">
+									<button type="submit" class="btn btn-success px-4"><i class="fas fa-check"></i> Add Product</button>
+									<a href="dashboard.php" class="btn btn-secondary px-4"><i class="fas fa-arrow-left"></i> Cancel</a>
+								</div>
+							</div>
+						</form>
+					</div>
+				</div>
 			</div>
-			<div class="col-md-6">
-				<label class="form-label">Image *</label>
-				<input type="file" name="image" class="form-control" accept="image/*" required>
-			</div>
-			<div class="col-md-4">
-				<label class="form-label">Price (HK$) *</label>
-				<input type="number" name="price" class="form-control" min="1" required>
-			<div class="col-md-4">
-				<label class="form-label">Category *</label>
-				<select name="category" class="form-select" required>
-					<option value="">Select</option>
-					<option value="Furniture">Furniture</option>
-					<option value="Material">Material</option>
-				</select>
-			</div>
-			<div class="col-md-4">
-				<label class="form-label">Material</label>
-				<input type="text" name="material" class="form-control">
-			</div>
-			<div class="col-md-6">
-				<label class="form-label">Description</label>
-				<textarea name="description" class="form-control"></textarea>
-			</div>
-			<div class="col-md-6">
-				<label class="form-label">Size</label>
-				<input type="text" name="size" class="form-control">
-			</div>
-			<div class="col-md-12">
-				<label class="form-label">Colors (hold Ctrl to select multiple)</label>
-				<select name="color[]" class="form-select" multiple required>
-					<option value="Red">Red</option>
-					<option value="Blue">Blue</option>
-					<option value="Yellow">Yellow</option>
-					<option value="Green">Green</option>
-					<option value="Black">Black</option>
-					<option value="White">White</option>
-					<option value="Brown">Brown</option>
-					<option value="Grey">Grey</option>
-					<option value="Other">Other</option>
-				</select>
-				<div class="form-text">You can select multiple colors for each product.</div>
-			</div>
-			<div class="col-12">
-				<button type="submit" class="btn btn-primary">Add Product</button>
-				<a href="dashboard.php" class="btn btn-secondary">Cancel</a>
-			</div>
-		</form>
+		</div>
 	</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
+<script>
+// 類別選擇時顯示/隱藏材料欄位
+const categorySelect = document.querySelector('select[name="category"]');
+const materialField = document.getElementById('material-field');
+function toggleMaterialField() {
+	if (categorySelect.value === 'Furniture') {
+		materialField.style.display = '';
+	} else {
+		materialField.style.display = 'none';
+		materialField.querySelector('input').value = '';
+	}
+}
+categorySelect.addEventListener('change', toggleMaterialField);
+window.addEventListener('DOMContentLoaded', toggleMaterialField);
+// --- 固定主色選擇器多選邏輯 ---
+let selectedColors = [];
+const selectedColorsPreview = document.getElementById('selected-colors-preview');
+const colorHiddenInput = document.getElementById('color-hidden-input');
+const mainColorPicker = document.getElementById('main-color-picker');
+const addMainColorBtn = document.getElementById('add-main-color-btn');
+
+function updateColorPreview() {
+	selectedColorsPreview.innerHTML = '';
+	selectedColors.forEach((color, idx) => {
+		const colorDiv = document.createElement('div');
+		colorDiv.className = 'd-flex align-items-center gap-1';
+		colorDiv.innerHTML = `
+			<span style="display:inline-block;width:28px;height:28px;border-radius:50%;background:${color};border:2px solid #ccc;"></span>
+			<button type="button" class="btn btn-sm btn-link text-danger p-0 ms-1" title="Remove" onclick="removeColor(${idx})"><i class="fas fa-times"></i></button>
+		`;
+		selectedColorsPreview.appendChild(colorDiv);
+	});
+	// Update hidden input for form submission
+	colorHiddenInput.name = 'color[]';
+	colorHiddenInput.value = selectedColors.join(',');
+}
+
+addMainColorBtn.addEventListener('click', function() {
+	const color = mainColorPicker.value;
+	if (!selectedColors.includes(color)) {
+		selectedColors.push(color);
+		updateColorPreview();
+	}
+});
+
+window.removeColor = function(idx) {
+	selectedColors.splice(idx, 1);
+	updateColorPreview();
+}
+
+// 初始化
+updateColorPreview();
+</script>
 </body>
-</html>
