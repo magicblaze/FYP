@@ -211,6 +211,7 @@ CREATE TABLE `OrderProduct` (
   `productid` int NOT NULL,
   `quantity` int NOT NULL,
   `orderid` int NOT NULL,
+  `deliverydate` date DEFAULT NULL,
   `managerid` int NOT NULL,
   PRIMARY KEY (`orderproductid`),
   KEY `productid_OrderProduct_idx` (`productid`),
@@ -222,9 +223,9 @@ CREATE TABLE `OrderProduct` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 INSERT INTO `OrderProduct`
-(`orderproductid`, `productid`, `quantity`, `orderid`, `managerid`) VALUES
-(1, 1, 10, 1,1),
-(2, 2, 20, 1,1);
+(`orderproductid`, `productid`, `quantity`, `orderid`, `deliverydate`, `managerid`) VALUES
+(1, 1, 10, 1, '2026-01-13', 1),
+(2, 2, 20, 1, '2026-01-23', 1);
 
 -- Order_Contractors table
 CREATE TABLE `Order_Contractors` (

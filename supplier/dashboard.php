@@ -59,6 +59,7 @@ $result = $stmt->get_result();
         <div class="h4 mb-0 text-primary">HappyDesign <span class="text-muted fs-6">| Supplier Portal</span></div>
         <div class="d-flex align-items-center gap-3">
             <span class="text-muted">Welcome, <strong><?= htmlspecialchars($supplierName) ?></strong></span>
+            <a href="schedule.php" class="nav-link  ">schedule</a>
             <a href="../logout.php" class="btn btn-outline-danger btn-sm">Logout</a>
         </div>
     </header>
