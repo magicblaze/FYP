@@ -12,13 +12,13 @@ if (isset($_SESSION['user'])) {
 
     switch ($role) {
         case 'client':
-            $dest = !empty($redirect) ? $redirect : 'design_detail.php'; //need adjust
+            $dest = !empty($redirect) ? $redirect : 'design_dashboard.php'; //need adjust
             break;
         case 'supplier':
             $dest = 'supplier/dashboard.php';
             break;
         case 'designer':
-            $dest = 'designer/dashboard.php';
+            $dest = 'design_dashboard.php';
             break;
         case 'manager':
             $dest = 'Manager/Manager_MyOrder.html';
@@ -28,7 +28,7 @@ if (isset($_SESSION['user'])) {
             $dest = '';
             break;
         default:
-            $dest = 'login.php';
+            $dest = 'dashboard.php';
     }
 
     header('Location: ' . $dest);

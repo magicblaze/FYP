@@ -69,15 +69,15 @@ $sql = "SELECT s.scheduleid AS scid,
           AND s.FinishDate >= NOW()
         ORDER BY s.FinishDate ASC
         LIMIT 8";
- $stmt = $conn->prepare($sql);
- if ($stmt) {
+$stmt = $conn->prepare($sql);
+if ($stmt) {
   $stmt->bind_param("i", $designerId);
   $stmt->execute();
   $upcoming = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
- } else {
+} else {
   // Prepare failed (table missing or SQL error) — fall back to empty list
   $upcoming = [];
- }
+}
 
 // Map schedule status to Bootstrap badge classes
 function statusBadgeClass($status)
@@ -120,6 +120,37 @@ function statusBadgeClass($status)
 </head>
 
 <body>
+  <header class="bg-white shadow p-3 d-flex justify-content-between align-items-center">
+    <div class="d-flex align-items-center gap-3">
+      <div class="h4 mb-0"><a href="design_dashboard.php" style="text-decoration: none; color: inherit;">HappyDesign</a>
+      </div>
+      <nav>
+        <ul class="nav align-items-center gap-2">
+          <li class="nav-item"><a class="nav-link active" href="design_dashboard.php">Design</a></li>
+          <li class="nav-item"><a class="nav-link" href="material_dashboard.php">Material</a></li>
+          <li class="nav-item"><a class="nav-link" href="furniture_dashboard.php">Furniture</a></li>
+        </ul>
+      </nav>
+    </div>
+    <nav>
+      <ul class="nav align-items-center">
+        <?php if (isset($_SESSION['user'])): ?>
+          <li class="nav-item me-2">
+            <a class="nav-link text-muted" href="client/profile.php">
+              <i class="fas fa-user me-1"></i>Hello
+              <?= htmlspecialchars($clientData['cname'] ?? $_SESSION['user']['name'] ?? 'User') ?>
+            </a>
+          </li>
+          <li class="nav-item"><a class="nav-link" href="client/my_likes.php">My Likes</a></li>
+          <li class="nav-item"><a class="nav-link" href="client/order_history.php">Order History</a></li>
+          <li class="nav-item"><a class="nav-link" href="chat.php">Chatroom</a></li>
+          <li class="nav-item"><a class="nav-link" href="logout.php">Logout</a></li>
+        <?php else: ?>
+          <li class="nav-item"><a class="nav-link" href="login.php">Login</a></li>
+        <?php endif; ?>
+      </ul>
+    </nav>
+  </header>
   <div class="container my-4">
     <h2>Welcome, <?= htmlspecialchars($_SESSION['user']['name'] ?? 'Designer') ?></h2>
 
@@ -140,7 +171,7 @@ function statusBadgeClass($status)
           </div>
         </div>
       </div>
-    
+
       <!-- Message -->
       <div class="col-md-3 col-6">
         <a href="chat.php" class="text-decoration-none">
@@ -157,7 +188,8 @@ function statusBadgeClass($status)
                  WHERE crm.member_type = 'designer'
                    AND crm.memberid = ?
                    AND (mr.is_read = 0 OR mr.is_read IS NULL)
-                   AND NOT (m.sender_type = 'designer' AND m.sender_id = ?)")
+                   AND NOT (m.sender_type = 'designer' AND m.sender_id = ?)"
+              )
               ;
               if ($stmt) {
                 $stmt->bind_param("ii", $designerId, $designerId);
