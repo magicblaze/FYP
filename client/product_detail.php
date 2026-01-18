@@ -296,34 +296,37 @@ function colorNameToHex($colorName) {
         }
 
         .color-button {
-            display: flex;
+            display: inline-flex;
             align-items: center;
-            gap: 0.5rem;
-            padding: 0.5rem 1rem;
-            border: 2px solid #ecf0f1;
-            background-color: #f8f9fa;
+            justify-content: center;
+            gap: 0;
+            padding: 0;
+            border: 2px solid #ddd;
+            background-color: transparent;
             color: #2c3e50;
             border-radius: 6px;
             cursor: pointer;
             transition: all 0.3s ease;
             font-size: 0.9rem;
             font-weight: 500;
-            min-width: fit-content;
+            min-width: 40px;
+            height: 40px;
             text-align: center;
         }
 
         .color-button:hover {
             border-color: #3498db;
-            background-color: #e3f2fd;
-            transform: translateY(-2px);
-            box-shadow: 0 2px 8px rgba(52, 152, 219, 0.2);
+            background-color: transparent;
+            transform: scale(1.1);
+            box-shadow: 0 2px 8px rgba(52, 152, 219, 0.3);
         }
 
         .color-button.selected {
-            background-color: #e3f2fd;
+            background-color: transparent;
             color: #2c3e50;
             border-color: #3498db;
-            box-shadow: 0 2px 8px rgba(52, 152, 219, 0.3);
+            border-width: 3px;
+            box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.3);
         }
 
         .color-swatch {
@@ -340,7 +343,7 @@ function colorNameToHex($colorName) {
         }
 
         .color-name {
-            display: inline-block;
+            display: none;
         }
 
         .color-select-dropdown {
@@ -493,9 +496,9 @@ function colorNameToHex($colorName) {
                                         class="color-button <?= $index === 0 ? 'selected' : '' ?>" 
                                         data-color="<?= htmlspecialchars($color) ?>"
                                         data-hex="<?= htmlspecialchars($hexColor) ?>"
-                                        onclick="selectColor(this)">
+                                        onclick="selectColor(this)"
+                                        title="<?= htmlspecialchars($color) ?>">
                                     <span class="color-swatch" style="background-color: <?= htmlspecialchars($hexColor) ?>;"></span>
-                                    <span class="color-name"><?= htmlspecialchars($color) ?></span>
                                 </button>
                             <?php endforeach; ?>
                         </div>
