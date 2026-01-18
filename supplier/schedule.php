@@ -511,9 +511,12 @@ $month_name = date('F', mktime(0, 0, 0, $current_month, 1));
 <body>
     <!-- Navbar -->
     <header class="bg-white shadow-sm p-3 d-flex justify-content-between align-items-center">
-        <div class="h4 mb-0 text-primary">HappyDesign <span class="text-muted fs-6">| <?php echo ucfirst($user_type); ?> Portal</span></div>
+        <div class="h4 mb-0 text-primary">HappyDesign <span class="text-muted fs-6">| <?php echo ucfirst($user_type); ?> Portal</span></div>            
+        <span class="text-muted">Welcome, <strong><?= htmlspecialchars($user_name) ?></strong></span>
         <div class="d-flex align-items-center gap-3">
-            <span class="text-muted">Welcome, <strong><?= htmlspecialchars($user_name) ?></strong></span>
+            <a href="dashboard.php" class="btn btn-outline-primary btn-sm me-3">
+                <i class="fas fa-arrow-left"></i> Home
+            </a>
             <a href="../logout.php" class="btn btn-outline-danger btn-sm">Logout</a>
         </div>
     </header>

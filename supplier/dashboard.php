@@ -87,7 +87,9 @@ $result = $stmt->get_result();
     <header class="bg-white shadow-sm p-3 d-flex justify-content-between align-items-center">
         <div class="h4 mb-0 text-primary">HappyDesign <span class="text-muted fs-6">| Supplier Portal</span></div>
         <div class="d-flex align-items-center gap-3">
-            <span class="text-muted">Welcome, <strong><?= htmlspecialchars($supplierName) ?></strong></span>
+            <a class="nav-link text-muted" href="S_profile.php">
+                <i class="fas fa-user me-1"></i>Hello <?= htmlspecialchars($supplierName) ?>
+            </a>
             <a href="schedule.php" class="nav-link  ">schedule</a>
             <a href="../logout.php" class="btn btn-outline-danger btn-sm">Logout</a>
         </div>
@@ -148,7 +150,15 @@ $result = $stmt->get_result();
                                         <div class="fw-bold"><?= htmlspecialchars($row['pname']) ?></div>
                                         <small class="text-muted">ID: <?= $row['productid'] ?></small>
                                     </td>
-                                    <td><span class="badge bg-info text-dark"><?= htmlspecialchars($row['category']) ?></span></td>
+                                    <td>
+                                        <?php
+                                            $cat = strtolower($row['category']);
+                                            $badgeClass = ($cat === 'furniture') ? 'bg-info text-dark' : (($cat === 'material') ? 'bg-success text-white' : 'bg-secondary');
+                                        ?>
+                                        <span class="badge <?= $badgeClass ?>">
+                                            <?= htmlspecialchars($row['category']) ?>
+                                        </span>
+                                    </td>
                                     <td>
                                         HK$<?= number_format($row['price']) ?>
                                     </td>
