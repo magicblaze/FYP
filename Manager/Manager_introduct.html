@@ -3,55 +3,99 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Worker Homepage</title>
+    <link rel="stylesheet" href="../css/Manager_style.css">
+    <title>Worker Homepage - HappyDesign</title>
 </head>
 <body>
-    <nav>
-        <a href="Manager_introduct.html">Introduct</a> |
-        <a href="Manager_MyOrder.html">MyOrder</a> |
-        <a href="Manager_Massage.html">Massage</a> |
-        <a href="Manager_Schedule.html">Schedule</a>
-    </nav>
-
-    <h1>Homepage</h1>
-    
-    <div id="personal-info">
-        <h2>Personal:</h2>
-        <div class="field">
-            <label for="worker-name">Name:</label>
-            <input type="text" id="worker-name" placeholder="(enter the Name)">
-        </div>
-        
-        <div class="field">
-            <label for="email">Email address:</label>
-            <input type="email" id="email" placeholder="xxxx@xxxx.com">
-        </div>
-        
-        <hr>
-        
-        <div class="field">
-            <label for="telephone">Telephone Number:</label>
-            <div class="telephone-input">
-                <select id="phone_num" name="phone_num">
-                            <option value="HK">+ 852</option>
-                            <option value="Cn">+ 86</option>
-                            <option value="AA">+ 01</option>
-                            <option value="BB">+ 02</option>
-                            <option value="CC">+ 03</option>
-                <input type="tel" id="telephone" placeholder="1111 2222">
+    <!-- 导航栏 -->
+    <nav class="nav-bar">
+        <div class="nav-container">
+            <a href="#" class="nav-brand">HappyDesign</a>
+            <div class="nav-links">
+                <a href="Manager_introduct.html" class="active">Introduct</a>
+                <a href="Manager_MyOrder.html">MyOrder</a>
+                <a href="Manager_Massage.html">Massage</a>
+                <a href="Manager_Schedule.html">Schedule</a>
             </div>
         </div>
+    </nav>
+
+    <!-- 主要内容 -->
+    <div class="page-container">
+        <h1 class="page-title">Personal Information</h1>
         
-        <div class="field">
-            <label for="password">Password:</label>
-            <input type="password" id="password" placeholder="123456">
-        </div>
-        
-        <div class="field">
-            <label for="company">Company Name:</label>
-            <input type="text" id="company">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Profile Details</h2>
+            </div>
+            <div class="card-body">
+                <form class="form-container">
+                    <div class="form-group">
+                        <label for="worker-name" class="form-label">Name:</label>
+                        <input type="text" id="worker-name" class="form-control" placeholder="Enter your name">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="email" class="form-label">Email address:</label>
+                        <input type="email" id="email" class="form-control" placeholder="xxxx@xxxx.com">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="telephone" class="form-label">Telephone Number:</label>
+                        <div class="d-flex gap-2">
+                            <select id="phone_num" name="phone_num" class="form-control" style="width: 120px;">
+                                <option value="HK">+852</option>
+                                <option value="Cn">+86</option>
+                                <option value="US">+1</option>
+                                <option value="UK">+44</option>
+                            </select>
+                            <input type="tel" id="telephone" class="form-control" placeholder="1111 2222">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="password" class="form-label">Password:</label>
+                        <input type="password" id="password" class="form-control" placeholder="Enter your password">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="company" class="form-label">Company Name:</label>
+                        <input type="text" id="company" class="form-control" placeholder="Enter company name">
+                    </div>
+                </form>
+            </div>
+            <div class="card-footer">
+                <button id="update-button" class="btn btn-primary">Update Profile</button>
+                <button onclick="window.location.href='Manager_MyOrder.html'" class="btn btn-secondary">Cancel</button>
+            </div>
         </div>
     </div>
-    <button id="update-button">Update</button>
+
+    <script>
+        // 表单验证
+        document.getElementById('update-button').addEventListener('click', function() {
+            const name = document.getElementById('worker-name').value;
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            if (!name || !email || !password) {
+                alert('Please fill in all required fields');
+                return;
+            }
+            
+            if (!validateEmail(email)) {
+                alert('Please enter a valid email address');
+                return;
+            }
+            
+            // 提交逻辑
+            alert('Profile updated successfully!');
+        });
+        
+        function validateEmail(email) {
+            const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            return re.test(email);
+        }
+    </script>
 </body>
 </html>
