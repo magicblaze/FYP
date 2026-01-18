@@ -311,8 +311,8 @@ CREATE TABLE `ChatRoomMember` (
 INSERT INTO `ChatRoomMember` (`ChatRoomMemberid`, `ChatRoomid`, `member_type`, `memberid`) VALUES
 (1, 2, 'manager', 1),
 (2, 2, 'designer', 1),
--- added membership for test designer (Lily, designerid=3)
-(6, 3, 'designer', 3);
+-- map test membership to existing designer id (use designerid=2)
+(6, 3, 'designer', 2);
 
 -- Message table
 CREATE TABLE `Message` (
@@ -395,36 +395,23 @@ SET FOREIGN_KEY_CHECKS = 1;
 
 -- Additional test data for stakeholders (clients, managers, contractors, designers, suppliers),
 -- plus sample chat rooms/messages and an order with related entries.
-INSERT INTO `Client` (`clientid`,`cname`,`ctel`,`cemail`,`cpassword`,`address`,`remember_token`) VALUES
-(3, 'Sara Lee', 98765432, 'sara@example.com', 'Pass123', 'Green Road', NULL),
-(4, 'Mark Li', 87654321, 'markli@example.com', 'Pass456', 'Blue Ave', NULL);
-
-INSERT INTO `Manager` (`managerid`,`mname`,`mtel`,`memail`,`mpassword`,`remember_token`) VALUES
-(3, 'Sam Manager', 55512345, 'sam.manager@example.com', 'manager321', NULL);
-
-INSERT INTO `Contractors` (`contractorid`,`cname`,`ctel`,`cemail`,`cpassword`,`price`,`introduction`,`certification`,`managerid`,`remember_token`) VALUES
-(3, 'Delta Contractors', 44455566, 'delta@contractors.com', 'Cont12345', 800, 'Experienced team', NULL, 1, NULL);
-
-INSERT INTO `Designer` (`designerid`,`dname`,`dtel`,`demail`,`dpassword`,`managerid`,`remember_token`) VALUES
-(3, 'Lily Chan', 33445566, 'lily@example.com', 'designer321', 2, NULL);
-
-INSERT INTO `Supplier` (`supplierid`,`sname`,`stel`,`semail`,`spassword`,`remember_token`) VALUES
-(3, 'Easy Supplies', 32132132, 'easy@supplies.com', 'supply123', NULL);
+-- Additional test data removed: duplicate user inserts were deleted to keep IDs consistent
+-- (Client/Manager/Contractors/Designer/Supplier rows already exist earlier in the dump)
 
 INSERT INTO `ChatRoom` (`ChatRoomid`, `roomname`, `description`, `room_type`, `created_by_type`, `created_by_id`) VALUES
 (3, 'project-room', 'discussion for project X', 'group', 'client',2);
 
 INSERT INTO `ChatRoomMember` (`ChatRoomMemberid`, `ChatRoomid`, `member_type`, `memberid`) VALUES
 (3, 3, 'client', 2),
-(4, 3, 'supplier', 3),
+(4, 3, 'supplier', 2),
 (5, 1, 'designer', 2);
 
 INSERT INTO `Message` (`messageid`, `sender_type`, `sender_id`, `content`,`message_type`,`attachment`,`ChatRoomid`) VALUES
 (3, 'client', 2, 'Hi team, starting project', 'text', NULL, 3),
-(4, 'supplier', 3, 'We can supply materials next week', 'text', NULL, 3),
+(4, 'supplier', 2, 'We can supply materials next week', 'text', NULL, 3),
 (5, 'designer', 2, 'I will prepare the plan', 'text', NULL, 1);
 
--- MessageRead rows for messages in ChatRoom 3 (room members: ChatRoomMemberid 3=client2,4=supplier3,6=designer3)
+-- MessageRead rows for messages in ChatRoom 3 (room members: ChatRoomMemberid 3=client2,4=supplier2,6=designer2)
 INSERT INTO `MessageRead` (`messagereadid`, `messageid`, `ChatRoomMemberid`, `is_read`, `read_at`) VALUES
 (5, 3, 3, 1, '2025-07-01 09:01:00'),
 (6, 3, 4, 0, NULL),
@@ -435,13 +422,13 @@ INSERT INTO `MessageRead` (`messagereadid`, `messageid`, `ChatRoomMemberid`, `is
 (11,5,5,1,'2025-06-01 08:00:00');
 
 INSERT INTO `Order` (`orderid`, `odate`, `clientid`, `budget`, `Floor_Plan`, `Requirements`,`designid`,`ostatus`) VALUES
-(3, '2025-07-01 09:00:00', 3, 1500, NULL, 'Need quick remodel', 1, 'Pending');
+(3, '2025-07-01 09:00:00', 1, 1500, NULL, 'Need quick remodel', 1, 'Pending');
 
 INSERT INTO `OrderProduct` (`orderproductid`, `productid`, `quantity`, `orderid`, `managerid`) VALUES
 (3, 3, 50, 3, 1);
 
 INSERT INTO `Order_Contractors` (`order_Contractorid`, `contractorid`, `orderid`, `managerid`) VALUES
-(3, 3, 3, 1);
+(3, 1, 3, 1);
 
 INSERT INTO `Schedule` (`scheduleid`,`managerid`,`FinishDate`,`orderid`) VALUES
 (3,1,'2025-08-01 17:00:00',3);

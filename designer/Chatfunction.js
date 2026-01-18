@@ -4,22 +4,29 @@ function initApp(config = {}) {
   const userType = config.userType || 'client';
   const items = config.items || [];
 
+  // Optionally namespace element ids when used as an embeddable widget.
+  const prefix = config.rootId ? (config.rootId + '_') : '';
+  const el = id => document.getElementById(prefix + id);
   const elements = {
-    agentsList: document.getElementById('agentsList'),
-    agentsListOff: document.getElementById('agentsListOffcanvas'),
-    cardsGrid: document.getElementById('cardsGrid'),
-    cardsGridOff: document.getElementById('cardsGridOffcanvas'),
-    messages: document.getElementById('messages'),
-    input: document.getElementById('input'),
-    send: document.getElementById('send'),
-    campaign: document.getElementById('campaignInput'),
-    campaignOff: document.getElementById('campaignInputOff'),
-    connectionStatus: document.getElementById('connectionStatus'),
-    openCatalogBtn: document.getElementById('openCatalogBtn'),
-    catalogOffcanvasEl: document.getElementById('catalogOffcanvas'),
+    agentsList: el('agentsList'),
+    agentsListOff: el('agentsListOffcanvas'),
+    cardsGrid: el('cardsGrid'),
+    cardsGridOff: el('cardsGridOffcanvas'),
+    messages: el('messages'),
+    input: el('input'),
+    send: el('send'),
+    campaign: el('campaignInput'),
+    campaignOff: el('campaignInputOff'),
+    connectionStatus: el('connectionStatus'),
+    openCatalogBtn: el('openCatalogBtn'),
+    catalogOffcanvasEl: el('catalogOffcanvas'),
   };
 
   let currentAgent = null;
+  let currentRoomId = null;
+  let lastMessageId = 0;
+  let pollTimer = null;
+  let typingThrottle = null;
   const bsOff = (elements.catalogOffcanvasEl) ? new bootstrap.Offcanvas(elements.catalogOffcanvasEl) : null;
   if (elements.openCatalogBtn && bsOff) {
     elements.openCatalogBtn.addEventListener('click', () => bsOff.show());
@@ -27,7 +34,7 @@ function initApp(config = {}) {
 
   function apiGet(path) { return fetch(API + path).then(r => r.json()); }
   function apiPost(path, data) {
-    return fetch(location.pathname + '?action=' + path, {
+    return fetch(API + path, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
@@ -100,10 +107,45 @@ function initApp(config = {}) {
       messages.forEach(m => {
         const who = (m.sender_type === userType && String(m.sender_id) == String(userId)) ? 'me' : 'them';
         appendMessageToUI({ body: m.content || m.body || '', campaign: m.campaign || null, created_at: m.timestamp || m.created_at || new Date().toISOString() }, who);
+        const mid = m.id || m.messageid || m.messageId || 0;
+        if (mid) lastMessageId = Math.max(lastMessageId, parseInt(mid, 10));
       });
       if (elements.messages) elements.messages.scrollTop = elements.messages.scrollHeight;
       return messages;
     }).catch(err => { console.error(err); return []; });
+  }
+
+  function startPolling(roomId) {
+    if (pollTimer) clearInterval(pollTimer);
+    currentRoomId = roomId;
+    pollTimer = setInterval(() => {
+      apiGet('getMessages&room=' + encodeURIComponent(roomId) + '&since=' + encodeURIComponent(lastMessageId)).then(ms => {
+        const messages = Array.isArray(ms) ? ms : (ms.messages || []);
+        messages.forEach(m => {
+          const who = (m.sender_type === userType && String(m.sender_id) == String(userId)) ? 'me' : 'them';
+          appendMessageToUI({ body: m.content || m.body || '', campaign: m.campaign || null, created_at: m.timestamp || m.created_at || new Date().toISOString() }, who);
+          const mid = m.id || m.messageid || m.messageId || 0;
+          if (mid) lastMessageId = Math.max(lastMessageId, parseInt(mid, 10));
+        });
+        if (elements.messages && messages.length) elements.messages.scrollTop = elements.messages.scrollHeight;
+      }).catch(() => {});
+
+      // typing status
+      apiGet('getTyping&room=' + encodeURIComponent(roomId)).then(tp => {
+        const el = document.getElementById('typingIndicator');
+        if (!el) return;
+        if (tp && tp.typing && !(tp.sender === userType && String(tp.sender_id) === String(userId))) {
+          el.textContent = 'typing...';
+        } else {
+          el.textContent = '';
+        }
+      }).catch(() => {});
+
+    }, 1500);
+  }
+
+  function stopPolling() {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
   }
 
   function appendMessageToUI(msgObj, who) {
@@ -125,6 +167,8 @@ function initApp(config = {}) {
       el.classList.toggle('active', el.dataset.roomId == (agent.ChatRoomid || agent.id));
     });
     const roomId = agent.ChatRoomid || agent.id || agent.roomId;
+    lastMessageId = 0;
+    startPolling(roomId);
     return loadMessages(roomId);
   }
 
@@ -136,7 +180,10 @@ function initApp(config = {}) {
     const roomId = currentAgent?.ChatRoomid || currentAgent?.id || currentAgent?.roomId;
     return apiPost('sendMessage', { sender_type: userType, sender_id: userId, content: text, room: roomId }).then(resp => {
       if (resp.ok) {
-        appendMessageToUI({ body: text, campaign: campaignVal, created_at: new Date().toISOString() }, 'me');
+        const created = (resp.message) ? resp.message : { content: text, created_at: new Date().toISOString(), id: resp.id };
+        appendMessageToUI({ body: created.content || text, campaign: campaignVal, created_at: created.timestamp || created.created_at || new Date().toISOString() }, 'me');
+        const mid = created.id || created.messageid || created.messageId || resp.id || 0;
+        if (mid) lastMessageId = Math.max(lastMessageId, parseInt(mid, 10));
         if (elements.input) elements.input.value = '';
         if (elements.messages) elements.messages.scrollTop = elements.messages.scrollHeight;
       } else {
@@ -165,7 +212,16 @@ function initApp(config = {}) {
   }
 
   if (elements.send) elements.send.addEventListener('click', sendMessage);
-  if (elements.input) elements.input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
+  if (elements.input) {
+    elements.input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
+    elements.input.addEventListener('input', () => {
+      if (!currentRoomId && currentAgent) currentRoomId = currentAgent.ChatRoomid || currentAgent.id || currentAgent.roomId;
+      if (!currentRoomId) return;
+      if (typingThrottle) return;
+      typingThrottle = setTimeout(() => { clearTimeout(typingThrottle); typingThrottle = null; }, 1800);
+      apiPost('typing', { room: currentRoomId, sender_type: userType, sender_id: userId }).catch(() => {});
+    });
+  }
   document.addEventListener('click', onCatalogItemClick);
 
   const campaignDesktop = elements.campaign;

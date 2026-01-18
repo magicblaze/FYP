@@ -57,6 +57,10 @@ if ($action) {
     .campaign-row input{border-radius:10px;padding:6px 8px;background:#f8fafc;border:1px solid #e6edf8}
     .offcanvas-body .list-group{max-height:240px;overflow:auto}
     .offcanvas-body #cardsGridOffcanvas{max-height:380px;overflow:auto}
+    /* Ensure chat panel has sensible minimum size for usability */
+    .chat-card .card-body { min-height: 480px; height: 680px; }
+    .chat-card .card-body > div { min-width: 360px; }
+    .chat-card #messages { min-height: 300px; }
   </style>
 </head>
 <body>
@@ -92,43 +96,41 @@ if ($action) {
 
   <div class="container my-4">
     <div class="row gx-3">
-      <aside class="col-lg-4 d-none d-lg-block" id="catalogColumn">
-        <div class="card shadow-sm catalog-card">
-          <div class="card-body p-3 d-flex flex-column" style="min-height:680px;">
-            <div class="d-flex align-items-center mb-2">
-              <div class="h6 mb-0">Chat Lists</div>
-            </div>
-
-            <div id="agentsList" class="list-group mb-3 overflow-auto" style="max-height:240px">
-              <?php include __DIR__ . '/chat_list.php'; ?>
-            </div>
-
-            <div class="small text-muted mb-2">Saved designs</div>
-            <div id="cardsGrid" class="row g-2 overflow-auto" style="max-height:520px"></div>
-          </div>
-        </div>
-      </aside>
-
-      <main class="col-lg-8">
+      <div class="col-12">
         <div class="card shadow-sm chat-card">
-          <div class="card-body d-flex flex-column p-3" style="height:680px;">
-            <div class="d-flex align-items-start justify-content-between mb-2 border-bottom pb-2">
-              <div>
-                <div class="chat-title h6 mb-0" id="chat-name"></div>
+          <div class="card-body d-flex p-0" style="min-height:480px;">
+            <div style="flex:0 0 28%;min-width:200px;max-width:36%;border-right:1px solid #eef3fb;padding:12px 14px;overflow:auto;background:#fbfdff">
+              <div class="d-flex align-items-center mb-2">
+                <div class="h6 mb-0">Chat Lists</div>
               </div>
+              <div id="agentsList" class="list-group mb-3 overflow-auto" style="max-height:240px">
+                <?php include __DIR__ . '/chat_list.php'; ?>
+              </div>
+              <div class="small text-muted mb-2">Saved designs</div>
+              <div id="cardsGrid" class="row g-2 overflow-auto" style="max-height:520px"></div>
             </div>
 
-            <div id="messages" class="flex-grow-1 overflow-auto mb-3 px-1" aria-live="polite"></div>
+            <!-- Right: messages -->
+            <div class="flex-grow-1 d-flex flex-column" style="padding:16px;min-width:220px;">
+              <div class="d-flex align-items-start justify-content-between mb-2 border-bottom pb-2">
+                <div>
+                  <div class="chat-title h6 mb-0" id="chat-name"></div>
+                  <div id="typingIndicator" class="small text-muted"></div>
+                </div>
+              </div>
 
-            <form id="composer" class="d-flex gap-2 align-items-center" role="form" onsubmit="return false;">
-              <button type="button" class="btn btn-light btn-sm" id="attach" title="Attach">📎</button>
-              <input id="input" class="form-control form-control-sm" placeholder="Write a message or type /share to send a product" aria-label="Message input">
-              <button type="button" class="btn btn-outline-secondary btn-sm" id="favorite" title="Quick favorite">♡</button>
-              <button type="button" class="btn btn-primary btn-sm" id="send">Send</button>
-            </form>
+              <div id="messages" class="flex-grow-1 overflow-auto mb-3 px-1" aria-live="polite"></div>
+
+              <form id="composer" class="d-flex gap-2 align-items-center" role="form" onsubmit="return false;">
+                <button type="button" class="btn btn-light btn-sm" id="attach" title="Attach">📎</button>
+                <input id="input" class="form-control form-control-sm" placeholder="Write a message or type /share to send a product" aria-label="Message input">
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="favorite" title="Quick favorite">♡</button>
+                <button type="button" class="btn btn-primary btn-sm" id="send">Send</button>
+              </form>
+            </div>
           </div>
         </div>
-      </main>
+      </div>
     </div>
   </div>
 
@@ -163,15 +165,28 @@ if ($action) {
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   <script src="Chatfunction.js"></script>
   <script>
+    <?php
+      $role = $_SESSION['user']['role'] ?? 'client';
+      $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
+    ?>
     document.addEventListener('DOMContentLoaded', function () {
-          initApp({
+          const app = initApp({
                   apiPath: 'ChatApi.php?action=',
-                  userType: 'client',
-                  userId: 1,
+                  userType: <?= json_encode($role) ?>,
+                  userId: <?= json_encode($uid) ?>,
                   items: [
                     {likes:277, price:'$50', title:'Modern Living Set'},//php later fetch from DB
                   ]
                 });
+          const openRoom = <?= json_encode($_GET['open_room'] ?? null) ?>;
+          if (openRoom) {
+            // Ensure agents loaded then select the room id
+            app.loadAgents().then(() => {
+              try { app.selectAgent({ ChatRoomid: openRoom, roomname: 'Conversation' }); } catch (e) { console.error(e); }
+            }).catch(() => {
+              try { app.selectAgent({ ChatRoomid: openRoom, roomname: 'Conversation' }); } catch (e) { console.error(e); }
+            });
+          }
     });
   </script>
 </body>
