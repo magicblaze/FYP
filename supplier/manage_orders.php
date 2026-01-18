@@ -32,6 +32,7 @@ $sql = "
         o.ostatus,
         c.cname,
         c.cemail,
+        c.address,
         ops.status as product_status,
         ops.updated_at as status_updated_at
     FROM OrderProduct op
@@ -280,7 +281,7 @@ $availableStatuses = ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelle
                         </div>
                         <div class="detail-item">
                             <div class="detail-label">Order ID</div>
-                            <div class="detail-value">#<?= $product['orderid'] ?></div>
+                            <div class="detail-value">#<?= $product['orderproductid'] ?></div>
                         </div>
                         <div class="detail-item">
                             <div class="detail-label">Order Date</div>
@@ -323,6 +324,10 @@ $availableStatuses = ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelle
                         <div class="order-info-item">
                             <span class="order-info-label">Email:</span>
                             <span class="order-info-value"><?= htmlspecialchars($product['cemail']) ?></span>
+                        </div>
+                        <div class="order-info-item">
+                            <span class="order-info-label">Address:</span>
+                            <span class="order-info-value"><?= htmlspecialchars($product['address'] ?? 'N/A') ?></span>
                         </div>
                         <div class="order-info-item">
                             <span class="order-info-label">Order Status:</span>

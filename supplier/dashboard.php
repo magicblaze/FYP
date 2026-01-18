@@ -86,7 +86,6 @@ $result = $stmt->get_result();
     <!-- Navbar -->
     <header class="bg-white shadow p-3 d-flex justify-content-between align-items-center">
         <div class="d-flex align-items-center gap-3">
-<<<<<<< HEAD
             <div class="h4 mb-0"><a href="dashboard.php" style="text-decoration: none; color: inherit;">HappyDesign</a></div>
             <nav>
                 <ul class="nav align-items-center gap-2">
@@ -94,13 +93,6 @@ $result = $stmt->get_result();
                     <li class="nav-item"><a class="nav-link" href="schedule.php">Schedule</a></li>
                 </ul>
             </nav>
-=======
-            <a class="nav-link text-muted" href="S_profile.php">
-                <i class="fas fa-user me-1"></i>Hello <?= htmlspecialchars($supplierName) ?>
-            </a>
-            <a href="schedule.php" class="nav-link  ">schedule</a>
-            <a href="../logout.php" class="btn btn-outline-danger btn-sm">Logout</a>
->>>>>>> 8abf487cd849d53aa423fa97646e73cd345a86e8
         </div>
         <nav>
             <ul class="nav align-items-center">
@@ -170,15 +162,7 @@ $result = $stmt->get_result();
                                         <div class="fw-bold"><?= htmlspecialchars($row['pname']) ?></div>
                                         <small class="text-muted">ID: <?= $row['productid'] ?></small>
                                     </td>
-                                    <td>
-                                        <?php
-                                            $cat = strtolower($row['category']);
-                                            $badgeClass = ($cat === 'furniture') ? 'bg-info text-dark' : (($cat === 'material') ? 'bg-success text-white' : 'bg-secondary');
-                                        ?>
-                                        <span class="badge <?= $badgeClass ?>">
-                                            <?= htmlspecialchars($row['category']) ?>
-                                        </span>
-                                    </td>
+                                    <td><span class="badge bg-info text-dark"><?= htmlspecialchars($row['category']) ?></span></td>
                                     <td>
                                         HK$<?= number_format($row['price']) ?>
                                     </td>
