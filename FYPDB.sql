@@ -35,6 +35,7 @@ DROP TABLE IF EXISTS `ChatRoomMember`;
 DROP TABLE IF EXISTS `Message`;
 DROP TABLE IF EXISTS `ProductLike`;
 DROP TABLE IF EXISTS `DesignLike`;
+drop table if exists `MessageRead`;
 
 -- Client table
 CREATE TABLE `Client` (
