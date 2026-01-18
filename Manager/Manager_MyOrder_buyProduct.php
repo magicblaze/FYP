@@ -6,7 +6,7 @@ require_once dirname(__DIR__) . '/config.php';
 <head>
     <meta charset="UTF-8">
     <link rel="stylesheet" href="../css/Manager_style.css">
-    <title>Buy Product - HappyDesign</title>
+    <title>buyProduct - HappyDesign</title>
 </head>
 <body>
     <!-- 导航栏 -->
@@ -154,7 +154,7 @@ require_once dirname(__DIR__) . '/config.php';
     <script>
     function buyProduct(orderId) {
         if(confirm('Are you sure you want to buy product for Order ID: ' + orderId + '?\n\nThis will proceed with the product purchase process.')) {
-            window.location.href = 'process_buyProduct.php?orderid=' + encodeURIComponent(orderId);
+            window.location.href = '../material_dashboard.php?orderid=' + encodeURIComponent(orderId);
         }
     }
     
