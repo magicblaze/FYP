@@ -75,8 +75,17 @@ if (isset($_GET['from']) && $_GET['from'] === 'my_likes') {
 // Use DB-driven image endpoint
 $mainImg = '../supplier/product_image.php?id=' . (int)$product['productid'];
 
-// Function to convert color name to hex code
-function colorNameToHex($colorName) {
+// Function to convert color name or hex code to hex code
+// Supports both formats: "red" -> "#FF0000" and "#FF0000" -> "#FF0000"
+function colorNameToHex($colorInput) {
+    $colorInput = trim($colorInput);
+    
+    // If input is already a valid hex code, return it
+    if (preg_match('/^#[0-9A-Fa-f]{6}$/i', $colorInput)) {
+        return strtoupper($colorInput);
+    }
+    
+    // Otherwise, treat it as a color name
     $colorMap = [
         'red' => '#FF0000',
         'blue' => '#0000FF',
@@ -149,7 +158,7 @@ function colorNameToHex($colorName) {
         'brass' => '#B5A642',
     ];
     
-    $colorLower = strtolower(trim($colorName));
+    $colorLower = strtolower($colorInput);
     return isset($colorMap[$colorLower]) ? $colorMap[$colorLower] : '#999999';
 }
 ?>
