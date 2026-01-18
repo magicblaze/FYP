@@ -91,7 +91,7 @@ try {
     $stmt = $pdo->prepare("SELECT * FROM Message WHERE ChatRoomid=? ORDER BY timestamp ASC");
     $stmt->execute([$roomId]);
     $rows = $stmt->fetchAll();
-    // augment with sender display name
+    // augment with sender display name and attach uploaded file metadata when present
     foreach ($rows as &$r) {
       $r['sender_name'] = null;
       $sid = isset($r['sender_id']) ? (int)$r['sender_id'] : 0;
@@ -110,6 +110,25 @@ try {
           $n = null; break;
       }
       if ($n) $r['sender_name'] = $n; else $r['sender_name'] = ($r['sender_type'] ?? '') . ' ' . ($r['sender_id'] ?? '');
+      // If messages reference an uploaded file via `fileid`, fetch its metadata and expose a compat `attachment` path
+      if (!empty($r['fileid'])) {
+        try {
+          $fstmt = $pdo->prepare('SELECT fileid, uploader_type, uploader_id, filename, filepath, mime, size, uploaded_at FROM UploadedFiles WHERE fileid=? LIMIT 1');
+          $fstmt->execute([(int)$r['fileid']]);
+          $frow = $fstmt->fetch();
+          if ($frow) {
+            $r['uploaded_file'] = $frow;
+            // backward compatibility: provide `attachment` containing the web-accessible filepath
+            if (!isset($r['attachment']) || empty($r['attachment'])) $r['attachment'] = $frow['filepath'];
+            // set message_type to 'image' when mime indicates an image (if not already set)
+            if (empty($r['message_type']) && !empty($frow['mime']) && strpos($frow['mime'], 'image/') === 0) {
+              $r['message_type'] = 'image';
+            }
+          }
+        } catch (Throwable $e) {
+          error_log('[ChatApi] failed to fetch uploaded file for message: ' . $e->getMessage());
+        }
+      }
     }
     if ($since > 0) {
       $filtered = array_filter($rows, function($m) use ($since) {
@@ -198,10 +217,10 @@ try {
           }
         }
       }
-      // insert with message_type and optional attachment
-      if ($attachmentPath) {
-        $stmt = $pdo->prepare("INSERT INTO Message (sender_type,sender_id,content,message_type,ChatRoomid,attachment) VALUES (?,?,?,?,?,?)");
-        $stmt->execute([$sender_type, $sender_id, $content, $message_type, $room, $attachmentPath]);
+      // insert with message_type and optional uploaded file reference (fileid)
+      if (!empty($uploadedFileId)) {
+        $stmt = $pdo->prepare("INSERT INTO Message (sender_type,sender_id,content,message_type,ChatRoomid,fileid) VALUES (?,?,?,?,?,?)");
+        $stmt->execute([$sender_type, $sender_id, $content, ($message_type?:'file'), $room, $uploadedFileId]);
       } else {
         $stmt = $pdo->prepare("INSERT INTO Message (sender_type,sender_id,content,message_type,ChatRoomid) VALUES (?,?,?,?,?)");
         $stmt->execute([$sender_type, $sender_id, $content, ($message_type?:'text'), $room]);
@@ -244,7 +263,10 @@ try {
         $fstmt = $pdo->prepare('SELECT fileid, uploader_type, uploader_id, filename, filepath, mime, size, uploaded_at FROM UploadedFiles WHERE fileid=? LIMIT 1');
         $fstmt->execute([$uploadedFileId]);
         $frow = $fstmt->fetch();
-        if ($frow) $row['uploaded_file'] = $frow;
+        if ($frow) {
+          $row['uploaded_file'] = $frow;
+          if (!isset($row['attachment']) || empty($row['attachment'])) $row['attachment'] = $frow['filepath'];
+        }
       } catch (Throwable $e) { error_log('[ChatApi] fetch uploaded file metadata failed: ' . $e->getMessage()); }
     }
     send_json(['ok'=>true,'id'=>$last,'message'=>$row]);

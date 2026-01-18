@@ -27,6 +27,7 @@ function initApp(config = {}) {
   let currentRoomId = null;
   let lastMessageId = 0;
   let widgetPendingFile = null;
+  let pendingFile = null;
   let pollTimer = null;
   let typingThrottle = null;
   const bsOff = (elements.catalogOffcanvasEl) ? new bootstrap.Offcanvas(elements.catalogOffcanvasEl) : null;
@@ -307,13 +308,15 @@ function initApp(config = {}) {
     let roomId = getSelectedRoomId();
     if (!roomId) { alert('Please select a person to chat with.'); return; }
     const text = (elements.input && elements.input.value || '').trim();
-    // If there's a pending widget file selection, upload that file instead of sending text immediately
-    if (widgetPendingFile) {
+    // If there's a pending file selection (widget or main), upload that file instead of sending text immediately
+    const fileToUpload = widgetPendingFile || pendingFile;
+    if (fileToUpload) {
       // ensure we have roomId
       if (!roomId) { alert('Please select a person to chat with.'); return; }
       // prepare FormData and upload
-      const file = widgetPendingFile;
-      widgetPendingFile = null;
+      const file = fileToUpload;
+      // clear pending references immediately to avoid double-send
+      widgetPendingFile = null; pendingFile = null;
       if (elements.send) elements.send.disabled = true;
       try {
         const fd = new FormData();
@@ -333,11 +336,11 @@ function initApp(config = {}) {
           alert('Failed to upload file');
         }
       } catch (err) {
-        console.error('widget file upload error', err);
+        console.error('file upload error', err);
         alert('Upload error: ' + (err && err.message ? err.message : ''));
       } finally {
         // clear preview & re-enable send
-        try { clearSelectedPreview(document.getElementById(prefix + 'attachPreview') || document.getElementById('chatwidget_attachPreview')); } catch(e){}
+          try { clearSelectedPreview(document.getElementById(prefix + 'attachPreviewColumn') || document.getElementById('attachPreviewColumn') || document.getElementById('chatwidget_attachPreviewColumn')); } catch(e){}
         if (elements.send) elements.send.disabled = false;
       }
       return;
@@ -411,7 +414,7 @@ function initApp(config = {}) {
     // main composer
     const attachBtn = document.getElementById('attach');
     const attachInput = document.getElementById('attachInput');
-    let attachPreview = document.getElementById('attachPreview');
+    let attachPreview = document.getElementById('attachPreviewColumn');
     if (attachBtn && attachInput) {
       attachBtn.addEventListener('click', () => attachInput.click());
       attachInput.addEventListener('change', async (e) => {
@@ -422,8 +425,18 @@ function initApp(config = {}) {
         try {
           if (!attachPreview) {
             console.warn('attachPreview missing, creating temporary preview element');
-            attachPreview = document.createElement('div'); attachPreview.id = 'attachPreview'; attachPreview.style.minWidth = '0'; attachPreview.style.maxWidth = '180px';
-            if (attachBtn && attachBtn.parentNode) attachBtn.parentNode.insertBefore(attachPreview, attachBtn);
+            attachPreview = document.createElement('div'); attachPreview.id = 'attachPreviewColumn'; attachPreview.style.minWidth = '0'; attachPreview.style.maxWidth = '100%';
+            // Insert preview row above the composer (message input row) when possible
+            try {
+              const composer = elements.input ? elements.input.closest('.composer') : null;
+              if (composer && composer.parentNode) {
+                composer.parentNode.insertBefore(attachPreview, composer);
+              } else if (attachBtn && attachBtn.parentNode) {
+                attachBtn.parentNode.insertBefore(attachPreview, attachBtn);
+              }
+            } catch (e) {
+              if (attachBtn && attachBtn.parentNode) attachBtn.parentNode.insertBefore(attachPreview, attachBtn);
+            }
           }
           showSelectedPreview(attachPreview, file);
         } catch(ex){ console.error('preview error', ex); }
@@ -467,30 +480,16 @@ function initApp(config = {}) {
           });
           lastMessageId = 0; startPolling(roomId);
         }
-        const fd = new FormData();
-        fd.append('sender_type', userType);
-        fd.append('sender_id', userId);
-        fd.append('room', roomId);
-        fd.append('message_type', 'file');
-        fd.append('attachment', file, file.name);
-        try {
-          const resp = await apiPostForm('sendMessage', fd);
-          if (resp && resp.ok) {
-            const created = resp.message || { content: '', created_at: new Date().toISOString(), id: resp.id };
-            appendMessageToUI(created, 'me');
-            clearSelectedPreview(attachPreview);
-          } else {
-            alert('Failed to upload file');
-            clearSelectedPreview(attachPreview);
-          }
-        } catch (err) { console.error(err); alert('Upload error: ' + (err && err.message ? err.message : '')); }
+        // Defer upload: store file until user presses Send
+        pendingFile = file;
+        // keep preview visible; clear native input so the same file can be re-selected later
         attachInput.value = '';
       });
     }
     // widget composer
     const wab = document.getElementById('chatwidget_attach');
     const waist = document.getElementById('chatwidget_attachInput');
-    let widgetPreview = document.getElementById('chatwidget_attachPreview');
+    let widgetPreview = document.getElementById('chatwidget_attachPreviewColumn');
     if (wab && waist) {
       let widgetClickGuard = false;
       wab.addEventListener('click', () => { if (widgetClickGuard) return; widgetClickGuard = true; setTimeout(() => widgetClickGuard = false, 600); waist.click(); });
@@ -500,8 +499,18 @@ function initApp(config = {}) {
         try {
           if (!widgetPreview) {
             console.warn('widgetPreview missing, creating temporary element');
-            widgetPreview = document.createElement('div'); widgetPreview.id='chatwidget_attachPreview'; widgetPreview.style.minWidth='0'; widgetPreview.style.maxWidth='120px';
-            if (wab && wab.parentNode) wab.parentNode.insertBefore(widgetPreview, wab);
+            widgetPreview = document.createElement('div'); widgetPreview.id='chatwidget_attachPreviewColumn'; widgetPreview.style.minWidth='0'; widgetPreview.style.maxWidth='100%';
+            // Try to insert preview above the composer row for the widget
+            try {
+              const composer = elements.input ? elements.input.closest('.composer') : null;
+              if (composer && composer.parentNode) {
+                composer.parentNode.insertBefore(widgetPreview, composer);
+              } else if (wab && wab.parentNode) {
+                wab.parentNode.insertBefore(widgetPreview, wab);
+              }
+            } catch (e) {
+              if (wab && wab.parentNode) wab.parentNode.insertBefore(widgetPreview, wab);
+            }
           }
           showSelectedPreview(widgetPreview, file);
         } catch(ex){ console.error('widget preview error', ex); }
@@ -532,23 +541,9 @@ function initApp(config = {}) {
           currentAgent = { ChatRoomid: roomId, roomname: rn };
           lastMessageId = 0; startPolling(roomId);
         }
-        const fd = new FormData();
-        fd.append('sender_type', userType);
-        fd.append('sender_id', userId);
-        fd.append('room', roomId);
-        fd.append('message_type', 'file');
-        fd.append('attachment', file, file.name);
-        try {
-          const resp = await apiPostForm('sendMessage', fd);
-          if (resp && resp.ok) {
-            const created = resp.message || { content: '', created_at: new Date().toISOString(), id: resp.id };
-            appendMessageToUI(created, 'me');
-            clearSelectedPreview(widgetPreview);
-          } else {
-            alert('Failed to upload file');
-            clearSelectedPreview(widgetPreview);
-          }
-        } catch (err) { console.error(err); alert('Upload error: ' + (err && err.message ? err.message : '')); }
+        // Defer upload: store file until user presses Send (widget)
+        widgetPendingFile = file;
+        // keep preview visible; clear native input so the same file can be re-selected later
         waist.value = '';
       });
     }
@@ -558,6 +553,7 @@ function initApp(config = {}) {
   function showSelectedPreview(container, file) {
     if (!container) return;
     container.innerHTML = '';
+    const root = document.createElement('div'); root.className = 'message-preview-row';
     const wrap = document.createElement('div'); wrap.className = 'd-flex align-items-center';
     if (file.type && file.type.startsWith('image/')) {
       const img = document.createElement('img');
@@ -567,13 +563,16 @@ function initApp(config = {}) {
       wrap.appendChild(img);
     } else {
       const ext = (file.name || '').split('.').pop() || '';
-      const badge = document.createElement('div'); badge.className = 'bg-secondary text-white d-inline-flex align-items-center justify-content-center';
-      badge.style.width = '56px'; badge.style.height = '44px'; badge.style.borderRadius = '6px'; badge.style.marginRight = '8px'; badge.textContent = ext.toUpperCase();
+      const badge = document.createElement('div'); badge.className = 'file-badge';
+      badge.textContent = ext.toUpperCase(); badge.style.marginRight = '8px';
       wrap.appendChild(badge);
     }
-    const name = document.createElement('div'); name.className = 'small text-truncate'; name.style.maxWidth = '96px'; name.textContent = file.name;
-    wrap.appendChild(name);
-    container.appendChild(wrap);
+    const meta = document.createElement('div'); meta.className = 'file-meta';
+    const name = document.createElement('div'); name.className = 'name'; name.textContent = file.name; meta.appendChild(name);
+    if (file.size) { const size = document.createElement('div'); size.className = 'size'; size.textContent = Math.round(file.size/1024) + ' KB'; meta.appendChild(size); }
+    wrap.appendChild(meta);
+    root.appendChild(wrap);
+    container.appendChild(root);
   }
   function clearSelectedPreview(container){ if (!container) return; container.innerHTML = ''; }
 

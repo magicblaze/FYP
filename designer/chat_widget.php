@@ -54,6 +54,16 @@ $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
 .chatwidget-bottomsheet .composer { position:sticky !important; bottom:0; background:linear-gradient(to top, rgba(255,255,255,0.9), rgba(255,255,255,0.6)); }
 </style>
 
+<!-- Preview row styling inserted by assistant -->
+<style>
+.message-preview-column{box-sizing:border-box;padding:8px 12px;border-top:1px solid #eef3fb;border-bottom:1px solid #f8f9fb;background:#ffffff;display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.message-preview-column img{max-width:100%;max-height:360px;border-radius:6px;object-fit:cover}
+.message-preview-column .file-badge{width:56px;height:44px;border-radius:6px;background:#6c757d;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:600}
+.message-preview-column .file-meta{display:flex;flex-direction:column;min-width:0}
+.message-preview-column .file-meta .name{font-size:0.95rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.message-preview-column .file-meta .size{font-size:0.8rem;color:#6c757d}
+</style>
+
 <?php
   // If not logged in, show button that redirects to login (preserves current page for redirect)
   $redirect = urlencode($_SERVER['REQUEST_URI'] ?? '');
@@ -87,7 +97,7 @@ $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
       <div id="chatwidget_messages" class="messages"></div>
       <div class="composer">
         <input type="file" id="chatwidget_attachInput" class="d-none" />
-        <div id="chatwidget_attachPreview" style="min-width:0;max-width:120px;display:flex;align-items:center;margin-right:6px"></div>
+        <div id="chatwidget_attachPreviewColumn" style="min-width:0;max-width:120px;display:flex;align-items:center;margin-right:6px"></div>
         <button id="chatwidget_attach" class="btn btn-light btn-sm" type="button" title="Attach" aria-label="Attach file">
           <i class="bi bi-paperclip" aria-hidden="true" style="font-size:16px;line-height:1"></i>
         </button>
@@ -333,7 +343,7 @@ $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
     try {
       const attachBtn = document.getElementById('chatwidget_attach');
       const attachInput = document.getElementById('chatwidget_attachInput');
-      const preview = document.getElementById('chatwidget_attachPreview');
+      const preview = document.getElementById('chatwidget_attachPreviewColumn');
       const sendBtn = document.getElementById('chatwidget_send');
 
       function clearPreview(){
