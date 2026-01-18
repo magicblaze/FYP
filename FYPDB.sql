@@ -334,6 +334,20 @@ INSERT INTO `Message` (`messageid`, `sender_type`, `sender_id`, `content`,`messa
 (1, 'manager', 1, 'hi','text',null,2),
 (2, 'designer', 1, 'hello','text',null,2);
 
+-- Table to store uploaded file metadata (uploader identity and path)
+CREATE TABLE `UploadedFiles` (
+  `fileid` int NOT NULL AUTO_INCREMENT,
+  `uploader_type` ENUM('client', 'designer','manager','Contractors','supplier') NOT NULL,
+  `uploader_id` int NOT NULL,
+  `filename` varchar(500) NOT NULL,
+  `filepath` varchar(1000) NOT NULL,
+  `mime` varchar(255) DEFAULT NULL,
+  `size` int DEFAULT NULL,
+  `uploaded_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`fileid`),
+  KEY `idx_uploader` (`uploader_type`, `uploader_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- Per-member read/unread status for messages
 CREATE TABLE `MessageRead` (
   `messagereadid` INT NOT NULL AUTO_INCREMENT,
