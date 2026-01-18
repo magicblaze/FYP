@@ -294,7 +294,7 @@ CREATE TABLE `ChatRoomMember` (
 
 INSERT INTO `ChatRoomMember` (`ChatRoomMemberid`, `ChatRoomid`, `member_type`, `memberid`) VALUES
 (1, 2, 'manager', 1),
-(2, 2, 'designer', 1);
+(2, 2, 'designer', 1),
 -- added membership for test designer (Lily, designerid=3)
 (6, 3, 'designer', 3);
 
