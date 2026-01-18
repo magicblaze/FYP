@@ -49,7 +49,7 @@ $catRes = $mysqli->query($catSql);
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- 修正 CSS 路徑: 指向上一層的 css/styles.css -->
-    <link rel="stylesheet" href="../css/styles.css">
+    <link rel="stylesheet" href="../css/supplier_styles.css">
     <style>
         /* 這裡保留原本為產品頁面設計的樣式 */
         .products-layout { display: flex; gap: 20px; margin-top: 20px; }
