@@ -1,32 +1,11 @@
 <?php
 require_once dirname(__DIR__) . '/config.php';
 
-// 定义一个安全的查询函数，自动检查连接
-function safe_mysqli_query($mysqli, $sql) {
-    // 检查连接是否有效
-    if (!isset($mysqli) || !($mysqli instanceof mysqli)) {
-        die("数据库连接无效");
-    }
-    
-    // 检查连接是否已关闭
-    if (@mysqli_ping($mysqli) === false) {
-        // 尝试重新连接
-        require_once dirname(__DIR__) . '/config.php'; // 重新包含配置文件
-        global $mysqli; // 获取全局的 $mysqli
-    }
-    
-    $result = mysqli_query($mysqli, $sql);
-    if(!$result) {
-        die("Database Error: " . mysqli_error($mysqli));
-    }
-    return $result;
-}
-
 // 获取搜索参数
 $search = isset($_GET['search']) ? mysqli_real_escape_string($mysqli, $_GET['search']) : '';
 
 // 构建查询条件
-$where_conditions = array("o.ostatus = 'Pending' OR o.ostatus = 'pending'");
+$where_conditions = array("o.ostatus = 'Cancelled' OR o.ostatus = 'cancelled'");
 
 if(!empty($search)) {
     $search_conditions = array();
@@ -40,7 +19,7 @@ if(!empty($search)) {
 
 $where_clause = !empty($where_conditions) ? "WHERE " . implode(" AND ", $where_conditions) : "";
 
-// 获取所有待处理订单
+// 获取所有已取消订单
 $sql = "SELECT o.orderid, o.odate, o.budget, o.Requirements, o.ostatus,
                c.clientid, c.cname as client_name, c.cemail as client_email, c.ctel as client_phone,
                d.designid, d.design as design_image, d.price as design_price, d.tag as design_tag,
@@ -52,17 +31,22 @@ $sql = "SELECT o.orderid, o.odate, o.budget, o.Requirements, o.ostatus,
         $where_clause
         ORDER BY o.odate DESC";
 
-// 使用安全的查询函数
-$result = safe_mysqli_query($mysqli, $sql);
+$result = mysqli_query($mysqli, $sql);
+
+if(!$result) {
+    die("Database Error: " . mysqli_error($mysqli));
+}
 
 // 计算统计信息
 $stats_sql = "SELECT 
-                COUNT(*) as total_pending,
+                COUNT(*) as total_cancelled,
                 SUM(o.budget) as total_budget,
-                AVG(o.budget) as avg_budget
+                AVG(o.budget) as avg_budget,
+                MIN(o.odate) as earliest_cancellation,
+                MAX(o.odate) as latest_cancellation
               FROM `Order` o
-              WHERE o.ostatus = 'Pending' OR o.ostatus = 'pending'";
-$stats_result = safe_mysqli_query($mysqli, $stats_sql);
+              WHERE o.ostatus = 'Cancelled' OR o.ostatus = 'cancelled'";
+$stats_result = mysqli_query($mysqli, $stats_sql);
 $stats = mysqli_fetch_assoc($stats_result);
 ?>
 
@@ -72,7 +56,45 @@ $stats = mysqli_fetch_assoc($stats_result);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="../css/Manager_style.css">
-    <title>Pending Orders - HappyDesign</title>
+    <title>Cancelled Orders - HappyDesign</title>
+    <style>
+        .status-cancelled {
+            background-color: #dc3545;
+            color: white;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .stat-card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            text-align: center;
+            transition: transform 0.3s ease;
+        }
+        .stat-card:hover {
+            transform: translateY(-5px);
+        }
+        .stat-value {
+            font-size: 28px;
+            font-weight: bold;
+            color: #dc3545;
+            margin-bottom: 5px;
+        }
+        .stat-label {
+            color: #666;
+            font-size: 14px;
+        }
+        .date-range {
+            font-size: 12px;
+            color: #888;
+            margin-top: 5px;
+        }
+    </style>
 </head>
 <body>
     <!-- 导航栏 -->
@@ -90,20 +112,8 @@ $stats = mysqli_fetch_assoc($stats_result);
 
     <!-- 主要内容 -->
     <div class="page-container">
-        <h1 class="page-title">Pending Orders</h1>
-        
-        <?php if(isset($_GET['msg']) && $_GET['msg'] == 'approved'): ?>
-            <div class="alert alert-success">
-                <div>
-                    <strong>Order #<?php echo htmlspecialchars($_GET['id'] ?? ''); ?> has been processed successfully!</strong>
-                    <?php if(isset($_GET['email']) && $_GET['email'] == 'sent'): ?>
-                        <p class="mb-0">Email notification has been sent to the client.</p>
-                    <?php elseif(isset($_GET['email']) && $_GET['email'] == 'failed'): ?>
-                        <p class="mb-0 text-danger">Warning: Email notification failed to send.</p>
-                    <?php endif; ?>
-                </div>
-            </div>
-        <?php endif; ?>
+        <h1 class="page-title">Cancelled Orders</h1>
+
         
         <!-- 搜索框 -->
         <div class="search-box">
@@ -113,7 +123,7 @@ $stats = mysqli_fetch_assoc($stats_result);
                        value="<?php echo htmlspecialchars($search); ?>">
                 <button type="submit" class="search-button">Search</button>
                 <?php if(!empty($search)): ?>
-                    <a href="Manager_MyOrder_AwaitingConfirm.php" class="btn btn-outline ml-2">Clear Search</a>
+                    <a href="Manager_MyOrder_Rejected.php" class="btn btn-outline ml-2">Clear Search</a>
                 <?php endif; ?>
             </form>
         </div>
@@ -122,27 +132,53 @@ $stats = mysqli_fetch_assoc($stats_result);
         if(mysqli_num_rows($result) == 0){
             echo '<div class="alert alert-info">
                 <div>
-                    <strong>No pending orders found' . (!empty($search) ? ' matching your search criteria.' : ' at the moment.') . '</strong>
-                    <p class="mb-0">All new orders will appear here when they are submitted by clients.</p>
+                    <strong>No cancelled orders found' . (!empty($search) ? ' matching your search criteria.' : ' at the moment.') . '</strong>
+                    <p class="mb-0">Orders that have been cancelled will appear here.</p>
                 </div>
             </div>';
         } else {
-            $total_pending = $stats['total_pending'] ?? 0;
+            $total_cancelled = $stats['total_cancelled'] ?? 0;
         ?>
         
         <!-- 统计卡片 -->
         <div class="stats-grid">
             <div class="stat-card">
-                <div class="stat-value"><?php echo $total_pending; ?></div>
-                <div class="stat-label">Pending Orders</div>
+                <div class="stat-value"><?php echo $total_cancelled; ?></div>
+                <div class="stat-label">Cancelled Orders</div>
+                <?php if(isset($stats['earliest_cancellation']) && $stats['earliest_cancellation'] != '0000-00-00 00:00:00'): ?>
+                    <div class="date-range">
+                        Since: <?php echo date('M Y', strtotime($stats['earliest_cancellation'])); ?>
+                    </div>
+                <?php endif; ?>
             </div>
             <div class="stat-card">
                 <div class="stat-value">$<?php echo number_format($stats['total_budget'] ?? 0, 2); ?></div>
-                <div class="stat-label">Total Budget</div>
+                <div class="stat-label">Total Lost Revenue</div>
+                <div class="date-range">
+                    Potential income from cancelled orders
+                </div>
             </div>
             <div class="stat-card">
                 <div class="stat-value">$<?php echo number_format($stats['avg_budget'] ?? 0, 2); ?></div>
-                <div class="stat-label">Average Budget</div>
+                <div class="stat-label">Average Order Value</div>
+                <div class="date-range">
+                    Average value of cancelled orders
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">
+                    <?php 
+                    if(isset($stats['latest_cancellation']) && $stats['latest_cancellation'] != '0000-00-00 00:00:00'){
+                        echo date('M d', strtotime($stats['latest_cancellation']));
+                    } else {
+                        echo 'N/A';
+                    }
+                    ?>
+                </div>
+                <div class="stat-label">Latest Cancellation</div>
+                <div class="date-range">
+                    Most recent cancelled order
+                </div>
             </div>
         </div>
         
@@ -153,12 +189,12 @@ $stats = mysqli_fetch_assoc($stats_result);
                     <tr>
                         <th>Order ID</th>
                         <th>Order Date</th>
+                        <th>Cancelled Date</th>
                         <th>Client</th>
                         <th>Budget</th>
                         <th>Design</th>
                         <th>Requirements</th>
                         <th>Status</th>
-                        <th>Scheduled Finish Date</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -167,6 +203,16 @@ $stats = mysqli_fetch_assoc($stats_result);
                     <tr>
                         <td><strong>#<?php echo htmlspecialchars($row["orderid"]); ?></strong></td>
                         <td><?php echo date('Y-m-d H:i', strtotime($row["odate"])); ?></td>
+                        <td>
+                            <?php 
+        
+                            if(isset($row["odate"]) && $row["odate"] != '0000-00-00 00:00:00'){
+                                echo date('Y-m-d H:i', strtotime($row["odate"]));
+                            } else {
+                                echo '<span class="text-muted">N/A</span>';
+                            }
+                            ?>
+                        </td>
                         <td>
                             <div class="d-flex flex-column">
                                 <strong><?php echo htmlspecialchars($row["client_name"] ?? 'N/A'); ?></strong>
@@ -179,7 +225,7 @@ $stats = mysqli_fetch_assoc($stats_result);
                                 <?php endif; ?>
                             </div>
                         </td>
-                        <td><strong class="text-success">$<?php echo number_format($row["budget"], 2); ?></strong></td>
+                        <td><strong class="text-danger">$<?php echo number_format($row["budget"], 2); ?></strong></td>
                         <td>
                             <div class="d-flex flex-column">
                                 <span>Design #<?php echo htmlspecialchars($row["designid"] ?? 'N/A'); ?></span>
@@ -192,25 +238,16 @@ $stats = mysqli_fetch_assoc($stats_result);
                         </td>
                         <td><?php echo htmlspecialchars(substr($row["Requirements"] ?? '', 0, 100)); ?></td>
                         <td>
-                            <span class="status-badge status-pending">
-                                <?php echo htmlspecialchars($row["ostatus"] ?? 'Pending'); ?>
+                            <span class="status-badge status-cancelled">
+                                <?php echo htmlspecialchars($row["ostatus"] ?? 'Cancelled'); ?>
                             </span>
-                        </td>
-                        <td>
-                            <?php 
-                            if(isset($row["FinishDate"]) && $row["FinishDate"] != '0000-00-00 00:00:00'){
-                                echo date('Y-m-d H:i', strtotime($row["FinishDate"]));
-                            } else {
-                                echo '<span class="text-muted">Not scheduled</span>';
-                            }
-                            ?>
                         </td>
                         <td>
                             <div class="btn-group">
                                 <button onclick="viewOrder(<?php echo $row['orderid']; ?>)" 
                                         class="btn btn-sm btn-primary">View</button>
-                                <button onclick="approveOrder(<?php echo $row['orderid']; ?>)" 
-                                        class="btn btn-sm btn-success">Approve</button>
+                                <button onclick="deleteOrder(<?php echo $row['orderid']; ?>)" 
+                                        class="btn btn-sm btn-danger">Delete</button>
                             </div>
                         </td>
                     </tr>
@@ -223,12 +260,13 @@ $stats = mysqli_fetch_assoc($stats_result);
         <div class="card mt-3">
             <div class="card-body d-flex justify-between align-center">
                 <div>
-                    <strong>Showing <?php echo mysqli_num_rows($result); ?> pending orders</strong>
-                    <p class="text-muted mb-0">Total: <?php echo $total_pending; ?> orders awaiting confirmation</p>
+                    <strong>Showing <?php echo mysqli_num_rows($result); ?> cancelled orders</strong>
+                    <p class="text-muted mb-0">Total: <?php echo $total_cancelled; ?> cancelled orders</p>
                 </div>
                 <div class="btn-group">
-                    
+                
                     <button onclick="printPage()" class="btn btn-outline">Print List</button>
+                    <button onclick="deleteAllCancelled()" class="btn btn-danger">Delete All</button>
                 </div>
             </div>
         </div>
@@ -242,7 +280,6 @@ $stats = mysqli_fetch_assoc($stats_result);
             <div class="btn-group">
                 <button onclick="window.location.href='Manager_MyOrder.html'" 
                         class="btn btn-secondary">Back to Orders Manager</button>
-                        
             </div>
         </div>
     </div>
@@ -252,13 +289,22 @@ $stats = mysqli_fetch_assoc($stats_result);
         window.location.href = 'Manager_view_order.php?id=' + orderId;
     }
     
-    function approveOrder(orderId) {
-        window.location.href = 'Manager_MyOrder_AwaitingConfirm_Approval.php?id=' + orderId;
+    
+    function deleteOrder(orderId) {
+        if(confirm('⚠️ WARNING: Are you sure you want to permanently delete order #' + orderId + '? This action cannot be undone!')) {
+            window.location.href = 'Manager_delete_order.php?id=' + orderId;
+        }
     }
-
+    
     
     function printPage() {
         window.print();
+    }
+    
+    function deleteAllCancelled() {
+        if(confirm('⚠️ DANGER: Are you sure you want to delete ALL cancelled orders? This action cannot be undone!')) {
+            window.location.href = 'Manager_delete_all_cancelled.php';
+        }
     }
     
     // 快捷键支持
@@ -350,92 +396,49 @@ $stats = mysqli_fetch_assoc($stats_result);
         });
     }
     
-    // 自动检查新订单（每60秒）
-    function checkForNewOrders() {
-        fetch('check_new_orders.php')
-            .then(response => response.json())
-            .then(data => {
-                if(data.newOrders > 0) {
-                    showNewOrderNotification(data.newOrders);
-                }
-            })
-            .catch(error => console.error('Error checking for new orders:', error));
+    // 自动刷新检查（可选）
+    function checkForUpdates() {
+        // 每30秒检查一次是否有新的取消订单
+        setTimeout(() => {
+            fetch('check_order_updates.php?type=cancelled')
+                .then(response => response.json())
+                .then(data => {
+                    if(data.newCancellations > 0) {
+                        showUpdateNotification(data.newCancellations);
+                    }
+                });
+        }, 30000);
     }
     
-    function showNewOrderNotification(count) {
+    function showUpdateNotification(count) {
         const notification = document.createElement('div');
-        notification.className = 'alert alert-info notification';
+        notification.className = 'alert alert-warning notification';
         notification.innerHTML = `
             <div>
-                <strong>New Orders Available</strong>
-                <p>There are ${count} new pending order(s).</p>
-                <button onclick="location.reload()" class="btn btn-sm btn-primary">Refresh Now</button>
+                <strong>New Cancellations Available</strong>
+                <p>There are ${count} new cancelled order(s).</p>
+                <button onclick="location.reload()" class="btn btn-sm btn-warning">Refresh Now</button>
                 <button onclick="this.parentElement.parentElement.remove()" class="btn btn-sm btn-outline">Dismiss</button>
             </div>
         `;
         
         document.querySelector('.page-container').insertBefore(notification, document.querySelector('.page-title').nextSibling);
-        
-        // 自动消失
-        setTimeout(() => {
-            if(notification.parentNode) {
-                notification.remove();
-            }
-        }, 10000);
     }
     
-    // 每60秒检查一次新订单
-    setInterval(checkForNewOrders, 60000);
+    // 启动更新检查
+    checkForUpdates();
     </script>
     
-    <style>
-        .highlight {
-            background-color: #fff3cd;
-            padding: 2px 4px;
-            border-radius: 3px;
-            font-weight: bold;
-        }
-        
-        .notification {
-            animation: slideDown 0.5s ease-out;
-            position: relative;
-            z-index: 1000;
-        }
-        
-        @keyframes slideDown {
-            from {
-                opacity: 0;
-                transform: translateY(-20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-        
-        .table tbody tr {
-            transition: all 0.3s ease;
-        }
-        
-        @media print {
-            .nav-bar,
-            .search-box,
-            .stats-grid,
-            .btn-group,
-            .notification {
-                display: none !important;
-            }
-            
-            .table-container {
-                box-shadow: none !important;
-                border: 1px solid #ddd !important;
-            }
-            
-            .page-title {
-                margin-bottom: 20px !important;
-            }
-        }
-    </style>
 </body>
 </html>
 
+<?php
+
+if(isset($stats_result)) {
+    mysqli_free_result($stats_result);
+}
+if(isset($result)) {
+    mysqli_free_result($result);
+}
+
+?>

@@ -148,8 +148,7 @@ if(isset($_GET['id'])) {
         <div class="d-flex justify-between mt-4 no-print">
             <div class="btn-group">
                 <button onclick="window.print()" class="btn btn-primary print-btn">Print This Page</button>
-                <button onclick="window.location.href='Manager_MyOrder_Completed.php'" 
-                        class="btn btn-secondary">Close</button>
+                <button onclick="goBack()" class="btn btn-secondary">Close</button>
             </div>
             <div class="d-flex align-center">
                 <span class="text-muted">Order #<?php echo $orderid ?? 'N/A'; ?></span>
@@ -163,9 +162,27 @@ if(isset($_GET['id'])) {
     ?>
 
     <script>
+
+        function goBack() {
+            window.history.back();
+        }
+        
         // 打印时添加页眉页脚
         window.addEventListener('beforeprint', function() {
             document.title = 'Order Details #' + '<?php echo $orderid ?? "N/A"; ?>';
+        });
+        
+        // 添加键盘快捷键支持
+        document.addEventListener('keydown', function(e) {
+            // ESC键关闭页面
+            if (e.key === 'Escape') {
+                goBack();
+            }
+            // Ctrl+P 打印
+            if (e.ctrlKey && e.key === 'p') {
+                e.preventDefault();
+                window.print();
+            }
         });
     </script>
 </body>

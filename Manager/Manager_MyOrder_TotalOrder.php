@@ -253,7 +253,7 @@ $stats = mysqli_fetch_assoc($stats_result);
                     <?php endif; ?>
                 </div>
                 <div class="btn-group">
-                    <button onclick="exportToCSV()" class="btn btn-outline">Export CSV</button>
+                
                     <button onclick="printPage()" class="btn btn-outline">Print</button>
                 </div>
             </div>
@@ -456,4 +456,4 @@ if(isset($result)) mysqli_free_result($result);
 if(isset($count_result)) mysqli_free_result($count_result);
 if(isset($stats_result)) mysqli_free_result($stats_result);
 mysqli_close($mysqli);
-?>v
+?>

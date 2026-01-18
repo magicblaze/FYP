@@ -144,8 +144,8 @@ $result = mysqli_query($mysqli, $sql);
                         </td>
                         <td>
                             <div class="btn-group">
-                                <button onclick="printOrderDetail(<?php echo $row['orderid']; ?>)" 
-                                        class="btn btn-sm btn-info">Print</button>
+                                <button onclick="viewOrder('<?php echo htmlspecialchars($row['orderid']); ?>')" 
+                                        class="btn btn-sm btn-info">View</button>
                                 <button onclick="archiveOrder(<?php echo $row['orderid']; ?>)" 
                                         class="btn btn-sm btn-secondary">Archive</button>
                             </div>
@@ -170,20 +170,16 @@ $result = mysqli_query($mysqli, $sql);
                 <button onclick="printThisPage()" class="btn btn-primary">Print This Page</button>
                 <button onclick="window.location.href='Manager_MyOrder.html'" 
                         class="btn btn-secondary">Back to Orders Manager</button>
-                <button onclick="window.location.href='index.php'" 
-                        class="btn btn-outline">Back to Dashboard</button>
+                        
             </div>
         </div>
     </div>
     
     <script>
-    function printOrderDetail(orderId) {
-        console.log('Printing order #' + orderId);
-
-        window.open('Manager_view_order.php?id=' + orderId, '_blank');
-
+        function viewOrder(orderId) {
+        window.location.href = 'Manager_view_order.php?id=' + encodeURIComponent(orderId);
     }
-    
+
     
     function archiveOrder(orderId) {
         if(confirm('Are you sure you want to archive order #' + orderId + '?\n\nThis action cannot be undone.')) {
