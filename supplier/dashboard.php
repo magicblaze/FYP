@@ -29,7 +29,7 @@ $result = $stmt->get_result();
     <title>Supplier Dashboard - HappyDesign</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="../css/styles.css">
+    <link rel="stylesheet" href="../css/supplier_style.css">
     <style>
         .dashboard-header {
             background: linear-gradient(135deg, #2c3e50, #3498db);
@@ -84,15 +84,26 @@ $result = $stmt->get_result();
 </head>
 <body>
     <!-- Navbar -->
-    <header class="bg-white shadow-sm p-3 d-flex justify-content-between align-items-center">
-        <div class="h4 mb-0 text-primary">HappyDesign <span class="text-muted fs-6">| Supplier Portal</span></div>
+    <header class="bg-white shadow p-3 d-flex justify-content-between align-items-center">
         <div class="d-flex align-items-center gap-3">
-            <a class="nav-link text-muted" href="S_profile.php">
-                <i class="fas fa-user me-1"></i>Hello <?= htmlspecialchars($supplierName) ?>
-            </a>
-            <a href="schedule.php" class="nav-link  ">schedule</a>
-            <a href="../logout.php" class="btn btn-outline-danger btn-sm">Logout</a>
+            <div class="h4 mb-0"><a href="dashboard.php" style="text-decoration: none; color: inherit;">HappyDesign</a></div>
+            <nav>
+                <ul class="nav align-items-center gap-2">
+                    <li class="nav-item"><a class="nav-link" href="dashboard.php">Dashboard</a></li>
+                    <li class="nav-item"><a class="nav-link" href="schedule.php">Schedule</a></li>
+                </ul>
+            </nav>
         </div>
+        <nav>
+            <ul class="nav align-items-center">
+                <li class="nav-item me-2">
+                    <a class="nav-link text-muted" href="#">
+                        <i class="fas fa-user me-1"></i>Hello <?= htmlspecialchars($supplierName) ?>
+                    </a>
+                </li>
+                <li class="nav-item"><a class="nav-link" href="../logout.php">Logout</a></li>
+            </ul>
+        </nav>
     </header>
 
     <!-- Dashboard Content -->
@@ -110,9 +121,10 @@ $result = $stmt->get_result();
                 </div>
             </div>
             <div class="col-md-4">
-                <div class="stat-card">
-                    <div class="text-muted mb-2">Views (Demo)</div>
-                    <div class="stat-number">1,240</div>
+                <div class="stat-card d-flex align-items-center justify-content-center flex-column">
+                    <a href="manage_orders.php" class="btn btn-primary btn-lg w-100">
+                        Manage Orders
+                    </a>
                 </div>
             </div>
             <div class="col-md-4">
@@ -150,15 +162,7 @@ $result = $stmt->get_result();
                                         <div class="fw-bold"><?= htmlspecialchars($row['pname']) ?></div>
                                         <small class="text-muted">ID: <?= $row['productid'] ?></small>
                                     </td>
-                                    <td>
-                                        <?php
-                                            $cat = strtolower($row['category']);
-                                            $badgeClass = ($cat === 'furniture') ? 'bg-info text-dark' : (($cat === 'material') ? 'bg-success text-white' : 'bg-secondary');
-                                        ?>
-                                        <span class="badge <?= $badgeClass ?>">
-                                            <?= htmlspecialchars($row['category']) ?>
-                                        </span>
-                                    </td>
+                                    <td><span class="badge bg-info text-dark"><?= htmlspecialchars($row['category']) ?></span></td>
                                     <td>
                                         HK$<?= number_format($row['price']) ?>
                                     </td>

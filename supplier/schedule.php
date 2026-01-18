@@ -235,7 +235,7 @@ $month_name = date('F', mktime(0, 0, 0, $current_month, 1));
     <title>Schedule Calendar - <?php echo ucfirst($user_type); ?></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="../css/styles.css">
+    <link rel="stylesheet" href="../css/supplier_style.css">
     <style>
         body {
             background-color: #f0f0f0;
@@ -510,15 +510,26 @@ $month_name = date('F', mktime(0, 0, 0, $current_month, 1));
 </head>
 <body>
     <!-- Navbar -->
-    <header class="bg-white shadow-sm p-3 d-flex justify-content-between align-items-center">
-        <div class="h4 mb-0 text-primary">HappyDesign <span class="text-muted fs-6">| <?php echo ucfirst($user_type); ?> Portal</span></div>            
-        <span class="text-muted">Welcome, <strong><?= htmlspecialchars($user_name) ?></strong></span>
+    <header class="bg-white shadow p-3 d-flex justify-content-between align-items-center">
         <div class="d-flex align-items-center gap-3">
-            <a href="dashboard.php" class="btn btn-outline-primary btn-sm me-3">
-                <i class="fas fa-arrow-left"></i> Home
-            </a>
-            <a href="../logout.php" class="btn btn-outline-danger btn-sm">Logout</a>
+            <div class="h4 mb-0"><a href="dashboard.php" style="text-decoration: none; color: inherit;">HappyDesign</a></div>
+            <nav>
+                <ul class="nav align-items-center gap-2">
+                    <li class="nav-item"><a class="nav-link" href="dashboard.php">Dashboard</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="schedule.php">Schedule</a></li>
+                </ul>
+            </nav>
         </div>
+        <nav>
+            <ul class="nav align-items-center">
+                <li class="nav-item me-2">
+                    <a class="nav-link text-muted" href="#">
+                        <i class="fas fa-user me-1"></i>Hello <?= htmlspecialchars($user_name) ?>
+                    </a>
+                </li>
+                <li class="nav-item"><a class="nav-link" href="../logout.php">Logout</a></li>
+            </ul>
+        </nav>
     </header>
 
     <!-- Dashboard Content -->
@@ -667,3 +678,4 @@ $month_name = date('F', mktime(0, 0, 0, $current_month, 1));
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
+                            

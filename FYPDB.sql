@@ -35,7 +35,8 @@ DROP TABLE IF EXISTS `ChatRoomMember`;
 DROP TABLE IF EXISTS `Message`;
 DROP TABLE IF EXISTS `ProductLike`;
 DROP TABLE IF EXISTS `DesignLike`;
-drop table if exists `MessageRead`;
+DROP TABLE IF EXISTS `MessageRead`;
+Drop TABLE IF EXISTS `OrderProductStatus`;
 
 -- Client table
 CREATE TABLE `Client` (
@@ -227,6 +228,20 @@ INSERT INTO `OrderProduct`
 (`orderproductid`, `productid`, `quantity`, `orderid`, `deliverydate`, `managerid`) VALUES
 (1, 1, 10, 1, '2026-01-13', 1),
 (2, 2, 20, 1, '2026-01-23', 1);
+
+CREATE TABLE `OrderProductStatus` (
+  `orderproductstatusid` int NOT NULL AUTO_INCREMENT,
+  `orderproductid` int NOT NULL,
+  `status` varchar(255) NOT NULL,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`orderproductstatusid`),
+  KEY `orderproductid_idx` (`orderproductid`),
+  CONSTRAINT `fk_orderproductstatus_orderproductid` FOREIGN KEY (`orderproductid`) REFERENCES `OrderProduct` (`orderproductid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO `OrderProductStatus` (`orderproductstatusid`, `orderproductid`, `status`) VALUES
+(1, 1, 'Pending'),
+(2, 2, 'Shipped');
 
 -- Order_Contractors table
 CREATE TABLE `Order_Contractors` (
