@@ -1,7 +1,7 @@
 <?php
 // ==============================
 // File: furniture_dashboard.php (Enhanced with Filters)
-// 用途：顯示供應商的傢俱 (Furniture) 列表，含進階過濾功能
+// 用途:顯示供應商的傢俱 (Furniture) 列表,含進階過濾功能
 // ==============================
 require_once __DIR__ . '/config.php';
 session_start();
@@ -313,6 +313,32 @@ if (!$size_result) die('Query error: ' . $mysqli->error);
                         </select>
                     </div>
 
+                    <!-- Color Filter -->
+                    <div class="filter-group">
+                        <label for="color">Color</label>
+                        <select name="color" id="color" class="form-select">
+                            <option value="">All Colors</option>
+                            <?php while ($c = $color_result->fetch_assoc()): ?>
+                                <option value="<?= htmlspecialchars($c['color']) ?>" <?= $color == $c['color'] ? 'selected' : '' ?>>
+                                    <?= htmlspecialchars($c['color']) ?>
+                                </option>
+                            <?php endwhile; ?>
+                        </select>
+                    </div>
+
+                    <!-- Size Filter -->
+                    <div class="filter-group">
+                        <label for="size">Size</label>
+                        <select name="size" id="size" class="form-select">
+                            <option value="">All Sizes</option>
+                            <?php while ($s = $size_result->fetch_assoc()): ?>
+                                <option value="<?= htmlspecialchars($s['size']) ?>" <?= $size == $s['size'] ? 'selected' : '' ?>>
+                                    <?= htmlspecialchars($s['size']) ?>
+                                </option>
+                            <?php endwhile; ?>
+                        </select>
+                    </div>
+
                     <!-- Sort By -->
                     <div class="filter-group">
                         <label for="sort_by">Sort By</label>
@@ -338,6 +364,7 @@ if (!$size_result) die('Query error: ' . $mysqli->error);
 
             <!-- Main Content -->
             <div class="main-content">
+
 
                 <!-- Results Grid -->
                 <div class="row g-4">
@@ -373,5 +400,34 @@ if (!$size_result) die('Query error: ' . $mysqli->error);
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- ==================== Chat Widget Integration ==================== -->
+    <?php
+    // Include floating chat widget for logged-in users only
+    if (isset($_SESSION['user'])) {
+        include __DIR__ . '/designer/chat_widget.php';
+    }
+    ?>
+
+    <!-- Include chat functionality JavaScript -->
+    <script src="designer/Chatfunction.js"></script>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        <?php if (isset($_SESSION['user'])): ?>
+        // Initialize chat application
+        const chatApp = initApp({
+            apiPath: 'designer/ChatApi.php?action=',
+            userId: <?= (int)($_SESSION['user']['clientid'] ?? $_SESSION['user']['id'] ?? 0) ?>,
+            userType: '<?= htmlspecialchars($_SESSION['user']['role'] ?? 'client') ?>',
+            rootId: 'chatwidget',
+            items: []
+        });
+        
+        console.log('Chat widget initialized');
+        <?php endif; ?>
+    });
+    </script>
+    <!-- ==================== End Chat Widget Integration ==================== -->
+
 </body>
 </html>

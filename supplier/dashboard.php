@@ -543,5 +543,33 @@ $result = $stmt->get_result();
             });
         }
     </script>
+
+    <!-- ==================== Chat Widget Integration ==================== -->
+    <?php
+    // Include floating chat widget for logged-in users only
+    if (isset($_SESSION['user'])) {
+        include __DIR__ . '/../designer/chat_widget.php';
+    }
+    ?>
+
+    <!-- Include chat functionality JavaScript -->
+    <script src="../designer/Chatfunction.js"></script>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        <?php if (isset($_SESSION['user'])): ?>
+        // Initialize chat application
+        const chatApp = initApp({
+            apiPath: '../designer/ChatApi.php?action=',
+            userId: <?= (int)($_SESSION['user']['supplierid'] ?? $_SESSION['user']['id'] ?? 0) ?>,
+            userType: '<?= htmlspecialchars($_SESSION['user']['role'] ?? 'supplier') ?>',
+            rootId: 'chatwidget',
+            items: []
+        });
+        
+        console.log('Chat widget initialized for supplier:', <?= (int)($_SESSION['user']['supplierid'] ?? 0) ?>);
+        <?php endif; ?>
+    });
+    </script>
+    <!-- ==================== End Chat Widget Integration ==================== -->
 </body>
 </html>

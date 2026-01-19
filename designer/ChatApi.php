@@ -25,7 +25,7 @@ register_shutdown_function(function() {
     echo json_encode(['error' => 'fatal', 'message' => $err['message']]);
   }
 });
-require_once './config.php';
+require_once __DIR__ . '/../config.php';
 
 // Ensure a PDO instance is available for this API. `config.php` defines mysqli variables
 if (!isset($pdo) || !($pdo instanceof PDO)) {
