@@ -531,6 +531,7 @@ $month_name = date('F', mktime(0, 0, 0, $current_month, 1));
     </style>
 </head>
 <body>
+    
     <!-- Navbar -->
     <header class="bg-white shadow p-3 d-flex justify-content-between align-items-center">
         <div class="d-flex align-items-center gap-3">

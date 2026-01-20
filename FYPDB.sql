@@ -36,6 +36,7 @@ DROP TABLE IF EXISTS `Message`;
 DROP TABLE IF EXISTS `ProductLike`;
 DROP TABLE IF EXISTS `DesignLike`;
 DROP TABLE IF EXISTS `MessageRead`;
+DROP TABLE IF EXISTS `UploadedFiles`;
 
 -- Client table
 CREATE TABLE `Client` (
