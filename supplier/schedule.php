@@ -47,29 +47,26 @@ if ($current_year < 2000 || $current_year > 2100) {
 
 // Fetch schedules based on user type
 if ($user_type === 'designer') {
-    // Designer sees schedules for orders where they are the designer
+    // Designer sees schedules with design finish dates from Schedule table
     $sql = "
         SELECT 
-            op.orderproductid,
-            op.deliverydate as FinishDate,
+            s.scheduleid,
+            s.DesignFinishDate as FinishDate,
             o.orderid,
             o.odate as OrderDate,
-            op.status as ProductStatus,
             o.ostatus,
             o.budget,
+            o.Requirements,
             c.cname as ClientName,
             d.designid,
-            m.mname as ManagerName,
-            p.pname as ProductName,
-            op.quantity
-        FROM `OrderProduct` op
-        JOIN `Order` o ON op.orderid = o.orderid
+            m.mname as ManagerName
+        FROM `Schedule` s
+        JOIN `Order` o ON s.orderid = o.orderid
         JOIN `Design` d ON o.designid = d.designid
         JOIN `Client` c ON o.clientid = c.clientid
-        JOIN `Manager` m ON op.managerid = m.managerid
-        JOIN `Product` p ON op.productid = p.productid
+        JOIN `Manager` m ON s.managerid = m.managerid
         WHERE d.designerid = ?
-        ORDER BY op.deliverydate ASC
+        ORDER BY s.DesignFinishDate ASC
     ";
     
     $stmt = $mysqli->prepare($sql);
@@ -111,30 +108,26 @@ if ($user_type === 'designer') {
     $stmt->close();
 
 } elseif ($user_type === 'manager') {
-    // Manager sees schedules for orders they manage
+    // Manager sees schedules for orders they manage from Schedule table
     $sql = "
         SELECT 
-            op.orderproductid,
-            op.deliverydate as FinishDate,
+            s.scheduleid,
+            s.OrderFinishDate as FinishDate,
             o.orderid,
             o.odate as OrderDate,
-            op.status as ProductStatus,
             o.ostatus,
             o.budget,
+            o.Requirements,
             c.cname as ClientName,
             d.designid,
-            des.dname as DesignerName,
-            p.pname as ProductName,
-            op.quantity
-        FROM `OrderProduct` op
-        JOIN `Order` o ON op.orderid = o.orderid
+            des.dname as DesignerName
+        FROM `Schedule` s
+        JOIN `Order` o ON s.orderid = o.orderid
         JOIN `Design` d ON o.designid = d.designid
         JOIN `Designer` des ON d.designerid = des.designerid
         JOIN `Client` c ON o.clientid = c.clientid
-        JOIN `Manager` m ON op.managerid = m.managerid
-        JOIN `Product` p ON op.productid = p.productid
-        WHERE m.managerid = ?
-        ORDER BY op.deliverydate ASC
+        WHERE s.managerid = ?
+        ORDER BY s.OrderFinishDate ASC
     ";
     
     $stmt = $mysqli->prepare($sql);
@@ -157,14 +150,17 @@ foreach ($schedules as $schedule) {
     }
 }
 
-// Function to get status badge color (now based on ProductStatus)
+// Function to get status badge color
 function getStatusBadgeClass($status) {
     switch(strtolower($status)) {
         case 'delivered':
+        case 'completed':
             return 'bg-success';
         case 'shipped':
+        case 'manufacturing':
             return 'bg-info';
         case 'processing':
+        case 'designing':
             return 'bg-primary';
         case 'pending':
             return 'bg-warning';
@@ -371,8 +367,6 @@ $month_name = date('F', mktime(0, 0, 0, $current_month, 1));
             cursor: pointer;
             transition: all 0.2s;
             overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
             display: block;
         }
 
@@ -603,15 +597,37 @@ $month_name = date('F', mktime(0, 0, 0, $current_month, 1));
                                                 <?php echo $day['day']; ?>
                                             </div>
                                             <?php foreach ($day['schedules'] as $schedule): ?>
-                                                <a class="schedule-item <?php echo getStatusBadgeClass($schedule['ProductStatus']); ?>" 
-                                                   data-bs-toggle="modal" 
-                                                   data-bs-target="#scheduleModal<?php echo $schedule['orderproductid']; ?>"
-                                                   title="<?php echo htmlspecialchars($schedule['ProductName']); ?>"
-                                                   href="javascript:void(0);">
-                                                    <span class="schedule-item-text">
-                                                        OP #<?php echo $schedule['orderproductid']; ?> - <?php echo htmlspecialchars($schedule['ProductName']); ?>
-                                                    </span>
-                                                </a>
+                                                <?php if ($user_type === 'designer'): ?>
+                                                    <a class="schedule-item" 
+                                                       data-bs-toggle="modal" 
+                                                       data-bs-target="#scheduleModal<?php echo $schedule['scheduleid']; ?>"
+                                                       title="Order #<?php echo $schedule['orderid']; ?> - <?php echo htmlspecialchars($schedule['ClientName']); ?>"
+                                                       href="javascript:void(0);">
+                                                        <span class="schedule-item-text">
+                                                            Order #<?php echo $schedule['orderid']; ?> - <?php echo htmlspecialchars($schedule['ClientName']); ?>
+                                                        </span>
+                                                    </a>
+                                                <?php elseif ($user_type === 'manager'): ?>
+                                                    <a class="schedule-item <?php echo getStatusBadgeClass($schedule['ostatus']); ?>" 
+                                                       data-bs-toggle="modal" 
+                                                       data-bs-target="#scheduleModal<?php echo $schedule['scheduleid']; ?>"
+                                                       title="Order #<?php echo $schedule['orderid']; ?> - <?php echo htmlspecialchars($schedule['ClientName']); ?>"
+                                                       href="javascript:void(0);">
+                                                        <span class="schedule-item-text">
+                                                            Order #<?php echo $schedule['orderid']; ?> - <?php echo htmlspecialchars($schedule['ClientName']); ?>
+                                                        </span>
+                                                    </a>
+                                                <?php else: ?>
+                                                    <a class="schedule-item <?php echo getStatusBadgeClass($schedule['ProductStatus']); ?>" 
+                                                       data-bs-toggle="modal" 
+                                                       data-bs-target="#scheduleModal<?php echo $schedule['orderproductid']; ?>"
+                                                       title="<?php echo htmlspecialchars($schedule['ProductName']); ?>"
+                                                       href="javascript:void(0);">
+                                                        <span class="schedule-item-text">
+                                                            OP #<?php echo $schedule['orderproductid']; ?> - <?php echo htmlspecialchars($schedule['ProductName']); ?>
+                                                        </span>
+                                                    </a>
+                                                <?php endif; ?>
                                             <?php endforeach; ?>
                                         </td>
                                     <?php endif; ?>
@@ -626,80 +642,186 @@ $month_name = date('F', mktime(0, 0, 0, $current_month, 1));
 
     <!-- Schedule Detail Modals -->
     <?php foreach ($schedules as $schedule): ?>
-        <div class="modal fade" id="scheduleModal<?php echo $schedule['orderproductid']; ?>" tabindex="-1">
-            <div class="modal-dialog modal-dialog-centered">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title">
-                            <i class="fas fa-calendar-check me-2"></i>OrderProduct #<?php echo $schedule['orderproductid']; ?>
-                        </h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body">
-                        <div class="schedule-detail">
-                            <div class="detail-label">OrderProduct ID</div>
-                            <div class="detail-value">#<?php echo htmlspecialchars($schedule['orderproductid']); ?></div>
+        <?php if ($user_type === 'manager'): ?>
+            <!-- Manager Modal: Show Order and Schedule information -->
+            <div class="modal fade" id="scheduleModal<?php echo $schedule['scheduleid']; ?>" tabindex="-1">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">
+                                <i class="fas fa-calendar-check me-2"></i>Order #<?php echo $schedule['orderid']; ?>
+                            </h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                         </div>
+                        <div class="modal-body">
 
-                        <div class="schedule-detail">
-                            <div class="detail-label">Product Name</div>
-                            <div class="detail-value"><?php echo htmlspecialchars($schedule['ProductName']); ?></div>
-                        </div>
-
-                        <div class="schedule-detail">
-                            <div class="detail-label">Quantity</div>
-                            <div class="detail-value"><?php echo htmlspecialchars($schedule['quantity']); ?></div>
-                        </div>
-
-                        <div class="schedule-detail">
-                            <div class="detail-label">Product Status</div>
-                            <div class="detail-value">
-                                <span class="badge <?php echo getStatusBadgeClass($schedule['ProductStatus']); ?>">
-                                    <?php echo htmlspecialchars($schedule['ProductStatus']); ?>
-                                </span>
-                            </div>
-                        </div>
-
-                        <div class="schedule-detail">
-                            <div class="detail-label">Client Name</div>
-                            <div class="detail-value"><?php echo htmlspecialchars($schedule['ClientName']); ?></div>
-                        </div>
-
-                        <?php if ($user_type === 'designer'): ?>
                             <div class="schedule-detail">
-                                <div class="detail-label">Manager</div>
-                                <div class="detail-value"><?php echo htmlspecialchars($schedule['ManagerName']); ?></div>
+                                <div class="detail-label">Order ID</div>
+                                <div class="detail-value">#<?php echo htmlspecialchars($schedule['orderid']); ?></div>
                             </div>
-                        <?php elseif ($user_type === 'supplier'): ?>
+
                             <div class="schedule-detail">
-                                <div class="detail-label">Manager</div>
-                                <div class="detail-value"><?php echo htmlspecialchars($schedule['ManagerName']); ?></div>
+                                <div class="detail-label">Client Name</div>
+                                <div class="detail-value"><?php echo htmlspecialchars($schedule['ClientName']); ?></div>
                             </div>
-                        <?php elseif ($user_type === 'manager'): ?>
+
                             <div class="schedule-detail">
                                 <div class="detail-label">Designer</div>
                                 <div class="detail-value"><?php echo htmlspecialchars($schedule['DesignerName']); ?></div>
                             </div>
-                        <?php endif; ?>
 
-                        <div class="schedule-detail">
-                            <div class="detail-label">Order Date</div>
-                            <div class="detail-value"><?php echo date('Y-m-d H:i', strtotime($schedule['OrderDate'])); ?></div>
-                        </div>
+                            <div class="schedule-detail">
+                                <div class="detail-label">Order Status</div>
+                                <div class="detail-value">
+                                    <span class="badge <?php echo getStatusBadgeClass($schedule['ostatus']); ?>">
+                                        <?php echo htmlspecialchars($schedule['ostatus']); ?>
+                                    </span>
+                                </div>
+                            </div>
 
-                        <div class="schedule-detail">
-                            <div class="detail-label">Delivery Date</div>
-                            <div class="detail-value"><?php echo date('Y-m-d', strtotime($schedule['FinishDate'])); ?></div>
-                        </div>
+                            <div class="schedule-detail">
+                                <div class="detail-label">Order Date</div>
+                                <div class="detail-value"><?php echo date('Y-m-d H:i', strtotime($schedule['OrderDate'])); ?></div>
+                            </div>
 
-                        <div class="schedule-detail">
-                            <div class="detail-label">Budget</div>
-                            <div class="detail-value">HK$<?php echo number_format($schedule['budget']); ?></div>
+                            <div class="schedule-detail">
+                                <div class="detail-label">Order Finish Date</div>
+                                <div class="detail-value"><?php echo date('Y-m-d', strtotime($schedule['FinishDate'])); ?></div>
+                            </div>
+
+                            <div class="schedule-detail">
+                                <div class="detail-label">Budget</div>
+                                <div class="detail-value">HK$<?php echo number_format($schedule['budget']); ?></div>
+                            </div>
+
+                            <?php if (!empty($schedule['Requirements'])): ?>
+                                <div class="schedule-detail">
+                                    <div class="detail-label">Requirements</div>
+                                    <div class="detail-value"><?php echo htmlspecialchars($schedule['Requirements']); ?></div>
+                                </div>
+                            <?php endif; ?>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
+        <?php elseif ($user_type === 'designer'): ?>
+            <!-- Designer Modal: Show Design and Schedule information -->
+            <div class="modal fade" id="scheduleModal<?php echo $schedule['scheduleid']; ?>" tabindex="-1">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">
+                                <i class="fas fa-calendar-check me-2"></i>Order #<?php echo $schedule['orderid']; ?>
+                            </h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+
+                            <div class="schedule-detail">
+                                <div class="detail-label">Order ID</div>
+                                <div class="detail-value">#<?php echo htmlspecialchars($schedule['orderid']); ?></div>
+                            </div>
+
+                            <div class="schedule-detail">
+                                <div class="detail-label">Client Name</div>
+                                <div class="detail-value"><?php echo htmlspecialchars($schedule['ClientName']); ?></div>
+                            </div>
+
+                            <div class="schedule-detail">
+                                <div class="detail-label">Manager</div>
+                                <div class="detail-value"><?php echo htmlspecialchars($schedule['ManagerName']); ?></div>
+                            </div>
+
+                            <div class="schedule-detail">
+                                <div class="detail-label">Order Date</div>
+                                <div class="detail-value"><?php echo date('Y-m-d H:i', strtotime($schedule['OrderDate'])); ?></div>
+                            </div>
+
+                            <div class="schedule-detail">
+                                <div class="detail-label">Design Finish Date</div>
+                                <div class="detail-value"><?php echo date('Y-m-d', strtotime($schedule['FinishDate'])); ?></div>
+                            </div>
+
+                            <div class="schedule-detail">
+                                <div class="detail-label">Budget</div>
+                                <div class="detail-value">HK$<?php echo number_format($schedule['budget']); ?></div>
+                            </div>
+
+                            <?php if (!empty($schedule['Requirements'])): ?>
+                                <div class="schedule-detail">
+                                    <div class="detail-label">Requirements</div>
+                                    <div class="detail-value"><?php echo htmlspecialchars($schedule['Requirements']); ?></div>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        <?php else: ?>
+            <!-- Designer/Supplier Modal: Show OrderProduct information -->
+            <div class="modal fade" id="scheduleModal<?php echo $schedule['orderproductid']; ?>" tabindex="-1">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">
+                                <i class="fas fa-calendar-check me-2"></i>OrderProduct #<?php echo $schedule['orderproductid']; ?>
+                            </h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="schedule-detail">
+                                <div class="detail-label">OrderProduct ID</div>
+                                <div class="detail-value">#<?php echo htmlspecialchars($schedule['orderproductid']); ?></div>
+                            </div>
+
+                            <div class="schedule-detail">
+                                <div class="detail-label">Product Name</div>
+                                <div class="detail-value"><?php echo htmlspecialchars($schedule['ProductName']); ?></div>
+                            </div>
+
+                            <div class="schedule-detail">
+                                <div class="detail-label">Quantity</div>
+                                <div class="detail-value"><?php echo htmlspecialchars($schedule['quantity']); ?></div>
+                            </div>
+
+                            <div class="schedule-detail">
+                                <div class="detail-label">Product Status</div>
+                                <div class="detail-value">
+                                    <span class="badge <?php echo getStatusBadgeClass($schedule['ProductStatus']); ?>">
+                                        <?php echo htmlspecialchars($schedule['ProductStatus']); ?>
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div class="schedule-detail">
+                                <div class="detail-label">Client Name</div>
+                                <div class="detail-value"><?php echo htmlspecialchars($schedule['ClientName']); ?></div>
+                            </div>
+
+                            <div class="schedule-detail">
+                                <div class="detail-label">Manager</div>
+                                <div class="detail-value"><?php echo htmlspecialchars($schedule['ManagerName']); ?></div>
+                            </div>
+
+                            <div class="schedule-detail">
+                                <div class="detail-label">Order Date</div>
+                                <div class="detail-value"><?php echo date('Y-m-d H:i', strtotime($schedule['OrderDate'])); ?></div>
+                            </div>
+
+                            <div class="schedule-detail">
+                                <div class="detail-label">Delivery Date</div>
+                                <div class="detail-value"><?php echo date('Y-m-d', strtotime($schedule['FinishDate'])); ?></div>
+                            </div>
+
+                            <div class="schedule-detail">
+                                <div class="detail-label">Budget</div>
+                                <div class="detail-value">HK$<?php echo number_format($schedule['budget']); ?></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        <?php endif; ?>
     <?php endforeach; ?>
 
     <!-- Bootstrap JS -->

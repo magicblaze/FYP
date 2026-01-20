@@ -36,6 +36,7 @@ DROP TABLE IF EXISTS `Message`;
 DROP TABLE IF EXISTS `ProductLike`;
 DROP TABLE IF EXISTS `DesignLike`;
 DROP TABLE IF EXISTS `MessageRead`;
+DROP TABLE IF EXISTS `UploadedFiles`;
 
 -- Client table
 CREATE TABLE `Client` (
@@ -104,7 +105,7 @@ CREATE TABLE `Designer` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 INSERT INTO `Designer` (`designerid`,`dname`,`dtel`,`demail`,`dpassword`,`managerid`,`remember_token`) VALUES
-(1, 'John Wong', 12345678, 'abc123@gmail.com', 'designer12345',1, NULL),
+(1, 'John Wong', 12345678, '123@gmail.com', 'designer12345',1, NULL),
 (2, 'Billy Chan', 11002234, 'abcdd@gmail.com', '123456',2, NULL);
 
 -- Supplier table
@@ -253,7 +254,8 @@ INSERT INTO `Order_Contractors`
 CREATE TABLE `Schedule` (
   `scheduleid` int NOT NULL AUTO_INCREMENT,
   `managerid` int NOT NULL,
-  `FinishDate` datetime DEFAULT NULL,
+  `OrderFinishDate` date DEFAULT NULL,
+  `DesignFinishDate` date DEFAULT NULL,
   `orderid` int NOT NULL,
   PRIMARY KEY (`scheduleid`),
   KEY `orderid_pk_idx` (`orderid`),
@@ -262,9 +264,9 @@ CREATE TABLE `Schedule` (
   CONSTRAINT `orderid_fk` FOREIGN KEY (`orderid`) REFERENCES `Order` (`orderid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-INSERT INTO `Schedule` (`scheduleid`,`managerid`,`FinishDate`,`orderid`) VALUES
-(1,1,'2025-05-13 12:01:00',1),
-(2,2,'2025-06-13 13:31:00',2);
+INSERT INTO `Schedule` (`scheduleid`,`managerid`,`OrderFinishDate`,`DesignFinishDate`,`orderid`) VALUES
+(1,1,'2026-01-15','2026-01-16',1),
+(2,2,'2026-01-17','2026-01-18',2);
 
 -- ChatRoom Tables
 CREATE TABLE `ChatRoom` (
@@ -431,8 +433,8 @@ INSERT INTO `OrderProduct` (`orderproductid`, `productid`, `quantity`, `orderid`
 INSERT INTO `Order_Contractors` (`order_Contractorid`, `contractorid`, `orderid`, `managerid`) VALUES
 (3, 1, 3, 1);
 
-INSERT INTO `Schedule` (`scheduleid`,`managerid`,`FinishDate`,`orderid`) VALUES
-(3,1,'2025-08-01 17:00:00',3);
+INSERT INTO `Schedule` (`scheduleid`,`managerid`,`OrderFinishDate`,`DesignFinishDate`,`orderid`) VALUES
+(3,1,'2026-01-01','2026-01-02',3);
 
 -- Add foreign key from Message.fileid to UploadedFiles.fileid
 ALTER TABLE `Message`
