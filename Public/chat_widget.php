@@ -56,7 +56,7 @@ $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
 
 <!-- Preview row styling inserted by assistant -->
 <style>
-.message-preview-column{box-sizing:border-box;padding:8px 12px;border-top:1px solid #eef3fb;border-bottom:1px solid #f8f9fb;background:#ffffff;display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.message-preview-column{box-sizing:border-box;padding:8px 12px;border-top:1px solid #eef3fb;border-bottom:44px solid #f8f9fb;background:#ffffff;display:flex;flex-direction:column;gap:8px;align-items:flex-start;}
 .message-preview-column img{max-width:100%;max-height:360px;border-radius:6px;object-fit:cover}
 .message-preview-column .file-badge{width:56px;height:44px;border-radius:6px;background:#6c757d;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:600}
 .message-preview-column .file-meta{display:flex;flex-direction:column;min-width:0}
@@ -95,9 +95,10 @@ $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
     <div id="chatwidget_divider" role="separator" aria-orientation="vertical" aria-label="Resize chat list"><div class="handle" aria-hidden="true"></div></div>
     <div class="right">
       <div id="chatwidget_messages" class="messages"></div>
+      <!-- attachment preview placeholder row (populated by JS) -->
+      <div id="chatwidget_attachPreviewColumn" class="message-preview-column" style="display:none;width:100%;margin-bottom:8px"></div>
       <div class="composer">
         <input type="file" id="chatwidget_attachInput" class="d-none" />
-        <div id="chatwidget_attachPreviewColumn" style="min-width:0;max-width:120px;display:flex;align-items:center;margin-right:6px"></div>
         <button id="chatwidget_attach" class="btn btn-light btn-sm" type="button" title="Attach" aria-label="Attach file">
           <i class="bi bi-paperclip" aria-hidden="true" style="font-size:16px;line-height:1"></i>
         </button>
@@ -333,9 +334,8 @@ $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
   })();
 })();
 </script>
-
 <!-- Initialize chat widget. This assumes Chatfunction.js and ChatApi.php are reachable at the same paths. -->
-<script src="designer/Chatfunction.js"></script>
+<script src="Chatfunction.js"></script>
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
 <script>
   document.addEventListener('DOMContentLoaded', function(){
@@ -399,7 +399,8 @@ $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
       if (sendBtn) sendBtn.addEventListener('click', function(){ setTimeout(clearPreview, 200); });
     } catch (e) { console.error('chatwidget preview init error', e); }
 
+
     // rootId 'chatwidget' maps to IDs like 'chatwidget_messages', 'chatwidget_input' etc.
-    initApp({ apiPath: 'designer/ChatApi.php?action=', userType: <?= json_encode($role) ?>, userId: <?= json_encode($uid) ?>, rootId: 'chatwidget', items: [] });
+    initApp({ apiPath: 'ChatApi.php?action=', userType: <?= json_encode($role) ?>, userId: <?= json_encode($uid) ?>, rootId: 'chatwidget', items: [] });
   });
 </script>

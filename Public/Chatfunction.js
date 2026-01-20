@@ -191,6 +191,15 @@ function initApp(config = {}) {
 
   function appendMessageToUI(msgObj, who) {
     if (!elements.messages) return;
+    // Avoid adding duplicate messages: if this message has an id and
+    // we've already rendered it, skip appending. This prevents duplicates
+    // when a poll and a send response arrive around the same time.
+    const existingId = msgObj.id || msgObj.messageid || msgObj.messageId || msgObj.messageID || msgObj.id;
+    if (existingId) {
+      try {
+        if (elements.messages.querySelector('[data-mid="' + existingId + '"]')) return;
+      } catch (e) {}
+    }
     const senderName = msgObj.sender_name || msgObj.sender || (msgObj.sender_type ? (msgObj.sender_type + ' ' + (msgObj.sender_id||'')) : '');
     const content = msgObj.content || msgObj.body || '';
     const time = msgObj.timestamp || msgObj.created_at || new Date().toISOString();
@@ -225,7 +234,7 @@ function initApp(config = {}) {
         url = (location.origin + '/' + att.replace(/^\/+/, ''));
       }
       if (/(\.png|\.jpe?g|\.gif|\.webp|\.bmp)$/i.test(lower)) {
-        attachmentHtml = `<div class="mt-2"><img src="${escapeHtml(url)}" style="max-width:220px;max-height:160px;border-radius:8px;display:block"/></div>`;
+        attachmentHtml = `<div class="mt-2"><img class="chat-attachment-img" src="${escapeHtml(url)}" style="max-width:420px;max-height:60vh;border-radius:8px;display:block;cursor:pointer"/></div>`;
       } else {
         const fname = att.split('/').pop();
         attachmentHtml = `<div class="mt-2"><a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(fname)}</a></div>`;
@@ -244,7 +253,15 @@ function initApp(config = {}) {
       wrapper.appendChild(bodyCol);
     }
 
+    if (existingId) wrapper.setAttribute('data-mid', existingId);
     elements.messages.appendChild(wrapper);
+    // wire up image click-to-enlarge for any rendered attachment images
+    try {
+      const imgEl = wrapper.querySelector('.chat-attachment-img');
+      if (imgEl) {
+        imgEl.addEventListener('click', () => { openPreviewModal(imgEl.src); });
+      }
+    } catch (e) {}
   }
 
   function selectAgent(agent) {
@@ -324,10 +341,22 @@ function initApp(config = {}) {
         fd.append('sender_id', userId);
         fd.append('room', roomId);
         fd.append('message_type', file.type && file.type.startsWith('image/') ? 'image' : 'file');
+        // include any typed text so the attachment can be sent together with a message
+        try { const txt = (elements.input && elements.input.value || '').trim(); if (txt) fd.append('content', txt); } catch(e) {}
         fd.append('attachment', file, file.name);
         const resp = await apiPostForm('sendMessage', fd);
         if (resp && resp.ok) {
           const created = resp.message || { content: '', created_at: new Date().toISOString(), id: resp.id };
+          // canonicalize possible attachment path from server response
+          try {
+            const msg = resp.message || {};
+            const cand = msg.attachment || msg.filepath || msg.file || resp.attachmentPath || resp.filepath || null;
+            if (cand) {
+              // if cand is object with filepath, prefer that
+              if (typeof cand === 'object' && cand.filepath) created.attachment = cand.filepath;
+              else created.attachment = cand;
+            }
+          } catch(e){}
           appendMessageToUI(created, 'me');
           const mid = created.id || created.messageid || created.messageId || resp.id || 0;
           if (mid) lastMessageId = Math.max(lastMessageId, parseInt(mid, 10));
@@ -425,19 +454,26 @@ function initApp(config = {}) {
         try {
           if (!attachPreview) {
             console.warn('attachPreview missing, creating temporary preview element');
-            attachPreview = document.createElement('div'); attachPreview.id = 'attachPreviewColumn'; attachPreview.style.minWidth = '0'; attachPreview.style.maxWidth = '100%';
-            // Insert preview row above the composer (message input row) when possible
-            try {
-              const composer = elements.input ? elements.input.closest('.composer') : null;
-              if (composer && composer.parentNode) {
-                composer.parentNode.insertBefore(attachPreview, composer);
-              } else if (attachBtn && attachBtn.parentNode) {
-                attachBtn.parentNode.insertBefore(attachPreview, attachBtn);
-              }
-            } catch (e) {
-              if (attachBtn && attachBtn.parentNode) attachBtn.parentNode.insertBefore(attachPreview, attachBtn);
+            attachPreview = document.createElement('div');
+            attachPreview.id = 'attachPreviewColumn';
+            attachPreview.className = 'message-preview-column';
+            attachPreview.style.minWidth = '0';
+            attachPreview.style.flex = '0 0 120px';
+            attachPreview.style.maxWidth = '160px';
+            attachPreview.style.marginRight = '8px';
+            // Insert preview as a full-width row above the composer (if available)
+            const composer = elements.input ? elements.input.closest('.composer') : null;
+            if (composer && composer.parentNode) {
+              // create a separate row before the composer so layout stays stable
+              attachPreview.style.display = 'block';
+              attachPreview.style.width = '100%';
+              attachPreview.style.maxWidth = 'none';
+              attachPreview.style.marginBottom = '8px';
+              composer.parentNode.insertBefore(attachPreview, composer);
+            } else if (attachBtn && attachBtn.parentNode) {
+              attachBtn.parentNode.insertBefore(attachPreview, attachBtn);
             }
-          }
+            }
           showSelectedPreview(attachPreview, file);
         } catch(ex){ console.error('preview error', ex); }
         let roomId = getSelectedRoomId();
@@ -459,12 +495,10 @@ function initApp(config = {}) {
                 const it = items[0];
                 roomId = it.dataset.roomId || it.getAttribute('data-room-id') || it.getAttribute('data-roomid') || null;
                 if (roomId) {
-                  // mark active and set currentAgent
-                  items.forEach(x => x.classList.remove('active'));
-                  it.classList.add('active');
+                  // silently use the single room for upload without forcing UI highlight
                   currentAgent = { ChatRoomid: roomId, roomname: (it.querySelector('.fw-semibold') ? it.querySelector('.fw-semibold').textContent : '') };
                   lastMessageId = 0; startPolling(roomId);
-                  console.info('auto-selected single agent roomId', roomId);
+                  console.info('using single agent roomId (no UI auto-select)', roomId);
                 }
               }
             }
@@ -499,17 +533,23 @@ function initApp(config = {}) {
         try {
           if (!widgetPreview) {
             console.warn('widgetPreview missing, creating temporary element');
-            widgetPreview = document.createElement('div'); widgetPreview.id='chatwidget_attachPreviewColumn'; widgetPreview.style.minWidth='0'; widgetPreview.style.maxWidth='100%';
-            // Try to insert preview above the composer row for the widget
-            try {
-              const composer = elements.input ? elements.input.closest('.composer') : null;
-              if (composer && composer.parentNode) {
-                composer.parentNode.insertBefore(widgetPreview, composer);
-              } else if (wab && wab.parentNode) {
-                wab.parentNode.insertBefore(widgetPreview, wab);
-              }
-            } catch (e) {
-              if (wab && wab.parentNode) wab.parentNode.insertBefore(widgetPreview, wab);
+            widgetPreview = document.createElement('div');
+            widgetPreview.id = 'chatwidget_attachPreviewColumn';
+            widgetPreview.className = 'message-preview-column';
+            widgetPreview.style.minWidth = '0';
+            widgetPreview.style.flex = '0 0 120px';
+            widgetPreview.style.maxWidth = '160px';
+            widgetPreview.style.marginRight = '8px';
+            // Try to insert preview as a separate full-width row above the composer for the widget
+            const composer = elements.input ? elements.input.closest('.composer') : null;
+            if (composer && composer.parentNode) {
+              widgetPreview.style.display = 'block';
+              widgetPreview.style.width = '100%';
+              widgetPreview.style.maxWidth = 'none';
+              widgetPreview.style.marginBottom = '8px';
+              composer.parentNode.insertBefore(widgetPreview, composer);
+            } else if (wab && wab.parentNode) {
+              wab.parentNode.insertBefore(widgetPreview, wab);
             }
           }
           showSelectedPreview(widgetPreview, file);
@@ -523,13 +563,11 @@ function initApp(config = {}) {
             const items = list.querySelectorAll('.list-group-item');
             if (items.length >= 1) {
               sel = items[0];
-              // mark active and set currentAgent
-              items.forEach(x => x.classList.remove('active'));
-              sel.classList.add('active');
               const rid = sel.dataset.roomId || sel.getAttribute('data-room-id') || sel.getAttribute('data-roomid');
+              // silently use first room but do not mutate active UI state
               currentAgent = { ChatRoomid: rid, roomname: (sel.querySelector('.fw-semibold') ? sel.querySelector('.fw-semibold').textContent : '') };
               lastMessageId = 0; startPolling(rid);
-              console.debug('chatwidget: auto-selected first room', rid);
+              console.debug('chatwidget: using first room silently', rid);
             }
           }
         }
@@ -552,14 +590,20 @@ function initApp(config = {}) {
   // preview helpers
   function showSelectedPreview(container, file) {
     if (!container) return;
+    // ensure the preview row is visible when populated
+    try { container.style.display = container.style.display === 'none' ? '' : container.style.display; } catch(e) {}
     container.innerHTML = '';
     const root = document.createElement('div'); root.className = 'message-preview-row';
     const wrap = document.createElement('div'); wrap.className = 'd-flex align-items-center';
     if (file.type && file.type.startsWith('image/')) {
       const img = document.createElement('img');
-      img.src = URL.createObjectURL(file);
-      img.style.maxWidth = '80px'; img.style.maxHeight = '60px'; img.style.objectFit = 'cover'; img.style.borderRadius = '6px'; img.style.marginRight = '8px';
-      img.onload = () => { URL.revokeObjectURL(img.src); };
+      const objUrl = URL.createObjectURL(file);
+      // keep object URL until preview is cleared so modal enlarge works
+      try { container._objUrl = objUrl; } catch(e) {}
+      img.src = objUrl;
+      img.style.maxWidth = '140px'; img.style.maxHeight = '120px'; img.style.objectFit = 'cover'; img.style.borderRadius = '6px'; img.style.marginRight = '8px';
+      img.style.cursor = 'pointer';
+      img.addEventListener('click', () => { openPreviewModal(objUrl); });
       wrap.appendChild(img);
     } else {
       const ext = (file.name || '').split('.').pop() || '';
@@ -572,9 +616,55 @@ function initApp(config = {}) {
     if (file.size) { const size = document.createElement('div'); size.className = 'size'; size.textContent = Math.round(file.size/1024) + ' KB'; meta.appendChild(size); }
     wrap.appendChild(meta);
     root.appendChild(wrap);
+    // add a small 'x' remove button aligned to the right of the preview row
+    try {
+      // ensure the preview row lays out horizontally so the button can sit at the right
+      root.style.display = 'flex';
+      root.style.alignItems = 'center';
+      wrap.style.flex = '1';
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn btn-sm btn-link';
+      btn.setAttribute('aria-label', 'Remove attachment');
+      btn.style.marginLeft = 'auto';
+      btn.style.padding = '0 6px';
+      btn.style.lineHeight = '1';
+      btn.textContent = '✕';
+      btn.addEventListener('click', function(){
+        try { clearSelectedPreview(container); } catch(e){}
+        // clear pending references if any
+        try { widgetPendingFile = null; pendingFile = null; } catch(e){}
+        // clear native file inputs where possible
+        try { const a = document.getElementById(prefix + 'attachInput') || document.getElementById('attachInput'); if (a) a.value = ''; } catch(e){}
+        try { const b = document.getElementById(prefix + 'chatwidget_attachInput') || document.getElementById('chatwidget_attachInput'); if (b) b.value = ''; } catch(e){}
+      });
+      root.appendChild(btn);
+    } catch(e) {}
     container.appendChild(root);
   }
-  function clearSelectedPreview(container){ if (!container) return; container.innerHTML = ''; }
+  function clearSelectedPreview(container){ if (!container) return; try { container.innerHTML = ''; container.style.display = 'none'; if (container._objUrl) { try { URL.revokeObjectURL(container._objUrl); } catch(e){} delete container._objUrl; } } catch(e) {} try { widgetPendingFile = null; pendingFile = null; } catch(e) {} }
+
+  // create/open a simple modal overlay for previewing images larger
+  function openPreviewModal(src) {
+    if (!src) return;
+    const id = prefix + 'previewModal';
+    let modal = document.getElementById(id);
+    if (!modal) {
+      modal = document.createElement('div'); modal.id = id;
+      modal.style.position = 'fixed'; modal.style.left = '0'; modal.style.top = '0'; modal.style.right = '0'; modal.style.bottom = '0';
+      modal.style.display = 'flex'; modal.style.alignItems = 'center'; modal.style.justifyContent = 'center'; modal.style.background = 'rgba(0,0,0,0.85)'; modal.style.zIndex = 20000;
+      modal.style.cursor = 'zoom-out';
+      const img = document.createElement('img'); img.id = prefix + 'previewModalImg'; img.style.maxWidth = '90vw'; img.style.maxHeight = '90vh'; img.style.boxShadow = '0 6px 30px rgba(0,0,0,0.6)'; img.style.borderRadius = '6px'; img.style.objectFit = 'contain';
+      modal.appendChild(img);
+      modal.addEventListener('click', () => { try { modal.style.display = 'none'; const i = document.getElementById(prefix + 'previewModalImg'); if (i && i.dataset && i.dataset.objurl) { try { URL.revokeObjectURL(i.dataset.objurl); } catch(e){} delete i.dataset.objurl; } } catch(e){} });
+      document.body.appendChild(modal);
+    }
+    const img = document.getElementById(prefix + 'previewModalImg');
+    if (!img) return;
+    img.src = src;
+    try { img.dataset.objurl = (src && src.indexOf('blob:') === 0) ? src : ''; } catch(e){}
+    modal.style.display = 'flex';
+  }
 
 
   if (elements.send) elements.send.addEventListener('click', sendMessage);
