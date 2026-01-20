@@ -419,6 +419,7 @@ if (!$size_result) die('Query error: ' . $mysqli->error);
             apiPath: 'designer/ChatApi.php?action=',
             userId: <?= (int)($_SESSION['user']['clientid'] ?? $_SESSION['user']['id'] ?? 0) ?>,
             userType: '<?= htmlspecialchars($_SESSION['user']['role'] ?? 'client') ?>',
+            userName: '<?= htmlspecialchars($_SESSION['user']['name'] ?? 'User', ENT_QUOTES) ?>',
             rootId: 'chatwidget',
             items: []
         });
