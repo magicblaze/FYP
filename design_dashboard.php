@@ -344,18 +344,18 @@ if (!$designer_result) die('Query error: ' . $mysqli->error);
     <?php
     // Include floating chat widget for logged-in users only
     if (isset($_SESSION['user'])) {
-        include __DIR__ . '/designer/chat_widget.php';
+        include __DIR__ . '/Public/chat_widget.php';
     }
     ?>
 
     <!-- Include chat functionality JavaScript -->
-    <script src="designer/Chatfunction.js"></script>
+    <script src="Public/Chatfunction.js"></script>
     <script>
     document.addEventListener('DOMContentLoaded', function() {
         <?php if (isset($_SESSION['user'])): ?>
         // Initialize chat application
         const chatApp = initApp({
-            apiPath: 'designer/ChatApi.php?action=',
+            apiPath: 'Public/ChatApi.php?action=',
             userId: <?= (int)($_SESSION['user']['clientid'] ?? $_SESSION['user']['id'] ?? 0) ?>,
             userType: '<?= htmlspecialchars($_SESSION['user']['role'] ?? 'client') ?>',
             userName: '<?= htmlspecialchars($_SESSION['user']['name'] ?? 'User', ENT_QUOTES) ?>',
