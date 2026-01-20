@@ -11,7 +11,7 @@ define('SMTP_HOST', 'smtp.gmail.com');
 define('SMTP_PORT', 587);
 define('SMTP_ENCRYPTION', 'tls'); // tls or ssl
 
-// 邮件发送函数（使用PHP内置mail()函数）
+// 发送简单文本邮件
 function sendEmailSimple($to, $subject, $message) {
     $headers = "From: " . GMAIL_FROM_NAME . " <" . GMAIL_FROM_EMAIL . ">\r\n";
     $headers .= "Reply-To: " . GMAIL_REPLY_TO . "\r\n";

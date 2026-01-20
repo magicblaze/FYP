@@ -17,7 +17,7 @@ require_once dirname(__DIR__) . '/config.php';
                 <a href="Manager_introduct.html">Introduct</a>
                 <a href="Manager_MyOrder.html">MyOrder</a>
                 <a href="Manager_Massage.html">Massage</a>
-                <a href="Manager_Schedule.html">Schedule</a>
+                <a href="Manager_Schedule.php">Schedule</a>
             </div>
         </div>
     </nav>

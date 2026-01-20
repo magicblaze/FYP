@@ -83,7 +83,7 @@ $stats = mysqli_fetch_assoc($stats_result);
                 <a href="Manager_introduct.html">Introduct</a>
                 <a href="Manager_MyOrder.html">MyOrder</a>
                 <a href="Manager_Massage.html">Massage</a>
-                <a href="Manager_Schedule.html">Schedule</a>
+                <a href="Manager_Schedule.php">Schedule</a>
             </div>
         </div>
     </nav>
@@ -242,7 +242,7 @@ $stats = mysqli_fetch_assoc($stats_result);
             <div class="btn-group">
                 <button onclick="window.location.href='Manager_MyOrder.html'" 
                         class="btn btn-secondary">Back to Orders Manager</button>
-                        
+
             </div>
         </div>
     </div>
