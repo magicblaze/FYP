@@ -50,16 +50,18 @@ if ($user_type === 'designer') {
     // Designer sees schedules for orders where they are the designer
     $sql = "
         SELECT 
-            op.orderproductid as scheduleid,
+            op.orderproductid,
             op.deliverydate as FinishDate,
             o.orderid,
             o.odate as OrderDate,
+            op.status as ProductStatus,
             o.ostatus,
             o.budget,
             c.cname as ClientName,
             d.designid,
             m.mname as ManagerName,
-            p.pname as ProductNames
+            p.pname as ProductName,
+            op.quantity
         FROM `OrderProduct` op
         JOIN `Order` o ON op.orderid = o.orderid
         JOIN `Design` d ON o.designid = d.designid
@@ -81,15 +83,17 @@ if ($user_type === 'designer') {
     // Supplier sees schedules for orders that include their products
     $sql = "
         SELECT 
-            op.orderproductid as scheduleid,
+            op.orderproductid,
             op.deliverydate as FinishDate,
             o.orderid,
             o.odate as OrderDate,
+            op.status as ProductStatus,
             o.ostatus,
             o.budget,
             c.cname as ClientName,
             m.mname as ManagerName,
-            p.pname as ProductNames
+            p.pname as ProductName,
+            op.quantity
         FROM `OrderProduct` op
         JOIN `Order` o ON op.orderid = o.orderid
         JOIN `Product` p ON op.productid = p.productid
@@ -110,22 +114,25 @@ if ($user_type === 'designer') {
     // Manager sees schedules for orders they manage
     $sql = "
         SELECT 
-            op.orderproductid as scheduleid,
+            op.orderproductid,
             op.deliverydate as FinishDate,
             o.orderid,
             o.odate as OrderDate,
+            op.status as ProductStatus,
             o.ostatus,
             o.budget,
             c.cname as ClientName,
             d.designid,
             des.dname as DesignerName,
-            p.pname as ProductNames
+            p.pname as ProductName,
+            op.quantity
         FROM `OrderProduct` op
         JOIN `Order` o ON op.orderid = o.orderid
         JOIN `Design` d ON o.designid = d.designid
         JOIN `Designer` des ON d.designerid = des.designerid
         JOIN `Client` c ON o.clientid = c.clientid
         JOIN `Manager` m ON op.managerid = m.managerid
+        JOIN `Product` p ON op.productid = p.productid
         WHERE m.managerid = ?
         ORDER BY op.deliverydate ASC
     ";
@@ -150,13 +157,15 @@ foreach ($schedules as $schedule) {
     }
 }
 
-// Function to get status badge color
+// Function to get status badge color (now based on ProductStatus)
 function getStatusBadgeClass($status) {
     switch(strtolower($status)) {
-        case 'completed':
+        case 'delivered':
             return 'bg-success';
-        case 'designing':
+        case 'shipped':
             return 'bg-info';
+        case 'processing':
+            return 'bg-primary';
         case 'pending':
             return 'bg-warning';
         case 'cancelled':
@@ -348,7 +357,7 @@ $month_name = date('F', mktime(0, 0, 0, $current_month, 1));
             background-color: #3498db;
             color: white;
             padding: 0.25rem 0.5rem;
-            border-radius: 4px;
+            border-radius: 50%;
             display: inline-block;
         }
 
@@ -375,22 +384,27 @@ $month_name = date('F', mktime(0, 0, 0, $current_month, 1));
         }
 
         .schedule-item.bg-success {
-            border-left-color: #27ae60;
-            background-color: #d5f4e6;
+            border-left-color: #155724;
+            background-color: #d4edda;
         }
 
         .schedule-item.bg-info {
-            border-left-color: #3498db;
+            border-left-color: #0c5460;
             background-color: #d1ecf1;
         }
 
+        .schedule-item.bg-primary {
+            border-left-color: #084298;
+            background-color: #cfe2ff;
+        }
+
         .schedule-item.bg-warning {
-            border-left-color: #f39c12;
+            border-left-color: #856404;
             background-color: #fff3cd;
         }
 
         .schedule-item.bg-danger {
-            border-left-color: #e74c3c;
+            border-left-color: #721c24;
             background-color: #f8d7da;
         }
 
@@ -461,20 +475,28 @@ $month_name = date('F', mktime(0, 0, 0, $current_month, 1));
         }
 
         .badge.bg-success {
-            background-color: #27ae60 !important;
+            background-color: #155724 !important;
+            color: white;
         }
 
         .badge.bg-info {
-            background-color: #3498db !important;
+            background-color: #0c5460 !important;
+            color: white;
+        }
+
+        .badge.bg-primary {
+            background-color: #084298 !important;
+            color: white;
         }
 
         .badge.bg-warning {
-            background-color: #f39c12 !important;
+            background-color: #856404 !important;
             color: white;
         }
 
         .badge.bg-danger {
-            background-color: #e74c3c !important;
+            background-color: #721c24 !important;
+            color: white;
         }
 
         @media (max-width: 768px) {
@@ -581,13 +603,13 @@ $month_name = date('F', mktime(0, 0, 0, $current_month, 1));
                                                 <?php echo $day['day']; ?>
                                             </div>
                                             <?php foreach ($day['schedules'] as $schedule): ?>
-                                                <a class="schedule-item <?php echo getStatusBadgeClass($schedule['ostatus']); ?>" 
+                                                <a class="schedule-item <?php echo getStatusBadgeClass($schedule['ProductStatus']); ?>" 
                                                    data-bs-toggle="modal" 
-                                                   data-bs-target="#scheduleModal<?php echo $schedule['scheduleid']; ?>"
-                                                   title="<?php echo htmlspecialchars($schedule['ClientName']); ?>"
+                                                   data-bs-target="#scheduleModal<?php echo $schedule['orderproductid']; ?>"
+                                                   title="<?php echo htmlspecialchars($schedule['ProductName']); ?>"
                                                    href="javascript:void(0);">
                                                     <span class="schedule-item-text">
-                                                        Order #<?php echo $schedule['orderid']; ?>
+                                                        OP #<?php echo $schedule['orderproductid']; ?> - <?php echo htmlspecialchars($schedule['ProductName']); ?>
                                                     </span>
                                                 </a>
                                             <?php endforeach; ?>
@@ -604,26 +626,36 @@ $month_name = date('F', mktime(0, 0, 0, $current_month, 1));
 
     <!-- Schedule Detail Modals -->
     <?php foreach ($schedules as $schedule): ?>
-        <div class="modal fade" id="scheduleModal<?php echo $schedule['scheduleid']; ?>" tabindex="-1">
+        <div class="modal fade" id="scheduleModal<?php echo $schedule['orderproductid']; ?>" tabindex="-1">
             <div class="modal-dialog modal-dialog-centered">
                 <div class="modal-content">
                     <div class="modal-header">
                         <h5 class="modal-title">
-                            <i class="fas fa-calendar-check me-2"></i>Schedule #<?php echo $schedule['scheduleid']; ?>
+                            <i class="fas fa-calendar-check me-2"></i>OrderProduct #<?php echo $schedule['orderproductid']; ?>
                         </h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body">
                         <div class="schedule-detail">
-                            <div class="detail-label">Order ID</div>
-                            <div class="detail-value">#<?php echo htmlspecialchars($schedule['orderid']); ?></div>
+                            <div class="detail-label">OrderProduct ID</div>
+                            <div class="detail-value">#<?php echo htmlspecialchars($schedule['orderproductid']); ?></div>
                         </div>
 
                         <div class="schedule-detail">
-                            <div class="detail-label">Status</div>
+                            <div class="detail-label">Product Name</div>
+                            <div class="detail-value"><?php echo htmlspecialchars($schedule['ProductName']); ?></div>
+                        </div>
+
+                        <div class="schedule-detail">
+                            <div class="detail-label">Quantity</div>
+                            <div class="detail-value"><?php echo htmlspecialchars($schedule['quantity']); ?></div>
+                        </div>
+
+                        <div class="schedule-detail">
+                            <div class="detail-label">Product Status</div>
                             <div class="detail-value">
-                                <span class="badge <?php echo getStatusBadgeClass($schedule['ostatus']); ?>">
-                                    <?php echo htmlspecialchars($schedule['ostatus']); ?>
+                                <span class="badge <?php echo getStatusBadgeClass($schedule['ProductStatus']); ?>">
+                                    <?php echo htmlspecialchars($schedule['ProductStatus']); ?>
                                 </span>
                             </div>
                         </div>
@@ -639,10 +671,6 @@ $month_name = date('F', mktime(0, 0, 0, $current_month, 1));
                                 <div class="detail-value"><?php echo htmlspecialchars($schedule['ManagerName']); ?></div>
                             </div>
                         <?php elseif ($user_type === 'supplier'): ?>
-                            <div class="schedule-detail">
-                                <div class="detail-label">Products</div>
-                                <div class="detail-value"><?php echo htmlspecialchars($schedule['ProductNames']); ?></div>
-                            </div>
                             <div class="schedule-detail">
                                 <div class="detail-label">Manager</div>
                                 <div class="detail-value"><?php echo htmlspecialchars($schedule['ManagerName']); ?></div>
@@ -660,8 +688,8 @@ $month_name = date('F', mktime(0, 0, 0, $current_month, 1));
                         </div>
 
                         <div class="schedule-detail">
-                            <div class="detail-label">Finish Date</div>
-                            <div class="detail-value"><?php echo date('Y-m-d H:i', strtotime($schedule['FinishDate'])); ?></div>
+                            <div class="detail-label">Delivery Date</div>
+                            <div class="detail-value"><?php echo date('Y-m-d', strtotime($schedule['FinishDate'])); ?></div>
                         </div>
 
                         <div class="schedule-detail">
@@ -678,4 +706,3 @@ $month_name = date('F', mktime(0, 0, 0, $current_month, 1));
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
-                            
