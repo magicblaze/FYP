@@ -1,5 +1,6 @@
 <?php
 session_start();
+require_once __DIR__ . '/config.php';
 
 // Handle fake login / logout for testing
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {

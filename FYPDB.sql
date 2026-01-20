@@ -307,18 +307,33 @@ CREATE TABLE `Message` (
   `sender_id` int NOT NULL,
   `content` text  NOT NULL,
   `message_type` ENUM('text', 'image', 'file') DEFAULT 'text',
-  `attachment` VARCHAR(500) NULL,
+  `fileid` int NULL,
   `ChatRoomid` int NOT NULL,
   `timestamp` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`messageid`),
   KEY `idx_room` (`ChatRoomid`),
+  KEY `idx_fileid` (`fileid`),
   KEY `idx_sender` (`sender_type`, `sender_id`),
   CONSTRAINT `fk_message_room` FOREIGN KEY (`ChatRoomid`) REFERENCES `ChatRoom` (`ChatRoomid`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-INSERT INTO `Message` (`messageid`, `sender_type`, `sender_id`, `content`,`message_type`,`attachment`,`ChatRoomid`) VALUES
-(1, 'manager', 1, 'hi','text',null,2),
-(2, 'designer', 1, 'hello','text',null,2);
+INSERT INTO `Message` (`messageid`, `sender_type`, `sender_id`, `content`,`message_type`,`fileid`,`ChatRoomid`) VALUES
+(1, 'manager', 1, 'hi','text',NULL,2),
+(2, 'designer', 1, 'hello','text',NULL,2);
+
+-- Table to store uploaded file metadata (uploader identity and path)
+CREATE TABLE `UploadedFiles` (
+  `fileid` int NOT NULL AUTO_INCREMENT,
+  `uploader_type` ENUM('client', 'designer','manager','Contractors','supplier') NOT NULL,
+  `uploader_id` int NOT NULL,
+  `filename` varchar(500) NOT NULL,
+  `filepath` varchar(1000) NOT NULL,
+  `mime` varchar(255) DEFAULT NULL,
+  `size` int DEFAULT NULL,
+  `uploaded_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`fileid`),
+  KEY `idx_uploader` (`uploader_type`, `uploader_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Per-member read/unread status for messages
 CREATE TABLE `MessageRead` (
@@ -392,7 +407,7 @@ INSERT INTO `ChatRoomMember` (`ChatRoomMemberid`, `ChatRoomid`, `member_type`, `
 (4, 3, 'supplier', 2),
 (5, 1, 'designer', 2);
 
-INSERT INTO `Message` (`messageid`, `sender_type`, `sender_id`, `content`,`message_type`,`attachment`,`ChatRoomid`) VALUES
+INSERT INTO `Message` (`messageid`, `sender_type`, `sender_id`, `content`,`message_type`,`fileid`,`ChatRoomid`) VALUES
 (3, 'client', 2, 'Hi team, starting project', 'text', NULL, 3),
 (4, 'supplier', 2, 'We can supply materials next week', 'text', NULL, 3),
 (5, 'designer', 2, 'I will prepare the plan', 'text', NULL, 1);
@@ -418,6 +433,10 @@ INSERT INTO `Order_Contractors` (`order_Contractorid`, `contractorid`, `orderid`
 
 INSERT INTO `Schedule` (`scheduleid`,`managerid`,`FinishDate`,`orderid`) VALUES
 (3,1,'2025-08-01 17:00:00',3);
+
+-- Add foreign key from Message.fileid to UploadedFiles.fileid
+ALTER TABLE `Message`
+  ADD CONSTRAINT `fk_message_fileid` FOREIGN KEY (`fileid`) REFERENCES `UploadedFiles` (`fileid`) ON DELETE SET NULL;
 
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;

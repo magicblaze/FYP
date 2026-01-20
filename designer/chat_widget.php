@@ -3,28 +3,30 @@
 if (session_status() !== PHP_SESSION_ACTIVE) {
   session_start();
 }
+$logged = isset($_SESSION['user']) && !empty($_SESSION['user']);
 $role = $_SESSION['user']['role'] ?? 'client';
 $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
 ?>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
 <style>
 /* Floating chat button and panel styles */
 #chatwidget_toggle {position:fixed;right:20px;bottom:20px;z-index:9999;border-radius:50%;width:56px;height:56px;background:#0d6efd;color:#fff;border:none;box-shadow:0 6px 18px rgba(11,27,43,0.18);display:flex;align-items:center;justify-content:center;font-size:22px}
-#chatwidget_panel {position:fixed;right:20px;top:20px;z-index:9998;width:520px;max-width:95vw;max-height:95vh;background:#fff;border-radius:12px;box-shadow:0 10px 30px rgba(11,27,43,0.12);overflow:hidden;display:none;flex-direction:column;min-width:377px;min-height:255px;box-sizing:border-box}
+#chatwidget_panel {position:fixed;right:20px;bottom:20px;z-index:9998;width:520px;max-width:95vw;max-height:95vh;background:#fff;border-radius:12px;box-shadow:0 10px 30px rgba(11,27,43,0.12);overflow:hidden;display:none;flex-direction:column;min-width:377px;min-height:255px;box-sizing:border-box}
 #chatwidget_panel .header{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#f7f9fc;border-bottom:1px solid #eef3fb}
 #chatwidget_panel .body{display:flex;gap:8px;padding:8px;flex:1 1 auto;min-height:0;box-sizing:border-box}
-#chatwidget_panel .body .left{width:160px;min-width:120px;max-width:220px;overflow:auto;border-right:1px solid #eef3fb;padding-right:8px}
-#chatwidget_panel .body .left{width:160px;min-width:140px;max-width:220px;overflow:auto;border-right:1px solid #eef3fb;padding-right:8px}
+#chatwidget_panel .body .left{width:160px;min-width:120px;overflow:auto;border-right:1px solid #eef3fb;padding-right:8px}
+#chatwidget_panel .body .left{width:160px;min-width:140px;overflow:auto;border-right:1px solid #eef3fb;padding-right:8px}
 #chatwidget_panel .composer{display:flex;gap:8px;padding:8px;border-top:1px solid #eef3fb}
 #chatwidget_panel .body .right{flex:1;display:flex;flex-direction:column;min-width:220px}
 #chatwidget_panel .body .right{flex:1;display:flex;flex-direction:column;min-width:220px;min-height:200px;position:relative}
 /* Responsive: stack on small screens */
 @media (max-width: 700px) {
-  #chatwidget_panel { right:8px; left:8px; top:auto; bottom:8px; width:calc(100% - 16px); max-width:none; border-radius:10px; min-width:unset; min-height:220px; max-height:80vh; }
+  #chatwidget_panel { right:20px; left:20px; top:auto; bottom:20px; width:calc(100% - 40px); max-width:none; border-radius:10px; min-width:unset; min-height:220px; max-height:80vh; }
   #chatwidget_panel .body { flex-direction:column; gap:6px; padding:6px; max-height:calc(80vh - 120px); }
   #chatwidget_panel .body .left { width:100%; min-width:unset; max-width:none; border-right:none; border-bottom:1px solid #eef3fb; padding-bottom:8px; }
   #chatwidget_panel .body .right { width:100%; min-height:140px; }
   #chatwidget_panel .messages { min-height:120px; }
-  #chatwidget_toggle { right:12px; bottom:12px; width:48px; height:48px; }
+  #chatwidget_toggle { right:20px; bottom:20px; width:48px; height:48px; }
 }
 
 @media (max-width: 420px) {
@@ -34,8 +36,12 @@ $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
   #chatwidget_panel .body .left .list-group { max-height:120px; overflow:auto; }
 }
 #chatwidget_panel .messages{flex:1 1 auto;overflow:auto;padding:6px;min-height:0}
+#chatwidget_divider{width:16px;margin-left:-8px;display:flex;align-items:center;justify-content:center;cursor:col-resize}
+#chatwidget_divider .handle{width:5px;height:56px;background:#dcdcdc;border-left:1px solid rgba(0,0,0,0.08);border-right:1px solid rgba(255,255,255,0.4);border-radius:3px}
+#chatwidget_agentsList { overflow:auto; -ms-overflow-style: none; scrollbar-width: none; }
+#chatwidget_agentsList::-webkit-scrollbar { display: none; width: 0; height: 0; }
 #chatwidget_panel .composer{display:flex;gap:8px;padding:8px;border-top:1px solid #eef3fb}
-#chatwidget_panel .composer{position:absolute;left:0;right:0;bottom:0;background:transparent;padding:8px 8px 12px 8px;z-index:3}
+#chatwidget_panel .composer{position:absolute;left:0;right:0;bottom:0;background:white;padding:8px 8px 12px 8px;z-index:3}
 #chatwidget_panel .messages{padding-bottom:72px}
 #chatwidget_panel .composer input{flex:1}
 #chatwidget_close{background:transparent;border:0;font-size:18px}
@@ -43,17 +49,39 @@ $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
 #chatwidget_panel .resizer{position:absolute;right:8px;bottom:8px;width:18px;height:18px;cursor:se-resize;background:linear-gradient(135deg, rgba(0,0,0,0.06), rgba(0,0,0,0.02));border-radius:4px;z-index:10001}
 
 /* Bottom-sheet helper class applied on small screens by JS for more predictable behavior */
-.chatwidget-bottomsheet { left:8px !important; right:8px !important; top:auto !important; bottom:8px !important; width:calc(100% - 16px) !important; height:60vh !important; max-height:80vh !important; border-radius:12px 12px 6px 6px !important; }
+.chatwidget-bottomsheet { left:20px !important; right:20px !important; top:auto !important; bottom:20px !important; width:calc(100% - 40px) !important; height:60vh !important; max-height:80vh !important; border-radius:12px 12px 6px 6px !important; }
 .chatwidget-bottomsheet .resizer { display:none !important; }
 .chatwidget-bottomsheet .composer { position:sticky !important; bottom:0; background:linear-gradient(to top, rgba(255,255,255,0.9), rgba(255,255,255,0.6)); }
 </style>
 
-<button id="chatwidget_toggle" aria-label="Open chat">💬</button>
+<!-- Preview row styling inserted by assistant -->
+<style>
+.message-preview-column{box-sizing:border-box;padding:8px 12px;border-top:1px solid #eef3fb;border-bottom:1px solid #f8f9fb;background:#ffffff;display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.message-preview-column img{max-width:100%;max-height:360px;border-radius:6px;object-fit:cover}
+.message-preview-column .file-badge{width:56px;height:44px;border-radius:6px;background:#6c757d;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:600}
+.message-preview-column .file-meta{display:flex;flex-direction:column;min-width:0}
+.message-preview-column .file-meta .name{font-size:0.95rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.message-preview-column .file-meta .size{font-size:0.8rem;color:#6c757d}
+</style>
+
+<?php
+  // If not logged in, show button that redirects to login (preserves current page for redirect)
+  $redirect = urlencode($_SERVER['REQUEST_URI'] ?? '');
+  if (!$logged) :
+?>
+  <a id="chatwidget_toggle" class="btn-link" href="../login.php?redirect=<?php echo $redirect ?>" aria-label="Log in to open chat" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;border-radius:50%;background:#0d6efd;color:#fff;">
+    <i class="bi bi-chat-dots" aria-hidden="true" style="font-size:22px;color:#fff;line-height:1"></i>
+  </a>
+<?php else: ?>
+  <button id="chatwidget_toggle" aria-label="Open chat" style="display:inline-flex;align-items:center;justify-content:center;padding:0;border:0;background:transparent;">
+    <i class="bi bi-chat-dots" aria-hidden="true" style="font-size:22px;color:#0d6efd;line-height:1"></i>
+  </button>
+<?php endif; ?>
 
 <div id="chatwidget_panel" role="dialog" aria-hidden="true" aria-label="Chat widget">
   <div class="header">
     <div>
-      <div style="font-weight:600">HappyDesign Chat</div>
+      <div style="font-weight:600">Message</div>
       <div id="chatwidget_typingIndicator" class="small text-muted"></div>
     </div>
     <div>
@@ -64,11 +92,19 @@ $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
     <div class="left">
       <div id="chatwidget_agentsList" class="list-group mb-2" style="max-height:100%;overflow:auto;"></div>
     </div>
+    <div id="chatwidget_divider" role="separator" aria-orientation="vertical" aria-label="Resize chat list"><div class="handle" aria-hidden="true"></div></div>
     <div class="right">
       <div id="chatwidget_messages" class="messages"></div>
       <div class="composer">
-        <input id="chatwidget_input" class="form-control form-control-sm" placeholder="Message..." aria-label="Message input">
-        <button id="chatwidget_send" class="btn btn-primary btn-sm">Send</button>
+        <input type="file" id="chatwidget_attachInput" class="d-none" />
+        <div id="chatwidget_attachPreviewColumn" style="min-width:0;max-width:120px;display:flex;align-items:center;margin-right:6px"></div>
+        <button id="chatwidget_attach" class="btn btn-light btn-sm" type="button" title="Attach" aria-label="Attach file">
+          <i class="bi bi-paperclip" aria-hidden="true" style="font-size:16px;line-height:1"></i>
+        </button>
+        <input id="chatwidget_input" class="form-control form-control-sm" placeholder="Message..." aria-label="Message input" <?php if (!$logged) echo 'disabled title="Log in to send messages"'; ?> >
+        <button id="chatwidget_send" class="btn btn-primary btn-sm" <?php if (!$logged) echo 'disabled title="Log in to send messages"'; ?> aria-label="Send message">
+          <i class="bi bi-send-fill" aria-hidden="true" style="font-size:16px;line-height:1;color:#fff"></i>
+        </button>
       </div>
     </div>
   </div>
@@ -106,20 +142,6 @@ $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
     } else if (pos.x !== undefined && pos.y !== undefined) {
       el.style.left = pos.x + 'px'; el.style.top = pos.y + 'px'; el.style.right = 'auto';
     }
-  }
-  // Ensure the element stays fully within the viewport (clamp if needed)
-  function ensureInViewport(el){
-    if(!el) return;
-    const rect = el.getBoundingClientRect();
-    const pad = 8;
-    let changed = false;
-    let left = rect.left, top = rect.top;
-    if (rect.right > window.innerWidth - pad) { left = Math.max(pad, window.innerWidth - el.offsetWidth - pad); changed = true; }
-    if (rect.left < pad) { left = pad; changed = true; }
-    if (rect.bottom > window.innerHeight - pad) { top = Math.max(pad, window.innerHeight - el.offsetHeight - pad); changed = true; }
-    if (rect.top < pad) { top = pad; changed = true; }
-    if (changed){ el.style.left = left + 'px'; el.style.top = top + 'px'; el.style.right = 'auto'; }
-    return changed;
   }
   // Save/load size (percent + absolute) and apply
   function saveSize(key, wPx, hPx, target){
@@ -289,13 +311,94 @@ $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
     panel.style.display = 'none'; panel.setAttribute('aria-hidden','true'); toggle.style.display='flex';
     const st = loadPos('chatwidget_toggle_pos'); if (st) applyPosTo(toggle, st);
   });
+
+  // Enable divider dragging to resize left list in widget
+  (function enableWidgetDivider(){
+    const bodyEl = document.getElementById('chatwidget_body');
+    const left = bodyEl ? bodyEl.querySelector('.left') : null;
+    const divider = document.getElementById('chatwidget_divider');
+    if (!bodyEl || !left || !divider) return;
+    const panelRect = () => panel.getBoundingClientRect();
+    const saveKey = 'chatwidget_left_w';
+    // apply stored width
+    try { const s = localStorage.getItem(saveKey); if (s) left.style.flex = '0 0 ' + parseInt(s,10) + 'px'; } catch(e){}
+    let dragging = false;
+    function onPointerDown(e){ if (e.button && e.button !== 0) return; dragging = true; divider.setPointerCapture && divider.setPointerCapture(e.pointerId); document.addEventListener('pointermove', onPointerMove); document.addEventListener('pointerup', onPointerUp); e.preventDefault(); }
+    function onPointerMove(e){ if(!dragging) return; const crect = panelRect(); const min = 120; const max = Math.round(crect.width * 0.8); const newW = Math.max(min, Math.min(e.clientX - crect.left, max)); left.style.flex = '0 0 ' + newW + 'px'; }
+    function onPointerUp(e){ if(!dragging) return; dragging = false; document.removeEventListener('pointermove', onPointerMove); document.removeEventListener('pointerup', onPointerUp); try { const w = left.getBoundingClientRect().width; localStorage.setItem(saveKey, Math.round(w)); } catch(e){} }
+    divider.addEventListener('pointerdown', onPointerDown);
+    // hide divider on small screens
+    function updateDividerVisibility(){ if (window.innerWidth <= 700) divider.style.display = 'none'; else divider.style.display = 'flex'; }
+    window.addEventListener('resize', updateDividerVisibility); updateDividerVisibility();
+  })();
 })();
 </script>
 
 <!-- Initialize chat widget. This assumes Chatfunction.js and ChatApi.php are reachable at the same paths. -->
 <script src="designer/Chatfunction.js"></script>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
 <script>
   document.addEventListener('DOMContentLoaded', function(){
+    // Wire attachment preview for the widget
+    try {
+      const attachBtn = document.getElementById('chatwidget_attach');
+      const attachInput = document.getElementById('chatwidget_attachInput');
+      const preview = document.getElementById('chatwidget_attachPreviewColumn');
+      const sendBtn = document.getElementById('chatwidget_send');
+
+      function clearPreview(){
+        if (!attachInput) return;
+        attachInput.value = '';
+        if (preview) preview.innerHTML = '';
+      }
+
+      if (attachBtn && attachInput) {
+        // Do NOT rebind the click to avoid opening the file dialog twice (Chatfunction.js already wires this).
+        // Only listen for `change` to render the preview and do not stop propagation so the upload handler runs.
+        let attachChangeGuard = false;
+        attachInput.addEventListener('change', function(e){
+          try {
+            if (attachChangeGuard) return; attachChangeGuard = true; setTimeout(()=>attachChangeGuard=false, 600);
+            if (!preview) return;
+            preview.innerHTML = '';
+            const file = this.files && this.files[0];
+            if (!file) return;
+
+            // Thumbnail for images, filename+icon for others
+            if (file.type && file.type.startsWith('image/')){
+              const img = document.createElement('img');
+              img.src = URL.createObjectURL(file);
+              img.style.maxWidth = '100px'; img.style.maxHeight = '60px'; img.style.objectFit = 'cover'; img.alt = file.name;
+              img.addEventListener('load', () => URL.revokeObjectURL(img.src));
+              preview.appendChild(img);
+            } else {
+              const icon = document.createElement('i');
+              icon.className = 'bi bi-file-earmark';
+              icon.style.fontSize = '20px'; icon.style.marginRight = '6px';
+              preview.appendChild(icon);
+              const span = document.createElement('span');
+              span.textContent = file.name;
+              span.style.fontSize = '12px';
+              preview.appendChild(span);
+            }
+
+            // remove button
+            const rm = document.createElement('button');
+            rm.type = 'button'; rm.className = 'btn btn-sm btn-link'; rm.title = 'Remove'; rm.style.marginLeft = '8px';
+            rm.textContent = '✕';
+            rm.addEventListener('click', function(){ clearPreview(); });
+            preview.appendChild(rm);
+
+            // do not prevent other listeners from running; Chatfunction.js will handle the upload
+            console.debug('chatwidget: preview set for', file.name);
+          } catch (ex) { console.error('attach change handler error', ex); }
+        });
+      }
+
+      // After send, clear preview (send handling lives in Chatfunction.js so we do a best-effort clear)
+      if (sendBtn) sendBtn.addEventListener('click', function(){ setTimeout(clearPreview, 200); });
+    } catch (e) { console.error('chatwidget preview init error', e); }
+
     // rootId 'chatwidget' maps to IDs like 'chatwidget_messages', 'chatwidget_input' etc.
     initApp({ apiPath: 'designer/ChatApi.php?action=', userType: <?= json_encode($role) ?>, userId: <?= json_encode($uid) ?>, rootId: 'chatwidget', items: [] });
   });
