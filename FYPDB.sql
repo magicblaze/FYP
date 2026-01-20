@@ -36,7 +36,6 @@ DROP TABLE IF EXISTS `Message`;
 DROP TABLE IF EXISTS `ProductLike`;
 DROP TABLE IF EXISTS `DesignLike`;
 DROP TABLE IF EXISTS `MessageRead`;
-Drop TABLE IF EXISTS `OrderProductStatus`;
 
 -- Client table
 CREATE TABLE `Client` (
@@ -214,6 +213,7 @@ CREATE TABLE `OrderProduct` (
   `quantity` int NOT NULL,
   `orderid` int NOT NULL,
   `deliverydate` date DEFAULT NULL,
+  `status` varchar(255) NOT NULL,
   `managerid` int NOT NULL,
   PRIMARY KEY (`orderproductid`),
   KEY `productid_OrderProduct_idx` (`productid`),
@@ -225,23 +225,9 @@ CREATE TABLE `OrderProduct` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 INSERT INTO `OrderProduct`
-(`orderproductid`, `productid`, `quantity`, `orderid`, `deliverydate`, `managerid`) VALUES
-(1, 1, 10, 1, '2026-01-13', 1),
-(2, 2, 20, 1, '2026-01-23', 1);
-
-CREATE TABLE `OrderProductStatus` (
-  `orderproductstatusid` int NOT NULL AUTO_INCREMENT,
-  `orderproductid` int NOT NULL,
-  `status` varchar(255) NOT NULL,
-  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`orderproductstatusid`),
-  KEY `orderproductid_idx` (`orderproductid`),
-  CONSTRAINT `fk_orderproductstatus_orderproductid` FOREIGN KEY (`orderproductid`) REFERENCES `OrderProduct` (`orderproductid`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-INSERT INTO `OrderProductStatus` (`orderproductstatusid`, `orderproductid`, `status`) VALUES
-(1, 1, 'Pending'),
-(2, 2, 'Shipped');
+(`orderproductid`, `productid`, `quantity`, `orderid`, `deliverydate`,`status`, `managerid`) VALUES
+(1, 1, 10, 1, '2026-01-13', 'Pending', 1),
+(2, 2, 20, 1, '2026-01-23', 'Shipped', 1);
 
 -- Order_Contractors table
 CREATE TABLE `Order_Contractors` (
@@ -424,8 +410,8 @@ INSERT INTO `MessageRead` (`messagereadid`, `messageid`, `ChatRoomMemberid`, `is
 INSERT INTO `Order` (`orderid`, `odate`, `clientid`, `budget`, `Floor_Plan`, `Requirements`,`designid`,`ostatus`) VALUES
 (3, '2025-07-01 09:00:00', 1, 1500, NULL, 'Need quick remodel', 1, 'Pending');
 
-INSERT INTO `OrderProduct` (`orderproductid`, `productid`, `quantity`, `orderid`, `managerid`) VALUES
-(3, 3, 50, 3, 1);
+INSERT INTO `OrderProduct` (`orderproductid`, `productid`, `quantity`, `orderid`, `deliverydate`, `status`, `managerid`) VALUES
+(3, 3, 50, 3, '2026-01-13', 'Pending', 1);
 
 INSERT INTO `Order_Contractors` (`order_Contractorid`, `contractorid`, `orderid`, `managerid`) VALUES
 (3, 1, 3, 1);

@@ -85,46 +85,22 @@ try {
     }
     $verifyStmt->close();
 
-    // ========== 检查是否已存在该订单产品的状态记录 ==========
-    $checkSql = "SELECT orderproductstatusid FROM OrderProductStatus WHERE orderproductid = ?";
-    $checkStmt = $mysqli->prepare($checkSql);
-    if (!$checkStmt) {
-        throw new Exception('Prepare failed (check): ' . $mysqli->error);
+    // ========== 直接更新 OrderProduct 表的 status 欄位 ==========
+    $updateSql = "UPDATE OrderProduct SET status = ? WHERE orderproductid = ?";
+    $updateStmt = $mysqli->prepare($updateSql);
+    if (!$updateStmt) {
+        throw new Exception('Prepare failed (update): ' . $mysqli->error);
     }
-    $checkStmt->bind_param("i", $orderProductId);
-    if (!$checkStmt->execute()) {
-        throw new Exception('Execute failed (check): ' . $checkStmt->error);
+    $updateStmt->bind_param("si", $newStatus, $orderProductId);
+    if (!$updateStmt->execute()) {
+        throw new Exception('Execute failed (update): ' . $updateStmt->error);
     }
-    $checkResult = $checkStmt->get_result();
-    $statusExists = $checkResult->num_rows > 0;
-    $checkStmt->close();
-
-    // ========== 更新或插入状态记录 ==========
-    if ($statusExists) {
-        // 更新现有记录
-        $updateSql = "UPDATE OrderProductStatus SET status = ? WHERE orderproductid = ?";
-        $updateStmt = $mysqli->prepare($updateSql);
-        if (!$updateStmt) {
-            throw new Exception('Prepare failed (update): ' . $mysqli->error);
-        }
-        $updateStmt->bind_param("si", $newStatus, $orderProductId);
-        if (!$updateStmt->execute()) {
-            throw new Exception('Execute failed (update): ' . $updateStmt->error);
-        }
-        $updateStmt->close();
-    } else {
-        // 插入新记录
-        $insertSql = "INSERT INTO OrderProductStatus (orderproductid, status) VALUES (?, ?)";
-        $insertStmt = $mysqli->prepare($insertSql);
-        if (!$insertStmt) {
-            throw new Exception('Prepare failed (insert): ' . $mysqli->error);
-        }
-        $insertStmt->bind_param("is", $orderProductId, $newStatus);
-        if (!$insertStmt->execute()) {
-            throw new Exception('Execute failed (insert): ' . $insertStmt->error);
-        }
-        $insertStmt->close();
+    
+    if ($updateStmt->affected_rows === 0) {
+        throw new Exception('No rows were updated. OrderProduct may not exist.');
     }
+    
+    $updateStmt->close();
 
     ob_end_clean();
     http_response_code(200);

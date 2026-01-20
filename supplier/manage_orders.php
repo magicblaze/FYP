@@ -25,6 +25,7 @@ $sql = "
         op.quantity,
         op.orderid,
         op.deliverydate,
+        op.status,
         p.pname,
         p.price,
         p.image,
@@ -32,14 +33,11 @@ $sql = "
         o.ostatus,
         c.cname,
         c.cemail,
-        c.address,
-        ops.status as product_status,
-        ops.updated_at as status_updated_at
+        c.address
     FROM OrderProduct op
     JOIN Product p ON op.productid = p.productid
     JOIN `Order` o ON op.orderid = o.orderid
     JOIN Client c ON o.clientid = c.clientid
-    LEFT JOIN OrderProductStatus ops ON op.orderproductid = ops.orderproductid
     WHERE p.supplierid = ?
     ORDER BY op.orderproductid DESC
 ";
@@ -280,7 +278,7 @@ $availableStatuses = ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelle
                             </div>
                         </div>
                         <div class="detail-item">
-                            <div class="detail-label">Order ID</div>
+                            <div class="detail-label">OrderProduct ID</div>
                             <div class="detail-value">#<?= $product['orderproductid'] ?></div>
                         </div>
                         <div class="detail-item">
@@ -299,17 +297,17 @@ $availableStatuses = ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelle
                                 <option value="">-- Select Status --</option>
                                 <?php foreach ($availableStatuses as $status): ?>
                                     <option value="<?= htmlspecialchars($status) ?>" 
-                                        <?= ($product['product_status'] === $status) ? 'selected' : '' ?>>
+                                        <?= ($product['status'] === $status) ? 'selected' : '' ?>>
                                         <?= htmlspecialchars($status) ?>
                                     </option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
-                        <?php if (!empty($product['product_status'])): ?>
+                        <?php if (!empty($product['status'])): ?>
                             <div>
                                 <label class="form-label mb-2"><strong>Current Status:</strong></label>
-                                <span class="status-badge status-<?= strtolower($product['product_status']) ?>">
-                                    <?= htmlspecialchars($product['product_status']) ?>
+                                <span class="status-badge status-<?= strtolower($product['status']) ?>">
+                                    <?= htmlspecialchars($product['status']) ?>
                                 </span>
                             </div>
                         <?php endif; ?>
