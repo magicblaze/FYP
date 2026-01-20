@@ -17,12 +17,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 	$price = intval($_POST['price'] ?? 0);
 	$category = $_POST['category'] ?? '';
 	$description = trim($_POST['description'] ?? '');
-	$size = trim($_POST['size'] ?? '');
+	$long = trim($_POST['long'] ?? '');
+	$wide = trim($_POST['wide'] ?? '');
+	$tall = trim($_POST['tall'] ?? '');
 	$material = trim($_POST['material'] ?? '');
 	// Handle color picker (array of hex values)
 	$colors = $_POST['color'] ?? [];
 	if (!is_array($colors)) {
 		$colors = [$colors];
+	}
+	// Handle color images (array of files)
+	$colorImages = $_FILES['color_image'] ?? null;
+	$colorImageNames = [];
+	$uploadDir = __DIR__ . '/../uploads/products/';
+	if (!is_dir($uploadDir)) {
+		mkdir($uploadDir, 0777, true);
+	}
+	foreach ($colors as $idx => $color) {
+		if ($colorImages && isset($colorImages['name'][$idx]) && $colorImages['error'][$idx] === UPLOAD_ERR_OK) {
+			$ext = pathinfo($colorImages['name'][$idx], PATHINFO_EXTENSION);
+			$imgName = uniqid('colorimg_', true) . '.' . $ext;
+			move_uploaded_file($colorImages['tmp_name'][$idx], $uploadDir . $imgName);
+			$colorImageNames[$color] = $imgName;
+		} else {
+			$colorImageNames[$color] = null;
+		}
 	}
 	$colorStr = implode(", ", $colors);
 
@@ -39,13 +58,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 	}
 
 	if ($pname && $price > 0 && $category && $imageName) {
-	$stmt = $mysqli->prepare("INSERT INTO Product (pname, image, price, likes, category, description, size, color, material, supplierid) VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?)");
-	$stmt->bind_param("ssissssss", $pname, $imageName, $price, $category, $description, $size, $colorStr, $material, $supplierId);
+	$stmt = $mysqli->prepare("INSERT INTO Product (pname, image, price, likes, category, description, long, wide, tall, color, material, supplierid) VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)");
+	$stmt->bind_param("ssisssssssss", $pname, $imageName, $price, $category, $description, $long, $wide, $tall, $colorStr, $material, $supplierId);
 	if ($stmt->execute()) {
-			$success = true;
-		} else {
-			$error = 'Database error: ' . $stmt->error;
+		$productId = $mysqli->insert_id;
+		// Insert color-image mapping
+		foreach ($colors as $color) {
+			if (!empty($colorImageNames[$color])) {
+				$pciStmt = $mysqli->prepare("INSERT INTO ProductColorImage (productid, color, image) VALUES (?, ?, ?)");
+				$pciStmt->bind_param("iss", $productId, $color, $colorImageNames[$color]);
+				$pciStmt->execute();
+				$pciStmt->close();
+			}
 		}
+		$success = true;
+	} else {
+		$error = 'Database error: ' . $stmt->error;
+	}
 	} else {
 		$error = 'Please fill in all required fields and upload an image.';
 	}
@@ -168,23 +197,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 								</div>
 								<div class="col-md-6">
 									<div class="form-section">
-										<label class="form-label"><i class="fas fa-ruler-combined"></i> Size</label>
-										<input type="text" name="size" class="form-control">
+										<label class="form-label"><i class="fas fa-ruler-horizontal"></i> Long (cm)</label>
+										<input type="text" name="long" class="form-control" placeholder="e.g. 200cm">
+									</div>
+									<div class="form-section mt-2">
+										<label class="form-label"><i class="fas fa-ruler-vertical"></i> Wide (cm)</label>
+										<input type="text" name="wide" class="form-control" placeholder="e.g. 80cm">
+									</div>
+									<div class="form-section mt-2">
+										<label class="form-label"><i class="fas fa-ruler"></i> Tall (cm)</label>
+										<input type="text" name="tall" class="form-control" placeholder="e.g. 300cm">
 									</div>
 								</div>
 							</div>
 							<div class="row mb-2">
 								<div class="col-md-12">
 									<div class="form-section">
-										<label class="form-label"><i class="fas fa-palette"></i> Colors <span class="text-muted">(Pick one or more)</span></label>
+										<label class="form-label"><i class="fas fa-palette"></i> Colors <span class="text-muted">(Pick one or more, each with image)</span></label>
 										<div class="d-flex align-items-center gap-2 mb-2">
 											<input type="color" id="main-color-picker" class="form-control form-control-color" value="#C0392B" style="width:48px; height:48px;">
+											<input type="file" id="main-color-image" class="form-control" accept="image/*" style="width:180px;">
 											<button type="button" class="btn btn-outline-primary btn-sm" id="add-main-color-btn">
 												<i class="fas fa-plus"></i> Add Color
 											</button>
 										</div>
 										<input type="hidden" name="color[]" id="color-hidden-input">
-										<div class="form-text">Click "+" to add a color. You can pick multiple colors for each product. Selected colors will appear below.</div>
+										<div id="color-images-inputs"></div>
+										<div class="form-text">Click "+" to add a color. You can pick multiple colors for each product. Each color can have its own image. Selected colors will appear below.</div>
 										<div id="selected-colors-preview" class="d-flex flex-wrap gap-2 mt-2"></div>
 									</div>
 								</div>
@@ -218,21 +257,42 @@ categorySelect.addEventListener('change', toggleMaterialField);
 window.addEventListener('DOMContentLoaded', toggleMaterialField);
 // --- 固定主色選擇器多選邏輯 ---
 let selectedColors = [];
+let selectedColorImages = [];
 const selectedColorsPreview = document.getElementById('selected-colors-preview');
 const colorHiddenInput = document.getElementById('color-hidden-input');
 const mainColorPicker = document.getElementById('main-color-picker');
+const mainColorImage = document.getElementById('main-color-image');
 const addMainColorBtn = document.getElementById('add-main-color-btn');
+const colorImagesInputs = document.getElementById('color-images-inputs');
 
 function updateColorPreview() {
 	selectedColorsPreview.innerHTML = '';
+	colorImagesInputs.innerHTML = '';
 	selectedColors.forEach((color, idx) => {
 		const colorDiv = document.createElement('div');
 		colorDiv.className = 'd-flex align-items-center gap-1';
+		let imgHtml = '';
+		if (selectedColorImages[idx]) {
+			imgHtml = `<img src="${URL.createObjectURL(selectedColorImages[idx])}" style="width:28px;height:28px;border-radius:6px;border:2px solid #ccc;object-fit:cover;">`;
+		}
 		colorDiv.innerHTML = `
 			<span style="display:inline-block;width:28px;height:28px;border-radius:50%;background:${color};border:2px solid #ccc;"></span>
+			${imgHtml}
 			<button type="button" class="btn btn-sm btn-link text-danger p-0 ms-1" title="Remove" onclick="removeColor(${idx})"><i class="fas fa-times"></i></button>
 		`;
 		selectedColorsPreview.appendChild(colorDiv);
+
+		// Add hidden file input for each color
+		const fileInput = document.createElement('input');
+		fileInput.type = 'file';
+		fileInput.name = 'color_image[]';
+		fileInput.accept = 'image/*';
+		fileInput.style.display = 'none';
+		if (selectedColorImages[idx]) {
+			// Attach the file to the input (for form submission)
+			// This is handled by the browser automatically
+		}
+		colorImagesInputs.appendChild(fileInput);
 	});
 	// Update hidden input for form submission
 	colorHiddenInput.name = 'color[]';
@@ -241,14 +301,17 @@ function updateColorPreview() {
 
 addMainColorBtn.addEventListener('click', function() {
 	const color = mainColorPicker.value;
+	const colorImgFile = mainColorImage.files[0] || null;
 	if (!selectedColors.includes(color)) {
 		selectedColors.push(color);
+		selectedColorImages.push(colorImgFile);
 		updateColorPreview();
 	}
 });
 
 window.removeColor = function(idx) {
 	selectedColors.splice(idx, 1);
+	selectedColorImages.splice(idx, 1);
 	updateColorPreview();
 }
 

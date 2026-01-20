@@ -45,7 +45,9 @@ try {
     $category = isset($_POST['category']) ? trim($_POST['category']) : '';
     $price = isset($_POST['price']) ? intval($_POST['price']) : 0; // 根据数据库结构，price 是 INT
     $description = isset($_POST['description']) ? trim($_POST['description']) : '';
-    $size = isset($_POST['size']) ? trim($_POST['size']) : '';
+    $long = isset($_POST['long']) ? trim($_POST['long']) : '';
+    $wide = isset($_POST['wide']) ? trim($_POST['wide']) : '';
+    $tall = isset($_POST['tall']) ? trim($_POST['tall']) : '';
     $material = isset($_POST['material']) ? trim($_POST['material']) : '';
     $colorStr = isset($_POST['color_str']) ? trim($_POST['color_str']) : '';
     $removeImage = isset($_POST['remove_image']) ? intval($_POST['remove_image']) : 0; // 是否删除当前图片
@@ -162,24 +164,20 @@ try {
     // ========== 数据库更新 ==========
     if ($newImagePath !== null) {
         // 如果上传了新图片，更新图片字段
-        $updateSql = "UPDATE Product SET pname = ?, category = ?, price = ?, description = ?, size = ?, color = ?, material = ?, image = ? WHERE productid = ? AND supplierid = ?";
+        $updateSql = "UPDATE Product SET pname = ?, category = ?, price = ?, description = ?, long = ?, wide = ?, tall = ?, color = ?, material = ?, image = ? WHERE productid = ? AND supplierid = ?";
         $updateStmt = $mysqli->prepare($updateSql);
         if (!$updateStmt) {
             throw new Exception('Prepare failed (update): ' . $mysqli->error);
         }
-        
-        // 类型字符串：s(pname), s(category), i(price), s(description), s(size), s(color), s(material), s(image), i(productid), i(supplierid)
-        $updateStmt->bind_param("ssisssssii", $pname, $category, $price, $description, $size, $colorStr, $material, $newImagePath, $productId, $supplierId);
+        $updateStmt->bind_param("ssissssssssii", $pname, $category, $price, $description, $long, $wide, $tall, $colorStr, $material, $newImagePath, $productId, $supplierId);
     } else {
         // 不更新图片字段
-        $updateSql = "UPDATE Product SET pname = ?, category = ?, price = ?, description = ?, size = ?, color = ?, material = ? WHERE productid = ? AND supplierid = ?";
+        $updateSql = "UPDATE Product SET pname = ?, category = ?, price = ?, description = ?, long = ?, wide = ?, tall = ?, color = ?, material = ? WHERE productid = ? AND supplierid = ?";
         $updateStmt = $mysqli->prepare($updateSql);
         if (!$updateStmt) {
             throw new Exception('Prepare failed (update): ' . $mysqli->error);
         }
-        
-        // 类型字符串：s(pname), s(category), i(price), s(description), s(size), s(color), s(material), i(productid), i(supplierid)
-        $updateStmt->bind_param("ssisssiii", $pname, $category, $price, $description, $size, $colorStr, $material, $productId, $supplierId);
+        $updateStmt->bind_param("ssissssssii", $pname, $category, $price, $description, $long, $wide, $tall, $colorStr, $material, $productId, $supplierId);
     }
 
     if (!$updateStmt->execute()) {

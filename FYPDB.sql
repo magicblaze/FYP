@@ -18,6 +18,7 @@ SET FOREIGN_KEY_CHECKS = 0;
 
 -- Drop existing tables to ensure clean slate
 DROP TABLE IF EXISTS `Product`;
+DROP TABLE IF EXISTS `ProductColorImage`;
 DROP TABLE IF EXISTS `Client`;
 DROP TABLE IF EXISTS `Manager`;
 DROP TABLE IF EXISTS `Contractors`;
@@ -168,7 +169,9 @@ CREATE TABLE `Product` (
   `likes` int NOT NULL,
   `category` varchar(100) NOT NULL,
   `description` text,
-  `size` varchar(100) DEFAULT NULL,
+  `long` varchar(50) DEFAULT NULL,
+  `wide` varchar(50) DEFAULT NULL,
+  `tall` varchar(50) DEFAULT NULL,
   `color` varchar(255) DEFAULT NULL,
   `material` varchar(255) DEFAULT NULL,
   `supplierid` int NOT NULL,
@@ -176,13 +179,13 @@ CREATE TABLE `Product` (
   KEY `supplierid_product_idx` (`supplierid`),
   CONSTRAINT `chk_category` CHECK (`category` IN ('Furniture','Material')),
   CONSTRAINT `fk_product_supplier` FOREIGN KEY (`supplierid`) REFERENCES `Supplier` (`supplierid`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+ ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-INSERT INTO `Product` (`productid`,`pname`, `image`, `price`, `likes`, `category`, `description`, `size`, `color`, `material`, `supplierid`) VALUES
-(1, 'Modern Sofa', 'sofa.jpg', 2000, 100, 'Furniture', 'A comfortable modern sofa.', '200cm*80cm', 'Grey, Blue', 'Fabric, Wood', 1),
-(2, 'Oak Chair', 'chair.jpg', 800, 50, 'Furniture', 'Solid wood chair.', '50cm*50cm', 'Brown,white', 'Oak', 1),
-(3, 'Brick', 'brick.jpg', 200, 25, 'Material', 'A brick.', null, null, null, 1),
-(4, 'Wood', 'wood.jpg', 800, 75, 'Material', 'A wood.', null, null, null, 2);
+INSERT INTO `Product` (`productid`,`pname`, `image`, `price`, `likes`, `category`, `description`, `long`, `wide`, `tall`, `color`, `material`, `supplierid`) VALUES
+(1, 'Modern Sofa', 'sofa.jpg', 2000, 100, 'Furniture', 'A comfortable modern sofa.', '200cm', '80cm', '300cm', 'Grey, Blue', 'Fabric, Wood', 1),
+(2, 'Oak Chair', 'chair.jpg', 800, 50, 'Furniture', 'Solid wood chair.', '50cm', '50cm', '100cm', 'Brown,white', 'Oak', 1),
+(3, 'Brick', 'brick.jpg', 200, 25, 'Material', 'A brick.', null, null, null, null, null, 1),
+(4, 'Wood', 'wood.jpg', 800, 75, 'Material', 'A wood.', null, null, null, null, null, 2);
 
 
 -- Order table
@@ -200,6 +203,17 @@ CREATE TABLE `Order` (
   KEY `designid_pk_idx` (`designid`),
   CONSTRAINT `clientid_pk` FOREIGN KEY (`clientid`) REFERENCES `Client` (`clientid`),
   CONSTRAINT `designid_pk` FOREIGN KEY (`designid`) REFERENCES `Design` (`designid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Table to store color-image mapping for each product
+CREATE TABLE `ProductColorImage` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `productid` int NOT NULL,
+  `color` varchar(50) NOT NULL,
+  `image` varchar(500) NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `productid_idx` (`productid`),
+  CONSTRAINT `fk_pci_productid` FOREIGN KEY (`productid`) REFERENCES `Product` (`productid`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 INSERT INTO `Order`
