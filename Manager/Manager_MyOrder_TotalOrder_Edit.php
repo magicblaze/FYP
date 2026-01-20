@@ -74,6 +74,35 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
     <meta charset="UTF-8">
     <link rel="stylesheet" href="../css/Manager_style.css">
     <title>Edit Order #<?php echo $orderid; ?> - HappyDesign</title>
+        <style>
+        body {
+            color: #000000;
+        }
+        
+        .text-muted {
+            color: #333333 !important;
+        }
+        
+        .card-body,
+        .table td,
+        .table th,
+        .info-label,
+        .info-value,
+        .btn,
+        .alert,
+        .small,
+        small {
+            color: #000000 !important;
+        }
+        
+        .text-success {
+            color: #006400 !important;
+        }
+        
+        .text-danger {
+            color: #8B0000 !important;
+        }
+    </style>
 </head>
 <body>
     <!-- 导航栏 -->
