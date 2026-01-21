@@ -1,5 +1,16 @@
 <?php
+session_start();
 require_once dirname(__DIR__) . '/config.php';
+
+// 检查用户是否以经理身份登录
+if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'manager') {
+    header('Location: ../login.php?redirect=' . urlencode($_SERVER['REQUEST_URI']));
+    exit;
+}
+
+$user = $_SESSION['user'];
+$user_id = $user['managerid'];
+$user_name = $user['name'];
 
 // 定义一个安全的查询函数，自动检查连接
 function safe_mysqli_query($mysqli, $sql) {
@@ -25,8 +36,11 @@ function safe_mysqli_query($mysqli, $sql) {
 // 获取搜索参数
 $search = isset($_GET['search']) ? mysqli_real_escape_string($mysqli, $_GET['search']) : '';
 
-// 构建查询条件
-$where_conditions = array("o.ostatus = 'Pending' OR o.ostatus = 'pending'");
+// 构建查询条件 - 只显示当前经理的待处理订单
+$where_conditions = array(
+    "(o.ostatus = 'Pending' OR o.ostatus = 'pending')",
+    "EXISTS (SELECT 1 FROM OrderProduct op WHERE op.orderid = o.orderid AND op.managerid = $user_id)"
+);
 
 if(!empty($search)) {
     $search_conditions = array();
@@ -55,13 +69,14 @@ $sql = "SELECT o.orderid, o.odate, o.budget, o.Requirements, o.ostatus,
 // 使用安全的查询函数
 $result = safe_mysqli_query($mysqli, $sql);
 
-// 计算统计信息
+// 计算统计信息 - 只统计当前经理的订单
 $stats_sql = "SELECT 
                 COUNT(*) as total_pending,
                 SUM(o.budget) as total_budget,
                 AVG(o.budget) as avg_budget
               FROM `Order` o
-              WHERE o.ostatus = 'Pending' OR o.ostatus = 'pending'";
+              WHERE (o.ostatus = 'Pending' OR o.ostatus = 'pending')
+              AND EXISTS (SELECT 1 FROM OrderProduct op WHERE op.orderid = o.orderid AND op.managerid = $user_id)";
 $stats_result = safe_mysqli_query($mysqli, $stats_sql);
 $stats = mysqli_fetch_assoc($stats_result);
 ?>
@@ -85,12 +100,16 @@ $stats = mysqli_fetch_assoc($stats_result);
                 <a href="Manager_Massage.php">Massage</a>
                 <a href="Manager_Schedule.php">Schedule</a>
             </div>
+            <div class="user-info">
+                <span>Welcome, <?php echo htmlspecialchars($user_name); ?></span>
+                <a href="../logout.php" class="btn-logout">Logout</a>
+            </div>
         </div>
     </nav>
 
     <!-- 主要内容 -->
     <div class="page-container">
-        <h1 class="page-title">Pending Orders</h1>
+        <h1 class="page-title">Pending Orders - <?php echo htmlspecialchars($user_name); ?></h1>
         
         <?php if(isset($_GET['msg']) && $_GET['msg'] == 'approved'): ?>
             <div class="alert alert-success">
@@ -362,7 +381,7 @@ $stats = mysqli_fetch_assoc($stats_result);
     
     // 自动检查新订单（每60秒）
     function checkForNewOrders() {
-        fetch('check_new_orders.php')
+        fetch('check_new_orders.php?manager_id=<?php echo $user_id; ?>')
             .then(response => response.json())
             .then(data => {
                 if(data.newOrders > 0) {

@@ -1,10 +1,7 @@
 <?php
-// ==============================
-// File: Manager_mark_complete.php
-// Mark order as completed - Simplified version
-// ==============================
-require_once dirname(__DIR__) . '/config.php';
 session_start();
+require_once dirname(__DIR__) . '/config.php';
+
 
 // 检查用户是否以经理身份登录
 if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'manager') {

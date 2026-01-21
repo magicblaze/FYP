@@ -1,11 +1,25 @@
 <?php
 require_once dirname(__DIR__) . '/config.php';
+session_start();
+
+// 检查用户是否以经理身份登录
+if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'manager') {
+    header('Location: ../login.php?redirect=' . urlencode($_SERVER['REQUEST_URI']));
+    exit;
+}
+
+$user = $_SESSION['user'];
+$user_id = $user['managerid'];
+$user_name = $user['name'];
 
 // 获取搜索参数
 $search = isset($_GET['search']) ? mysqli_real_escape_string($mysqli, $_GET['search']) : '';
 
-// 构建查询条件
-$where_conditions = array("o.ostatus = 'Cancelled' OR o.ostatus = 'cancelled'");
+// 构建查询条件 - 添加manager id过滤
+$where_conditions = array(
+    "(o.ostatus = 'Cancelled' OR o.ostatus = 'cancelled')",
+    "op.managerid = $user_id"
+);
 
 if(!empty($search)) {
     $search_conditions = array();
@@ -19,8 +33,8 @@ if(!empty($search)) {
 
 $where_clause = !empty($where_conditions) ? "WHERE " . implode(" AND ", $where_conditions) : "";
 
-// 获取所有已取消订单 - UPDATED FOR NEW DATE STRUCTURE
-$sql = "SELECT o.orderid, o.odate, o.budget, o.Requirements, o.ostatus,
+// 获取所有已取消订单 - UPDATED FOR NEW DATE STRUCTURE - 只显示该经理的订单
+$sql = "SELECT DISTINCT o.orderid, o.odate, o.budget, o.Requirements, o.ostatus,
                c.clientid, c.cname as client_name, c.cemail as client_email, c.ctel as client_phone,
                d.designid, d.design as design_image, d.price as design_price, d.tag as design_tag,
                s.OrderFinishDate, s.DesignFinishDate
@@ -28,6 +42,7 @@ $sql = "SELECT o.orderid, o.odate, o.budget, o.Requirements, o.ostatus,
         LEFT JOIN `Client` c ON o.clientid = c.clientid
         LEFT JOIN `Design` d ON o.designid = d.designid
         LEFT JOIN `Schedule` s ON o.orderid = s.orderid
+        LEFT JOIN `OrderProduct` op ON o.orderid = op.orderid
         $where_clause
         ORDER BY o.odate DESC";
 
@@ -37,15 +52,17 @@ if(!$result) {
     die("Database Error: " . mysqli_error($mysqli));
 }
 
-// 计算统计信息
+// 计算统计信息 - 添加manager id过滤
 $stats_sql = "SELECT 
-                COUNT(*) as total_cancelled,
+                COUNT(DISTINCT o.orderid) as total_cancelled,
                 SUM(o.budget) as total_budget,
                 AVG(o.budget) as avg_budget,
                 MIN(o.odate) as earliest_cancellation,
                 MAX(o.odate) as latest_cancellation
               FROM `Order` o
-              WHERE o.ostatus = 'Cancelled' OR o.ostatus = 'cancelled'";
+              LEFT JOIN `OrderProduct` op ON o.orderid = op.orderid
+              WHERE (o.ostatus = 'Cancelled' OR o.ostatus = 'cancelled')
+              AND op.managerid = $user_id";
 $stats_result = mysqli_query($mysqli, $stats_sql);
 $stats = mysqli_fetch_assoc($stats_result);
 ?>
@@ -94,6 +111,38 @@ $stats = mysqli_fetch_assoc($stats_result);
             color: #888;
             margin-top: 5px;
         }
+        /* 用户信息样式 */
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            color: white;
+            margin-left: auto;
+        }
+        .btn-logout {
+            background: rgba(255,255,255,0.2);
+            padding: 5px 15px;
+            border-radius: 4px;
+            color: white;
+            text-decoration: none;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+        .btn-logout:hover {
+            background: rgba(255,255,255,0.3);
+            color: white;
+        }
+        /* 导航栏容器调整 */
+        .nav-container {
+            display: flex;
+            align-items: center;
+            width: 100%;
+        }
+        .nav-links {
+            display: flex;
+            gap: 20px;
+            margin-left: 30px;
+        }
     </style>
 </head>
 <body>
@@ -106,6 +155,10 @@ $stats = mysqli_fetch_assoc($stats_result);
                 <a href="Manager_MyOrder.php">MyOrder</a>
                 <a href="Manager_Massage.php">Massage</a>
                 <a href="Manager_Schedule.php">Schedule</a>
+            </div>
+            <div class="user-info">
+                <span>Welcome, <?php echo htmlspecialchars($user_name); ?></span>
+                <a href="../logout.php" class="btn-logout">Logout</a>
             </div>
         </div>
     </nav>
@@ -284,7 +337,6 @@ $stats = mysqli_fetch_assoc($stats_result);
                     <p class="text-muted mb-0">Total: <?php echo $total_cancelled; ?> cancelled orders</p>
                 </div>
                 <div class="btn-group">
-                
                     <button onclick="printPage()" class="btn btn-outline">Print List</button>
                     <button onclick="deleteAllCancelled()" class="btn btn-danger">Delete All</button>
                 </div>
@@ -309,13 +361,11 @@ $stats = mysqli_fetch_assoc($stats_result);
         window.location.href = 'Manager_view_order.php?id=' + orderId;
     }
     
-    
     function deleteOrder(orderId) {
         if(confirm('⚠️ WARNING: Are you sure you want to permanently delete order #' + orderId + '? This action cannot be undone!')) {
             window.location.href = 'Manager_delete_order.php?id=' + orderId;
         }
     }
-    
     
     function printPage() {
         window.print();
@@ -453,12 +503,13 @@ $stats = mysqli_fetch_assoc($stats_result);
 </html>
 
 <?php
-
 if(isset($stats_result)) {
     mysqli_free_result($stats_result);
 }
 if(isset($result)) {
     mysqli_free_result($result);
 }
-
+if(isset($mysqli) && $mysqli) {
+    mysqli_close($mysqli);
+}
 ?>

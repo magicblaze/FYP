@@ -2,12 +2,36 @@
 session_start();
 require_once dirname(__DIR__) . '/config.php';
 
+// 检查用户是否以经理身份登录
+if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'manager') {
+    header('Location: ../login.php?redirect=' . urlencode($_SERVER['REQUEST_URI']));
+    exit;
+}
+
+$user = $_SESSION['user'];
+$user_id = $user['managerid'];
+$user_name = $user['name'];
+
 // 获取订单ID
 $order_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
 if($order_id <= 0) {
     header('Location: Manager_MyOrder_AwaitingConfirm.php');
     exit;
+}
+
+// 检查订单是否属于当前经理
+$check_manager_sql = "SELECT COUNT(*) as count FROM `OrderProduct` op 
+                      JOIN `Manager` m ON op.managerid = m.managerid 
+                      WHERE op.orderid = ? AND m.managerid = ?";
+$check_stmt = mysqli_prepare($mysqli, $check_manager_sql);
+mysqli_stmt_bind_param($check_stmt, "ii", $order_id, $user_id);
+mysqli_stmt_execute($check_stmt);
+$check_result = mysqli_stmt_get_result($check_stmt);
+$manager_check = mysqli_fetch_assoc($check_result);
+
+if ($manager_check['count'] == 0) {
+    die("You don't have permission to approve this order.");
 }
 
 // 获取订单详情 - UPDATED FOR NEW DATE STRUCTURE
@@ -65,9 +89,9 @@ if($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_approval'])) {
             }
         }
         
-        // 3. 更新或创建Schedule记录 - UPDATED FOR NEW DATE STRUCTURE
-        $manager_id = $_SESSION['user_id'] ?? 1;
-        
+
+
+    // 3. 更新或创建Schedule记录 - UPDATED FOR NEW DATE STRUCTURE
         if(!empty($estimated_completion) || !empty($design_finish_date)) {
             $check_schedule_sql = "SELECT scheduleid FROM `Schedule` WHERE orderid = $order_id";
             $schedule_result = mysqli_query($mysqli, $check_schedule_sql);
@@ -76,11 +100,11 @@ if($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_approval'])) {
                 $update_schedule_sql = "UPDATE `Schedule` SET 
                                         OrderFinishDate = " . (!empty($estimated_completion) ? "'$estimated_completion'" : "NULL") . ",
                                         DesignFinishDate = " . (!empty($design_finish_date) ? "'$design_finish_date'" : "NULL") . ",
-                                        managerid = $manager_id 
+                                        managerid = $user_id 
                                         WHERE orderid = $order_id";
             } else {
                 $update_schedule_sql = "INSERT INTO `Schedule` (managerid, OrderFinishDate, DesignFinishDate, orderid) 
-                                       VALUES ($manager_id, " . 
+                                       VALUES ($user_id, " . 
                                        (!empty($estimated_completion) ? "'$estimated_completion'" : "NULL") . ", " .
                                        (!empty($design_finish_date) ? "'$design_finish_date'" : "NULL") . ", 
                                        $order_id)";
@@ -185,12 +209,16 @@ function sendApprovalEmail($order, $status, $manager_reply, $additional_notes, $
                 <a href="Manager_Massage.php">Massage</a>
                 <a href="Manager_Schedule.php">Schedule</a>
             </div>
+            <div class="user-info">
+                <span>Welcome, <?php echo htmlspecialchars($user_name); ?></span>
+                <a href="../logout.php" class="btn-logout">Logout</a>
+            </div>
         </div>
     </nav>
 
     <!-- 主要内容 -->
     <div class="page-container">
-        <h1 class="page-title">Approve Order #<?php echo htmlspecialchars($order['orderid']); ?></h1>
+        <h1 class="page-title">Approve Order #<?php echo htmlspecialchars($order['orderid']); ?> - <?php echo htmlspecialchars($user_name); ?></h1>
         
         <?php if(isset($error_message)): ?>
             <div class="alert alert-error">

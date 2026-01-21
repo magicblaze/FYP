@@ -1,6 +1,16 @@
-
 <?php
 require_once dirname(__DIR__) . '/config.php';
+session_start();
+
+// 检查用户是否以经理身份登录
+if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'manager') {
+    header('Location: ../login.php?redirect=' . urlencode($_SERVER['REQUEST_URI']));
+    exit;
+}
+
+$user = $_SESSION['user'];
+$user_id = $user['managerid'];
+$user_name = $user['name'];
 
 ?>
 <!DOCTYPE html>
@@ -21,6 +31,10 @@ require_once dirname(__DIR__) . '/config.php';
                 <a href="Manager_Massage.php">Massage</a>
                 <a href="Manager_Schedule.php">Schedule</a>
             </div>
+            <div class="user-info">
+                <span>Welcome, <?php echo htmlspecialchars($user_name); ?></span>
+                <a href="../logout.php" class="btn-logout">Logout</a>
+            </div>
         </div>
     </nav>
 
@@ -29,8 +43,8 @@ require_once dirname(__DIR__) . '/config.php';
         <h1 class="page-title">Buy Product - Designing Orders</h1>
         
         <?php
-        // UPDATED SQL FOR NEW DATE STRUCTURE
-        $sql = "SELECT o.orderid, o.odate, o.budget, o.Requirements, o.ostatus,
+        // UPDATED SQL FOR NEW DATE STRUCTURE - 只显示该经理的订单
+        $sql = "SELECT DISTINCT o.orderid, o.odate, o.budget, o.Requirements, o.ostatus,
                        c.clientid, c.cname as client_name,
                        d.designid, d.price as design_price, d.tag as design_tag,
                        s.OrderFinishDate, s.DesignFinishDate
@@ -38,10 +52,15 @@ require_once dirname(__DIR__) . '/config.php';
                 LEFT JOIN `Client` c ON o.clientid = c.clientid
                 LEFT JOIN `Design` d ON o.designid = d.designid
                 LEFT JOIN `Schedule` s ON o.orderid = s.orderid
+                LEFT JOIN `OrderProduct` op ON o.orderid = op.orderid
                 WHERE o.ostatus = 'Designing'
+                AND op.managerid = ?
                 ORDER BY o.odate DESC";
         
-        $result = mysqli_query($mysqli, $sql);
+        $stmt = mysqli_prepare($mysqli, $sql);
+        mysqli_stmt_bind_param($stmt, "i", $user_id);
+        mysqli_stmt_execute($stmt);
+        $result = mysqli_stmt_get_result($stmt);
         
         if(!$result){
             echo '<div class="alert alert-error">
@@ -150,7 +169,10 @@ require_once dirname(__DIR__) . '/config.php';
         
         <?php
         mysqli_free_result($result);
-        mysqli_close($mysqli);
+        mysqli_stmt_close($stmt);
+        if(isset($mysqli) && $mysqli) {
+            mysqli_close($mysqli);
+        }
         }
         ?>
         

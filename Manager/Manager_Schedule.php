@@ -1,12 +1,26 @@
 <?php
+session_start();
 require_once dirname(__DIR__) . '/config.php';
+
+// 检查用户是否以经理身份登录
+if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'manager') {
+    header('Location: ../login.php?redirect=' . urlencode($_SERVER['REQUEST_URI']));
+    exit;
+}
+
+$user = $_SESSION['user'];
+$user_id = $user['managerid'];
+$user_name = $user['name'];
 
 // 获取搜索参数
 $search = isset($_GET['search']) ? mysqli_real_escape_string($mysqli, $_GET['search']) : '';
 $status_filter = isset($_GET['status']) ? $_GET['status'] : '';
 
-// 构建查询条件 - 只显示已批准的订单（Designing 和 Completed）
-$where_conditions = array("(o.ostatus = 'Designing' OR o.ostatus = 'Completed' OR o.ostatus = 'designing' OR o.ostatus = 'completed')");
+// 构建查询条件 - 只显示已批准的订单（Designing 和 Completed）且属于当前经理
+$where_conditions = array(
+    "(o.ostatus = 'Designing' OR o.ostatus = 'Completed' OR o.ostatus = 'designing' OR o.ostatus = 'completed')",
+    "EXISTS (SELECT 1 FROM OrderProduct op WHERE op.orderid = o.orderid AND op.managerid = $user_id)"
+);
 
 if(!empty($search)) {
     $search_conditions = array();
@@ -63,8 +77,9 @@ $stats_sql = "SELECT
                 SUM(CASE WHEN DATE(s.OrderFinishDate) = CURDATE() THEN 1 ELSE 0 END) as total_today
               FROM `Order` o
               LEFT JOIN `Schedule` s ON o.orderid = s.orderid
-              WHERE o.ostatus = 'Designing' OR o.ostatus = 'Completed' 
-              OR o.ostatus = 'designing' OR o.ostatus = 'completed'";
+              WHERE (o.ostatus = 'Designing' OR o.ostatus = 'Completed' 
+              OR o.ostatus = 'designing' OR o.ostatus = 'completed')
+              AND EXISTS (SELECT 1 FROM OrderProduct op WHERE op.orderid = o.orderid AND op.managerid = $user_id)";
 $stats_result = mysqli_query($mysqli, $stats_sql);
 $stats = mysqli_fetch_assoc($stats_result);
 
@@ -73,7 +88,8 @@ $weekly_completed_sql = "SELECT COUNT(*) as weekly_completed
                         FROM `Order` o
                         LEFT JOIN `Schedule` s ON o.orderid = s.orderid
                         WHERE o.ostatus = 'Completed' 
-                        AND YEARWEEK(s.OrderFinishDate, 1) = YEARWEEK(CURDATE(), 1)";
+                        AND YEARWEEK(s.OrderFinishDate, 1) = YEARWEEK(CURDATE(), 1)
+                        AND EXISTS (SELECT 1 FROM OrderProduct op WHERE op.orderid = o.orderid AND op.managerid = $user_id)";
 $weekly_result = mysqli_query($mysqli, $weekly_completed_sql);
 $weekly_stats = mysqli_fetch_assoc($weekly_result);
 ?>
@@ -238,12 +254,16 @@ $weekly_stats = mysqli_fetch_assoc($weekly_result);
                 <a href="Manager_Massage.php">Massage</a>
                 <a href="Manager_Schedule.php" class="active">Schedule</a>
             </div>
+            <div class="user-info">
+                <span>Welcome, <?php echo htmlspecialchars($user_name); ?></span>
+                <a href="../logout.php" class="btn-logout">Logout</a>
+            </div>
         </div>
     </nav>
 
     <!-- 主要内容 -->
     <div class="page-container">
-        <h1 class="page-title">Schedule Management</h1>
+        <h1 class="page-title">Schedule Management - <?php echo htmlspecialchars($user_name); ?></h1>
         
         <!-- 搜索框 -->
         <div class="search-box no-print">

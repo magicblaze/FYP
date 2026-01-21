@@ -1,3 +1,4 @@
+
 <?php
 // ==============================
 // File: Manager_Schedule_detail.php
@@ -31,9 +32,9 @@ if ($current_year < 2000 || $current_year > 2100) {
 // 获取订单ID（如果有）
 $order_id = isset($_GET['orderid']) ? (int)$_GET['orderid'] : 0;
 
-// 获取经理管理的所有排程 - 主要获取订单完成日期和设计完成日期
+// 获取经理管理的所有排程 - 更新SQL添加manager id过滤和状态过滤
 $sql = "
-    SELECT 
+    SELECT DISTINCT
         o.orderid,
         o.odate as OrderDate,
         o.ostatus as OrderStatus,
@@ -54,7 +55,11 @@ $sql = "
     LEFT JOIN `Design` d ON o.designid = d.designid
     LEFT JOIN `Designer` des ON d.designerid = des.designerid
     LEFT JOIN `Schedule` sch ON o.orderid = sch.orderid
-    WHERE sch.managerid = ? AND sch.orderid IS NOT NULL
+    LEFT JOIN `OrderProduct` op ON o.orderid = op.orderid
+    WHERE sch.managerid = ? 
+    AND op.managerid = ?
+    AND sch.orderid IS NOT NULL
+    AND LOWER(o.ostatus) NOT IN ('pending', 'cancelled')  -- 添加状态过滤
     " . ($order_id > 0 ? " AND o.orderid = ?" : "") . "
     ORDER BY sch.OrderFinishDate ASC, sch.DesignFinishDate ASC
 ";
@@ -65,9 +70,9 @@ if (!$stmt) {
 }
 
 if ($order_id > 0) {
-    $stmt->bind_param("ii", $user_id, $order_id);
+    $stmt->bind_param("iii", $user_id, $user_id, $order_id);
 } else {
-    $stmt->bind_param("i", $user_id);
+    $stmt->bind_param("ii", $user_id, $user_id);
 }
 
 if (!$stmt->execute()) {
@@ -117,9 +122,9 @@ foreach ($design_finish_by_date as $date => $items) {
     );
 }
 
-// 获取未排程的订单（没有Schedule记录的订单）
+// 获取未排程的订单（没有Schedule记录的订单）- 更新SQL添加状态过滤
 $unscheduled_sql = "
-    SELECT 
+    SELECT DISTINCT
         o.orderid,
         o.odate as OrderDate,
         o.ostatus as OrderStatus,
@@ -131,11 +136,10 @@ $unscheduled_sql = "
     FROM `Order` o
     JOIN `Client` c ON o.clientid = c.clientid
     LEFT JOIN `Schedule` sch ON o.orderid = sch.orderid
-    WHERE EXISTS (
-        SELECT 1 FROM `OrderProduct` op 
-        WHERE op.orderid = o.orderid AND op.managerid = ?
-    ) 
+    LEFT JOIN `OrderProduct` op ON o.orderid = op.orderid
+    WHERE op.managerid = ?
     AND sch.orderid IS NULL
+    AND LOWER(o.ostatus) NOT IN ('pending', 'cancelled')  -- 添加状态过滤
     " . ($order_id > 0 ? " AND o.orderid = ?" : "") . "
     ORDER BY o.odate DESC
     LIMIT 6
@@ -251,7 +255,328 @@ $designing_orders = count(array_filter($schedules, function($s) {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="../css/Manager_style.css">
-    <style>
+       <style>
+        /* 日期样式 */
+        .order-finish-date {
+            color: #28a745; /* 绿色 */
+            font-weight: bold;
+        }
+        
+        .design-finish-date {
+            color: #007bff; /* 蓝色 */
+            font-weight: bold;
+        }
+
+        .date-badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin: 2px;
+            display: inline-block;
+        }
+        
+        .order-finish-badge {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .design-finish-badge {
+            background-color: #cfe2ff;
+            color: #084298;
+            border: 1px solid #b6d4fe;
+        }
+        
+        /* 日历项目样式 */
+        .calendar-order-item {
+            background-color: #d4edda;
+            border-left: 3px solid #28a745;
+            padding: 0.4rem 0.6rem;
+            margin: 0.3rem 0;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            display: block;
+            text-decoration: none;
+            color: #155724;
+        }
+        
+        .calendar-design-item {
+            background-color: #cfe2ff;
+            border-left: 3px solid #007bff;
+            padding: 0.4rem 0.6rem;
+            margin: 0.3rem 0;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            display: block;
+            text-decoration: none;
+            color: #084298;
+        }
+        
+        .calendar-order-item:hover {
+            background-color: #c3e6cb;
+            transform: translateX(3px);
+            text-decoration: none;
+            color: #155724;
+        }
+        
+        .calendar-design-item:hover {
+            background-color: #b6d4fe;
+            transform: translateX(3px);
+            text-decoration: none;
+            color: #084298;
+        }
+        
+        /* 基础样式 */
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .header-section {
+            background: linear-gradient(135deg, #2c3e50, #4a6491);
+            color: white;
+            padding: 2rem 0;
+            margin-bottom: 2rem;
+            border-radius: 0 0 15px 15px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        
+        .stats-card {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+            border: none;
+        }
+        
+        .stat-item {
+            text-align: center;
+            padding: 1rem;
+        }
+        
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #2c3e50;
+            margin-bottom: 0.5rem;
+        }
+        
+        .stat-label {
+            color: #7f8c8d;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .calendar-container {
+            background: white;
+            border-radius: 15px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        }
+        
+        .calendar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 2px solid #ecf0f1;
+        }
+        
+        .calendar-title {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #2c3e50;
+        }
+        
+        .calendar-nav a {
+            background-color: #3498db;
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .calendar-nav a:hover {
+            background-color: #2980b9;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            color: white;
+        }
+        
+        .calendar-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+        }
+        
+        .calendar-table th {
+            background-color: #f8f9fa;
+            color: #2c3e50;
+            padding: 1rem;
+            text-align: center;
+            font-weight: 600;
+            border-bottom: 2px solid #ecf0f1;
+        }
+        
+        .calendar-table td {
+            width: 14.28%;
+            height: 140px;
+            padding: 0.75rem;
+            border: 1px solid #ecf0f1;
+            vertical-align: top;
+            background-color: #fff;
+            transition: all 0.2s;
+            position: relative;
+        }
+        
+        .calendar-table td:hover {
+            background-color: #f8f9fa;
+        }
+        
+        .calendar-table td.other-month {
+            background-color: #fafafa;
+            color: #bdc3c7;
+        }
+        
+        .calendar-table td.today {
+            background-color: #e8f4f8;
+        }
+        
+        .day-number {
+            font-weight: 700;
+            color: #2c3e50;
+            margin-bottom: 0.5rem;
+            font-size: 1.1rem;
+        }
+        
+        .day-number.today {
+            background-color: #3498db;
+            color: white;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .day-number.other-month {
+            color: #bdc3c7;
+        }
+        
+        .unscheduled-list {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: #7f8c8d;
+        }
+        
+        .empty-state i {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+        
+        .modal-content {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        }
+        
+        .modal-header {
+            background: linear-gradient(135deg, #2c3e50, #4a6491);
+            color: white;
+            border-radius: 15px 15px 0 0;
+            padding: 1.5rem;
+        }
+        
+        .modal-body {
+            padding: 2rem;
+        }
+        
+        .detail-item {
+            margin-bottom: 1.5rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid #ecf0f1;
+        }
+        
+        .detail-item:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+        
+        .detail-label {
+            font-weight: 600;
+            color: #3498db;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            margin-bottom: 0.5rem;
+        }
+        
+        .detail-value {
+            color: #2c3e50;
+            font-size: 1rem;
+        }
+        
+        .action-buttons {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+            margin-top: 2rem;
+        }
+        
+        @media (max-width: 768px) {
+            .calendar-table td {
+                height: 120px;
+                padding: 0.5rem;
+            }
+            
+            .calendar-order-item,
+            .calendar-design-item {
+                font-size: 0.7rem;
+                padding: 0.3rem 0.4rem;
+            }
+            
+            .stat-number {
+                font-size: 1.8rem;
+            }
+            
+            .calendar-header {
+                flex-direction: column;
+                gap: 1rem;
+                align-items: flex-start;
+            }
+        }
+    </style>
+   <style>
         /* 日期样式 */
         .order-finish-date {
             color: #28a745; /* 绿色 */
@@ -583,6 +908,10 @@ $designing_orders = count(array_filter($schedules, function($s) {
                 <a href="Manager_MyOrder.php">MyOrder</a>
                 <a href="Manager_Massage.php">Massage</a>
                 <a href="Manager_Schedule.php" class="active">Schedule</a>
+            </div>
+            <div class="user-info">
+                <span>Welcome, <?php echo htmlspecialchars($user_name); ?></span>
+                <a href="../logout.php" class="btn-logout">Logout</a>
             </div>
         </div>
     </nav>
@@ -1073,3 +1402,8 @@ $designing_orders = count(array_filter($schedules, function($s) {
     </script>
 </body>
 </html>
+<?php
+if(isset($mysqli) && $mysqli) {
+    $mysqli->close();
+}
+?>

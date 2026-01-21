@@ -1,8 +1,32 @@
 <?php
+session_start();
 require_once dirname(__DIR__) . '/config.php';
+
+// 检查用户是否以经理身份登录
+if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'manager') {
+    header('Location: ../login.php?redirect=' . urlencode($_SERVER['REQUEST_URI']));
+    exit;
+}
+
+$user = $_SESSION['user'];
+$user_id = $user['managerid'];
 
 if(isset($_GET['id'])) {
     $orderid = mysqli_real_escape_string($mysqli, $_GET['id']);
+    
+    // 检查订单是否属于当前经理
+    $check_manager_sql = "SELECT COUNT(*) as count FROM `OrderProduct` op 
+                          JOIN `Manager` m ON op.managerid = m.managerid 
+                          WHERE op.orderid = ? AND m.managerid = ?";
+    $check_stmt = mysqli_prepare($mysqli, $check_manager_sql);
+    mysqli_stmt_bind_param($check_stmt, "ii", $orderid, $user_id);
+    mysqli_stmt_execute($check_stmt);
+    $check_result = mysqli_stmt_get_result($check_stmt);
+    $manager_check = mysqli_fetch_assoc($check_result);
+    
+    if ($manager_check['count'] == 0) {
+        die("You don't have permission to view this order.");
+    }
     
     $sql = "SELECT o.*, c.*, d.*, s.*
             FROM `Order` o
@@ -82,6 +106,10 @@ if(isset($_GET['id'])) {
                 <a href="Manager_MyOrder.php">MyOrder</a>
                 <a href="Manager_Massage.php">Massage</a>
                 <a href="Manager_Schedule.php">Schedule</a>
+            </div>
+            <div class="user-info">
+                <span>Welcome, <?php echo htmlspecialchars($user_name); ?></span>
+                <a href="../logout.php" class="btn-logout">Logout</a>
             </div>
         </div>
     </nav>

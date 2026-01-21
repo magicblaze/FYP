@@ -1,12 +1,23 @@
 <?php
+session_start();
 require_once dirname(__DIR__) . '/config.php';
+
+// 检查用户是否以经理身份登录
+if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'manager') {
+    header('Location: ../login.php?redirect=' . urlencode($_SERVER['REQUEST_URI']));
+    exit;
+}
+
+$user = $_SESSION['user'];
+$user_id = $user['managerid'];
+$user_name = $user['name'];
 
 // 获取状态过滤参数
 $status_filter = isset($_GET['status']) ? $_GET['status'] : 'all';
 $search = isset($_GET['search']) ? mysqli_real_escape_string($mysqli, $_GET['search']) : '';
 
-// 构建查询条件
-$where_conditions = array();
+// 构建查询条件 - 只显示当前经理的订单
+$where_conditions = array("EXISTS (SELECT 1 FROM OrderProduct op WHERE op.orderid = o.orderid AND op.managerid = $user_id)");
 
 if($status_filter != 'all') {
     $status_filter = mysqli_real_escape_string($mysqli, $status_filter);
@@ -38,13 +49,15 @@ $sql = "SELECT o.orderid, o.odate, o.budget, o.Requirements, o.ostatus,
 
 $result = mysqli_query($mysqli, $sql);
 
-// 获取总数
-$count_sql = "SELECT COUNT(*) as total FROM `Order` o $where_clause";
+// 获取总数 - 只统计当前经理的订单
+$count_sql = "SELECT COUNT(*) as total 
+              FROM `Order` o 
+              WHERE EXISTS (SELECT 1 FROM OrderProduct op WHERE op.orderid = o.orderid AND op.managerid = $user_id)";
 $count_result = mysqli_query($mysqli, $count_sql);
 $count_row = mysqli_fetch_assoc($count_result);
 $total_orders = $count_row['total'];
 
-// 获取统计数据
+// 获取统计数据 - 只统计当前经理的订单
 $stats_sql = "SELECT 
                 COUNT(*) as total_orders,
                 SUM(o.budget) as total_budget,
@@ -52,11 +65,11 @@ $stats_sql = "SELECT
                 SUM(CASE WHEN o.ostatus = 'Pending' THEN 1 ELSE 0 END) as pending_count,
                 SUM(CASE WHEN o.ostatus = 'Designing' THEN 1 ELSE 0 END) as designing_count,
                 SUM(CASE WHEN o.ostatus = 'Completed' THEN 1 ELSE 0 END) as completed_count
-              FROM `Order` o";
+              FROM `Order` o
+              WHERE EXISTS (SELECT 1 FROM OrderProduct op WHERE op.orderid = o.orderid AND op.managerid = $user_id)";
 $stats_result = mysqli_query($mysqli, $stats_sql);
 $stats = mysqli_fetch_assoc($stats_result);
 ?>
-
 <!DOCTYPE html>
 <html>
 <head>
@@ -75,12 +88,16 @@ $stats = mysqli_fetch_assoc($stats_result);
                 <a href="Manager_Massage.php">Massage</a>
                 <a href="Manager_Schedule.php">Schedule</a>
             </div>
+            <div class="user-info">
+                <span>Welcome, <?php echo htmlspecialchars($user_name); ?></span>
+                <a href="../logout.php" class="btn-logout">Logout</a>
+            </div>
         </div>
     </nav>
 
     <!-- 主要内容 -->
     <div class="page-container">
-        <h1 class="page-title">Total Orders</h1>
+        <h1 class="page-title">Total Orders - <?php echo htmlspecialchars($user_name); ?></h1>
         
         <!-- 搜索框 -->
         <div class="search-box">

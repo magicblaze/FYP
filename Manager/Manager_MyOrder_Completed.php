@@ -1,9 +1,19 @@
-
 <?php
 require_once dirname(__DIR__) . '/config.php';
+session_start();
 
-// 查询已完成订单 - UPDATED FOR NEW DATE STRUCTURE
-$sql = "SELECT o.orderid, o.odate, o.budget, o.Requirements, o.ostatus,
+// 检查用户是否以经理身份登录
+if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'manager') {
+    header('Location: ../login.php?redirect=' . urlencode($_SERVER['REQUEST_URI']));
+    exit;
+}
+
+$user = $_SESSION['user'];
+$user_id = $user['managerid'];
+$user_name = $user['name'];
+
+// 查询已完成订单 - UPDATED FOR NEW DATE STRUCTURE - 只显示该经理的订单
+$sql = "SELECT DISTINCT o.orderid, o.odate, o.budget, o.Requirements, o.ostatus,
                c.clientid, c.cname as client_name,
                d.designid, d.price as design_price, d.tag as design_tag,
                s.OrderFinishDate, s.DesignFinishDate
@@ -11,10 +21,15 @@ $sql = "SELECT o.orderid, o.odate, o.budget, o.Requirements, o.ostatus,
         LEFT JOIN `Client` c ON o.clientid = c.clientid
         LEFT JOIN `Design` d ON o.designid = d.designid
         LEFT JOIN `Schedule` s ON o.orderid = s.orderid
-        WHERE o.ostatus = 'Completed' OR o.ostatus = 'completed'
+        LEFT JOIN `OrderProduct` op ON o.orderid = op.orderid
+        WHERE (o.ostatus = 'Completed' OR o.ostatus = 'completed')
+        AND op.managerid = ?
         ORDER BY s.OrderFinishDate DESC";
 
-$result = mysqli_query($mysqli, $sql);
+$stmt = mysqli_prepare($mysqli, $sql);
+mysqli_stmt_bind_param($stmt, "i", $user_id);
+mysqli_stmt_execute($stmt);
+$result = mysqli_stmt_get_result($stmt);
 ?>
 
 <!DOCTYPE html>
@@ -35,6 +50,10 @@ $result = mysqli_query($mysqli, $sql);
                 <a href="Manager_MyOrder.php">MyOrder</a>
                 <a href="Manager_Massage.php">Massage</a>
                 <a href="Manager_Schedule.php">Schedule</a>
+            </div>
+            <div class="user-info">
+                <span>Welcome, <?php echo htmlspecialchars($user_name); ?></span>
+                <a href="../logout.php" class="btn-logout">Logout</a>
             </div>
         </div>
     </nav>
@@ -75,10 +94,16 @@ $result = mysqli_query($mysqli, $sql);
                 <div class="stat-label">Total Completed Orders</div>
             </div>
             <?php
+            // 更新预算查询以包含manager id过滤
             $budget_sql = "SELECT SUM(o.budget) as total_budget 
-                           FROM `Order` o 
-                           WHERE o.ostatus = 'Completed' OR o.ostatus = 'completed'";
-            $budget_result = mysqli_query($mysqli, $budget_sql);
+                           FROM `Order` o
+                           LEFT JOIN `OrderProduct` op ON o.orderid = op.orderid
+                           WHERE (o.ostatus = 'Completed' OR o.ostatus = 'completed')
+                           AND op.managerid = ?";
+            $budget_stmt = mysqli_prepare($mysqli, $budget_sql);
+            mysqli_stmt_bind_param($budget_stmt, "i", $user_id);
+            mysqli_stmt_execute($budget_stmt);
+            $budget_result = mysqli_stmt_get_result($budget_stmt);
             $budget_row = mysqli_fetch_assoc($budget_result);
             $total_budget = $budget_row['total_budget'] ?? 0;
             $avg_budget = $total_completed > 0 ? $total_budget / $total_completed : 0;
@@ -172,7 +197,11 @@ $result = mysqli_query($mysqli, $sql);
         
         mysqli_free_result($result);
         if(isset($budget_result)) mysqli_free_result($budget_result);
-        mysqli_close($mysqli);
+        if(isset($stmt)) mysqli_stmt_close($stmt);
+        if(isset($budget_stmt)) mysqli_stmt_close($budget_stmt);
+        if(isset($mysqli) && $mysqli) {
+            mysqli_close($mysqli);
+        }
         ?>
         
         <!-- 页面按钮 -->
@@ -198,15 +227,12 @@ $result = mysqli_query($mysqli, $sql);
         }
     }
     
-
     function printThisPage() {
         window.print();
     }
     
     document.addEventListener('DOMContentLoaded', function() {
-
         document.addEventListener('keydown', function(e) {
-
             if(e.ctrlKey && e.key === 'p') {
                 e.preventDefault();
                 printThisPage();
@@ -217,7 +243,6 @@ $result = mysqli_query($mysqli, $sql);
             }
         });
     });
-
     </script>
 </body>
 </html>
