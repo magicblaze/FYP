@@ -34,9 +34,43 @@ $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $budget = (int)($_POST['budget'] ?? $design['price']);
     $requirements = trim($_POST['requirements'] ?? '');
+    $paymentMethod = trim($_POST['payment_method'] ?? '');
+
+    // 驗證必填字段
+    if ($budget <= 0) {
+        $error = 'Budget must be greater than 0.';
+    } elseif (empty($paymentMethod)) {
+        $error = 'Payment method is required.';
+    }
+
+    // 驗證支付方式相關字段
+    if (!$error) {
+        if ($paymentMethod === 'alipay_hk') {
+            $alipayEmail = trim($_POST['alipay_hk_email'] ?? '');
+            $alipayPhone = trim($_POST['alipay_hk_phone'] ?? '');
+            if (empty($alipayEmail)) {
+                $error = 'AlipayHK Account Email is required.';
+            } elseif (empty($alipayPhone)) {
+                $error = 'AlipayHK Phone Number is required.';
+            }
+        } elseif ($paymentMethod === 'paypal') {
+            $paypalEmail = trim($_POST['paypal_email'] ?? '');
+            if (empty($paypalEmail)) {
+                $error = 'PayPal Email is required.';
+            }
+        } elseif ($paymentMethod === 'fps') {
+            $fpsId = trim($_POST['fps_id'] ?? '');
+            $fpsName = trim($_POST['fps_name'] ?? '');
+            if (empty($fpsId)) {
+                $error = 'FPS ID is required.';
+            } elseif (empty($fpsName)) {
+                $error = 'Account Holder Name is required.';
+            }
+        }
+    }
 
     $uploadPath = null;
-    if (!empty($_FILES['floorplan']['name'])) {
+    if (!$error && !empty($_FILES['floorplan']['name'])) {
         $allowedExt = ['pdf','jpg','jpeg','png'];
         $allowedMimes = ['application/pdf','image/jpeg','image/png'];
         $maxSize = 10 * 1024 * 1024;
@@ -66,6 +100,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($_FILES['floorplan']['error'] !== UPLOAD_ERR_NO_FILE) {
             $error = 'Upload error. Please try again.';
         }
+    } elseif (!$error) {
+        // 如果沒有上傳文件，也是錯誤
+        $error = 'Floor Plan is required.';
     }
     if (!$error) {
         $stmt = $mysqli->prepare("INSERT INTO `Order` (odate, clientid, budget, Floor_Plan, Requirements, designid, ostatus) VALUES (NOW(), ?, ?, ?, ?, ?, 'Designing')");
@@ -263,7 +300,7 @@ if (!empty($clientData['ctel'])) {
                                     <p class="text-muted small">PDF, JPG, PNG up to 10MB</p>
                                 </div>
                             </label>
-                            <input type="file" id="floorplanUpload" name="floorplan" class="file-input" accept=".pdf,.jpg,.jpeg,.png">
+                            <input type="file" id="floorplanUpload" name="floorplan" class="file-input" accept=".pdf,.jpg,.jpeg,.png" required>
                             
                             <!-- Preview container for images -->
                             <div class="floorplan-preview-container" id="imagePreviewContainer">
@@ -341,11 +378,11 @@ if (!empty($clientData['ctel'])) {
                             <div class="payment-form" id="alipayHKForm">
                                 <h4 class="payment-form-title">AlipayHK Information</h4>
                                 <div class="mb-3">
-                                    <label for="alipayHKEmail" class="form-label">AlipayHK Account Email</label>
+                                    <label for="alipayHKEmail" class="form-label">AlipayHK Account Email <span style="color: #e74c3c;">*</span></label>
                                     <input type="email" class="form-control" id="alipayHKEmail" name="alipay_hk_email" placeholder="your.email@example.com">
                                 </div>
                                 <div class="mb-3">
-                                    <label for="alipayHKPhone" class="form-label">AlipayHK Phone Number</label>
+                                    <label for="alipayHKPhone" class="form-label">AlipayHK Phone Number <span style="color: #e74c3c;">*</span></label>
                                     <input type="tel" class="form-control" id="alipayHKPhone" name="alipay_hk_phone" placeholder="+852 XXXX XXXX">
                                 </div>
                             </div>
@@ -354,7 +391,7 @@ if (!empty($clientData['ctel'])) {
                             <div class="payment-form" id="paypalForm" style="display: none;">
                                 <h4 class="payment-form-title">PayPal Information</h4>
                                 <div class="mb-3">
-                                    <label for="paypalEmail" class="form-label">PayPal Email</label>
+                                    <label for="paypalEmail" class="form-label">PayPal Email <span style="color: #e74c3c;">*</span></label>
                                     <input type="email" class="form-control" id="paypalEmail" name="paypal_email" placeholder="your.email@example.com">
                                 </div>
                             </div>
@@ -363,11 +400,11 @@ if (!empty($clientData['ctel'])) {
                             <div class="payment-form" id="fpsForm" style="display: none;">
                                 <h4 class="payment-form-title">FPS Information</h4>
                                 <div class="mb-3">
-                                    <label for="fpsId" class="form-label">FPS ID</label>
+                                    <label for="fpsId" class="form-label">FPS ID <span style="color: #e74c3c;">*</span></label>
                                     <input type="text" class="form-control" id="fpsId" name="fps_id" placeholder="Your FPS ID (Phone/Email/ID Number)">
                                 </div>
                                 <div class="mb-3">
-                                    <label for="fpsName" class="form-label">Account Holder Name</label>
+                                    <label for="fpsName" class="form-label">Account Holder Name <span style="color: #e74c3c;">*</span></label>
                                     <input type="text" class="form-control" id="fpsName" name="fps_name" placeholder="John Doe">
                                 </div>
                             </div>
@@ -388,8 +425,8 @@ if (!empty($clientData['ctel'])) {
                             </div>
 
                             <div class="mt-3 mb-3">
-                                <label for="budget" class="form-label fw-bold">Budget</label>
-                                <input class="form-control" type="number" id="budget" name="budget" min="0" value="<?= (int)$design['price'] ?>">
+                                <label for="budget" class="form-label fw-bold">Budget <span style="color: #e74c3c;">*</span></label>
+                                <input class="form-control" type="number" id="budget" name="budget" min="0" value="<?= (int)$design['price'] ?>" required>
                             </div>
 
                             <div class="mt-4">
@@ -415,15 +452,31 @@ if (!empty($clientData['ctel'])) {
 
             function updatePaymentForm() {
                 const selectedMethod = document.querySelector('input[name="payment_method"]:checked').value;
+                
+                // Remove required from all payment fields
+                document.getElementById('alipayHKEmail').removeAttribute('required');
+                document.getElementById('alipayHKPhone').removeAttribute('required');
+                document.getElementById('paypalEmail').removeAttribute('required');
+                document.getElementById('fpsId').removeAttribute('required');
+                document.getElementById('fpsName').removeAttribute('required');
+                
+                // Hide all payment forms
                 alipayHKForm.style.display = 'none';
                 paypalForm.style.display = 'none';
                 fpsForm.style.display = 'none';
+                
+                // Show selected form and add required
                 if (selectedMethod === 'alipay_hk') {
                     alipayHKForm.style.display = 'block';
+                    document.getElementById('alipayHKEmail').setAttribute('required', 'required');
+                    document.getElementById('alipayHKPhone').setAttribute('required', 'required');
                 } else if (selectedMethod === 'paypal') {
                     paypalForm.style.display = 'block';
+                    document.getElementById('paypalEmail').setAttribute('required', 'required');
                 } else if (selectedMethod === 'fps') {
                     fpsForm.style.display = 'block';
+                    document.getElementById('fpsId').setAttribute('required', 'required');
+                    document.getElementById('fpsName').setAttribute('required', 'required');
                 }
             }
 

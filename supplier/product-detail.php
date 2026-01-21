@@ -19,31 +19,39 @@ $stmt->execute();
 $product = $stmt->get_result()->fetch_assoc();
 if (!$product) { http_response_code(404); die('Product not found.'); }
 
-// Parse colors from database - supports both color names and hex codes
-$colors = [];
-if (!empty($product['color'])) {
-    // Split colors by comma and trim whitespace
-    $colorArray = array_map('trim', explode(',', $product['color']));
-    $colors = array_filter($colorArray); // Remove empty values
-}
-
-// 查询颜色图片映射
+// Get color images from ProductColorImage table (regardless of Product.color field)
 $colorImages = [];
-if (!empty($colors)) {
-    $colorImageSql = "SELECT color, image FROM ProductColorImage WHERE productid = ?";
-    $colorImageStmt = $mysqli->prepare($colorImageSql);
-    $colorImageStmt->bind_param("i", $productid);
-    $colorImageStmt->execute();
-    $colorImageResult = $colorImageStmt->get_result();
-    
-    while ($row = $colorImageResult->fetch_assoc()) {
-        $colorImages[$row['color']] = $row['image'];
-    }
-    $colorImageStmt->close();
+$colors = [];
+$colorImageSql = "SELECT color, image FROM ProductColorImage WHERE productid = ? ORDER BY id ASC";
+$colorImageStmt = $mysqli->prepare($colorImageSql);
+$colorImageStmt->bind_param("i", $productid);
+$colorImageStmt->execute();
+$colorImageResult = $colorImageStmt->get_result();
+while ($row = $colorImageResult->fetch_assoc()) {
+    $colorImages[$row['color']] = $row['image'];
+    $colors[] = $row['color'];
+}
+$colorImageStmt->close();
+
+// If no color images found, try to parse colors from Product.color field
+if (empty($colors) && !empty($product['color'])) {
+    $colorArray = array_map('trim', explode(',', $product['color']));
+    $colors = array_filter($colorArray);
 }
 
-// Use DB-driven image endpoint
-$mainImg = '../supplier/product_image.php?id=' . (int)$product['productid'];
+// Get the first color's image from ProductColorImage table
+$mainImg = null;
+if (!empty($colorImages)) {
+    // Get the first image from colorImages array
+    $firstImage = reset($colorImages);
+    if ($firstImage) {
+        $mainImg = '../uploads/products/' . htmlspecialchars($firstImage);
+    }
+}
+// Fallback to placeholder if no image found
+if (!$mainImg) {
+    $mainImg = '../uploads/products/placeholder.jpg';
+}
 
 // Define supplier name
 $supplierName = isset($_SESSION['user']['name']) ? $_SESSION['user']['name'] : 'Guest';
@@ -457,13 +465,13 @@ function getColorDisplayName($colorInput) {
                                 $hasImage = isset($colorImages[$color]);
                             ?>
                                 <button type="button" 
-                                        class="color-button" 
+                                        class="color-button <?= $index === 0 ? 'selected' : '' ?>" 
                                         data-color="<?= htmlspecialchars($color) ?>"
                                         data-hex="<?= htmlspecialchars($hexColor) ?>"
                                         data-has-image="<?= $hasImage ? 'true' : 'false' ?>"
                                         onclick="selectColor(this)"
                                         title="<?= htmlspecialchars($displayName) ?>">
-                                    <span class="color-swatch" style="background-color: <?= htmlspecialchars($hexColor) ?>;"></span>
+                                    <span class="color-swatch" style="background-color: <?= htmlspecialchars($hexColor) ?>"></span>
                                 </button>
                             <?php endforeach; ?>
                         </div>
@@ -482,8 +490,8 @@ function getColorDisplayName($colorInput) {
                         </select>
                     <?php endif; ?>
                     
-                    <input type="hidden" id="selectedColor" value="">
-                    <input type="hidden" id="selectedColorHex" value="">
+                    <input type="hidden" id="selectedColor" value="<?= htmlspecialchars($colors[0] ?? '') ?>">
+                    <input type="hidden" id="selectedColorHex" value="<?= htmlspecialchars(colorToHex($colors[0] ?? '')) ?>">
                 </div>
                 <?php endif; ?>
 
@@ -562,10 +570,27 @@ function getColorDisplayName($colorInput) {
     function updateProductImage(color) {
         const productImg = document.getElementById('productImage');
         
-        // 检查是否有该颜色的图片
-        if (colorImages[color]) {
+        // 查找不区分大小写的颜色图片
+        let imageFile = null;
+        if (colorImages) {
+            // 先尝试精确匹配
+            if (colorImages[color]) {
+                imageFile = colorImages[color];
+            } else {
+                // 尝试不区分大小写的匹配
+                const colorLower = color.toLowerCase();
+                for (const key in colorImages) {
+                    if (key.toLowerCase() === colorLower) {
+                        imageFile = colorImages[key];
+                        break;
+                    }
+                }
+            }
+        }
+        
+        if (imageFile) {
             // 使用颜色图片
-            const colorImageUrl = '../supplier/product_color_image.php?productid=' + productId + '&color=' + encodeURIComponent(color);
+            const colorImageUrl = '../uploads/products/' + imageFile;
             
             // 添加加载状态
             productImg.classList.add('loading');
@@ -577,14 +602,14 @@ function getColorDisplayName($colorInput) {
                 productImg.classList.remove('loading');
             };
             newImg.onerror = function() {
-                // 如果颜色图片加载失败，使用主图片
-                productImg.src = '../supplier/product_image.php?id=' + productId;
+                // 如果颜色图片加载失败，使用 placeholder
+                productImg.src = '../uploads/products/placeholder.jpg';
                 productImg.classList.remove('loading');
             };
             newImg.src = colorImageUrl;
         } else {
-            // 使用主图片
-            productImg.src = '../supplier/product_image.php?id=' + productId;
+            // 使用 placeholder
+            productImg.src = '../uploads/products/placeholder.jpg';
             productImg.classList.remove('loading');
         }
     }
@@ -599,12 +624,7 @@ function getColorDisplayName($colorInput) {
         return document.getElementById('selectedColorHex').value;
     }
 
-    // 页面加载时初始化 - 不选择任何颜色，只显示主图片
-    document.addEventListener('DOMContentLoaded', function() {
-        // 显示主图片
-        const productImg = document.getElementById('productImage');
-        productImg.src = '../supplier/product_image.php?id=' + productId;
-    });
+    // 页面加载时初始化 - 不需要修改图片，因为 PHP 已经设置了正确的图片路径
     </script>
 </body>
 </html>

@@ -18,13 +18,15 @@ if ($clientid <= 0) {
     die('Invalid session. Please sign in again.');
 }
 
-// Get liked products
-$products_sql = "SELECT p.*, s.sname 
+// Get liked products with their first color images
+$products_sql = "SELECT p.*, s.sname, pci.image as first_color_image
                  FROM Product p
                  JOIN Supplier s ON p.supplierid = s.supplierid
+                 LEFT JOIN ProductColorImage pci ON p.productid = pci.productid
                  WHERE p.productid IN (
                      SELECT productid FROM ProductLike WHERE clientid = ?
                  )
+                 GROUP BY p.productid
                  ORDER BY p.productid DESC";
 $products_stmt = $mysqli->prepare($products_sql);
 $products_stmt->bind_param("i", $clientid);
@@ -363,11 +365,14 @@ $total_count = $products_count + $designs_count;
             </div>
             <div class="likes-grid">
                 <?php while ($product = $liked_products->fetch_assoc()): 
-                    $productImageUrl = '../uploads/products/' . $product['image'];
+                    // Use first color image from ProductColorImage table, or placeholder if not available
+                    $productImageUrl = !empty($product['first_color_image']) 
+                        ? '../uploads/products/' . htmlspecialchars($product['first_color_image'])
+                        : '../uploads/products/placeholder.jpg';
                 ?>
                 <div class="like-card">
                     <div class="like-card-image">
-                        <img src="<?= htmlspecialchars($productImageUrl) ?>" alt="<?= htmlspecialchars($product['pname']) ?>">
+                        <img src="<?= $productImageUrl ?>" alt="<?= htmlspecialchars($product['pname']) ?>">
                     </div>
                     <div class="like-card-body">
                         <div class="like-card-title" title="<?= htmlspecialchars($product['pname']) ?>">

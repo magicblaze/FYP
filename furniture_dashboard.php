@@ -72,10 +72,24 @@ $supplier_sql = "SELECT DISTINCT s.supplierid, s.sname FROM Supplier s
 $supplier_result = $mysqli->query($supplier_sql);
 if (!$supplier_result) die('Query error: ' . $mysqli->error);
 
+// 獲取每個產品的第一個顏色圖片
+$productFirstColorImages = [];
+$colorImageSql = "SELECT DISTINCT p.productid, pci.image FROM Product p 
+                  LEFT JOIN ProductColorImage pci ON p.productid = pci.productid 
+                  WHERE p.category = 'Furniture' 
+                  ORDER BY p.productid, pci.id ASC";
+$colorImageResult = $mysqli->query($colorImageSql);
+if ($colorImageResult) {
+    $seenProducts = [];
+    while ($row = $colorImageResult->fetch_assoc()) {
+        if (!isset($seenProducts[$row['productid']])) {
+            $productFirstColorImages[$row['productid']] = $row['image'];
+            $seenProducts[$row['productid']] = true;
+        }
+    }
+}
+
 // 獲取所有顏色用於過濾下拉菜單 (已禁用)
-// $color_sql = "SELECT DISTINCT color FROM Product WHERE category = 'Furniture' AND color IS NOT NULL ORDER BY color ASC";
-// $color_result = $mysqli->query($color_sql);
-// if (!$color_result) die('Query error: ' . $mysqli->error);
 $color_result = null; // 设置为 null
 
 // 獲取所有尺寸用於過濾下拉菜單 (已禁用 - size 列不存在)
@@ -357,7 +371,16 @@ $size_result = null; // 设置为 null 以避免后续错误
                         <div class="col-lg-4 col-md-6 col-sm-12">
                             <a href="client/product_detail.php?id=<?= htmlspecialchars($prod['productid']) ?>" style="text-decoration: none;">
                                 <div class="card h-100">
-                                    <img src="supplier/product_image.php?id=<?= (int)$prod['productid'] ?>" class="card-img-top" alt="<?= htmlspecialchars($prod['pname']) ?>" onerror="this.src='https://via.placeholder.com/300x250?text=No+Image'">
+                                    <?php 
+                                        $prodId = $prod['productid'];
+                                        $imageFile = $productFirstColorImages[$prodId] ?? null;
+                                        if ($imageFile) {
+                                            $imageSrc = 'uploads/products/' . htmlspecialchars($imageFile);
+                                        } else {
+                                            $imageSrc = 'uploads/products/placeholder.jpg';
+                                        }
+                                    ?>
+                                    <img src="<?= $imageSrc ?>" class="card-img-top" alt="<?= htmlspecialchars($prod['pname']) ?>" onerror="this.src='https://via.placeholder.com/300x250?text=No+Image'" style="height: 250px; object-fit: cover;">
                                     <div class="card-body text-center">
                                         <h5 class="card-title"><?= htmlspecialchars($prod['pname']) ?></h5>
                                         <p class="text-muted mb-2">

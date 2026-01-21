@@ -81,6 +81,23 @@ $supplier_sql = "SELECT DISTINCT s.supplierid, s.sname FROM Supplier s
 $supplier_result = $mysqli->query($supplier_sql);
 if (!$supplier_result) die('Query error: ' . $mysqli->error);
 
+// 獲取每個產品的第一個顏色圖片
+$productFirstColorImages = [];
+$colorImageSql = "SELECT DISTINCT p.productid, pci.image FROM Product p 
+                  LEFT JOIN ProductColorImage pci ON p.productid = pci.productid 
+                  WHERE p.category = 'Material' 
+                  ORDER BY p.productid, pci.id ASC";
+$colorImageResult = $mysqli->query($colorImageSql);
+if ($colorImageResult) {
+    $seenProducts = [];
+    while ($row = $colorImageResult->fetch_assoc()) {
+        if (!isset($seenProducts[$row['productid']])) {
+            $productFirstColorImages[$row['productid']] = $row['image'];
+            $seenProducts[$row['productid']] = true;
+        }
+    }
+}
+
 // 獲取所有材料類型用於過濾下拉菜單
 $material_sql = "SELECT DISTINCT material FROM Product WHERE category = 'Material' AND material IS NOT NULL ORDER BY material ASC";
 $material_result = $mysqli->query($material_sql);
@@ -332,7 +349,16 @@ if (!$material_result) die('Query error: ' . $mysqli->error);
                         <div class="col-lg-4 col-md-6 col-sm-12">
                             <a href="client/product_detail.php?id=<?= htmlspecialchars($prod['productid']) ?>" style="text-decoration: none;">
                                 <div class="card h-100">
-                                    <img src="supplier/product_image.php?id=<?= (int)$prod['productid'] ?>" class="card-img-top" alt="<?= htmlspecialchars($prod['pname']) ?>">
+                                    <?php 
+                                        $prodId = $prod['productid'];
+                                        $imageFile = $productFirstColorImages[$prodId] ?? null;
+                                        if ($imageFile) {
+                                            $imageSrc = 'uploads/products/' . htmlspecialchars($imageFile);
+                                        } else {
+                                            $imageSrc = 'uploads/products/placeholder.jpg';
+                                        }
+                                    ?>
+                                    <img src="<?= $imageSrc ?>" class="card-img-top" alt="<?= htmlspecialchars($prod['pname']) ?>" style="height: 250px; object-fit: cover;">
                                     <div class="card-body text-center">
                                         <h5 class="card-title"><?= htmlspecialchars($prod['pname']) ?></h5>
                                         <p class="text-muted mb-2">

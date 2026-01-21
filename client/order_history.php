@@ -206,7 +206,7 @@ $orders = $stmt->get_result();
                 <ul class="nav align-items-center gap-2">
                     <li class="nav-item"><a class="nav-link" href="../design_dashboard.php">Design</a></li>
                     <li class="nav-item"><a class="nav-link" href="../material_dashboard.php">Material</a></li>
-                    <li class="nav-item"><a class="nav-link" href="furniture_dashboard.php">Furniture</a></li>
+                    <li class="nav-item"><a class="nav-link" href="../furniture_dashboard.php">Furniture</a></li>
                 </ul>
             </nav>
         </div>

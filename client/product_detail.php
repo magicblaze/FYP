@@ -26,25 +26,24 @@ $stmt->execute();
 $product = $stmt->get_result()->fetch_assoc();
 if (!$product) { http_response_code(404); die('Product not found.'); }
 
-// Parse colors from database
-    $colors = [];
-    if (!empty($product['color'])) {
-        // Split colors by comma and trim whitespace
-        $colorArray = array_map('trim', explode(',', $product['color']));
-        $colors = array_filter($colorArray); // Remove empty values
-    }
-
-    // Get color images from ProductColorImage table
+    // Get color images from ProductColorImage table (regardless of Product.color field)
     $colorImages = [];
-    if (!empty($colors)) {
-        $colorImageSql = "SELECT color, image FROM ProductColorImage WHERE productid = ?";
-        $colorImageStmt = $mysqli->prepare($colorImageSql);
-        $colorImageStmt->bind_param("i", $productid);
-        $colorImageStmt->execute();
-        $colorImageResult = $colorImageStmt->get_result();
-        while ($row = $colorImageResult->fetch_assoc()) {
-            $colorImages[$row['color']] = $row['image'];
-        }
+    $colors = [];
+    $colorImageSql = "SELECT color, image FROM ProductColorImage WHERE productid = ? ORDER BY id ASC";
+    $colorImageStmt = $mysqli->prepare($colorImageSql);
+    $colorImageStmt->bind_param("i", $productid);
+    $colorImageStmt->execute();
+    $colorImageResult = $colorImageStmt->get_result();
+    while ($row = $colorImageResult->fetch_assoc()) {
+        $colorImages[$row['color']] = $row['image'];
+        $colors[] = $row['color'];
+    }
+    $colorImageStmt->close();
+    
+    // If no color images found, try to parse colors from Product.color field
+    if (empty($colors) && !empty($product['color'])) {
+        $colorArray = array_map('trim', explode(',', $product['color']));
+        $colors = array_filter($colorArray);
     }
 
 // Get other products from the same supplier
@@ -85,8 +84,19 @@ if (isset($_GET['from']) && $_GET['from'] === 'my_likes') {
     }
 }
 
-// Use DB-driven image endpoint
-$mainImg = '../supplier/product_image.php?id=' . (int)$product['productid'];
+// Get the first color's image from ProductColorImage table
+$mainImg = null;
+if (!empty($colorImages)) {
+    // Get the first image from colorImages array
+    $firstImage = reset($colorImages);
+    if ($firstImage) {
+        $mainImg = '../uploads/products/' . htmlspecialchars($firstImage);
+    }
+}
+// Fallback to placeholder if no image found
+if (!$mainImg) {
+    $mainImg = '../uploads/products/placeholder.jpg';
+}
 
 // Function to convert color name or hex code to hex code
 // Supports both formats: "red" -> "#FF0000" and "#FF0000" -> "#FF0000"
@@ -584,7 +594,17 @@ function colorNameToHex($colorInput) {
         <div class="detail-gallery-images">
             <?php while ($r = $others->fetch_assoc()): ?>
                 <a href="product_detail.php?id=<?= (int)$r['productid'] ?>">
-                    <img src="../supplier/product_image.php?id=<?= (int)$r['productid'] ?>" alt="<?= htmlspecialchars($r['pname']) ?>">
+                    <?php 
+                        // Get first color image for related product
+                        $relatedColorSql = "SELECT image FROM ProductColorImage WHERE productid = ? ORDER BY id ASC LIMIT 1";
+                        $relatedColorStmt = $mysqli->prepare($relatedColorSql);
+                        $relatedColorStmt->bind_param("i", $r['productid']);
+                        $relatedColorStmt->execute();
+                        $relatedColorResult = $relatedColorStmt->get_result();
+                        $relatedImage = $relatedColorResult->fetch_assoc();
+                        $imageSrc = ($relatedImage && $relatedImage['image']) ? '../uploads/products/' . htmlspecialchars($relatedImage['image']) : '../uploads/products/placeholder.jpg';
+                    ?>
+                    <img src="<?= $imageSrc ?>" alt="<?= htmlspecialchars($r['pname']) ?>">
                 </a>
             <?php endwhile; ?>
         </div>
@@ -628,17 +648,34 @@ function colorNameToHex($colorInput) {
 
     // Update product image based on selected color
     function updateProductImage(color) {
-        const productId = <?= (int)$productid ?>;
         const colorImages = <?= json_encode($colorImages) ?>;
         const productImg = document.querySelector('.product-image-wrapper img');
         
-        if (colorImages && colorImages[color]) {
-            // If color has a specific image, use it
-            const imageUrl = '../supplier/product_color_image.php?productid=' + productId + '&color=' + encodeURIComponent(color);
+        // Find the image with case-insensitive color matching
+        let imageFile = null;
+        if (colorImages) {
+            // Try exact match first
+            if (colorImages[color]) {
+                imageFile = colorImages[color];
+            } else {
+                // Try case-insensitive match
+                const colorLower = color.toLowerCase();
+                for (const key in colorImages) {
+                    if (key.toLowerCase() === colorLower) {
+                        imageFile = colorImages[key];
+                        break;
+                    }
+                }
+            }
+        }
+        
+        if (imageFile) {
+            // If color has a specific image, use it from ProductColorImage table
+            const imageUrl = '../uploads/products/' + imageFile;
             productImg.src = imageUrl;
         } else {
-            // Otherwise, use the main product image
-            productImg.src = '../supplier/product_image.php?id=' + productId;
+            // Otherwise, use placeholder
+            productImg.src = '../uploads/products/placeholder.jpg';
         }
     }
 

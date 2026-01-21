@@ -26,19 +26,22 @@ $sql = "
         op.orderid,
         op.deliverydate,
         op.status,
+        COALESCE(op.color, '') as color,
         p.pname,
         p.price,
-        p.image,
         o.odate,
         o.ostatus,
         c.cname,
         c.cemail,
-        c.address
+        c.address,
+        pci.image
     FROM OrderProduct op
     JOIN Product p ON op.productid = p.productid
     JOIN `Order` o ON op.orderid = o.orderid
     JOIN Client c ON o.clientid = c.clientid
+    LEFT JOIN ProductColorImage pci ON p.productid = pci.productid
     WHERE p.supplierid = ?
+    GROUP BY op.orderproductid
     ORDER BY op.orderproductid DESC
 ";
 
@@ -202,6 +205,72 @@ $availableStatuses = ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelle
             padding: 3rem 1rem;
             color: #6c757d;
         }
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            animation: fadeIn 0.3s ease-out;
+        }
+        .modal-box {
+            background: #2c3e50;
+            color: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+            text-align: center;
+            min-width: 350px;
+            animation: scaleIn 0.3s ease-out;
+        }
+        .modal-box .modal-title {
+            font-size: 0.9rem;
+            color: #bdc3c7;
+            margin-bottom: 1rem;
+        }
+        .modal-box .modal-message {
+            font-size: 1.1rem;
+            margin-bottom: 2rem;
+            font-weight: 500;
+        }
+        .modal-box .modal-btn {
+            background: none;
+            border: 2px solid #3498db;
+            color: #3498db;
+            padding: 0.7rem 2rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.95rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        .modal-box .modal-btn:hover {
+            background: #3498db;
+            color: white;
+        }
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
+        }
+        @keyframes scaleIn {
+            from {
+                transform: scale(0.9);
+                opacity: 0;
+            }
+            to {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
     </style>
 </head>
 <body>
@@ -244,7 +313,7 @@ $availableStatuses = ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelle
                         <!-- Product Image -->
                         <div>
                             <?php if (!empty($product['image'])): ?>
-                                <img src="product_image.php?id=<?= $product['productid'] ?>" 
+                                <img src="../uploads/products/<?= htmlspecialchars($product['image']) ?>" 
                                      alt="<?= htmlspecialchars($product['pname']) ?>" 
                                      class="product-image">
                             <?php else: ?>
@@ -267,6 +336,40 @@ $availableStatuses = ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelle
                         <div class="detail-item">
                             <div class="detail-label">Quantity</div>
                             <div class="detail-value"><?= $product['quantity'] ?></div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Color</div>
+                            <div class="detail-value">
+                                <?php if (!empty($product['color'])): ?>
+                                    <?php
+                                        $colorName = $product['color'];
+                                        $colorHex = match(strtolower($colorName)) {
+                                            'red' => '#FF0000',
+                                            'blue' => '#0000FF',
+                                            'green' => '#008000',
+                                            'yellow' => '#FFFF00',
+                                            'black' => '#000000',
+                                            'white' => '#FFFFFF',
+                                            'grey' => '#808080',
+                                            'gray' => '#808080',
+                                            'orange' => '#FFA500',
+                                            'purple' => '#800080',
+                                            'pink' => '#FFC0CB',
+                                            'brown' => '#A52A2A',
+                                            'beige' => '#F5F5DC',
+                                            'navy' => '#000080',
+                                            'silver' => '#C0C0C0',
+                                            'gold' => '#FFD700',
+                                            'cyan' => '#00FFFF',
+                                            'magenta' => '#FF00FF',
+                                            default => '#CCCCCC'
+                                        };
+                                    ?>
+                                    <div style="display: inline-block; width: 30px; height: 30px; background-color: <?= $colorHex ?>; border: 1px solid #999; border-radius: 4px;" title="<?= htmlspecialchars($colorName) ?>"></div>
+                                <?php else: ?>
+                                    <span class="text-muted">N/A</span>
+                                <?php endif; ?>
+                            </div>
                         </div>
                         <div class="detail-item">
                             <div class="detail-label">Delivery Date</div>
@@ -386,12 +489,34 @@ $availableStatuses = ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelle
             });
         }
 
+        function showModal(message, title, callback = null) {
+            const overlay = document.createElement('div');
+            overlay.className = 'modal-overlay';
+            const modalBox = document.createElement('div');
+            modalBox.className = 'modal-box';
+            const callbackFn = callback ? callback : 'this.closest(".modal-overlay").remove()';
+            modalBox.innerHTML = `
+                <div class="modal-title">${title}</div>
+                <div class="modal-message">${message}</div>
+                <button class="modal-btn" onclick="${callbackFn}">確定</button>
+            `;
+            overlay.appendChild(modalBox);
+            document.body.appendChild(overlay);
+        }
+
         function updateStatus(selectElement) {
             const orderProductId = selectElement.dataset.orderproductid;
             const newStatus = selectElement.value;
 
             if (!newStatus) {
                 alert('Please select a status');
+                return;
+            }
+
+            // 显示确认对话框
+            if (!confirm('Are you sure you want to update the status to "' + newStatus + '"?')) {
+                // 用户点击取消，重置选择框
+                selectElement.value = '';
                 return;
             }
 

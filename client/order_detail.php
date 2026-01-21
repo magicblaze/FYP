@@ -50,7 +50,8 @@ $clientStmt->execute();
 $clientData = $clientStmt->get_result()->fetch_assoc();
 
 // Fetch products/materials for this order
-$productsSql = "SELECT op.orderproductid, op.productid, op.quantity, op.managerid,
+$productsSql = "SELECT op.orderproductid, op.productid, op.quantity, op.managerid, op.status,
+                       op.color,
                        p.pname, p.price, p.category, p.description,
                        m.mname as manager_name
                 FROM OrderProduct op
@@ -78,7 +79,7 @@ $contractorsStmt->execute();
 $contractors = $contractorsStmt->get_result();
 
 // Fetch schedule/timeline information
-$scheduleSql = "SELECT s.scheduleid, s.managerid, s.FinishDate,
+$scheduleSql = "SELECT s.scheduleid, s.managerid, s.OrderFinishDate,
                        m.mname as manager_name
                 FROM Schedule s
                 JOIN Manager m ON s.managerid = m.managerid
@@ -402,10 +403,12 @@ $products->data_seek(0);
                     <thead>
                         <tr>
                             <th>Product Name</th>
+                            <th>Color</th>
                             <th>Category</th>
                             <th>Unit Price</th>
                             <th>Quantity</th>
                             <th>Total</th>
+                            <th>Status</th>
                             <th>Assigned Manager</th>
                         </tr>
                     </thead>
@@ -418,10 +421,50 @@ $products->data_seek(0);
                                         <br><small class="text-muted"><?= htmlspecialchars(substr($product['description'], 0, 60)) ?></small>
                                     <?php endif; ?>
                                 </td>
+                                <td>
+                                    <?php
+                                        $colorName = $product['color'] ?? 'N/A';
+                                        $colorHex = match(strtolower($colorName)) {
+                                            'red' => '#FF0000',
+                                            'blue' => '#0000FF',
+                                            'green' => '#008000',
+                                            'yellow' => '#FFFF00',
+                                            'black' => '#000000',
+                                            'white' => '#FFFFFF',
+                                            'grey' => '#808080',
+                                            'gray' => '#808080',
+                                            'orange' => '#FFA500',
+                                            'purple' => '#800080',
+                                            'pink' => '#FFC0CB',
+                                            'brown' => '#A52A2A',
+                                            'beige' => '#F5F5DC',
+                                            'navy' => '#000080',
+                                            'silver' => '#C0C0C0',
+                                            'gold' => '#FFD700',
+                                            'cyan' => '#00FFFF',
+                                            'magenta' => '#FF00FF',
+                                            default => '#CCCCCC'
+                                        };
+                                    ?>
+                                    <div style="display: inline-block; width: 30px; height: 30px; background-color: <?= $colorHex ?>; border: 1px solid #999; border-radius: 4px; title='<?= htmlspecialchars($colorName) ?>'" title="<?= htmlspecialchars($colorName) ?>"></div>
+                                </td>
                                 <td><?= htmlspecialchars($product['category']) ?></td>
                                 <td class="price-highlight">$<?= number_format((float)$product['price'], 2) ?></td>
                                 <td><?= (int)$product['quantity'] ?></td>
                                 <td class="price-highlight">$<?= number_format((float)$product['price'] * $product['quantity'], 2) ?></td>
+                                <td>
+                                    <?php
+                                        $status = $product['status'] ?? 'Pending';
+                                        $statusClass = match($status) {
+                                            'Completed' => 'badge bg-success',
+                                            'In Progress' => 'badge bg-info',
+                                            'Pending' => 'badge bg-warning',
+                                            'Cancelled' => 'badge bg-danger',
+                                            default => 'badge bg-secondary'
+                                        };
+                                    ?>
+                                    <span class="<?= $statusClass ?>"><?= htmlspecialchars($status) ?></span>
+                                </td>
                                 <td>
                                     <span class="manager-badge">
                                         <i class="fas fa-user-tie me-1"></i><?= htmlspecialchars($product['manager_name']) ?>
@@ -444,47 +487,6 @@ $products->data_seek(0);
                 </div>
             <?php endif; ?>
 
-            <!-- Contractors Section -->
-            <div class="section-title">
-                <i class="fas fa-users me-2"></i>Assigned Contractors
-            </div>
-            <?php if ($contractors->num_rows > 0): ?>
-                <table class="contractor-table">
-                    <thead>
-                        <tr>
-                            <th>Contractor Name</th>
-                            <th>Contact</th>
-                            <th>Email</th>
-                            <th>Service Price</th>
-                            <th>Assigned Manager</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php while ($contractor = $contractors->fetch_assoc()): ?>
-                            <tr>
-                                <td><strong><?= htmlspecialchars($contractor['contractor_name']) ?></strong></td>
-                                <td><?= htmlspecialchars($contractor['ctel']) ?></td>
-                                <td>
-                                    <a href="mailto:<?= htmlspecialchars($contractor['cemail']) ?>" class="text-decoration-none">
-                                        <?= htmlspecialchars($contractor['cemail']) ?>
-                                    </a>
-                                </td>
-                                <td class="price-highlight">$<?= number_format((float)$contractor['price'], 2) ?></td>
-                                <td>
-                                    <span class="manager-badge">
-                                        <i class="fas fa-user-tie me-1"></i><?= htmlspecialchars($contractor['manager_name']) ?>
-                                    </span>
-                                </td>
-                            </tr>
-                        <?php endwhile; ?>
-                    </tbody>
-                </table>
-            <?php else: ?>
-                <div class="empty-message">
-                    <i class="fas fa-users"></i>
-                    <p>No contractors assigned yet.</p>
-                </div>
-            <?php endif; ?>
 
             <!-- Schedule/Timeline Section -->
             <div class="section-title">
@@ -502,7 +504,7 @@ $products->data_seek(0);
                     <tbody>
                         <?php while ($schedule = $schedules->fetch_assoc()): ?>
                             <?php
-                            $finishDate = strtotime($schedule['FinishDate']);
+                            $finishDate = strtotime($schedule['OrderFinishDate']);
                             $today = strtotime(date('Y-m-d'));
                             $isOverdue = $finishDate < $today;
                             $isUpcoming = $finishDate >= $today && $finishDate <= strtotime('+7 days');

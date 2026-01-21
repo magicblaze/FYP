@@ -39,6 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 	}
 	
 	// Process each color and its associated image
+	// Each color MUST have an image
 	foreach ($colors as $idx => $color) {
 		if ($colorImages && isset($colorImages['name'][$idx]) && $colorImages['error'][$idx] === UPLOAD_ERR_OK) {
 			$ext = pathinfo($colorImages['name'][$idx], PATHINFO_EXTENSION);
@@ -54,70 +55,72 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 	}
 	$colorStr = implode(", ", $colors);
 
-	// Handle main product image upload
-	$imageName = null;
-	if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
-		$ext = pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION);
-		$imageName = uniqid('prod_', true) . '.' . $ext;
-		$uploadDir = __DIR__ . '/../uploads/products/';
-		if (!is_dir($uploadDir)) {
-			mkdir($uploadDir, 0777, true);
+		// Check if all colors have images
+		$allColorsHaveImages = true;
+		foreach ($colors as $color) {
+			if (empty($colorImageNames[$color])) {
+				$allColorsHaveImages = false;
+				break;
+			}
 		}
-		if (!move_uploaded_file($_FILES['image']['tmp_name'], $uploadDir . $imageName)) {
-			$error = 'Failed to upload main product image.';
-			$imageName = null;
-		}
-	}
 
-		if ($pname && $price > 0 && $category && $imageName && !empty($colors)) {
-			$stmt = $mysqli->prepare("INSERT INTO Product (pname, image, price, likes, category, description, `long`, `wide`, `tall`, color, material, supplierid) VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)");
-		if (!$stmt) {
-			$error = 'Database error: ' . $mysqli->error;
-		} else {
-			$stmt->bind_param("ssissssssss", $pname, $imageName, $price, $category, $description, $long, $wide, $tall, $colorStr, $material, $supplierId);
-			if ($stmt->execute()) {
-				$productId = $mysqli->insert_id;
-				// Insert color-image mapping
-				$colorInsertSuccess = true;
-				foreach ($colors as $color) {
-					if (!empty($colorImageNames[$color])) {
-						$pciStmt = $mysqli->prepare("INSERT INTO ProductColorImage (productid, color, image) VALUES (?, ?, ?)");
-						if ($pciStmt) {
-							$pciStmt->bind_param("iss", $productId, $color, $colorImageNames[$color]);
-							if (!$pciStmt->execute()) {
+		// Use the first color's image as the main product image
+		$imageName = null;
+		if (!empty($colors) && !empty($colorImageNames[$colors[0]])) {
+			$imageName = $colorImageNames[$colors[0]];
+		}
+
+			if ($pname && $price > 0 && $category && $imageName && !empty($colors) && $allColorsHaveImages) {
+				$stmt = $mysqli->prepare("INSERT INTO Product (pname, price, likes, category, description, `long`, `wide`, `tall`, color, material, supplierid) VALUES (?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)");
+			if (!$stmt) {
+				$error = 'Database error: ' . $mysqli->error;
+			} else {
+				$stmt->bind_param("sissssssss", $pname, $price, $category, $description, $long, $wide, $tall, $colorStr, $material, $supplierId);
+				if ($stmt->execute()) {
+					$productId = $mysqli->insert_id;
+					// Insert color-image mapping into ProductColorImage table
+					$colorInsertSuccess = true;
+					foreach ($colors as $color) {
+						if (!empty($colorImageNames[$color])) {
+							$pciStmt = $mysqli->prepare("INSERT INTO ProductColorImage (productid, color, image) VALUES (?, ?, ?)");
+							if ($pciStmt) {
+								$pciStmt->bind_param("iss", $productId, $color, $colorImageNames[$color]);
+								if (!$pciStmt->execute()) {
+									$colorInsertSuccess = false;
+								}
+								$pciStmt->close();
+							} else {
 								$colorInsertSuccess = false;
 							}
-							$pciStmt->close();
-						} else {
-							$colorInsertSuccess = false;
 						}
 					}
-				}
-				if ($colorInsertSuccess) {
-					$success = true;
-				} else {
-					$error = 'Product added but some color images failed to save.';
-				}
+					if ($colorInsertSuccess) {
+						$success = true;
+					} else {
+						$error = 'Product added but some color images failed to save.';
+					}
 			} else {
 				$error = 'Database error: ' . $stmt->error;
 			}
 			$stmt->close();
 		}
-	} else {
-		if (!$pname) {
-			$error = 'Please enter a product name.';
-		} elseif ($price <= 0) {
-			$error = 'Please enter a valid price.';
-		} elseif (!$category) {
-			$error = 'Please select a category.';
-		} elseif (!$imageName) {
-			$error = 'Please upload a main product image.';
-		} elseif (empty($colors)) {
-			$error = 'Please add at least one color.';
 		} else {
-			$error = 'Please fill in all required fields.';
+			if (!$pname) {
+				$error = 'Please enter a product name.';
+			} elseif ($price <= 0) {
+				$error = 'Please enter a valid price.';
+			} elseif (!$category) {
+				$error = 'Please select a category.';
+			} elseif (empty($colors)) {
+				$error = 'Please add at least one color.';
+			} elseif (!$allColorsHaveImages) {
+				$error = 'Each color must have an image. Please upload an image for all colors.';
+			} elseif (!$imageName) {
+				$error = 'Please upload an image for the first color.';
+			} else {
+				$error = 'Please fill in all required fields.';
+			}
 		}
-	}
 }
 ?>
 <!DOCTYPE html>
@@ -346,13 +349,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 										<input type="text" name="pname" class="form-control" required>
 									</div>
 								</div>
-								<div class="col-md-6">
-									<div class="form-section">
-										<label class="form-label"><i class="fas fa-image"></i> Main Image *</label>
-										<input type="file" name="image" class="form-control" accept="image/*" required>
-										<small class="form-text text-muted">This is the main product image</small>
-									</div>
-								</div>
+
 								<div class="col-md-4">
 									<div class="form-section">
 										<label class="form-label"><i class="fas fa-dollar-sign"></i> Price (HK$) *</label>
@@ -406,7 +403,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 								<div class="col-md-12">
 									<div class="form-section">
 										<label class="form-label"><i class="fas fa-palette"></i> Product Colors *</label>
-										<p class="form-text text-muted mb-2">Add colors for your product. Each color can have its own image.</p>
+										<p class="form-text text-muted mb-2">Add colors for your product. Each color MUST have an image.</p>
 										
 										<!-- Add Color Input Section -->
 										<div class="add-color-section">
@@ -416,7 +413,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 													<input type="color" id="main-color-picker" class="form-control form-control-color" value="#C0392B">
 												</div>
 												<div class="color-picker-item" style="flex: 1; min-width: 200px;">
-													<label for="main-color-image">Select Image (Optional):</label>
+													<label for="main-color-image">Select Image (Required) *:</label>
 													<input type="file" id="main-color-image" class="form-control" accept="image/*">
 												</div>
 												<button type="button" class="btn btn-primary" id="add-main-color-btn">
@@ -429,7 +426,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 										<div id="color-list-container">
 											<div id="empty-colors-state" class="empty-state">
 												<i class="fas fa-palette"></i>
-												<p>No colors added yet. Pick a color above and click "Add Color".</p>
+												<p>No colors added yet. Pick a color and image above, then click "Add Color".</p>
 											</div>
 											<div id="color-list" class="color-list" style="display: none;"></div>
 										</div>
@@ -499,24 +496,17 @@ function updateColorDisplay() {
 		colorDiv.className = 'color-item';
 		
 		let imagePreviewHtml = '';
+		let imageStatusClass = 'text-danger';
+		let imageStatusText = 'No image (Required)';
+		
 		if (item.imageFile) {
 			const imageUrl = URL.createObjectURL(item.imageFile);
-			imagePreviewHtml = `<img src="${imageUrl}" alt="Color image" class="color-image-preview">`;
+			imagePreviewHtml = '<img src="' + imageUrl + '" alt="Color image" class="color-image-preview">';
+			imageStatusClass = 'text-success';
+			imageStatusText = 'Image: ' + item.imageFile.name;
 		}
 		
-		colorDiv.innerHTML = `
-			<div class="color-swatch" style="background-color: ${item.color};"></div>
-			<div class="color-info">
-				<div class="color-code">${item.color.toUpperCase()}</div>
-				<small class="text-muted">${item.imageFile ? 'Image: ' + item.imageFile.name : 'No image'}</small>
-			</div>
-			${imagePreviewHtml}
-			<div class="color-actions">
-				<button type="button" class="btn btn-sm btn-outline-danger btn-remove-color" onclick="removeColor(${idx})">
-					<i class="fas fa-trash"></i> Remove
-				</button>
-			</div>
-		`;
+		colorDiv.innerHTML = '<div class="color-swatch" style="background-color: ' + item.color + ';"></div><div class="color-info"><div class="color-code">' + item.color.toUpperCase() + '</div><small class="' + imageStatusClass + '">' + imageStatusText + '</small></div>' + imagePreviewHtml + '<div class="color-actions"><button type="button" class="btn btn-sm btn-outline-danger btn-remove-color" onclick="removeColor(' + idx + ')"><i class="fas fa-trash"></i> Remove</button></div>';
 		colorList.appendChild(colorDiv);
 	});
 	
@@ -562,6 +552,12 @@ addMainColorBtn.addEventListener('click', function() {
 		return;
 	}
 	
+	// Check if image is provided (required)
+	if (!imageFile) {
+		alert('Please select an image for this color. Each color must have an image.');
+		return;
+	}
+	
 	selectedColors.push({
 		color: color,
 		imageFile: imageFile
@@ -579,6 +575,14 @@ form.addEventListener('submit', function(e) {
 	if (selectedColors.length === 0) {
 		e.preventDefault();
 		alert('Please add at least one color!');
+		return false;
+	}
+	
+	// Check if all colors have images
+	const allColorsHaveImages = selectedColors.every(item => item.imageFile !== null);
+	if (!allColorsHaveImages) {
+		e.preventDefault();
+		alert('Each color must have an image. Please upload an image for all colors.');
 		return false;
 	}
 });

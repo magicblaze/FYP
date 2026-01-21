@@ -421,6 +421,14 @@ $mainImg = $baseUrlEarly . $appRoot . '/design_image.php?id=' . (int)$design['de
     <?php endif; ?>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
+    <script>
+    // 處理訂單按鈕點擊事件
+    function handleOrder(designId) {
+        // 重定向到訂單頁面
+        window.location.href = 'order.php?designid=' + designId;
+    }
+    </script>
+
     <!-- Chat widget: include unified PHP widget (handles markup and initialization) -->
     <?php
         // Provide server-side share payload so the widget handles sharing internally

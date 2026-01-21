@@ -1,7 +1,7 @@
 <?php
 // ==============================
 // File: supplier/update_product.php
-// 处理产品编辑更新的后端脚本 - 支持颜色编辑 (改进版本)
+// 处理产品编辑更新的后端脚本 - 主圖片自動關聯到第一個顏色 (改进版本)
 // ==============================
 
 error_reporting(E_ALL);
@@ -48,7 +48,6 @@ try {
     $wide = isset($_POST['wide']) ? trim($_POST['wide']) : '';
     $tall = isset($_POST['tall']) ? trim($_POST['tall']) : '';
     $material = isset($_POST['material']) ? trim($_POST['material']) : '';
-    $removeImage = isset($_POST['remove_image']) ? intval($_POST['remove_image']) : 0;
 
     // 处理颜色数据
     $colorsData = isset($_POST['colors_data']) ? json_decode($_POST['colors_data'], true) : [];
@@ -70,7 +69,7 @@ try {
     }
 
     // 检查产品是否存在且属于当前供应商
-    $checkSql = "SELECT supplierid, image FROM Product WHERE productid = ?";
+    $checkSql = "SELECT supplierid FROM Product WHERE productid = ?";
     $checkStmt = $mysqli->prepare($checkSql);
     if (!$checkStmt) {
         throw new Exception('Prepare failed (check): ' . $mysqli->error);
@@ -91,71 +90,13 @@ try {
     }
     $checkStmt->close();
 
-    // ========== 图片处理逻辑 ==========
+    // ========== 图片处理逻辑：主圖片將自動關聯到第一個顏色的圖片 ==========
     $newImagePath = null;
-    
-    if ($removeImage == 1) {
-        if (!empty($productRow['image'])) {
-            $oldImagePath = __DIR__ . '/../uploads/products/' . $productRow['image'];
-            if (file_exists($oldImagePath)) {
-                unlink($oldImagePath);
-            }
-        }
-        $newImagePath = '';
-    }
-    
-    if (isset($_FILES['image']) && $_FILES['image']['error'] !== UPLOAD_ERR_NO_FILE) {
-        if ($_FILES['image']['error'] !== UPLOAD_ERR_OK) {
-            throw new Exception('File upload error: ' . $_FILES['image']['error']);
-        }
-
-        $file = $_FILES['image'];
-        
-        // 验证文件类型
-        $allowedMimes = ['image/jpeg'];
-        $finfo = finfo_open(FILEINFO_MIME_TYPE);
-        $mimeType = finfo_file($finfo, $file['tmp_name']);
-        finfo_close($finfo);
-        
-        if (!in_array($mimeType, $allowedMimes)) {
-            throw new Exception('Invalid file type. Only JPG/JPEG files are allowed');
-        }
-        
-        // 验证文件大小（5MB）
-        $maxSize = 5 * 1024 * 1024;
-        if ($file['size'] > $maxSize) {
-            throw new Exception('File size exceeds 5MB limit');
-        }
-        
-        // 验证文件扩展名
-        $fileExt = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-        if (!in_array($fileExt, ['jpg', 'jpeg'])) {
-            throw new Exception('Invalid file extension. Only JPG/JPEG files are allowed');
-        }
-        
-        // 生成唯一的文件名
-        $fileName = 'product_' . $productId . '_' . time() . '.jpg';
-        $filePath = $uploadDir . $fileName;
-        
-        // 移动上传的文件
-        if (!move_uploaded_file($file['tmp_name'], $filePath)) {
-            throw new Exception('Failed to move uploaded file');
-        }
-        
-        // 删除旧图片（如果存在）
-        if (!empty($productRow['image'])) {
-            $oldImagePath = __DIR__ . '/../uploads/products/' . $productRow['image'];
-            if (file_exists($oldImagePath)) {
-                unlink($oldImagePath);
-            }
-        }
-        
-        $newImagePath = $fileName;
-    }
 
     // ========== 处理颜色和颜色图片 ==========
     $colorStr = '';
     $newColors = [];
+    $firstColorImageName = null; // 用於存儲第一個顏色的圖片
     
     if (!empty($colorsData) && is_array($colorsData)) {
         foreach ($colorsData as $idx => $colorData) {
@@ -181,8 +122,8 @@ try {
                         throw new Exception('Invalid color image file type');
                     }
                     
-                    if ($file['size'] > 5 * 1024 * 1024) {
-                        throw new Exception('Color image size exceeds 5MB limit');
+                    if ($file['size'] > 50 * 1024 * 1024) {
+                        throw new Exception('Color image size exceeds 50MB limit');
                     }
                     
                     // 生成唯一的文件名
@@ -212,40 +153,61 @@ try {
                         $deleteOldStmt->close();
                     }
                     
-                    // 更新或插入颜色-图片映射
-                    $upsertSql = "INSERT INTO ProductColorImage (productid, color, image) VALUES (?, ?, ?) 
-                                  ON DUPLICATE KEY UPDATE image = ?";
-                    $upsertStmt = $mysqli->prepare($upsertSql);
-                    if ($upsertStmt) {
-                        $upsertStmt->bind_param("isss", $productId, $color, $colorImageName, $colorImageName);
-                        $upsertStmt->execute();
-                        $upsertStmt->close();
+                    // 插入新的颜色-图片映射
+                    // 注意：ProductColorImage 表没有 UNIQUE 约束，所以不能使用 ON DUPLICATE KEY
+                    // 旧记录已经删除，现在直接插入新记录
+                    $insertSql = "INSERT INTO ProductColorImage (productid, color, image) VALUES (?, ?, ?)";
+                    $insertStmt = $mysqli->prepare($insertSql);
+                    if ($insertStmt) {
+                        $insertStmt->bind_param("iss", $productId, $color, $colorImageName);
+                        if (!$insertStmt->execute()) {
+                            throw new Exception('Failed to insert color image mapping: ' . $insertStmt->error);
+                        }
+                        $insertStmt->close();
+                    } else {
+                        throw new Exception('Failed to prepare insert statement: ' . $mysqli->error);
+                    }
+                    
+                    // 如果是第一個顏色，記錄其圖片名稱
+                    if ($idx == 0) {
+                        $firstColorImageName = $colorImageName;
                     }
                 }
             }
         }
         
         $colorStr = implode(", ", $newColors);
+        
+        // 如果有新的第一個顏色圖片，使用它作為主圖片
+        if ($firstColorImageName !== null) {
+            $newImagePath = $firstColorImageName;
+        } elseif (!empty($newColors)) {
+            // 否則，使用現有的第一個顏色圖片作為主圖片
+            $firstColor = $newColors[0];
+            $getFirstColorImageSql = "SELECT image FROM ProductColorImage WHERE productid = ? AND color = ?";
+            $getFirstColorImageStmt = $mysqli->prepare($getFirstColorImageSql);
+            if ($getFirstColorImageStmt) {
+                $getFirstColorImageStmt->bind_param("is", $productId, $firstColor);
+                $getFirstColorImageStmt->execute();
+                $getFirstColorImageResult = $getFirstColorImageStmt->get_result();
+                if ($getFirstColorImageResult->num_rows > 0) {
+                    $firstColorImageRow = $getFirstColorImageResult->fetch_assoc();
+                    $newImagePath = $firstColorImageRow['image'];
+                }
+                $getFirstColorImageStmt->close();
+            }
+        }
     }
 
     // ========== 数据库更新 ==========
-    if ($newImagePath !== null) {
-        // 如果上传了新图片，更新图片字段
-        $updateSql = "UPDATE Product SET pname = ?, category = ?, price = ?, description = ?, `long` = ?, `wide` = ?, `tall` = ?, color = ?, material = ?, image = ? WHERE productid = ? AND supplierid = ?";
-        $updateStmt = $mysqli->prepare($updateSql);
-        if (!$updateStmt) {
-            throw new Exception('Prepare failed (update): ' . $mysqli->error);
-        }
-        $updateStmt->bind_param("ssissssssii", $pname, $category, $price, $description, $long, $wide, $tall, $colorStr, $material, $newImagePath, $productId, $supplierId);
-    } else {
-        // 不更新图片字段
-        $updateSql = "UPDATE Product SET pname = ?, category = ?, price = ?, description = ?, `long` = ?, `wide` = ?, `tall` = ?, color = ?, material = ? WHERE productid = ? AND supplierid = ?";
-        $updateStmt = $mysqli->prepare($updateSql);
-        if (!$updateStmt) {
-            throw new Exception('Prepare failed (update): ' . $mysqli->error);
-        }
-        $updateStmt->bind_param("ssissssssii", $pname, $category, $price, $description, $long, $wide, $tall, $colorStr, $material, $productId, $supplierId);
+    // 更新產品信息（不更新image欄位，因為Product表中沒有該欄位）
+    // 主圖片自動關聯到第一個顏色的圖片，存儲在ProductColorImage表中
+    $updateSql = "UPDATE Product SET pname = ?, category = ?, price = ?, description = ?, `long` = ?, `wide` = ?, `tall` = ?, color = ?, material = ? WHERE productid = ? AND supplierid = ?";
+    $updateStmt = $mysqli->prepare($updateSql);
+    if (!$updateStmt) {
+        throw new Exception('Prepare failed (update): ' . $mysqli->error);
     }
+    $updateStmt->bind_param("ssissssssii", $pname, $category, $price, $description, $long, $wide, $tall, $colorStr, $material, $productId, $supplierId);
 
     if (!$updateStmt->execute()) {
         throw new Exception('Execute failed (update): ' . $updateStmt->error);
@@ -258,7 +220,7 @@ try {
     echo json_encode([
         'success' => true, 
         'message' => 'Product updated successfully with all colors and images',
-        'image_path' => $newImagePath
+        'first_color_image' => $newImagePath
     ]);
 
 } catch (Exception $e) {

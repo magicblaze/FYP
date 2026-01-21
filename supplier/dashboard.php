@@ -24,7 +24,8 @@ $result = $stmt->get_result();
 
 // 3. 为每个产品加载颜色图片信息
 $productColorImages = [];
-$colorImageSql = "SELECT productid, color, image FROM ProductColorImage";
+$productFirstColorImages = []; // 存储每个产品的第一个颜色图片
+$colorImageSql = "SELECT productid, color, image FROM ProductColorImage ORDER BY productid, id ASC";
 $colorImageStmt = $mysqli->prepare($colorImageSql);
 $colorImageStmt->execute();
 $colorImageResult = $colorImageStmt->get_result();
@@ -34,6 +35,8 @@ while ($row = $colorImageResult->fetch_assoc()) {
     $color = $row['color'];
     if (!isset($productColorImages[$productId])) {
         $productColorImages[$productId] = [];
+        // 第一个颜色的图片作为主图片
+        $productFirstColorImages[$productId] = $row['image'];
     }
     $productColorImages[$productId][$color] = $row['image'];
 }
@@ -313,7 +316,15 @@ $colorImageStmt->close();
                                 <?php while ($row = $result->fetch_assoc()): ?>
                                 <tr>
                                     <td class="ps-4">
-                                        <img src="product_image.php?id=<?= $row['productid'] ?>" alt="img">
+                                        <?php 
+                                            $productId = $row['productid'];
+                                            $imageFile = $productFirstColorImages[$productId] ?? null;
+                                            if ($imageFile) {
+                                                echo '<img src="../uploads/products/' . htmlspecialchars($imageFile) . '" alt="Product Image" style="width: 50px; height: 50px; object-fit: cover; border-radius: 5px;">';
+                                            } else {
+                                                echo '<img src="../uploads/products/placeholder.jpg" alt="No Image" style="width: 50px; height: 50px; object-fit: cover; border-radius: 5px;">';
+                                            }
+                                        ?>
                                     </td>
                                     <td>
                                         <div class="fw-bold"><?= htmlspecialchars($row['pname']) ?></div>
@@ -357,43 +368,7 @@ $colorImageStmt->close();
                         <input type="hidden" id="productId" name="productid">
                         
                         <!-- 图片上传字段 -->
-                        <div class="row g-3 mb-2">
-                            <div class="col-md-12">
-                                <div class="form-section">
-                                    <label class="form-label"><i class="fas fa-image"></i> Product Image (JPG)</label>
-                                    
-                                    <!-- 当前图片显示 -->
-                                    <div id="current-image-container" class="mb-3" style="display:none;">
-                                        <div class="alert alert-info d-flex align-items-center justify-content-between">
-                                            <div>
-                                                <strong>Current Image:</strong>
-                                                <img id="current-image" src="" alt="Current Image" style="max-width: 100px; max-height: 100px; border-radius: 4px; margin-top: 0.5rem;">
-                                            </div>
-                                            <button type="button" class="btn btn-sm btn-danger" onclick="removeCurrentImage()">
-                                                <i class="fas fa-trash me-1"></i>Remove
-                                            </button>
-                                        </div>
-                                    </div>
-                                    
-                                    <!-- 新图片上传 -->
-                                    <div class="d-flex align-items-center gap-2 mb-2">
-                                        <input type="file" id="productImage" name="image" class="form-control" accept=".jpg,.jpeg" onchange="previewImage(event)">
-                                    </div>
-                                    <div class="form-text">Upload a JPG image for your product. Maximum size: 5MB.</div>
-                                    
-                                    <!-- 新图片预览 -->
-                                    <div id="image-preview-container" class="mt-2" style="display:none;">
-                                        <div class="alert alert-success">
-                                            <strong>New Image Preview:</strong>
-                                            <img id="image-preview" src="" alt="Image Preview" style="max-width: 200px; max-height: 200px; border-radius: 8px; display: block; margin-top: 0.5rem;">
-                                        </div>
-                                    </div>
-                                    
-                                    <!-- 隐藏字段标记是否删除图片 -->
-                                    <input type="hidden" id="removeImage" name="remove_image" value="0">
-                                </div>
-                            </div>
-                        </div>
+
                         
                         <div class="row g-3 mb-2">
                             <div class="col-md-6">
@@ -628,52 +603,6 @@ $colorImageStmt->close();
         categorySelect.addEventListener('change', toggleMaterialField);
 
         /**
-         * 图片预览
-         */
-        function previewImage(event) {
-            const file = event.target.files[0];
-            const previewContainer = document.getElementById('image-preview-container');
-            const previewImg = document.getElementById('image-preview');
-            
-            if (file) {
-                // 验证文件大小（5MB）
-                if (file.size > 5 * 1024 * 1024) {
-                    alert('File size exceeds 5MB limit');
-                    event.target.value = '';
-                    previewContainer.style.display = 'none';
-                    return;
-                }
-                
-                // 验证文件格式
-                if (!file.type.match('image/jpeg')) {
-                    alert('Only JPG/JPEG files are allowed');
-                    event.target.value = '';
-                    previewContainer.style.display = 'none';
-                    return;
-                }
-                
-                // 显示预览
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    previewImg.src = e.target.result;
-                    previewContainer.style.display = 'block';
-                };
-                reader.readAsDataURL(file);
-            } else {
-                previewContainer.style.display = 'none';
-            }
-        }
-
-        /**
-         * 删除当前图片
-         */
-        function removeCurrentImage() {
-            document.getElementById('removeImage').value = '1';
-            document.getElementById('current-image-container').style.display = 'none';
-            alert('Current image will be removed when you save the product.');
-        }
-
-        /**
          * 加載產品數據到編輯表單
          */
         function loadProductData(productData, colorImages) {
@@ -686,19 +615,7 @@ $colorImageStmt->close();
             document.getElementById('productWide').value = productData.wide || '';
             document.getElementById('productTall').value = productData.tall || '';
             document.getElementById('productMaterial').value = productData.material || '';
-            document.getElementById('productImage').value = '';
-            document.getElementById('image-preview-container').style.display = 'none';
-            document.getElementById('removeImage').value = '0';
-            
-            // 显示当前图片
-            const currentImageContainer = document.getElementById('current-image-container');
-            if (productData.image) {
-                const currentImageElement = document.getElementById('current-image');
-                currentImageElement.src = 'product_image.php?id=' + productData.productid;
-                currentImageContainer.style.display = 'block';
-            } else {
-                currentImageContainer.style.display = 'none';
-            }
+
             
             // 保存颜色图片映射
             productColorImagesMap = colorImages || {};

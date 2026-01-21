@@ -52,7 +52,7 @@ try {
     }
 
     // ========== 检查产品是否存在且属于当前供应商 ==========
-    $checkSql = "SELECT image FROM Product WHERE productid = ? AND supplierid = ?";
+    $checkSql = "SELECT productid FROM Product WHERE productid = ? AND supplierid = ?";
     $checkStmt = $mysqli->prepare($checkSql);
     if (!$checkStmt) {
         throw new Exception('Prepare failed (check): ' . $mysqli->error);
@@ -66,7 +66,6 @@ try {
         http_response_code(404);
         throw new Exception('Product not found or you do not have permission to delete it');
     }
-    $productRow = $checkResult->fetch_assoc();
     $checkStmt->close();
 
     // ========== 检查是否有订单关联该产品 ==========
@@ -90,15 +89,35 @@ try {
         throw new Exception('This product has ' . $orderCount . ' related ' . $orderText . ' and cannot be deleted.');
     }
 
-    // ========== 删除产品图片文件 ==========
-    if (!empty($productRow['image'])) {
-        $imagePath = __DIR__ . '/../uploads/products/' . $productRow['image'];
-        if (file_exists($imagePath)) {
-            if (!unlink($imagePath)) {
-                // 图片删除失败，但继续删除产品
-                error_log('Warning: Failed to delete image file: ' . $imagePath);
+    // ========== 删除产品的颜色图片 ==========
+    // 从 ProductColorImage 表中获取所有颜色图片
+    $colorImageSql = "SELECT image FROM ProductColorImage WHERE productid = ?";
+    $colorImageStmt = $mysqli->prepare($colorImageSql);
+    if ($colorImageStmt) {
+        $colorImageStmt->bind_param("i", $productId);
+        $colorImageStmt->execute();
+        $colorImageResult = $colorImageStmt->get_result();
+        while ($colorRow = $colorImageResult->fetch_assoc()) {
+            if (!empty($colorRow['image'])) {
+                $imagePath = __DIR__ . '/../uploads/products/' . $colorRow['image'];
+                if (file_exists($imagePath)) {
+                    if (!unlink($imagePath)) {
+                        // 图片删除失败，但继续删除产品
+                        error_log('Warning: Failed to delete image file: ' . $imagePath);
+                    }
+                }
             }
         }
+        $colorImageStmt->close();
+    }
+
+    // ========== 从数据库中删除产品的颜色图片映射 ==========
+    $deleteColorImageSql = "DELETE FROM ProductColorImage WHERE productid = ?";
+    $deleteColorImageStmt = $mysqli->prepare($deleteColorImageSql);
+    if ($deleteColorImageStmt) {
+        $deleteColorImageStmt->bind_param("i", $productId);
+        $deleteColorImageStmt->execute();
+        $deleteColorImageStmt->close();
     }
 
     // ========== 从数据库中删除产品 ==========
