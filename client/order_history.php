@@ -220,7 +220,6 @@ $orders = $stmt->get_result();
                     </li>
                     <li class="nav-item"><a class="nav-link" href="../client/my_likes.php">My Likes</a></li>
                     <li class="nav-item"><a class="nav-link active" href="../client/order_history.php">Order History</a></li>
-                    <li class="nav-item"><a class="nav-link" href="../chat.php">Chatroom</a></li>
                     <li class="nav-item"><a class="nav-link" href="../logout.php">Logout</a></li>
                   <?php else: ?>
                     <li class="nav-item"><a class="nav-link" href="../login.php">Login</a></li>

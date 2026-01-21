@@ -1,7 +1,7 @@
 <?php
 // ==============================
-// File: product-detail.php (HYBRID - Supports Mixed Color Formats)
-// Purpose: Display product details with color selection supporting both color names and hex codes
+// File: product-detail.php (IMPROVED - With Color-Based Image Display)
+// Purpose: Display product details with color selection and dynamic image switching
 // ==============================
 require_once __DIR__ . '/../config.php';
 session_start();
@@ -25,6 +25,21 @@ if (!empty($product['color'])) {
     // Split colors by comma and trim whitespace
     $colorArray = array_map('trim', explode(',', $product['color']));
     $colors = array_filter($colorArray); // Remove empty values
+}
+
+// 查询颜色图片映射
+$colorImages = [];
+if (!empty($colors)) {
+    $colorImageSql = "SELECT color, image FROM ProductColorImage WHERE productid = ?";
+    $colorImageStmt = $mysqli->prepare($colorImageSql);
+    $colorImageStmt->bind_param("i", $productid);
+    $colorImageStmt->execute();
+    $colorImageResult = $colorImageStmt->get_result();
+    
+    while ($row = $colorImageResult->fetch_assoc()) {
+        $colorImages[$row['color']] = $row['image'];
+    }
+    $colorImageStmt->close();
 }
 
 // Use DB-driven image endpoint
@@ -159,12 +174,21 @@ function getColorDisplayName($colorInput) {
             border-radius: 12px;
             overflow: hidden;
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            background-color: #f8f9fa;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .product-image-wrapper img {
             width: 100%;
             height: 100%;
             object-fit: cover;
+            transition: opacity 0.3s ease;
+        }
+
+        .product-image-wrapper img.loading {
+            opacity: 0.5;
         }
 
         .product-panel {
@@ -257,6 +281,7 @@ function getColorDisplayName($colorInput) {
             min-width: 40px;
             height: 40px;
             text-align: center;
+            position: relative;
         }
 
         .color-button:hover {
@@ -326,6 +351,23 @@ function getColorDisplayName($colorInput) {
             margin: 0;
         }
 
+        /* Color image indicator */
+        .color-button[data-has-image="true"]::after {
+            content: "🖼";
+            position: absolute;
+            bottom: -5px;
+            right: -5px;
+            font-size: 12px;
+            background: white;
+            border-radius: 50%;
+            width: 18px;
+            height: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #3498db;
+        }
+
         @media (max-width: 768px) {
             .product-detail-wrapper {
                 flex-direction: column;
@@ -381,7 +423,7 @@ function getColorDisplayName($colorInput) {
         <div class="product-detail-wrapper">
             <!-- Product Image -->
             <div class="product-image-wrapper">
-                <img src="<?= htmlspecialchars($mainImg) ?>" alt="<?= htmlspecialchars($product['pname']) ?>">
+                <img id="productImage" src="<?= htmlspecialchars($mainImg) ?>" alt="<?= htmlspecialchars($product['pname']) ?>">
             </div>
 
             <div class="product-panel">
@@ -412,11 +454,13 @@ function getColorDisplayName($colorInput) {
                             <?php foreach ($colors as $index => $color): 
                                 $hexColor = colorToHex($color);
                                 $displayName = getColorDisplayName($color);
+                                $hasImage = isset($colorImages[$color]);
                             ?>
                                 <button type="button" 
-                                        class="color-button <?= $index === 0 ? 'selected' : '' ?>" 
+                                        class="color-button" 
                                         data-color="<?= htmlspecialchars($color) ?>"
                                         data-hex="<?= htmlspecialchars($hexColor) ?>"
+                                        data-has-image="<?= $hasImage ? 'true' : 'false' ?>"
                                         onclick="selectColor(this)"
                                         title="<?= htmlspecialchars($displayName) ?>">
                                     <span class="color-swatch" style="background-color: <?= htmlspecialchars($hexColor) ?>;"></span>
@@ -438,21 +482,35 @@ function getColorDisplayName($colorInput) {
                         </select>
                     <?php endif; ?>
                     
-                    <input type="hidden" id="selectedColor" value="<?= htmlspecialchars($colors[0]) ?>">
-                    <input type="hidden" id="selectedColorHex" value="<?= htmlspecialchars(colorToHex($colors[0])) ?>">
+                    <input type="hidden" id="selectedColor" value="">
+                    <input type="hidden" id="selectedColorHex" value="">
                 </div>
                 <?php endif; ?>
 
-                <?php if (!empty($product['size']) || !empty($product['material'])): ?>
                 <div class="product-specs">
                     <?php if (!empty($product['size'])): ?>
                         <div><i class="fas fa-ruler me-2"></i><strong>Size:</strong> <?= htmlspecialchars($product['size']) ?></div>
                     <?php endif; ?>
+                    
+                    <?php if (!empty($product['long']) || !empty($product['wide']) || !empty($product['tall'])): ?>
+                        <div style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #ecf0f1;">
+                            <div style="font-weight: 600; color: #2c3e50; margin-bottom: 0.75rem;">Dimensions:</div>
+                            <?php if (!empty($product['long'])): ?>
+                                <div style="margin-bottom: 0.5rem; margin-left: 1.5rem;"><strong>Length:</strong> <?= htmlspecialchars($product['long']) ?></div>
+                            <?php endif; ?>
+                            <?php if (!empty($product['wide'])): ?>
+                                <div style="margin-bottom: 0.5rem; margin-left: 1.5rem;"><strong>Width:</strong> <?= htmlspecialchars($product['wide']) ?></div>
+                            <?php endif; ?>
+                            <?php if (!empty($product['tall'])): ?>
+                                <div style="margin-left: 1.5rem;"><strong>Height:</strong> <?= htmlspecialchars($product['tall']) ?></div>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
+                    
                     <?php if (!empty($product['material'])): ?>
-                        <div><i class="fas fa-cube me-2"></i><strong>Material:</strong> <?= htmlspecialchars($product['material']) ?></div>
+                        <div style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #ecf0f1;"><i class="fas fa-cube me-2"></i><strong>Material:</strong> <?= htmlspecialchars($product['material']) ?></div>
                     <?php endif; ?>
                 </div>
-                <?php endif; ?>
 
                 <?php if (!empty($product['description'])): ?>
                 <div class="product-description">
@@ -465,6 +523,10 @@ function getColorDisplayName($colorInput) {
     </main>
 
     <script>
+    // 颜色图片映射（从 PHP 传递）
+    const colorImages = <?= json_encode($colorImages) ?>;
+    const productId = <?= $productid ?>;
+
     // Color selection function for button-based selection
     function selectColor(button) {
         const allButtons = document.querySelectorAll('.color-button');
@@ -476,6 +538,9 @@ function getColorDisplayName($colorInput) {
         const selectedHex = button.dataset.hex;
         document.getElementById('selectedColor').value = selectedColor;
         document.getElementById('selectedColorHex').value = selectedHex;
+        
+        // 更新图片
+        updateProductImage(selectedColor);
     }
 
     // Color selection function for dropdown-based selection
@@ -487,6 +552,40 @@ function getColorDisplayName($colorInput) {
             
             document.getElementById('selectedColor').value = selectedColor;
             document.getElementById('selectedColorHex').value = selectedHex;
+            
+            // 更新图片
+            updateProductImage(selectedColor);
+        }
+    }
+
+    // 更新产品图片
+    function updateProductImage(color) {
+        const productImg = document.getElementById('productImage');
+        
+        // 检查是否有该颜色的图片
+        if (colorImages[color]) {
+            // 使用颜色图片
+            const colorImageUrl = '../supplier/product_color_image.php?productid=' + productId + '&color=' + encodeURIComponent(color);
+            
+            // 添加加载状态
+            productImg.classList.add('loading');
+            
+            // 创建新的图片对象来预加载
+            const newImg = new Image();
+            newImg.onload = function() {
+                productImg.src = colorImageUrl;
+                productImg.classList.remove('loading');
+            };
+            newImg.onerror = function() {
+                // 如果颜色图片加载失败，使用主图片
+                productImg.src = '../supplier/product_image.php?id=' + productId;
+                productImg.classList.remove('loading');
+            };
+            newImg.src = colorImageUrl;
+        } else {
+            // 使用主图片
+            productImg.src = '../supplier/product_image.php?id=' + productId;
+            productImg.classList.remove('loading');
         }
     }
 
@@ -499,6 +598,13 @@ function getColorDisplayName($colorInput) {
     function getSelectedColorHex() {
         return document.getElementById('selectedColorHex').value;
     }
+
+    // 页面加载时初始化 - 不选择任何颜色，只显示主图片
+    document.addEventListener('DOMContentLoaded', function() {
+        // 显示主图片
+        const productImg = document.getElementById('productImage');
+        productImg.src = '../supplier/product_image.php?id=' + productId;
+    });
     </script>
 </body>
 </html>

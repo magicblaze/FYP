@@ -27,12 +27,25 @@ $product = $stmt->get_result()->fetch_assoc();
 if (!$product) { http_response_code(404); die('Product not found.'); }
 
 // Parse colors from database
-$colors = [];
-if (!empty($product['color'])) {
-    // Split colors by comma and trim whitespace
-    $colorArray = array_map('trim', explode(',', $product['color']));
-    $colors = array_filter($colorArray); // Remove empty values
-}
+    $colors = [];
+    if (!empty($product['color'])) {
+        // Split colors by comma and trim whitespace
+        $colorArray = array_map('trim', explode(',', $product['color']));
+        $colors = array_filter($colorArray); // Remove empty values
+    }
+
+    // Get color images from ProductColorImage table
+    $colorImages = [];
+    if (!empty($colors)) {
+        $colorImageSql = "SELECT color, image FROM ProductColorImage WHERE productid = ?";
+        $colorImageStmt = $mysqli->prepare($colorImageSql);
+        $colorImageStmt->bind_param("i", $productid);
+        $colorImageStmt->execute();
+        $colorImageResult = $colorImageStmt->get_result();
+        while ($row = $colorImageResult->fetch_assoc()) {
+            $colorImages[$row['color']] = $row['image'];
+        }
+    }
 
 // Get other products from the same supplier
 $other_sql = "SELECT productid, pname, price FROM Product WHERE supplierid=? AND productid<>? LIMIT 6";
@@ -447,7 +460,6 @@ function colorNameToHex($colorInput) {
                     <li class="nav-item"><a class="nav-link" href="../client/my_likes.php">My Likes</a></li>
                     <li class="nav-item"><a class="nav-link" href="order_history.php">Order History</a></li>
                     <li class="nav-item"><a class="nav-link" href="my_likes.php">My Likes</a></li>
-                    <li class="nav-item"><a class="nav-link" href="../chat.php">Chatroom</a></li>
                     <li class="nav-item"><a class="nav-link" href="../logout.php">Logout</a></li>
                 <?php else: ?>
                     <li class="nav-item"><a class="nav-link" href="../login.php">Login</a></li>
@@ -531,16 +543,30 @@ function colorNameToHex($colorInput) {
                 </div>
                 <?php endif; ?>
 
-                <?php if (!empty($product['size']) || !empty($product['material'])): ?>
                 <div class="product-specs">
                     <?php if (!empty($product['size'])): ?>
                         <div><i class="fas fa-ruler me-2"></i><strong>Size:</strong> <?= htmlspecialchars($product['size']) ?></div>
                     <?php endif; ?>
+                    
+                    <?php if (!empty($product['long']) || !empty($product['wide']) || !empty($product['tall'])): ?>
+                        <div style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #ecf0f1;">
+                            <div style="font-weight: 600; color: #2c3e50; margin-bottom: 0.75rem;">Size:</div>
+                            <?php if (!empty($product['long'])): ?>
+                                <div style="margin-bottom: 0.5rem; margin-left: 1.5rem;"><strong>Length:</strong> <?= htmlspecialchars($product['long']) ?></div>
+                            <?php endif; ?>
+                            <?php if (!empty($product['wide'])): ?>
+                                <div style="margin-bottom: 0.5rem; margin-left: 1.5rem;"><strong>Width:</strong> <?= htmlspecialchars($product['wide']) ?></div>
+                            <?php endif; ?>
+                            <?php if (!empty($product['tall'])): ?>
+                                <div style="margin-left: 1.5rem;"><strong>Height:</strong> <?= htmlspecialchars($product['tall']) ?></div>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
+                    
                     <?php if (!empty($product['material'])): ?>
-                        <div><i class="fas fa-cube me-2"></i><strong>Material:</strong> <?= htmlspecialchars($product['material']) ?></div>
+                        <div style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #ecf0f1;"><i class="fas fa-cube me-2"></i><strong>Material:</strong> <?= htmlspecialchars($product['material']) ?></div>
                     <?php endif; ?>
                 </div>
-                <?php endif; ?>
 
                 <?php if (!empty($product['description'])): ?>
                 <div class="product-description">
@@ -580,6 +606,9 @@ function colorNameToHex($colorInput) {
         const selectedHex = button.dataset.hex;
         document.getElementById('selectedColor').value = selectedColor;
         document.getElementById('selectedColorHex').value = selectedHex;
+        
+        // Update product image based on selected color
+        updateProductImage(selectedColor);
     }
 
     // Color selection function for dropdown-based selection
@@ -591,6 +620,25 @@ function colorNameToHex($colorInput) {
             
             document.getElementById('selectedColor').value = selectedColor;
             document.getElementById('selectedColorHex').value = selectedHex;
+            
+            // Update product image based on selected color
+            updateProductImage(selectedColor);
+        }
+    }
+
+    // Update product image based on selected color
+    function updateProductImage(color) {
+        const productId = <?= (int)$productid ?>;
+        const colorImages = <?= json_encode($colorImages) ?>;
+        const productImg = document.querySelector('.product-image-wrapper img');
+        
+        if (colorImages && colorImages[color]) {
+            // If color has a specific image, use it
+            const imageUrl = '../supplier/product_color_image.php?productid=' + productId + '&color=' + encodeURIComponent(color);
+            productImg.src = imageUrl;
+        } else {
+            // Otherwise, use the main product image
+            productImg.src = '../supplier/product_image.php?id=' + productId;
         }
     }
 

@@ -1,7 +1,7 @@
 <?php
 // ==============================
 // File: supplier/dashboard.php
-// 供應商專屬後台首頁 - 最終版本 (已修復)
+// 供應商專屬後台首頁 - 支持颜色编辑 (修复版本)
 // ==============================
 require_once __DIR__ . '/../config.php';
 session_start();
@@ -21,6 +21,23 @@ $stmt = $mysqli->prepare($sql);
 $stmt->bind_param("i", $supplierId);
 $stmt->execute();
 $result = $stmt->get_result();
+
+// 3. 为每个产品加载颜色图片信息
+$productColorImages = [];
+$colorImageSql = "SELECT productid, color, image FROM ProductColorImage";
+$colorImageStmt = $mysqli->prepare($colorImageSql);
+$colorImageStmt->execute();
+$colorImageResult = $colorImageStmt->get_result();
+
+while ($row = $colorImageResult->fetch_assoc()) {
+    $productId = $row['productid'];
+    $color = $row['color'];
+    if (!isset($productColorImages[$productId])) {
+        $productColorImages[$productId] = [];
+    }
+    $productColorImages[$productId][$color] = $row['image'];
+}
+$colorImageStmt->close();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -52,7 +69,7 @@ $result = $stmt->get_result();
         }
         .action-btn { width: 32px; height: 32px; padding: 0; line-height: 32px; border-radius: 50%; text-align: center; }
         
-        /* 編輯彈出表單樣式 - 與 Addpoduct.php 一致 */
+        /* 編輯彈出表單樣式 */
         .form-section {
             background: #f8fafd;
             border-radius: 12px;
@@ -79,6 +96,146 @@ $result = $stmt->get_result();
         }
         .modal-header .btn-close {
             filter: brightness(0) invert(1);
+        }
+        
+        /* 颜色编辑样式 */
+        .color-item {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem;
+            background: #fff;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            margin-bottom: 0.75rem;
+            transition: all 0.3s ease;
+        }
+        
+        .color-item:hover {
+            border-color: #3498db;
+            box-shadow: 0 2px 8px rgba(52, 152, 219, 0.1);
+        }
+        
+        .color-swatch {
+            width: 50px;
+            height: 50px;
+            border-radius: 8px;
+            border: 2px solid #ccc;
+            flex-shrink: 0;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        .color-info {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        
+        .color-code {
+            font-family: monospace;
+            font-weight: 600;
+            color: #2c3e50;
+            font-size: 0.9rem;
+        }
+        
+        .color-image-preview {
+            width: 60px;
+            height: 60px;
+            border-radius: 6px;
+            object-fit: cover;
+            border: 2px solid #ddd;
+            flex-shrink: 0;
+        }
+        
+        .color-actions {
+            display: flex;
+            gap: 0.5rem;
+            flex-shrink: 0;
+        }
+        
+        .btn-remove-color {
+            padding: 0.5rem 0.75rem;
+            font-size: 0.85rem;
+        }
+        
+        .color-list {
+            max-height: 400px;
+            overflow-y: auto;
+            padding-right: 0.5rem;
+        }
+        
+        .color-list::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .color-list::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        
+        .color-list::-webkit-scrollbar-thumb {
+            background: #bbb;
+            border-radius: 4px;
+        }
+        
+        .color-list::-webkit-scrollbar-thumb:hover {
+            background: #888;
+        }
+        
+        .add-color-section {
+            background: #f0f7ff;
+            border: 2px dashed #3498db;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .color-picker-group {
+            display: flex;
+            align-items: flex-end;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+        
+        .color-picker-item {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        
+        .color-picker-item label {
+            font-size: 0.9rem;
+            font-weight: 600;
+            margin-bottom: 0;
+        }
+        
+        .color-picker-item input[type="color"] {
+            width: 80px;
+            height: 50px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        
+        .color-picker-item input[type="file"] {
+            flex: 1;
+            min-width: 200px;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 2rem;
+            color: #7f8c8d;
+            background: #fafafa;
+            border-radius: 8px;
+            border: 2px dashed #bdc3c7;
+        }
+        
+        .empty-state i {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+            color: #bdc3c7;
         }
     </style>
 </head>
@@ -168,7 +325,7 @@ $result = $stmt->get_result();
                                     </td>
                                     <td class="text-end pe-4">
                                         <a href="product-detail.php?id=<?= $row['productid'] ?>" class="btn btn-primary action-btn btn-sm" title="View"><i class="fas fa-eye"></i></a>
-                                        <button class="btn btn-warning action-btn btn-sm text-white" title="Edit" data-bs-toggle="modal" data-bs-target="#editModal" onclick="loadProductData(<?= htmlspecialchars(json_encode($row), ENT_QUOTES, 'UTF-8') ?>)"><i class="fas fa-pen"></i></button>
+                                        <button class="btn btn-warning action-btn btn-sm text-white" title="Edit" data-bs-toggle="modal" data-bs-target="#editModal" onclick="loadProductData(<?= htmlspecialchars(json_encode($row), ENT_QUOTES, 'UTF-8') ?>, <?= htmlspecialchars(json_encode($productColorImages[$row['productid']] ?? []), ENT_QUOTES, 'UTF-8') ?>)"><i class="fas fa-pen"></i></button>
                                         <button class="btn btn-danger action-btn btn-sm" title="Delete" onclick="deleteProduct(<?= $row['productid'] ?>, <?= htmlspecialchars(json_encode($row['pname']), ENT_QUOTES, 'UTF-8') ?>)"><i class="fas fa-trash"></i></button>
                                     </td>
                                 </tr>
@@ -195,7 +352,7 @@ $result = $stmt->get_result();
                     <h5 class="modal-title" id="editModalLabel"><i class="fas fa-edit me-2"></i>Edit Product</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body">
+                <div class="modal-body" style="max-height: 80vh; overflow-y: auto;">
                     <form id="editProductForm" enctype="multipart/form-data">
                         <input type="hidden" id="productId" name="productid">
                         
@@ -278,25 +435,57 @@ $result = $stmt->get_result();
                             </div>
                             <div class="col-md-6">
                                 <div class="form-section">
-                                    <label class="form-label"><i class="fas fa-ruler-combined"></i> Size</label>
-                                    <input type="text" id="productSize" name="size" class="form-control" placeholder="e.g., 200cm*80cm">
+                                    <label class="form-label"><i class="fas fa-ruler"></i> Dimensions</label>
+                                    <div class="row g-2">
+                                        <div class="col-4">
+                                            <input type="text" id="productLong" name="long" class="form-control" placeholder="Length">
+                                        </div>
+                                        <div class="col-4">
+                                            <input type="text" id="productWide" name="wide" class="form-control" placeholder="Width">
+                                        </div>
+                                        <div class="col-4">
+                                            <input type="text" id="productTall" name="tall" class="form-control" placeholder="Height">
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
 
+                        <!-- 颜色编辑部分 -->
                         <div class="row mb-2">
                             <div class="col-md-12">
                                 <div class="form-section">
-                                    <label class="form-label"><i class="fas fa-palette"></i> Color</label>
-                                    <div class="d-flex align-items-center gap-2 mb-2">
-                                        <input type="color" id="main-color-picker" class="form-control form-control-color" value="#C0392B" style="width:48px; height:48px;">
-                                        <button type="button" class="btn btn-outline-primary btn-sm" id="add-main-color-btn">
-                                            <i class="fas fa-plus"></i> Add Color
-                                        </button>
+                                    <label class="form-label"><i class="fas fa-palette"></i> Colors & Images</label>
+                                    
+                                    <!-- 添加颜色部分 -->
+                                    <div class="add-color-section">
+                                        <div class="color-picker-group">
+                                            <div class="color-picker-item">
+                                                <label>Select Color</label>
+                                                <input type="color" id="edit-color-picker" class="form-control form-control-color" value="#C0392B" style="width:80px; height:50px;">
+                                            </div>
+                                            <div class="color-picker-item">
+                                                <label>Upload Image</label>
+                                                <input type="file" id="edit-color-image" class="form-control" accept="image/*">
+                                            </div>
+                                            <div class="color-picker-item">
+                                                <button type="button" class="btn btn-primary" id="edit-add-color-btn">
+                                                    <i class="fas fa-plus"></i> Add Color
+                                                </button>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div class="form-text">Click "+" to add a color. You can pick multiple colors for each product. Selected colors will appear below.</div>
-                                    <div id="selected-colors-preview" class="d-flex flex-wrap gap-2 mt-2"></div>
-                                    <input type="hidden" id="color-hidden-input" name="color_str">
+                                    
+                                    <!-- 已有颜色列表 -->
+                                    <div id="edit-color-list" class="color-list">
+                                        <div class="empty-state">
+                                            <i class="fas fa-palette"></i>
+                                            <p>No colors added yet</p>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- 隐藏输入用于提交 -->
+                                    <input type="hidden" id="edit-colors-data" name="colors_data" value="[]">
                                 </div>
                             </div>
                         </div>
@@ -315,48 +504,114 @@ $result = $stmt->get_result();
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
     <script>
-        let selectedColors = [];
-        const selectedColorsPreview = document.getElementById('selected-colors-preview');
-        const colorHiddenInput = document.getElementById('color-hidden-input');
-        const mainColorPicker = document.getElementById('main-color-picker');
-        const addMainColorBtn = document.getElementById('add-main-color-btn');
+        let editSelectedColors = [];
+        let productColorImagesMap = {}; // 存储颜色图片映射
+        const editColorList = document.getElementById('edit-color-list');
+        const editColorsData = document.getElementById('edit-colors-data');
+        const editColorPicker = document.getElementById('edit-color-picker');
+        const editColorImage = document.getElementById('edit-color-image');
+        const editAddColorBtn = document.getElementById('edit-add-color-btn');
         const categorySelect = document.getElementById('productCategory');
         const materialField = document.getElementById('material-field');
 
         /**
-         * 更新顏色預覽
+         * 更新颜色列表显示
          */
-        function updateColorPreview() {
-            selectedColorsPreview.innerHTML = '';
-            selectedColors.forEach((color, idx) => {
-                const colorDiv = document.createElement('div');
-                colorDiv.className = 'd-flex align-items-center gap-1';
-                colorDiv.innerHTML = `
-                    <span style="display:inline-block;width:28px;height:28px;border-radius:50%;background:${color};border:2px solid #ccc;"></span>
-                    <button type="button" class="btn btn-sm btn-link text-danger p-0 ms-1" title="Remove" onclick="removeColor(${idx})"><i class="fas fa-times"></i></button>
+        function updateEditColorDisplay() {
+            editColorList.innerHTML = '';
+            
+            if (editSelectedColors.length === 0) {
+                editColorList.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-palette"></i>
+                        <p>No colors added yet</p>
+                    </div>
                 `;
-                selectedColorsPreview.appendChild(colorDiv);
-            });
-            colorHiddenInput.value = selectedColors.join(", ");
-        }
-
-        /**
-         * 移除顏色
-         */
-        window.removeColor = function(idx) {
-            selectedColors.splice(idx, 1);
-            updateColorPreview();
-        }
-
-        /**
-         * 添加顏色
-         */
-        addMainColorBtn.addEventListener('click', function() {
-            const color = mainColorPicker.value;
-            if (!selectedColors.includes(color)) {
-                selectedColors.push(color);
-                updateColorPreview();
+                return;
             }
+            
+            editSelectedColors.forEach((item, idx) => {
+                const colorDiv = document.createElement('div');
+                colorDiv.className = 'color-item';
+                
+                let imagePreviewHtml = '';
+                if (item.imageFile) {
+                    const imageUrl = URL.createObjectURL(item.imageFile);
+                    imagePreviewHtml = `<img src="${imageUrl}" alt="Color image" class="color-image-preview">`;
+                } else if (item.existingImage) {
+                    // 使用正确的图片URL
+                    const imageUrl = 'product_color_image.php?productid=' + item.productId + '&color=' + encodeURIComponent(item.color);
+                    imagePreviewHtml = `<img src="${imageUrl}" alt="Color image" class="color-image-preview" onerror="this.style.display='none';">`;
+                }
+                
+                colorDiv.innerHTML = `
+                    <div class="color-swatch" style="background-color: ${item.color};"></div>
+                    <div class="color-info">
+                        <div class="color-code">${item.color.toUpperCase()}</div>
+                        <small class="text-muted">${item.imageFile ? 'New: ' + item.imageFile.name : (item.existingImage ? 'Existing: ' + item.existingImage : 'No image')}</small>
+                    </div>
+                    ${imagePreviewHtml}
+                    <div class="color-actions">
+                        <button type="button" class="btn btn-sm btn-outline-danger btn-remove-color" onclick="removeEditColor(${idx})">
+                            <i class="fas fa-trash"></i> Remove
+                        </button>
+                    </div>
+                `;
+                editColorList.appendChild(colorDiv);
+            });
+            
+            // 更新隐藏输入
+            updateEditColorsData();
+        }
+        
+        /**
+         * 更新颜色数据JSON
+         */
+        function updateEditColorsData() {
+            const colorsData = editSelectedColors.map(item => ({
+                color: item.color,
+                hasNewImage: !!item.imageFile,
+                hasExistingImage: !!item.existingImage,
+                existingImage: item.existingImage || null,
+                isNew: item.isNew || false
+            }));
+            editColorsData.value = JSON.stringify(colorsData);
+        }
+
+        /**
+         * 移除颜色
+         */
+        window.removeEditColor = function(idx) {
+            editSelectedColors.splice(idx, 1);
+            updateEditColorDisplay();
+        }
+
+        /**
+         * 添加颜色
+         */
+        editAddColorBtn.addEventListener('click', function() {
+            const color = editColorPicker.value;
+            const imageFile = editColorImage.files[0] || null;
+            
+            // 检查颜色是否已存在
+            if (editSelectedColors.some(item => item.color.toLowerCase() === color.toLowerCase())) {
+                alert('This color has already been added!');
+                return;
+            }
+            
+            editSelectedColors.push({
+                color: color,
+                imageFile: imageFile,
+                existingImage: null,
+                isNew: true,
+                productId: document.getElementById('productId').value
+            });
+            
+            // 重置输入
+            editColorPicker.value = '#C0392B';
+            editColorImage.value = '';
+            
+            updateEditColorDisplay();
         });
 
         /**
@@ -421,34 +676,50 @@ $result = $stmt->get_result();
         /**
          * 加載產品數據到編輯表單
          */
-        function loadProductData(productData) {
+        function loadProductData(productData, colorImages) {
             document.getElementById('productId').value = productData.productid;
             document.getElementById('productName').value = productData.pname;
             document.getElementById('productCategory').value = productData.category;
             document.getElementById('productPrice').value = productData.price;
             document.getElementById('productDescription').value = productData.description || '';
-            document.getElementById('productSize').value = productData.size || '';
+            document.getElementById('productLong').value = productData.long || '';
+            document.getElementById('productWide').value = productData.wide || '';
+            document.getElementById('productTall').value = productData.tall || '';
             document.getElementById('productMaterial').value = productData.material || '';
-            document.getElementById('productImage').value = ''; // 清空文件输入
-            document.getElementById('image-preview-container').style.display = 'none'; // 隐藏新图片预览
-            document.getElementById('removeImage').value = '0'; // 重置删除标记
+            document.getElementById('productImage').value = '';
+            document.getElementById('image-preview-container').style.display = 'none';
+            document.getElementById('removeImage').value = '0';
             
             // 显示当前图片
             const currentImageContainer = document.getElementById('current-image-container');
             if (productData.image) {
                 const currentImageElement = document.getElementById('current-image');
-                currentImageElement.src = 'product_image.php?id=' + productData.productid; // 使用 product_image.php 来显示图片
+                currentImageElement.src = 'product_image.php?id=' + productData.productid;
                 currentImageContainer.style.display = 'block';
             } else {
                 currentImageContainer.style.display = 'none';
             }
             
-            selectedColors = [];
+            // 保存颜色图片映射
+            productColorImagesMap = colorImages || {};
+            
+            // 加载颜色
+            editSelectedColors = [];
             if (productData.color) {
                 const colors = productData.color.split(',').map(c => c.trim()).filter(c => c);
-                selectedColors = colors;
+                colors.forEach(color => {
+                    const existingImage = productColorImagesMap[color] || null;
+                    editSelectedColors.push({
+                        color: color,
+                        imageFile: null,
+                        existingImage: existingImage,
+                        isNew: false,
+                        productId: productData.productid
+                    });
+                });
             }
-            updateColorPreview();
+            
+            updateEditColorDisplay();
             toggleMaterialField();
         }
 
@@ -456,14 +727,12 @@ $result = $stmt->get_result();
          * 削除產品
          */
         function deleteProduct(productId, productName) {
-            // 要求用戶确认
             const confirmDelete = confirm(`Are you sure you want to delete "${productName}"?\n\nThis action cannot be undone.`);
             
             if (!confirmDelete) {
-                return; // 用戶取消删除
+                return;
             }
             
-            // 执行删除
             const deleteBtn = event.target.closest('button');
             const originalHTML = deleteBtn.innerHTML;
             deleteBtn.disabled = true;
@@ -508,6 +777,13 @@ $result = $stmt->get_result();
 
             const formData = new FormData(form);
             
+            // 添加颜色图片文件
+            editSelectedColors.forEach((item, idx) => {
+                if (item.imageFile) {
+                    formData.append(`color_image_${idx}`, item.imageFile);
+                }
+            });
+            
             // 顯示加載狀態
             const saveBtn = event.target;
             const originalText = saveBtn.innerHTML;
@@ -546,7 +822,6 @@ $result = $stmt->get_result();
 
     <!-- ==================== Chat Widget Integration ==================== -->
     <?php
-    // Include floating chat widget for logged-in users only
     if (isset($_SESSION['user'])) {
         include __DIR__ . '/../Public/chat_widget.php';
     }
@@ -557,7 +832,6 @@ $result = $stmt->get_result();
     <script>
     document.addEventListener('DOMContentLoaded', function() {
         <?php if (isset($_SESSION['user'])): ?>
-        // Initialize chat application
         const chatApp = initApp({
             apiPath: '../Public/ChatApi.php?action=',
             userId: <?= (int)($_SESSION['user']['supplierid'] ?? $_SESSION['user']['id'] ?? 0) ?>,

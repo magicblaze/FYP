@@ -322,7 +322,6 @@ $total_count = $products_count + $designs_count;
                     </li>
                     <li class="nav-item"><a class="nav-link active" href="../client/my_likes.php">My Likes</a></li>
                     <li class="nav-item"><a class="nav-link" href="../client/order_history.php">Order History</a></li>
-                    <li class="nav-item"><a class="nav-link" href="../chat.php">Chatroom</a></li>
                     <li class="nav-item"><a class="nav-link" href="../logout.php">Logout</a></li>
                 <?php else: ?>
                     <li class="nav-item"><a class="nav-link" href="../login.php">Login</a></li>
@@ -388,9 +387,6 @@ $total_count = $products_count + $designs_count;
                             <a href="product_detail.php?id=<?= (int)$product['productid'] ?>&from=my_likes" class="like-card-btn view">
                                 <i class="fas fa-eye"></i> View
                             </a>
-                            <button type="button" class="like-card-btn chat" data-owner-type="supplier" data-owner-id="<?= (int)$product['supplierid'] ?>">
-                                <i class="fas fa-comments"></i> Chat
-                            </button>
                         </div>
                     </div>
                 </div>
@@ -424,9 +420,6 @@ $total_count = $products_count + $designs_count;
                             <a href="design_detail.php?designid=<?= (int)$design['designid'] ?>&from=my_likes" class="like-card-btn view">
                                 <i class="fas fa-eye"></i> View
                             </a>
-                            <button type="button" class="like-card-btn chat" data-owner-type="designer" data-owner-id="<?= (int)$design['designerid'] ?>">
-                                <i class="fas fa-comments"></i> Chat
-                            </button>
                         </div>
                     </div>
                 </div>
@@ -445,37 +438,6 @@ $total_count = $products_count + $designs_count;
         </div>
     </main>
 
-    <script>
-    // Remove button functionality removed - users can only view items
-    </script>
-        <script>
-        (function(){
-            const clientId = <?= json_encode($clientid) ?>;
-            document.addEventListener('click', function(e){
-                const btn = e.target.closest && e.target.closest('.like-card-btn.chat');
-                if (!btn) return;
-                const ownerType = btn.getAttribute('data-owner-type');
-                const ownerId = parseInt(btn.getAttribute('data-owner-id') || '0', 10);
-                if (!ownerType || !ownerId) return alert('Owner info missing');
-                btn.disabled = true;
-                fetch('../designer/ChatApi.php?action=createRoom', {
-                    method: 'POST',
-                    headers: {'Content-Type':'application/json'},
-                    body: JSON.stringify({ creator_type: 'client', creator_id: clientId, other_type: ownerType, other_id: ownerId })
-                }).then(r => r.json()).then(json => {
-                    btn.disabled = false;
-                    if (json && json.ok && json.room) {
-                        const id = json.room.ChatRoomid || json.room.ChatRoomId || json.room.id || json.room.ChatRoomid;
-                        if (id) {
-                            // Redirect to chat page and open the room
-                            window.location.href = '../designer/chat.php?open_room=' + encodeURIComponent(id);
-                            return;
-                        }
-                    }
-                    alert('Unable to open chat.');
-                }).catch(err => { btn.disabled = false; console.error(err); alert('Chat request failed'); });
-            });
-        })();
-        </script>
+
 </body>
 </html>
