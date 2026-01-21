@@ -277,7 +277,7 @@ $orders = $stmt->get_result();
                                     <?php endforeach; ?>
                                 </div>
                                 <?php if (!empty($order['Floor_Plan'])): ?>
-                                    <a href="<?= htmlspecialchars($order['Floor_Plan']) ?>" class="floor-plan-link" target="_blank" onclick="event.stopPropagation();">
+                                    <a href="../<?= htmlspecialchars($order['Floor_Plan']) ?>" class="floor-plan-link" target="_blank" onclick="event.stopPropagation();">
                                         <i class="fas fa-file-image me-1"></i>View Floor Plan
                                     </a>
                                 <?php endif; ?>

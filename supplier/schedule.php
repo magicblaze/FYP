@@ -18,16 +18,20 @@ $user_id = null;
 $user_name = '';
 $schedules = [];
 
-// Determine user ID based on role
+// Determine user ID based on role and dashboard link
+// Note: schedule.php is in the supplier folder, so use ../ to go up one level
 if ($user_type === 'designer') {
     $user_id = $user['designerid'];
     $user_name = $user['name'];
+    $dashboardLink = '../designer/designer_dashboard.php';
 } elseif ($user_type === 'supplier') {
     $user_id = $user['supplierid'];
     $user_name = $user['name'];
+    $dashboardLink = 'dashboard.php';
 } elseif ($user_type === 'manager') {
     $user_id = $user['managerid'];
     $user_name = $user['name'];
+    $dashboardLink = '../manager/Manager_MyOrder.html';
 } else {
     header('Location: login.php');
     exit;
@@ -529,10 +533,10 @@ $month_name = date('F', mktime(0, 0, 0, $current_month, 1));
     <!-- Navbar -->
     <header class="bg-white shadow p-3 d-flex justify-content-between align-items-center">
         <div class="d-flex align-items-center gap-3">
-            <div class="h4 mb-0"><a href="dashboard.php" style="text-decoration: none; color: inherit;">HappyDesign</a></div>
+            <div class="h4 mb-0"><a href="<?= $dashboardLink ?>" style="text-decoration: none; color: inherit;">HappyDesign</a></div>
             <nav>
                 <ul class="nav align-items-center gap-2">
-                    <li class="nav-item"><a class="nav-link" href="dashboard.php">Dashboard</a></li>
+                    <li class="nav-item"><a class="nav-link" href="<?= $dashboardLink ?>">Dashboard</a></li>
                     <li class="nav-item"><a class="nav-link active" href="schedule.php">Schedule</a></li>
                 </ul>
             </nav>

@@ -410,7 +410,7 @@ $colorImageStmt->close();
                             </div>
                             <div class="col-md-6">
                                 <div class="form-section">
-                                    <label class="form-label"><i class="fas fa-ruler"></i> Dimensions</label>
+                                    <label class="form-label"><i class="fas fa-ruler"></i> Size</label>
                                     <div class="row g-2">
                                         <div class="col-4">
                                             <input type="text" id="productLong" name="long" class="form-control" placeholder="Length">
