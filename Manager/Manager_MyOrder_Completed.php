@@ -1,17 +1,18 @@
+
 <?php
 require_once dirname(__DIR__) . '/config.php';
 
-// 查询已完成订单
+// 查询已完成订单 - UPDATED FOR NEW DATE STRUCTURE
 $sql = "SELECT o.orderid, o.odate, o.budget, o.Requirements, o.ostatus,
                c.clientid, c.cname as client_name,
                d.designid, d.price as design_price, d.tag as design_tag,
-               s.FinishDate
+               s.OrderFinishDate, s.DesignFinishDate
         FROM `Order` o
         LEFT JOIN `Client` c ON o.clientid = c.clientid
         LEFT JOIN `Design` d ON o.designid = d.designid
         LEFT JOIN `Schedule` s ON o.orderid = s.orderid
         WHERE o.ostatus = 'Completed' OR o.ostatus = 'completed'
-        ORDER BY s.FinishDate DESC";
+        ORDER BY s.OrderFinishDate DESC";
 
 $result = mysqli_query($mysqli, $sql);
 ?>
@@ -30,9 +31,9 @@ $result = mysqli_query($mysqli, $sql);
         <div class="nav-container">
             <a href="#" class="nav-brand">HappyDesign</a>
             <div class="nav-links">
-                <a href="Manager_introduct.html">Introduct</a>
-                <a href="Manager_MyOrder.html">MyOrder</a>
-                <a href="Manager_Massage.html">Massage</a>
+                <a href="Manager_introduct.php">Introduct</a>
+                <a href="Manager_MyOrder.php">MyOrder</a>
+                <a href="Manager_Massage.php">Massage</a>
                 <a href="Manager_Schedule.php">Schedule</a>
             </div>
         </div>
@@ -104,7 +105,8 @@ $result = mysqli_query($mysqli, $sql);
                         <th>Design</th>
                         <th>Requirements</th>
                         <th>Status</th>
-                        <th>Completed Date</th>
+                        <th>Order Completed Date</th>
+                        <th>Design Completed Date</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -135,8 +137,17 @@ $result = mysqli_query($mysqli, $sql);
                         </td>
                         <td>
                             <?php 
-                            if(isset($row["FinishDate"]) && $row["FinishDate"] != '0000-00-00 00:00:00'){
-                                echo date('Y-m-d H:i', strtotime($row["FinishDate"]));
+                            if(isset($row["OrderFinishDate"]) && $row["OrderFinishDate"] != '0000-00-00 00:00:00'){
+                                echo date('Y-m-d H:i', strtotime($row["OrderFinishDate"]));
+                            } else {
+                                echo '<span class="text-muted">N/A</span>';
+                            }
+                            ?>
+                        </td>
+                        <td>
+                            <?php 
+                            if(isset($row["DesignFinishDate"]) && $row["DesignFinishDate"] != '0000-00-00 00:00:00'){
+                                echo date('Y-m-d H:i', strtotime($row["DesignFinishDate"]));
                             } else {
                                 echo '<span class="text-muted">N/A</span>';
                             }
@@ -168,7 +179,7 @@ $result = mysqli_query($mysqli, $sql);
         <div class="d-flex justify-between mt-4">
             <div class="btn-group">
                 <button onclick="printThisPage()" class="btn btn-primary">Print This Page</button>
-                <button onclick="window.location.href='Manager_MyOrder.html'" 
+                <button onclick="window.location.href='Manager_MyOrder.php'" 
                         class="btn btn-secondary">Back to Orders Manager</button>
                         
             </div>
@@ -202,7 +213,7 @@ $result = mysqli_query($mysqli, $sql);
             }
 
             if(e.key === 'Escape') {
-                window.location.href = 'Manager_MyOrder.html';
+                window.location.href = 'Manager_MyOrder.php';
             }
         });
     });

@@ -10,11 +10,11 @@ if($order_id <= 0) {
     exit;
 }
 
-// 获取订单详情
+// 获取订单详情 - UPDATED FOR NEW DATE STRUCTURE
 $sql = "SELECT o.orderid, o.odate, o.budget, o.Requirements, o.Floor_Plan, o.ostatus,
                c.clientid, c.cname as client_name, c.cemail as client_email, c.ctel as client_phone,
                d.designid, d.design as design_image, d.price as design_price, d.tag as design_tag,
-               s.FinishDate,
+               s.OrderFinishDate, s.DesignFinishDate,
                m.mname as manager_name, m.memail as manager_email
         FROM `Order` o
         LEFT JOIN `Client` c ON o.clientid = c.clientid
@@ -37,6 +37,7 @@ if($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_approval'])) {
     $manager_reply = mysqli_real_escape_string($mysqli, $_POST['manager_reply']);
     $additional_notes = mysqli_real_escape_string($mysqli, $_POST['additional_notes']);
     $estimated_completion = mysqli_real_escape_string($mysqli, $_POST['estimated_completion']);
+    $design_finish_date = mysqli_real_escape_string($mysqli, $_POST['design_finish_date']);
     
     // 开始事务
     mysqli_begin_transaction($mysqli);
@@ -64,17 +65,25 @@ if($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_approval'])) {
             }
         }
         
-        // 3. 更新或创建Schedule记录
+        // 3. 更新或创建Schedule记录 - UPDATED FOR NEW DATE STRUCTURE
         $manager_id = $_SESSION['user_id'] ?? 1;
         
-        if(!empty($estimated_completion)) {
+        if(!empty($estimated_completion) || !empty($design_finish_date)) {
             $check_schedule_sql = "SELECT scheduleid FROM `Schedule` WHERE orderid = $order_id";
             $schedule_result = mysqli_query($mysqli, $check_schedule_sql);
             
             if(mysqli_num_rows($schedule_result) > 0) {
-                $update_schedule_sql = "UPDATE `Schedule` SET FinishDate = '$estimated_completion', managerid = $manager_id WHERE orderid = $order_id";
+                $update_schedule_sql = "UPDATE `Schedule` SET 
+                                        OrderFinishDate = " . (!empty($estimated_completion) ? "'$estimated_completion'" : "NULL") . ",
+                                        DesignFinishDate = " . (!empty($design_finish_date) ? "'$design_finish_date'" : "NULL") . ",
+                                        managerid = $manager_id 
+                                        WHERE orderid = $order_id";
             } else {
-                $update_schedule_sql = "INSERT INTO `Schedule` (managerid, FinishDate, orderid) VALUES ($manager_id, '$estimated_completion', $order_id)";
+                $update_schedule_sql = "INSERT INTO `Schedule` (managerid, OrderFinishDate, DesignFinishDate, orderid) 
+                                       VALUES ($manager_id, " . 
+                                       (!empty($estimated_completion) ? "'$estimated_completion'" : "NULL") . ", " .
+                                       (!empty($design_finish_date) ? "'$design_finish_date'" : "NULL") . ", 
+                                       $order_id)";
             }
             
             if(!mysqli_query($mysqli, $update_schedule_sql)) {
@@ -86,7 +95,7 @@ if($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_approval'])) {
         mysqli_commit($mysqli);
         
         // 发送邮件给客户
-        $email_sent = sendApprovalEmail($order, $status, $manager_reply, $additional_notes, $estimated_completion);
+        $email_sent = sendApprovalEmail($order, $status, $manager_reply, $additional_notes, $estimated_completion, $design_finish_date);
         
         // 重定向回主页面
         $redirect_url = "Manager_MyOrder_AwaitingConfirm.php?msg=approved&id=" . $order_id;
@@ -106,11 +115,10 @@ if($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_approval'])) {
     }
 }
 
-// 发送邮件函数
-function sendApprovalEmail($order, $status, $manager_reply, $additional_notes, $estimated_completion) {
+// 发送邮件函数 - UPDATED FOR NEW DATE STRUCTURE
+function sendApprovalEmail($order, $status, $manager_reply, $additional_notes, $estimated_completion, $design_finish_date) {
     $to = $order['client_email'];
     $subject = "Order #" . $order['orderid'] . " - Status Update";
-    
 
     $message = "Dear " . $order['client_name'] . ",\n\n";
     $message .= "Your order #" . $order['orderid'] . " has been processed.\n\n";
@@ -132,7 +140,10 @@ function sendApprovalEmail($order, $status, $manager_reply, $additional_notes, $
         $message .= "Additional Notes: " . $additional_notes . "\n";
     }
     if(!empty($estimated_completion)) {
-        $message .= "Estimated Completion Date: " . date('Y-m-d H:i', strtotime($estimated_completion)) . "\n";
+        $message .= "Estimated Order Completion Date: " . date('Y-m-d H:i', strtotime($estimated_completion)) . "\n";
+    }
+    if(!empty($design_finish_date)) {
+        $message .= "Estimated Design Completion Date: " . date('Y-m-d H:i', strtotime($design_finish_date)) . "\n";
     }
     
     $message .= "\nNEXT STEPS\n";
@@ -150,11 +161,8 @@ function sendApprovalEmail($order, $status, $manager_reply, $additional_notes, $
     $headers .= "Reply-To: noreply@happydesign.com\r\n";
     $headers .= "Content-Type: text/plain; charset=UTF-8\r\n";
     
-
-
     return mail($to, $subject, $message, $headers);
 }
-
 
 ?>
 
@@ -172,9 +180,9 @@ function sendApprovalEmail($order, $status, $manager_reply, $additional_notes, $
         <div class="nav-container">
             <a href="#" class="nav-brand">HappyDesign</a>
             <div class="nav-links">
-                <a href="Manager_introduct.html">Introduct</a>
-                <a href="Manager_MyOrder.html">MyOrder</a>
-                <a href="Manager_Massage.html">Massage</a>
+                <a href="Manager_introduct.php">Introduct</a>
+                <a href="Manager_MyOrder.php">MyOrder</a>
+                <a href="Manager_Massage.php">Massage</a>
                 <a href="Manager_Schedule.php">Schedule</a>
             </div>
         </div>
@@ -255,6 +263,28 @@ function sendApprovalEmail($order, $status, $manager_reply, $additional_notes, $
                             <td colspan="3"><?php echo htmlspecialchars($order['Floor_Plan']); ?></td>
                         </tr>
                         <?php endif; ?>
+                        <tr>
+                            <th>Current Order Finish Date</th>
+                            <td>
+                                <?php 
+                                if(isset($order["OrderFinishDate"]) && $order["OrderFinishDate"] != '0000-00-00 00:00:00'){
+                                    echo date('Y-m-d H:i', strtotime($order["OrderFinishDate"]));
+                                } else {
+                                    echo '<span class="text-muted">Not scheduled</span>';
+                                }
+                                ?>
+                            </td>
+                            <th>Current Design Finish Date</th>
+                            <td>
+                                <?php 
+                                if(isset($order["DesignFinishDate"]) && $order["DesignFinishDate"] != '0000-00-00 00:00:00'){
+                                    echo date('Y-m-d H:i', strtotime($order["DesignFinishDate"]));
+                                } else {
+                                    echo '<span class="text-muted">Not scheduled</span>';
+                                }
+                                ?>
+                            </td>
+                        </tr>
                     </table>
                 </div>
             </div>
@@ -292,10 +322,17 @@ function sendApprovalEmail($order, $status, $manager_reply, $additional_notes, $
                     </div>
                     
                     <div class="form-group">
-                        <label for="estimated_completion" class="form-label">Estimated Completion Date (Optional)</label>
+                        <label for="estimated_completion" class="form-label">Estimated Order Completion Date (Optional)</label>
                         <input type="datetime-local" name="estimated_completion" id="estimated_completion" class="form-control"
                                value="<?php echo date('Y-m-d\TH:i', strtotime('+7 days')); ?>">
                         <small class="text-muted">If approved, when do you estimate this order will be completed?</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="design_finish_date" class="form-label">Estimated Design Completion Date (Optional)</label>
+                        <input type="datetime-local" name="design_finish_date" id="design_finish_date" class="form-control"
+                               value="<?php echo date('Y-m-d\TH:i', strtotime('+3 days')); ?>">
+                        <small class="text-muted">If approved, when do you estimate the design will be completed?</small>
                     </div>
                     
                     <div class="alert alert-warning mt-4">

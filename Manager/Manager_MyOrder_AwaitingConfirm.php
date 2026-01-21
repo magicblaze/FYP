@@ -40,11 +40,11 @@ if(!empty($search)) {
 
 $where_clause = !empty($where_conditions) ? "WHERE " . implode(" AND ", $where_conditions) : "";
 
-// 获取所有待处理订单
+// 获取所有待处理订单 - UPDATED FOR NEW DATE STRUCTURE
 $sql = "SELECT o.orderid, o.odate, o.budget, o.Requirements, o.ostatus,
                c.clientid, c.cname as client_name, c.cemail as client_email, c.ctel as client_phone,
                d.designid, d.design as design_image, d.price as design_price, d.tag as design_tag,
-               s.FinishDate
+               s.OrderFinishDate, s.DesignFinishDate
         FROM `Order` o
         LEFT JOIN `Client` c ON o.clientid = c.clientid
         LEFT JOIN `Design` d ON o.designid = d.designid
@@ -80,9 +80,9 @@ $stats = mysqli_fetch_assoc($stats_result);
         <div class="nav-container">
             <a href="#" class="nav-brand">HappyDesign</a>
             <div class="nav-links">
-                <a href="Manager_introduct.html">Introduct</a>
-                <a href="Manager_MyOrder.html">MyOrder</a>
-                <a href="Manager_Massage.html">Massage</a>
+                <a href="Manager_introduct.php">Introduct</a>
+                <a href="Manager_MyOrder.php">MyOrder</a>
+                <a href="Manager_Massage.php">Massage</a>
                 <a href="Manager_Schedule.php">Schedule</a>
             </div>
         </div>
@@ -158,7 +158,8 @@ $stats = mysqli_fetch_assoc($stats_result);
                         <th>Design</th>
                         <th>Requirements</th>
                         <th>Status</th>
-                        <th>Scheduled Finish Date</th>
+                        <th>Order Finish Date</th>
+                        <th>Design Finish Date</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -198,8 +199,17 @@ $stats = mysqli_fetch_assoc($stats_result);
                         </td>
                         <td>
                             <?php 
-                            if(isset($row["FinishDate"]) && $row["FinishDate"] != '0000-00-00 00:00:00'){
-                                echo date('Y-m-d H:i', strtotime($row["FinishDate"]));
+                            if(isset($row["OrderFinishDate"]) && $row["OrderFinishDate"] != '0000-00-00 00:00:00'){
+                                echo date('Y-m-d H:i', strtotime($row["OrderFinishDate"]));
+                            } else {
+                                echo '<span class="text-muted">Not scheduled</span>';
+                            }
+                            ?>
+                        </td>
+                        <td>
+                            <?php 
+                            if(isset($row["DesignFinishDate"]) && $row["DesignFinishDate"] != '0000-00-00 00:00:00'){
+                                echo date('Y-m-d H:i', strtotime($row["DesignFinishDate"]));
                             } else {
                                 echo '<span class="text-muted">Not scheduled</span>';
                             }
@@ -240,7 +250,7 @@ $stats = mysqli_fetch_assoc($stats_result);
         <!-- 返回按钮 -->
         <div class="d-flex justify-between mt-4">
             <div class="btn-group">
-                <button onclick="window.location.href='Manager_MyOrder.html'" 
+                <button onclick="window.location.href='Manager_MyOrder.php'" 
                         class="btn btn-secondary">Back to Orders Manager</button>
 
             </div>
@@ -282,7 +292,7 @@ $stats = mysqli_fetch_assoc($stats_result);
             
             // Esc键返回
             if(e.key === 'Escape') {
-                window.location.href = 'Manager_MyOrder.html';
+                window.location.href = 'Manager_MyOrder.php';
             }
         });
         
@@ -438,4 +448,3 @@ $stats = mysqli_fetch_assoc($stats_result);
     </style>
 </body>
 </html>
-

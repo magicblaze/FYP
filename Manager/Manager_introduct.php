@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -12,9 +13,9 @@
         <div class="nav-container">
             <a href="#" class="nav-brand">HappyDesign</a>
             <div class="nav-links">
-                <a href="Manager_introduct.html" class="active">Introduct</a>
-                <a href="Manager_MyOrder.html">MyOrder</a>
-                <a href="Manager_Massage.html">Massage</a>
+                <a href="Manager_introduct.php" class="active">Introduct</a>
+                <a href="Manager_MyOrder.php">MyOrder</a>
+                <a href="Manager_Massage.php">Massage</a>
                 <a href="Manager_Schedule.php">Schedule</a>
             </div>
         </div>

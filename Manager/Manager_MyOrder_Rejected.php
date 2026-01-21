@@ -19,11 +19,11 @@ if(!empty($search)) {
 
 $where_clause = !empty($where_conditions) ? "WHERE " . implode(" AND ", $where_conditions) : "";
 
-// 获取所有已取消订单
+// 获取所有已取消订单 - UPDATED FOR NEW DATE STRUCTURE
 $sql = "SELECT o.orderid, o.odate, o.budget, o.Requirements, o.ostatus,
                c.clientid, c.cname as client_name, c.cemail as client_email, c.ctel as client_phone,
                d.designid, d.design as design_image, d.price as design_price, d.tag as design_tag,
-               s.FinishDate
+               s.OrderFinishDate, s.DesignFinishDate
         FROM `Order` o
         LEFT JOIN `Client` c ON o.clientid = c.clientid
         LEFT JOIN `Design` d ON o.designid = d.designid
@@ -102,9 +102,9 @@ $stats = mysqli_fetch_assoc($stats_result);
         <div class="nav-container">
             <a href="#" class="nav-brand">HappyDesign</a>
             <div class="nav-links">
-                <a href="Manager_introduct.html">Introduct</a>
-                <a href="Manager_MyOrder.html">MyOrder</a>
-                <a href="Manager_Massage.html">Massage</a>
+                <a href="Manager_introduct.php">Introduct</a>
+                <a href="Manager_MyOrder.php">MyOrder</a>
+                <a href="Manager_Massage.php">Massage</a>
                 <a href="Manager_Schedule.php">Schedule</a>
             </div>
         </div>
@@ -194,6 +194,8 @@ $stats = mysqli_fetch_assoc($stats_result);
                         <th>Budget</th>
                         <th>Design</th>
                         <th>Requirements</th>
+                        <th>Order Finish Date</th>
+                        <th>Design Finish Date</th>
                         <th>Status</th>
                         <th>Actions</th>
                     </tr>
@@ -205,11 +207,11 @@ $stats = mysqli_fetch_assoc($stats_result);
                         <td><?php echo date('Y-m-d H:i', strtotime($row["odate"])); ?></td>
                         <td>
                             <?php 
-        
-                            if(isset($row["odate"]) && $row["odate"] != '0000-00-00 00:00:00'){
-                                echo date('Y-m-d H:i', strtotime($row["odate"]));
+                            // Use OrderFinishDate as cancellation date if available
+                            if(isset($row["OrderFinishDate"]) && $row["OrderFinishDate"] != '0000-00-00 00:00:00'){
+                                echo date('Y-m-d H:i', strtotime($row["OrderFinishDate"]));
                             } else {
-                                echo '<span class="text-muted">N/A</span>';
+                                echo date('Y-m-d H:i', strtotime($row["odate"]));
                             }
                             ?>
                         </td>
@@ -237,6 +239,24 @@ $stats = mysqli_fetch_assoc($stats_result);
                             </div>
                         </td>
                         <td><?php echo htmlspecialchars(substr($row["Requirements"] ?? '', 0, 100)); ?></td>
+                        <td>
+                            <?php 
+                            if(isset($row["OrderFinishDate"]) && $row["OrderFinishDate"] != '0000-00-00 00:00:00'){
+                                echo date('Y-m-d H:i', strtotime($row["OrderFinishDate"]));
+                            } else {
+                                echo '<span class="text-muted">N/A</span>';
+                            }
+                            ?>
+                        </td>
+                        <td>
+                            <?php 
+                            if(isset($row["DesignFinishDate"]) && $row["DesignFinishDate"] != '0000-00-00 00:00:00'){
+                                echo date('Y-m-d H:i', strtotime($row["DesignFinishDate"]));
+                            } else {
+                                echo '<span class="text-muted">N/A</span>';
+                            }
+                            ?>
+                        </td>
                         <td>
                             <span class="status-badge status-cancelled">
                                 <?php echo htmlspecialchars($row["ostatus"] ?? 'Cancelled'); ?>
@@ -278,7 +298,7 @@ $stats = mysqli_fetch_assoc($stats_result);
         <!-- 返回按钮 -->
         <div class="d-flex justify-between mt-4">
             <div class="btn-group">
-                <button onclick="window.location.href='Manager_MyOrder.html'" 
+                <button onclick="window.location.href='Manager_MyOrder.php'" 
                         class="btn btn-secondary">Back to Orders Manager</button>
             </div>
         </div>
@@ -328,7 +348,7 @@ $stats = mysqli_fetch_assoc($stats_result);
             
             // Esc键返回
             if(e.key === 'Escape') {
-                window.location.href = 'Manager_MyOrder.html';
+                window.location.href = 'Manager_MyOrder.php';
             }
         });
         

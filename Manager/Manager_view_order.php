@@ -78,9 +78,9 @@ if(isset($_GET['id'])) {
         <div class="nav-container">
             <a href="#" class="nav-brand">HappyDesign</a>
             <div class="nav-links">
-                <a href="Manager_introduct.html">Introduct</a>
-                <a href="Manager_MyOrder.html">MyOrder</a>
-                <a href="Manager_Massage.html">Massage</a>
+                <a href="Manager_introduct.php">Introduct</a>
+                <a href="Manager_MyOrder.php">MyOrder</a>
+                <a href="Manager_Massage.php">Massage</a>
                 <a href="Manager_Schedule.php">Schedule</a>
             </div>
         </div>
@@ -150,11 +150,21 @@ if(isset($_GET['id'])) {
                     <td colspan="3"><?php echo nl2br(htmlspecialchars($order['Requirements'])); ?></td>
                 </tr>
                 <tr>
-                    <th>Completed Date</th>
-                    <td colspan="3">
+                    <th>Order Finish Date</th>
+                    <td>
                         <?php 
-                        if(isset($order["FinishDate"]) && $order["FinishDate"] != '0000-00-00 00:00:00'){
-                            echo date('Y-m-d H:i', strtotime($order["FinishDate"]));
+                        if(isset($order["OrderFinishDate"]) && $order["OrderFinishDate"] != '0000-00-00 00:00:00'){
+                            echo date('Y-m-d H:i', strtotime($order["OrderFinishDate"]));
+                        } else {
+                            echo '<span class="text-muted">N/A</span>';
+                        }
+                        ?>
+                    </td>
+                    <th>Design Finish Date</th>
+                    <td>
+                        <?php 
+                        if(isset($order["DesignFinishDate"]) && $order["DesignFinishDate"] != '0000-00-00 00:00:00'){
+                            echo date('Y-m-d H:i', strtotime($order["DesignFinishDate"]));
                         } else {
                             echo '<span class="text-muted">N/A</span>';
                         }

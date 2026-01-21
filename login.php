@@ -21,7 +21,7 @@ if (isset($_SESSION['user'])) {
             $dest = 'design_dashboard.php';
             break;
         case 'manager':
-            $dest = 'Manager/Manager_MyOrder.html';
+            $dest = 'Manager/Manager_MyOrder.php';
             break;
         case 'contractors':
             // need edit
@@ -144,7 +144,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $dest = 'designer/dashboard.php';
                     break;
                 case 'manager':
-                    $dest = 'Manager/Manager_MyOrder.html';
+                    $dest = 'Manager/Manager_MyOrder.php';
                     break;
                 case 'contractors':
                     // No dedicated contractors UI in repo; send to design dashboard by default

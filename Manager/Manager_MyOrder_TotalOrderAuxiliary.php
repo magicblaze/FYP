@@ -1,6 +1,8 @@
 <?php
 if (isset($_GET["orderid"])){
     require_once dirname(__DIR__) . '/config.php';
+
+
     
     // 验证和清理输入
     $orderid = isset($_GET["orderid"]) ? intval($_GET["orderid"]) : 0;

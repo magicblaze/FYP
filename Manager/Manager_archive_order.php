@@ -41,12 +41,12 @@ mysqli_begin_transaction($mysqli);
 
 try {
     // 1. Archive order data to Archive table
-    // First check if Archive table exists, if not create it
+    // First check if Archive table exists, if not create it with new structure
     $check_archive_table = "SHOW TABLES LIKE 'Archive'";
     $table_result = mysqli_query($mysqli, $check_archive_table);
     
     if (mysqli_num_rows($table_result) == 0) {
-        // Create Archive table if it doesn't exist
+        // Create Archive table with new structure (OrderFinishDate and DesignFinishDate)
         $create_archive_table = "
             CREATE TABLE `Archive` (
                 `archiveid` INT AUTO_INCREMENT PRIMARY KEY,
@@ -60,7 +60,8 @@ try {
                 `client_name` VARCHAR(255),
                 `design_price` DECIMAL(10,2),
                 `design_tag` VARCHAR(255),
-                `finish_date` DATETIME,
+                `order_finish_date` DATETIME,
+                `design_finish_date` DATETIME,
                 `archived_date` DATETIME DEFAULT CURRENT_TIMESTAMP,
                 INDEX `idx_orderid` (`orderid`),
                 INDEX `idx_archived_date` (`archived_date`)
@@ -72,14 +73,15 @@ try {
         }
     }
     
-    // 2. Get complete order details for archiving
-    // SIMPLIFIED: Only get columns we actually need for archiving
+    // 2. Get complete order details for archiving with new column names
+    // Assuming we have both OrderFinishDate and DesignFinishDate in the Schedule table
     $archive_sql = "
         SELECT o.orderid, o.odate, o.budget, o.Requirements, o.ostatus,
                o.clientid, o.designid,
                c.cname as client_name,
                d.price as design_price, d.tag as design_tag,
-               s.FinishDate as finish_date
+               s.OrderFinishDate as order_finish_date,
+               s.DesignFinishDate as design_finish_date
         FROM `Order` o
         LEFT JOIN `Client` c ON o.clientid = c.clientid
         LEFT JOIN `Design` d ON o.designid = d.designid
@@ -97,12 +99,12 @@ try {
         throw new Exception("Failed to retrieve order data");
     }
     
-    // 3. Insert into Archive table
+    // 3. Insert into Archive table with new structure
     $insert_archive_sql = "
         INSERT INTO `Archive` 
         (orderid, odate, budget, Requirements, ostatus, clientid, designid, 
-         client_name, design_price, design_tag, finish_date)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         client_name, design_price, design_tag, order_finish_date, design_finish_date)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ";
     
     $insert_stmt = mysqli_prepare($mysqli, $insert_archive_sql);
@@ -111,11 +113,12 @@ try {
     $client_name = $order_data['client_name'] ?? null;
     $design_price = $order_data['design_price'] ?? null;
     $design_tag = $order_data['design_tag'] ?? null;
-    $finish_date = $order_data['finish_date'] ?? null;
+    $order_finish_date = $order_data['order_finish_date'] ?? null;
+    $design_finish_date = $order_data['design_finish_date'] ?? null;
     
     mysqli_stmt_bind_param(
         $insert_stmt, 
-        "isdssiisdss",
+        "isdssiisdssss",
         $order_data['orderid'],
         $order_data['odate'],
         $order_data['budget'],
@@ -126,7 +129,8 @@ try {
         $client_name,
         $design_price,
         $design_tag,
-        $finish_date
+        $order_finish_date,
+        $design_finish_date
     );
     
     if (!mysqli_stmt_execute($insert_stmt)) {

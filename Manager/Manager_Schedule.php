@@ -18,34 +18,35 @@ if(!empty($search)) {
     $where_conditions[] = "(" . implode(" OR ", $search_conditions) . ")";
 }
 
+// 修改：使用 OrderFinishDate 而不是 FinishDate
 if(!empty($status_filter)) {
     if($status_filter == 'designing') {
         $where_conditions[] = "o.ostatus = 'Designing'";
     } elseif($status_filter == 'completed') {
         $where_conditions[] = "o.ostatus = 'Completed'";
     } elseif($status_filter == 'today') {
-        $where_conditions[] = "DATE(s.FinishDate) = CURDATE()";
+        $where_conditions[] = "DATE(s.OrderFinishDate) = CURDATE()";
     } elseif($status_filter == 'overdue') {
-        $where_conditions[] = "s.FinishDate < NOW() AND o.ostatus = 'Designing'";
+        $where_conditions[] = "s.OrderFinishDate < NOW() AND o.ostatus = 'Designing'";
     } elseif($status_filter == 'upcoming') {
-        $where_conditions[] = "s.FinishDate > NOW() AND o.ostatus = 'Designing'";
+        $where_conditions[] = "s.OrderFinishDate > NOW() AND o.ostatus = 'Designing'";
     }
 }
 
 $where_clause = !empty($where_conditions) ? "WHERE " . implode(" AND ", $where_conditions) : "";
 
-// 获取所有已安排的订单 - 简化查询，只选择存在的字段
+// 修改：使用 OrderFinishDate 而不是 FinishDate
 $sql = "SELECT o.orderid, o.odate, o.budget, o.Requirements, o.ostatus,
                c.clientid, c.cname as client_name, c.cemail as client_email, c.ctel as client_phone,
                d.designid, d.design as design_image, d.price as design_price, d.tag as design_tag,
-               s.scheduleid, s.FinishDate,
-               DATEDIFF(s.FinishDate, CURDATE()) as days_remaining
+               s.scheduleid, s.OrderFinishDate, s.DesignFinishDate,
+               DATEDIFF(s.OrderFinishDate, CURDATE()) as days_remaining
         FROM `Order` o
         LEFT JOIN `Client` c ON o.clientid = c.clientid
         LEFT JOIN `Design` d ON o.designid = d.designid
         LEFT JOIN `Schedule` s ON o.orderid = s.orderid
         $where_clause
-        ORDER BY s.FinishDate ASC, o.odate DESC";
+        ORDER BY s.OrderFinishDate ASC, o.odate DESC";
 
 $result = mysqli_query($mysqli, $sql);
 
@@ -53,13 +54,13 @@ if(!$result) {
     die("Database Error: " . mysqli_error($mysqli));
 }
 
-// 计算统计信息 - 移除 Progress 相关统计
+// 修改统计查询：使用 OrderFinishDate 而不是 FinishDate
 $stats_sql = "SELECT 
                 COUNT(*) as total_scheduled,
                 SUM(CASE WHEN o.ostatus = 'Designing' THEN 1 ELSE 0 END) as total_designing,
                 SUM(CASE WHEN o.ostatus = 'Completed' THEN 1 ELSE 0 END) as total_completed,
-                SUM(CASE WHEN s.FinishDate < NOW() AND o.ostatus = 'Designing' THEN 1 ELSE 0 END) as total_overdue,
-                SUM(CASE WHEN DATE(s.FinishDate) = CURDATE() THEN 1 ELSE 0 END) as total_today
+                SUM(CASE WHEN s.OrderFinishDate < NOW() AND o.ostatus = 'Designing' THEN 1 ELSE 0 END) as total_overdue,
+                SUM(CASE WHEN DATE(s.OrderFinishDate) = CURDATE() THEN 1 ELSE 0 END) as total_today
               FROM `Order` o
               LEFT JOIN `Schedule` s ON o.orderid = s.orderid
               WHERE o.ostatus = 'Designing' OR o.ostatus = 'Completed' 
@@ -67,12 +68,12 @@ $stats_sql = "SELECT
 $stats_result = mysqli_query($mysqli, $stats_sql);
 $stats = mysqli_fetch_assoc($stats_result);
 
-// 获取本周完成的任务
+// 修改：使用 OrderFinishDate 而不是 FinishDate
 $weekly_completed_sql = "SELECT COUNT(*) as weekly_completed
                         FROM `Order` o
                         LEFT JOIN `Schedule` s ON o.orderid = s.orderid
                         WHERE o.ostatus = 'Completed' 
-                        AND YEARWEEK(s.FinishDate, 1) = YEARWEEK(CURDATE(), 1)";
+                        AND YEARWEEK(s.OrderFinishDate, 1) = YEARWEEK(CURDATE(), 1)";
 $weekly_result = mysqli_query($mysqli, $weekly_completed_sql);
 $weekly_stats = mysqli_fetch_assoc($weekly_result);
 ?>
@@ -210,6 +211,20 @@ $weekly_stats = mysqli_fetch_assoc($weekly_result);
         
         .status-indicator.designing { background-color: #17a2b8; }
         .status-indicator.completed { background-color: #28a745; }
+        
+        /* 添加新的样式用于显示两个日期 */
+        .date-info {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+        .date-label {
+            font-size: 11px;
+            color: #666;
+        }
+        .date-value {
+            font-weight: 500;
+        }
     </style>
 </head>
 <body>
@@ -218,9 +233,9 @@ $weekly_stats = mysqli_fetch_assoc($weekly_result);
         <div class="nav-container">
             <a href="#" class="nav-brand">HappyDesign</a>
             <div class="nav-links">
-                <a href="Manager_introduct.html">Introduct</a>
-                <a href="Manager_MyOrder.html">MyOrder</a>
-                <a href="Manager_Massage.html">Massage</a>
+                <a href="Manager_introduct.php">Introduct</a>
+                <a href="Manager_MyOrder.php">MyOrder</a>
+                <a href="Manager_Massage.php">Massage</a>
                 <a href="Manager_Schedule.php" class="active">Schedule</a>
             </div>
         </div>
@@ -257,15 +272,15 @@ $weekly_stats = mysqli_fetch_assoc($weekly_result);
             </div>
             <div class="filter-tab <?php echo $status_filter == 'today' ? 'active' : ''; ?>" 
                  onclick="window.location.href='Manager_Schedule.php?status=today'">
-                <span class="timeline-indicator timeline-today"></span>Today
+                <span class="timeline-indicator timeline-today"></span>Order Due Today
             </div>
             <div class="filter-tab <?php echo $status_filter == 'overdue' ? 'active' : ''; ?>" 
                  onclick="window.location.href='Manager_Schedule.php?status=overdue'">
-                <span class="timeline-indicator timeline-overdue"></span>Overdue
+                <span class="timeline-indicator timeline-overdue"></span>Order Overdue
             </div>
             <div class="filter-tab <?php echo $status_filter == 'upcoming' ? 'active' : ''; ?>" 
                  onclick="window.location.href='Manager_Schedule.php?status=upcoming'">
-                <span class="timeline-indicator timeline-upcoming"></span>Upcoming
+                <span class="timeline-indicator timeline-upcoming"></span>Order Upcoming
             </div>
         </div>
         
@@ -295,12 +310,12 @@ $weekly_stats = mysqli_fetch_assoc($weekly_result);
             </div>
             <div class="stat-card overdue">
                 <div class="stat-value"><?php echo $stats['total_overdue'] ?? 0; ?></div>
-                <div class="stat-label">Overdue</div>
-                <div style="font-size: 12px; color: #888; margin-top: 5px;">Past due date orders</div>
+                <div class="stat-label">Order Overdue</div>
+                <div style="font-size: 12px; color: #888; margin-top: 5px;">Past order due date</div>
             </div>
             <div class="stat-card today">
                 <div class="stat-value"><?php echo $stats['total_today'] ?? 0; ?></div>
-                <div class="stat-label">Due Today</div>
+                <div class="stat-label">Order Due Today</div>
                 <div style="font-size: 12px; color: #888; margin-top: 5px;">Orders due today</div>
             </div>
             <div class="stat-card">
@@ -324,7 +339,8 @@ $weekly_stats = mysqli_fetch_assoc($weekly_result);
                         <th>Client</th>
                         <th>Status</th>
                         <th>Order Date</th>
-                        <th>Finish Date</th>
+                        <th>Order Finish Date</th>
+                        <th>Design Finish Date</th>
                         <th>Time Left</th>
                         <th>Budget</th>
                         <th>Design</th>
@@ -334,21 +350,27 @@ $weekly_stats = mysqli_fetch_assoc($weekly_result);
                 <tbody>
                     <?php 
                     while($row = mysqli_fetch_assoc($result)): 
-                        // 确定倒计时样式
+                        // 确定倒计时样式 - 基于 OrderFinishDate
                         $countdown_class = '';
                         $countdown_text = '';
+                        $order_finish_date = $row['OrderFinishDate'];
+                        $design_finish_date = $row['DesignFinishDate'];
+                        
                         if($row['ostatus'] == 'Completed') {
                             $countdown_class = 'countdown-upcoming';
                             $countdown_text = 'Completed';
-                        } elseif($row['days_remaining'] < 0) {
-                            $countdown_class = 'countdown-overdue';
-                            $countdown_text = abs($row['days_remaining']) . ' days overdue';
-                        } elseif($row['days_remaining'] == 0) {
-                            $countdown_class = 'countdown-today';
-                            $countdown_text = 'Due today';
-                        } elseif($row['days_remaining'] > 0) {
-                            $countdown_class = 'countdown-upcoming';
-                            $countdown_text = $row['days_remaining'] . ' days left';
+                        } elseif(!empty($order_finish_date) && $order_finish_date != '0000-00-00') {
+                            $days_remaining = $row['days_remaining'];
+                            if($days_remaining < 0) {
+                                $countdown_class = 'countdown-overdue';
+                                $countdown_text = abs($days_remaining) . ' days overdue';
+                            } elseif($days_remaining == 0) {
+                                $countdown_class = 'countdown-today';
+                                $countdown_text = 'Due today';
+                            } elseif($days_remaining > 0) {
+                                $countdown_class = 'countdown-upcoming';
+                                $countdown_text = $days_remaining . ' days left';
+                            }
                         } else {
                             $countdown_class = 'countdown-upcoming';
                             $countdown_text = 'No date set';
@@ -378,8 +400,17 @@ $weekly_stats = mysqli_fetch_assoc($weekly_result);
                         </td>
                         <td>
                             <?php 
-                            if(isset($row["FinishDate"]) && $row["FinishDate"] != '0000-00-00 00:00:00'){
-                                echo date('Y-m-d', strtotime($row["FinishDate"]));
+                            if(isset($row["OrderFinishDate"]) && $row["OrderFinishDate"] != '0000-00-00'){
+                                echo date('Y-m-d', strtotime($row["OrderFinishDate"]));
+                            } else {
+                                echo '<span class="text-muted">Not scheduled</span>';
+                            }
+                            ?>
+                        </td>
+                        <td>
+                            <?php 
+                            if(isset($row["DesignFinishDate"]) && $row["DesignFinishDate"] != '0000-00-00'){
+                                echo date('Y-m-d', strtotime($row["DesignFinishDate"]));
                             } else {
                                 echo '<span class="text-muted">Not scheduled</span>';
                             }
@@ -390,7 +421,7 @@ $weekly_stats = mysqli_fetch_assoc($weekly_result);
                                 <?php echo $countdown_text; ?>
                             </span>
                         </td>
-                        <td><strong class="text-success">$<?php echo number_format($row["budget"], 2); ?></strong></td>
+                        <td><strong class="text-success">HK$<?php echo number_format($row["budget"], 2); ?></strong></td>
                         <td>
                             <?php if(!empty($row["designid"])): ?>
                             <small>Design #<?php echo htmlspecialchars($row["designid"]); ?></small><br>
@@ -402,9 +433,9 @@ $weekly_stats = mysqli_fetch_assoc($weekly_result);
                         <td class="no-print">
                             <div class="btn-group">
                                 <button onclick="viewOrder(<?php echo $row['orderid']; ?>)" 
-                                        class="btn btn-sm btn-primary">View</button>
-                                <button onclick="updateSchedule(<?php echo $row['orderid']; ?>)" 
-                                        class="btn btn-sm btn-info">Update</button>
+                                        class="btn btn-sm btn-primary">View Order</button>
+                                <button onclick="viewSchedule(<?php echo $row['orderid']; ?>)" 
+                                        class="btn btn-sm btn-primary">View Schedule</button>
                                 <?php if($row['ostatus'] == 'Designing'): ?>
                                 <button onclick="markComplete(<?php echo $row['orderid']; ?>)" 
                                         class="btn btn-sm btn-success">Complete</button>
@@ -452,10 +483,11 @@ $weekly_stats = mysqli_fetch_assoc($weekly_result);
     function viewOrder(orderId) {
         window.location.href = 'Manager_view_order.php?id=' + orderId;
     }
-    
-    function updateSchedule(orderId) {
-        window.location.href = 'Manager_update_schedule.php?id=' + orderId;
+
+    function viewSchedule(orderId) {
+        window.location.href = 'Manager_Schedule_detail.php?id=' + orderId;
     }
+
     
     function markComplete(orderId) {
         if(confirm('Are you sure you want to mark order #' + orderId + ' as completed?')) {
@@ -485,7 +517,7 @@ $weekly_stats = mysqli_fetch_assoc($weekly_result);
             }
             
             if(e.key === 'Escape') {
-                window.location.href = 'Manager_MyOrder.html';
+                window.location.href = 'Manager_MyOrder.php';
             }
         });
     });

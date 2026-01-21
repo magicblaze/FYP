@@ -1,5 +1,7 @@
+
 <?php
 require_once dirname(__DIR__) . '/config.php';
+
 ?>
 <!DOCTYPE html>
 <html>
@@ -14,9 +16,9 @@ require_once dirname(__DIR__) . '/config.php';
         <div class="nav-container">
             <a href="#" class="nav-brand">HappyDesign</a>
             <div class="nav-links">
-                <a href="Manager_introduct.html">Introduct</a>
-                <a href="Manager_MyOrder.html">MyOrder</a>
-                <a href="Manager_Massage.html">Massage</a>
+                <a href="Manager_introduct.php">Introduct</a>
+                <a href="Manager_MyOrder.php">MyOrder</a>
+                <a href="Manager_Massage.php">Massage</a>
                 <a href="Manager_Schedule.php">Schedule</a>
             </div>
         </div>
@@ -27,10 +29,11 @@ require_once dirname(__DIR__) . '/config.php';
         <h1 class="page-title">Buy Product - Designing Orders</h1>
         
         <?php
+        // UPDATED SQL FOR NEW DATE STRUCTURE
         $sql = "SELECT o.orderid, o.odate, o.budget, o.Requirements, o.ostatus,
                        c.clientid, c.cname as client_name,
                        d.designid, d.price as design_price, d.tag as design_tag,
-                       s.FinishDate
+                       s.OrderFinishDate, s.DesignFinishDate
                 FROM `Order` o
                 LEFT JOIN `Client` c ON o.clientid = c.clientid
                 LEFT JOIN `Design` d ON o.designid = d.designid
@@ -85,7 +88,8 @@ require_once dirname(__DIR__) . '/config.php';
                         <th>Design</th>
                         <th>Requirement</th>
                         <th>Status</th>
-                        <th>Scheduled Date</th>
+                        <th>Order Finish Date</th>
+                        <th>Design Finish Date</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -116,8 +120,17 @@ require_once dirname(__DIR__) . '/config.php';
                         </td>
                         <td>
                             <?php 
-                            if(isset($row["FinishDate"]) && $row["FinishDate"] != '0000-00-00 00:00:00'){
-                                echo date('Y-m-d H:i', strtotime($row["FinishDate"]));
+                            if(isset($row["OrderFinishDate"]) && $row["OrderFinishDate"] != '0000-00-00 00:00:00'){
+                                echo date('Y-m-d H:i', strtotime($row["OrderFinishDate"]));
+                            } else {
+                                echo '<span class="text-muted">Not scheduled</span>';
+                            }
+                            ?>
+                        </td>
+                        <td>
+                            <?php 
+                            if(isset($row["DesignFinishDate"]) && $row["DesignFinishDate"] != '0000-00-00 00:00:00'){
+                                echo date('Y-m-d H:i', strtotime($row["DesignFinishDate"]));
                             } else {
                                 echo '<span class="text-muted">Not scheduled</span>';
                             }
@@ -143,7 +156,7 @@ require_once dirname(__DIR__) . '/config.php';
         
         <!-- 返回按钮 -->
         <div class="d-flex justify-between mt-4">
-            <button onclick="window.location.href='Manager_MyOrder.html'" 
+            <button onclick="window.location.href='Manager_MyOrder.php'" 
                     class="btn btn-secondary">Back to MyOrders</button>
             <div class="d-flex align-center">
                 <span class="text-muted">Showing <?php echo $total_orders; ?> designing orders</span>

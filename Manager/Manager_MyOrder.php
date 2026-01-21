@@ -1,5 +1,21 @@
+<?php
+require_once dirname(__DIR__) . '/config.php';
+session_start();
+
+// Check if user is logged in as manager
+if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'manager') {
+    header('Location: ../login.php?redirect=Manager/Manager_MyOrder.php');
+    exit;
+}
+
+// Get manager info
+$user = $_SESSION['user'];
+$user_id = $user['managerid'];
+$user_name = $user['name'];
+?>
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -12,16 +28,16 @@
         <div class="nav-container">
             <a href="#" class="nav-brand">HappyDesign</a>
             <div class="nav-links">
-                <a href="Manager_introduct.html" class="active">Introduct</a>
-                <a href="Manager_MyOrder.html">MyOrder</a>
-                <a href="Manager_Massage.html">Massage</a>
+                <a href="Manager_introduct.php" class="active">Introduct</a>
+                <a href="Manager_MyOrder.php">MyOrder</a>
+                <a href="Manager_Massage.php">Massage</a>
                 <a href="Manager_Schedule.php">Schedule</a>
             </div>
         </div>
     </nav>
 
     <div class="page-container">
-        <h1 class="page-title">Order Management</h1>
+        <h1 class="page-title">Order Management - Welcome <?php echo htmlspecialchars($user_name); ?></h1>
         
         <div class="card">
             <div class="card-body">
@@ -37,7 +53,6 @@
     </div>
 
     <script>
-
         document.addEventListener('DOMContentLoaded', function() {
             const currentPage = window.location.pathname.split('/').pop();
             const navLinks = document.querySelectorAll('.nav-links a');

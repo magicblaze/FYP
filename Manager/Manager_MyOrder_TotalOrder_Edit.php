@@ -7,7 +7,7 @@ $orderid = isset($_GET['id']) ? intval($_GET['id']) : 0;
 $sql = "SELECT o.orderid, o.odate, o.budget, o.Requirements, o.Floor_Plan, o.ostatus,
                c.clientid, c.cname as client_name, c.ctel, c.cemail,
                d.designid, d.design, d.price as design_price, d.tag as design_tag,
-               s.scheduleid, s.FinishDate
+               s.scheduleid, s.OrderFinishDate, s.DesignFinishDate
         FROM `Order` o
         LEFT JOIN `Client` c ON o.clientid = c.clientid
         LEFT JOIN `Design` d ON o.designid = d.designid
@@ -26,19 +26,25 @@ $edit_order = isset($_GET['edit']) && $_GET['edit'] == 'order';
 if($_SERVER['REQUEST_METHOD'] == 'POST') {
     if(isset($_POST['update_status'])) {
         $new_status = mysqli_real_escape_string($mysqli, $_POST['ostatus']);
-        $finish_date = mysqli_real_escape_string($mysqli, $_POST['FinishDate']);
+        $order_finish_date = mysqli_real_escape_string($mysqli, $_POST['OrderFinishDate']);
+        $design_finish_date = mysqli_real_escape_string($mysqli, $_POST['DesignFinishDate']);
         
-
+        // 更新订单状态
         $update_order_status_sql = "UPDATE `Order` SET ostatus = '$new_status' WHERE orderid = $orderid";
         
         if(mysqli_query($mysqli, $update_order_status_sql)) {
-
-
+            // 更新或创建Schedule记录
             if($order['scheduleid']) {
-                $update_schedule_sql = "UPDATE `Schedule` SET FinishDate = '$finish_date' WHERE scheduleid = '{$order['scheduleid']}'";
-            }else {
-                $update_schedule_sql = "INSERT INTO `Schedule` (managerid, FinishDate, orderid) 
-                                       VALUES (1, '$finish_date', '$orderid')";
+                $update_schedule_sql = "UPDATE `Schedule` SET 
+                                        OrderFinishDate = " . (!empty($order_finish_date) ? "'$order_finish_date'" : "NULL") . ",
+                                        DesignFinishDate = " . (!empty($design_finish_date) ? "'$design_finish_date'" : "NULL") . "
+                                        WHERE scheduleid = '{$order['scheduleid']}'";
+            } else {
+                $update_schedule_sql = "INSERT INTO `Schedule` (managerid, OrderFinishDate, DesignFinishDate, orderid) 
+                                       VALUES (1, " . 
+                                       (!empty($order_finish_date) ? "'$order_finish_date'" : "NULL") . ", " .
+                                       (!empty($design_finish_date) ? "'$design_finish_date'" : "NULL") . ", 
+                                       '$orderid')";
             }
             mysqli_query($mysqli, $update_schedule_sql);
             
@@ -110,9 +116,9 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
         <div class="nav-container">
             <a href="#" class="nav-brand">HappyDesign</a>
             <div class="nav-links">
-                <a href="Manager_introduct.html">Introduct</a>
-                <a href="Manager_MyOrder.html">MyOrder</a>
-                <a href="Manager_Massage.html">Massage</a>
+                <a href="Manager_introduct.php">Introduct</a>
+                <a href="Manager_MyOrder.php">MyOrder</a>
+                <a href="Manager_Massage.php">Massage</a>
                 <a href="Manager_Schedule.php">Schedule</a>
             </div>
         </div>
@@ -201,11 +207,23 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
                             </td>
                         </tr>
                         <tr>
-                            <th>Scheduled Finish Date</th>
+                            <th>Order Finish Date</th>
                             <td>
                                 <?php 
-                                if(isset($order["FinishDate"]) && $order["FinishDate"] != '0000-00-00 00:00:00'){
-                                    echo date('Y-m-d H:i', strtotime($order["FinishDate"]));
+                                if(isset($order["OrderFinishDate"]) && $order["OrderFinishDate"] != '0000-00-00 00:00:00'){
+                                    echo date('Y-m-d H:i', strtotime($order["OrderFinishDate"]));
+                                } else {
+                                    echo '<span class="text-muted">Not scheduled</span>';
+                                }
+                                ?>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Design Finish Date</th>
+                            <td>
+                                <?php 
+                                if(isset($order["DesignFinishDate"]) && $order["DesignFinishDate"] != '0000-00-00 00:00:00'){
+                                    echo date('Y-m-d H:i', strtotime($order["DesignFinishDate"]));
                                 } else {
                                     echo '<span class="text-muted">Not scheduled</span>';
                                 }
@@ -223,14 +241,14 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
                 <!-- 更新状态部分 -->
                 <div class="card h-100">
                     <div class="card-header">
-                        <h3 class="card-title">Update Status</h3>
+                        <h3 class="card-title">Update Status & Dates</h3>
                     </div>
                     <div class="card-body">
                         <?php if(!$edit_status): ?>
                             <form method="get">
                                 <input type="hidden" name="id" value="<?php echo $orderid; ?>">
                                 <input type="hidden" name="edit" value="status">
-                                <button type="submit" class="btn btn-primary btn-block">Update Status</button>
+                                <button type="submit" class="btn btn-primary btn-block">Update Status & Dates</button>
                             </form>
                         <?php else: ?>
                             <form method="post">
@@ -257,19 +275,27 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
                                             </td>
                                         </tr>
                                         <tr>
-                                            <th>Finish Date</th>
+                                            <th>Order Finish Date</th>
                                             <td>
-                                                <input type="datetime-local" name="FinishDate" class="form-control"
-                                                       value="<?php echo isset($order['FinishDate']) && $order['FinishDate'] != '0000-00-00 00:00:00' 
-                                                               ? date('Y-m-d\TH:i', strtotime($order['FinishDate'])) 
-                                                               : date('Y-m-d\TH:i'); ?>"
-                                                       required>
+                                                <input type="datetime-local" name="OrderFinishDate" class="form-control"
+                                                       value="<?php echo isset($order['OrderFinishDate']) && $order['OrderFinishDate'] != '0000-00-00 00:00:00' 
+                                                               ? date('Y-m-d\TH:i', strtotime($order['OrderFinishDate'])) 
+                                                               : date('Y-m-d\TH:i', strtotime('+7 days')); ?>">
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <th>Design Finish Date</th>
+                                            <td>
+                                                <input type="datetime-local" name="DesignFinishDate" class="form-control"
+                                                       value="<?php echo isset($order['DesignFinishDate']) && $order['DesignFinishDate'] != '0000-00-00 00:00:00' 
+                                                               ? date('Y-m-d\TH:i', strtotime($order['DesignFinishDate'])) 
+                                                               : date('Y-m-d\TH:i', strtotime('+3 days')); ?>">
                                             </td>
                                         </tr>
                                     </table>
                                 </div>
                                 <div class="d-flex justify-between mt-3">
-                                    <button type="submit" class="btn btn-success">Save Status</button>
+                                    <button type="submit" class="btn btn-success">Save Status & Dates</button>
                                     <a href="Manager_MyOrder_TotalOrder_Edit.php?id=<?php echo $orderid; ?>" class="btn btn-secondary">Cancel</a>
                                 </div>
                             </form>
@@ -377,7 +403,7 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
             <div class="btn-group">
                 <button onclick="window.location.href='Manager_MyOrder_TotalOrder.php'" 
                         class="btn btn-secondary">Back to Order List</button>
-                <button onclick="window.location.href='Manager_MyOrder.html'" 
+                <button onclick="window.location.href='Manager_MyOrder.php'" 
                         class="btn btn-outline">Back to Orders Manager</button>
             </div>
         </div>
