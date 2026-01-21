@@ -88,6 +88,22 @@ function initApp(config = {}) {
   function escapeHtml(s) { return String(s || '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
   function stripHtml(html) { return String(html || '').replace(/<[^>]*>?/gm, ''); }
 
+  // Format timestamps: prefix with "Today" or MM/DD, then show the time (English)
+  function formatMessageTimestamp(ts) {
+    try {
+      const d = new Date(ts);
+      if (isNaN(d.getTime())) return '';
+      const now = new Date();
+      const time = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+      if (d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()) {
+        return 'Today ' + time;
+      }
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return mm + '/' + dd + ' ' + time;
+    } catch (e) { return ''; }
+  }
+
   function renderCards(list) {
     [elements.cardsGrid, elements.cardsGridOff].forEach(root => {
       if (!root) return;
@@ -124,8 +140,21 @@ function initApp(config = {}) {
       const storedOther = (roomKey ? localStorage.getItem('chat_other_name_' + roomKey) : null);
       const name = a.other_name || a.otherName || storedOther || a.roomname || a.name || `Room ${btn.dataset.roomId}`;
       const title = a.description || a.title || '';
+      // Determine role label (human friendly)
+      const roleRaw = a.other_type || a.otherType || a.member_type || a.role || a.type || '';
+      let roleLabel = '';
+      try {
+        switch ((roleRaw || '').toString().toLowerCase()) {
+          case 'client': roleLabel = 'Client'; break;
+          case 'designer': roleLabel = 'Designer'; break;
+          case 'manager': roleLabel = 'Manager'; break;
+          case 'supplier': roleLabel = 'Supplier'; break;
+          case 'contractors': roleLabel = 'Contractor'; break;
+          default: roleLabel = ''; break;
+        }
+      } catch(e) { roleLabel = ''; }
       btn.innerHTML = `<div class="me-2"><div class="rounded-circle bg-secondary text-white d-inline-flex align-items-center justify-content-center" style="width:36px;height:36px">${escapeHtml((name||'')[0]||'R')}</div></div>
-        <div class="flex-grow-1 text-start"><div class="fw-semibold">${escapeHtml(name)}</div><div class="small text-muted">${escapeHtml(title)}</div></div>`;
+        <div class="flex-grow-1 text-start"><div class="fw-semibold">${escapeHtml(name)}</div><div class="small text-muted">${escapeHtml(roleLabel || title)}</div></div>`;
       btn.addEventListener('click', () => {
         selectAgent(a);
         if (isOff && bsOff) bsOff.hide();
@@ -301,7 +330,7 @@ function initApp(config = {}) {
     if (designHtml) {
       // Override bubble styling so the message bubble is white (not the usual colored bubble)
       bubble.className = 'bg-white text-dark rounded';
-      bubble.innerHTML = `${designHtml}${campaignHtml}<div class="text-muted small mt-1">${new Date(time).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>`;
+      bubble.innerHTML = `${designHtml}${campaignHtml}<div class="text-muted small mt-1">${formatMessageTimestamp(time)}</div>`;
     } else {
       // For plain image attachments, prefer a white bubble instead of a blue one for sender 'me'
       if (isImageMessage) {
@@ -310,7 +339,7 @@ function initApp(config = {}) {
       // Choose time text color: if the bubble uses `text-white` (blue bubble), make the time white for readability
       let timeClass = 'text-muted';
       try { if (bubble.className && bubble.className.indexOf('text-white') !== -1) timeClass = 'text-white'; } catch (e) {}
-      const timeHtml = `<div class="${timeClass} small mt-1">${new Date(time).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>`;
+      const timeHtml = `<div class="${timeClass} small mt-1">${formatMessageTimestamp(time)}</div>`;
       bubble.innerHTML = `<div>${contentHtml}</div>${attachmentHtml}${campaignHtml}${timeHtml}`;
     }
 
@@ -351,7 +380,7 @@ function initApp(config = {}) {
     const rid = agent.ChatRoomid || agent.id || agent.roomId;
     const stored = (rid ? localStorage.getItem('chat_other_name_' + rid) : null);
     const displayName = agent.other_name || agent.otherName || stored || agent.roomname || agent.name || '';
-    if (elements.connectionStatus) elements.connectionStatus.textContent = `Connected to ${displayName}`;
+    if (elements.connectionStatus) elements.connectionStatus.textContent = `${displayName}`;
     document.querySelectorAll('#agentsList .list-group-item, #agentsListOffcanvas .list-group-item').forEach(el => {
       el.classList.toggle('active', el.dataset.roomId == (agent.ChatRoomid || agent.id));
     });

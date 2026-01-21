@@ -62,6 +62,10 @@ $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
 .message-preview-column .file-meta{display:flex;flex-direction:column;min-width:0}
 .message-preview-column .file-meta .name{font-size:0.95rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .message-preview-column .file-meta .size{font-size:0.8rem;color:#6c757d}
+/* Chat link styling: bold white by default for visibility on colored bubbles */
+#chatwidget_panel a { color: #ffffff !important; font-weight: 700 !important; }
+/* Exception: links inside white message cards should remain dark for readability */
+#chatwidget_panel .bg-white a, #chatwidget_panel .text-dark a { color: #333333 !important; font-weight:700 !important; }
 </style>
 
 <?php
@@ -82,6 +86,7 @@ $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
   <div class="header">
     <div>
       <div style="font-weight:600">Message</div>
+            <div id="chatwidget_connectionStatus" class="small text-muted">Select a conversation</div>
       <div id="chatwidget_typingIndicator" class="small text-muted"></div>
     </div>
     <div>
@@ -105,7 +110,7 @@ $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
         <button id="chatwidget_share" class="btn btn-outline-secondary btn-sm" type="button" title="Share page" aria-label="Share design" style="display:none;margin-left:4px">
           <i class="bi bi-share" aria-hidden="true" style="font-size:14px"></i>
         </button>
-        <input id="chatwidget_input" class="form-control form-control-sm" placeholder="Message..." aria-label="Message input" <?php if (!$logged) echo 'disabled title="Log in to send messages"'; ?> >
+        <input id="chatwidget_input" class="form-control form-control-sm" placeholder="Type a message..." aria-label="Message input" <?php if (!$logged) echo 'disabled title="Log in to send messages"'; ?> >
         <button id="chatwidget_send" class="btn btn-primary btn-sm" <?php if (!$logged) echo 'disabled title="Log in to send messages"'; ?> aria-label="Send message">
           <i class="bi bi-send-fill" aria-hidden="true" style="font-size:16px;line-height:1;color:#fff"></i>
         </button>

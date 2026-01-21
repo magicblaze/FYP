@@ -70,7 +70,37 @@ try {
     if ($user_type && $user_id > 0) {
       $stmt = $pdo->prepare("SELECT cr.* FROM ChatRoom cr JOIN ChatRoomMember m ON m.ChatRoomid=cr.ChatRoomid WHERE m.member_type=? AND m.memberid=? ORDER BY cr.ChatRoomid DESC");
       $stmt->execute([$user_type, $user_id]);
-      send_json($stmt->fetchAll());
+      $rooms = $stmt->fetchAll();
+      // Enrich each room with the other participant's display name when possible
+      foreach ($rooms as &$r) {
+        $roomId = $r['ChatRoomid'] ?? ($r['ChatRoomId'] ?? ($r['id'] ?? null));
+        if (!$roomId) continue;
+        try {
+          $mstmt = $pdo->prepare('SELECT member_type, memberid FROM ChatRoomMember WHERE ChatRoomid=? AND NOT (member_type=? AND memberid=?) LIMIT 1');
+          $mstmt->execute([(int)$roomId, $user_type, $user_id]);
+          $other = $mstmt->fetch();
+          if ($other && isset($other['member_type']) && isset($other['memberid'])) {
+            $otype = $other['member_type'];
+            $oid = (int)$other['memberid'];
+            $name = null;
+            switch ($otype) {
+              case 'client': $q = $pdo->prepare('SELECT cname AS name FROM Client WHERE clientid=? LIMIT 1'); break;
+              case 'designer': $q = $pdo->prepare('SELECT dname AS name FROM Designer WHERE designerid=? LIMIT 1'); break;
+              case 'manager': $q = $pdo->prepare('SELECT mname AS name FROM Manager WHERE managerid=? LIMIT 1'); break;
+              case 'Contractors': $q = $pdo->prepare('SELECT cname AS name FROM Contractors WHERE contractorid=? LIMIT 1'); break;
+              case 'supplier': $q = $pdo->prepare('SELECT sname AS name FROM Supplier WHERE supplierid=? LIMIT 1'); break;
+              default: $q = null; break;
+            }
+            if ($q) { $q->execute([$oid]); $name = $q->fetchColumn(); }
+            $r['other_name'] = $name ?: ($otype . ' ' . $oid);
+            $r['other_type'] = $otype;
+            $r['other_id'] = $oid;
+          }
+        } catch (Throwable $e) {
+          // ignore enrichment failures
+        }
+      }
+      send_json($rooms);
     } else {
       $stmt = $pdo->query("SELECT * FROM ChatRoom ORDER BY ChatRoomid DESC");
       send_json($stmt->fetchAll());
