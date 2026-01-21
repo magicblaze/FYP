@@ -18,6 +18,7 @@ SET FOREIGN_KEY_CHECKS = 0;
 
 -- Drop existing tables to ensure clean slate
 DROP TABLE IF EXISTS `Product`;
+DROP TABLE IF EXISTS `ProductColorImage`;
 DROP TABLE IF EXISTS `Client`;
 DROP TABLE IF EXISTS `Manager`;
 DROP TABLE IF EXISTS `Contractors`;
@@ -36,6 +37,7 @@ DROP TABLE IF EXISTS `Message`;
 DROP TABLE IF EXISTS `ProductLike`;
 DROP TABLE IF EXISTS `DesignLike`;
 DROP TABLE IF EXISTS `MessageRead`;
+DROP TABLE IF EXISTS `UploadedFiles`;
 
 -- Client table
 CREATE TABLE `Client` (
@@ -104,7 +106,7 @@ CREATE TABLE `Designer` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 INSERT INTO `Designer` (`designerid`,`dname`,`dtel`,`demail`,`dpassword`,`managerid`,`remember_token`) VALUES
-(1, 'John Wong', 12345678, 'abc123@gmail.com', 'designer12345',1, NULL),
+(1, 'John Wong', 12345678, '123@gmail.com', 'designer12345',1, NULL),
 (2, 'Billy Chan', 11002234, 'abcdd@gmail.com', '123456',2, NULL);
 
 -- Supplier table
@@ -162,12 +164,13 @@ INSERT INTO `Comment_design` (`comment_designid`,`clientid`,`content`,`designid`
 CREATE TABLE `Product` (
   `productid` int NOT NULL AUTO_INCREMENT,
   `pname` varchar(255) NOT NULL,
-  `image` varchar(500) DEFAULT NULL,
   `price` int NOT NULL,
   `likes` int NOT NULL,
   `category` varchar(100) NOT NULL,
   `description` text,
-  `size` varchar(100) DEFAULT NULL,
+  `long` varchar(50) DEFAULT NULL,
+  `wide` varchar(50) DEFAULT NULL,
+  `tall` varchar(50) DEFAULT NULL,
   `color` varchar(255) DEFAULT NULL,
   `material` varchar(255) DEFAULT NULL,
   `supplierid` int NOT NULL,
@@ -175,14 +178,13 @@ CREATE TABLE `Product` (
   KEY `supplierid_product_idx` (`supplierid`),
   CONSTRAINT `chk_category` CHECK (`category` IN ('Furniture','Material')),
   CONSTRAINT `fk_product_supplier` FOREIGN KEY (`supplierid`) REFERENCES `Supplier` (`supplierid`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+ ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-INSERT INTO `Product` (`productid`,`pname`, `image`, `price`, `likes`, `category`, `description`, `size`, `color`, `material`, `supplierid`) VALUES
-(1, 'Modern Sofa', 'sofa.jpg', 2000, 100, 'Furniture', 'A comfortable modern sofa.', '200cm*80cm', 'Grey, Blue', 'Fabric, Wood', 1),
-(2, 'Oak Chair', 'chair.jpg', 800, 50, 'Furniture', 'Solid wood chair.', '50cm*50cm', 'Brown,white', 'Oak', 1),
-(3, 'Brick', 'brick.jpg', 200, 25, 'Material', 'A brick.', null, null, null, 1),
-(4, 'Wood', 'wood.jpg', 800, 75, 'Material', 'A wood.', null, null, null, 2);
-
+INSERT INTO `Product` (`productid`,`pname`, `price`, `likes`, `category`, `description`, `long`, `wide`, `tall`, `color`, `material`, `supplierid`) VALUES
+(1, 'Modern Sofa', 2000, 100, 'Furniture', 'A comfortable modern sofa.', '200cm', '80cm', '300cm', 'Grey, Blue', 'Fabric, Wood', 1),
+(2, 'Oak Chair', 800, 50, 'Furniture', 'Solid wood chair.', '50cm', '50cm', '100cm', 'Brown,white', 'Oak', 1),
+(3, 'Brick', 200, 25, 'Material', 'A brick.', null, null, null, 'Blue', null, 1),
+(4, 'Wood', 800, 75, 'Material', 'A wood.', null, null, null, 'Blue', null, 2);
 
 -- Order table
 CREATE TABLE `Order` (
@@ -206,6 +208,25 @@ INSERT INTO `Order`
 (1, '2025-04-12 17:50:00', 1, 1000, NULL, 'abc',2,'Designing'),
 (2, '2025-05-10 12:00:00', 2, 2000, NULL, 'abc',1,'Completed');
 
+-- Table to store color-image mapping for each product
+CREATE TABLE `ProductColorImage` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `productid` int NOT NULL,
+  `color` varchar(50) NOT NULL,
+  `image` varchar(500) NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `productid_idx` (`productid`),
+  CONSTRAINT `fk_pci_productid` FOREIGN KEY (`productid`) REFERENCES `Product` (`productid`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO `ProductColorImage` (`id`, `productid`, `color`, `image`) VALUES
+(1, 1, 'Grey', 'sofa_grey.jpg'),
+(2, 1, 'Blue', 'sofa_blue.jpg'),
+(3, 2, 'Brown', 'chair_brown.jpg'),
+(4, 2, 'White', 'chair_white.jpg'),
+(5, 4, 'Black', 'wood.jpg'),
+(6, 3, 'White', 'brick.jpg');
+
 -- OrderMaterial table
 CREATE TABLE `OrderProduct` (
   `orderproductid` int NOT NULL AUTO_INCREMENT,
@@ -215,6 +236,7 @@ CREATE TABLE `OrderProduct` (
   `deliverydate` date DEFAULT NULL,
   `status` varchar(255) NOT NULL,
   `managerid` int NOT NULL,
+  `color` varchar(100) DEFAULT NULL,
   PRIMARY KEY (`orderproductid`),
   KEY `productid_OrderProduct_idx` (`productid`),
   KEY `orderid_OrderProduct_idx` (`orderid`),
@@ -225,9 +247,9 @@ CREATE TABLE `OrderProduct` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 INSERT INTO `OrderProduct`
-(`orderproductid`, `productid`, `quantity`, `orderid`, `deliverydate`,`status`, `managerid`) VALUES
-(1, 1, 10, 1, '2026-01-13', 'Pending', 1),
-(2, 2, 20, 1, '2026-01-23', 'Shipped', 1);
+(`orderproductid`, `productid`, `quantity`, `orderid`, `deliverydate`,`status`, `managerid`, `color`) VALUES
+(1, 1, 10, 1, '2026-01-13', 'Pending', 1, 'Grey'),
+(2, 2, 20, 1, '2026-01-23', 'Shipped', 1, 'Brown');
 
 -- Order_Contractors table
 CREATE TABLE `Order_Contractors` (
@@ -253,7 +275,8 @@ INSERT INTO `Order_Contractors`
 CREATE TABLE `Schedule` (
   `scheduleid` int NOT NULL AUTO_INCREMENT,
   `managerid` int NOT NULL,
-  `FinishDate` datetime DEFAULT NULL,
+  `OrderFinishDate` date DEFAULT NULL,
+  `DesignFinishDate` date DEFAULT NULL,
   `orderid` int NOT NULL,
   PRIMARY KEY (`scheduleid`),
   KEY `orderid_pk_idx` (`orderid`),
@@ -262,9 +285,9 @@ CREATE TABLE `Schedule` (
   CONSTRAINT `orderid_fk` FOREIGN KEY (`orderid`) REFERENCES `Order` (`orderid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-INSERT INTO `Schedule` (`scheduleid`,`managerid`,`FinishDate`,`orderid`) VALUES
-(1,1,'2025-05-13 12:01:00',1),
-(2,2,'2025-06-13 13:31:00',2);
+INSERT INTO `Schedule` (`scheduleid`,`managerid`,`OrderFinishDate`,`DesignFinishDate`,`orderid`) VALUES
+(1,1,'2026-01-15','2026-01-16',1),
+(2,2,'2026-01-17','2026-01-18',2);
 
 -- ChatRoom Tables
 CREATE TABLE `ChatRoom` (
@@ -425,14 +448,14 @@ INSERT INTO `MessageRead` (`messagereadid`, `messageid`, `ChatRoomMemberid`, `is
 INSERT INTO `Order` (`orderid`, `odate`, `clientid`, `budget`, `Floor_Plan`, `Requirements`,`designid`,`ostatus`) VALUES
 (3, '2025-07-01 09:00:00', 1, 1500, NULL, 'Need quick remodel', 1, 'Pending');
 
-INSERT INTO `OrderProduct` (`orderproductid`, `productid`, `quantity`, `orderid`, `deliverydate`, `status`, `managerid`) VALUES
-(3, 3, 50, 3, '2026-01-13', 'Pending', 1);
+INSERT INTO `OrderProduct` (`orderproductid`, `productid`, `quantity`, `orderid`, `deliverydate`, `status`, `managerid`, `color`) VALUES
+(3, 3, 50, 3, '2026-01-13', 'Pending', 1, 'White');
 
 INSERT INTO `Order_Contractors` (`order_Contractorid`, `contractorid`, `orderid`, `managerid`) VALUES
 (3, 1, 3, 1);
 
-INSERT INTO `Schedule` (`scheduleid`,`managerid`,`FinishDate`,`orderid`) VALUES
-(3,1,'2025-08-01 17:00:00',3);
+INSERT INTO `Schedule` (`scheduleid`,`managerid`,`OrderFinishDate`,`DesignFinishDate`,`orderid`) VALUES
+(3,1,'2026-01-01','2026-01-02',3);
 
 -- Add foreign key from Message.fileid to UploadedFiles.fileid
 ALTER TABLE `Message`

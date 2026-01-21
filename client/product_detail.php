@@ -26,13 +26,25 @@ $stmt->execute();
 $product = $stmt->get_result()->fetch_assoc();
 if (!$product) { http_response_code(404); die('Product not found.'); }
 
-// Parse colors from database
-$colors = [];
-if (!empty($product['color'])) {
-    // Split colors by comma and trim whitespace
-    $colorArray = array_map('trim', explode(',', $product['color']));
-    $colors = array_filter($colorArray); // Remove empty values
-}
+    // Get color images from ProductColorImage table (regardless of Product.color field)
+    $colorImages = [];
+    $colors = [];
+    $colorImageSql = "SELECT color, image FROM ProductColorImage WHERE productid = ? ORDER BY id ASC";
+    $colorImageStmt = $mysqli->prepare($colorImageSql);
+    $colorImageStmt->bind_param("i", $productid);
+    $colorImageStmt->execute();
+    $colorImageResult = $colorImageStmt->get_result();
+    while ($row = $colorImageResult->fetch_assoc()) {
+        $colorImages[$row['color']] = $row['image'];
+        $colors[] = $row['color'];
+    }
+    $colorImageStmt->close();
+    
+    // If no color images found, try to parse colors from Product.color field
+    if (empty($colors) && !empty($product['color'])) {
+        $colorArray = array_map('trim', explode(',', $product['color']));
+        $colors = array_filter($colorArray);
+    }
 
 // Get other products from the same supplier
 $other_sql = "SELECT productid, pname, price FROM Product WHERE supplierid=? AND productid<>? LIMIT 6";
@@ -72,8 +84,19 @@ if (isset($_GET['from']) && $_GET['from'] === 'my_likes') {
     }
 }
 
-// Use DB-driven image endpoint
-$mainImg = '../supplier/product_image.php?id=' . (int)$product['productid'];
+// Get the first color's image from ProductColorImage table
+$mainImg = null;
+if (!empty($colorImages)) {
+    // Get the first image from colorImages array
+    $firstImage = reset($colorImages);
+    if ($firstImage) {
+        $mainImg = '../uploads/products/' . htmlspecialchars($firstImage);
+    }
+}
+// Fallback to placeholder if no image found
+if (!$mainImg) {
+    $mainImg = '../uploads/products/placeholder.jpg';
+}
 
 // Function to convert color name or hex code to hex code
 // Supports both formats: "red" -> "#FF0000" and "#FF0000" -> "#FF0000"
@@ -447,7 +470,6 @@ function colorNameToHex($colorInput) {
                     <li class="nav-item"><a class="nav-link" href="../client/my_likes.php">My Likes</a></li>
                     <li class="nav-item"><a class="nav-link" href="order_history.php">Order History</a></li>
                     <li class="nav-item"><a class="nav-link" href="my_likes.php">My Likes</a></li>
-                    <li class="nav-item"><a class="nav-link" href="../chat.php">Chatroom</a></li>
                     <li class="nav-item"><a class="nav-link" href="../logout.php">Logout</a></li>
                 <?php else: ?>
                     <li class="nav-item"><a class="nav-link" href="../login.php">Login</a></li>
@@ -531,16 +553,30 @@ function colorNameToHex($colorInput) {
                 </div>
                 <?php endif; ?>
 
-                <?php if (!empty($product['size']) || !empty($product['material'])): ?>
                 <div class="product-specs">
                     <?php if (!empty($product['size'])): ?>
                         <div><i class="fas fa-ruler me-2"></i><strong>Size:</strong> <?= htmlspecialchars($product['size']) ?></div>
                     <?php endif; ?>
+                    
+                    <?php if (!empty($product['long']) || !empty($product['wide']) || !empty($product['tall'])): ?>
+                        <div style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #ecf0f1;">
+                            <div style="font-weight: 600; color: #2c3e50; margin-bottom: 0.75rem;">Size:</div>
+                            <?php if (!empty($product['long'])): ?>
+                                <div style="margin-bottom: 0.5rem; margin-left: 1.5rem;"><strong>Length:</strong> <?= htmlspecialchars($product['long']) ?></div>
+                            <?php endif; ?>
+                            <?php if (!empty($product['wide'])): ?>
+                                <div style="margin-bottom: 0.5rem; margin-left: 1.5rem;"><strong>Width:</strong> <?= htmlspecialchars($product['wide']) ?></div>
+                            <?php endif; ?>
+                            <?php if (!empty($product['tall'])): ?>
+                                <div style="margin-left: 1.5rem;"><strong>Height:</strong> <?= htmlspecialchars($product['tall']) ?></div>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
+                    
                     <?php if (!empty($product['material'])): ?>
-                        <div><i class="fas fa-cube me-2"></i><strong>Material:</strong> <?= htmlspecialchars($product['material']) ?></div>
+                        <div style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #ecf0f1;"><i class="fas fa-cube me-2"></i><strong>Material:</strong> <?= htmlspecialchars($product['material']) ?></div>
                     <?php endif; ?>
                 </div>
-                <?php endif; ?>
 
                 <?php if (!empty($product['description'])): ?>
                 <div class="product-description">
@@ -558,7 +594,17 @@ function colorNameToHex($colorInput) {
         <div class="detail-gallery-images">
             <?php while ($r = $others->fetch_assoc()): ?>
                 <a href="product_detail.php?id=<?= (int)$r['productid'] ?>">
-                    <img src="../supplier/product_image.php?id=<?= (int)$r['productid'] ?>" alt="<?= htmlspecialchars($r['pname']) ?>">
+                    <?php 
+                        // Get first color image for related product
+                        $relatedColorSql = "SELECT image FROM ProductColorImage WHERE productid = ? ORDER BY id ASC LIMIT 1";
+                        $relatedColorStmt = $mysqli->prepare($relatedColorSql);
+                        $relatedColorStmt->bind_param("i", $r['productid']);
+                        $relatedColorStmt->execute();
+                        $relatedColorResult = $relatedColorStmt->get_result();
+                        $relatedImage = $relatedColorResult->fetch_assoc();
+                        $imageSrc = ($relatedImage && $relatedImage['image']) ? '../uploads/products/' . htmlspecialchars($relatedImage['image']) : '../uploads/products/placeholder.jpg';
+                    ?>
+                    <img src="<?= $imageSrc ?>" alt="<?= htmlspecialchars($r['pname']) ?>">
                 </a>
             <?php endwhile; ?>
         </div>
@@ -580,6 +626,9 @@ function colorNameToHex($colorInput) {
         const selectedHex = button.dataset.hex;
         document.getElementById('selectedColor').value = selectedColor;
         document.getElementById('selectedColorHex').value = selectedHex;
+        
+        // Update product image based on selected color
+        updateProductImage(selectedColor);
     }
 
     // Color selection function for dropdown-based selection
@@ -591,6 +640,42 @@ function colorNameToHex($colorInput) {
             
             document.getElementById('selectedColor').value = selectedColor;
             document.getElementById('selectedColorHex').value = selectedHex;
+            
+            // Update product image based on selected color
+            updateProductImage(selectedColor);
+        }
+    }
+
+    // Update product image based on selected color
+    function updateProductImage(color) {
+        const colorImages = <?= json_encode($colorImages) ?>;
+        const productImg = document.querySelector('.product-image-wrapper img');
+        
+        // Find the image with case-insensitive color matching
+        let imageFile = null;
+        if (colorImages) {
+            // Try exact match first
+            if (colorImages[color]) {
+                imageFile = colorImages[color];
+            } else {
+                // Try case-insensitive match
+                const colorLower = color.toLowerCase();
+                for (const key in colorImages) {
+                    if (key.toLowerCase() === colorLower) {
+                        imageFile = colorImages[key];
+                        break;
+                    }
+                }
+            }
+        }
+        
+        if (imageFile) {
+            // If color has a specific image, use it from ProductColorImage table
+            const imageUrl = '../uploads/products/' + imageFile;
+            productImg.src = imageUrl;
+        } else {
+            // Otherwise, use placeholder
+            productImg.src = '../uploads/products/placeholder.jpg';
         }
     }
 

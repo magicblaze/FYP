@@ -1,6 +1,6 @@
 <?php
 session_start();
-require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/../config.php';
 
 // Handle fake login / logout for testing
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -68,12 +68,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     <p>Include the floating chat widget below. Click the blue button at bottom-right to open the chat panel.</p>
 
-    <?php include __DIR__ . '/designer/chat_widget.php'; ?>
+    <?php include __DIR__ . '/../Public/chat_widget.php'; ?>
 
     <hr>
     <h5>Database debug: chat-related tables</h5>
     <?php
-      require_once __DIR__ . '/config.php';
+      require_once __DIR__ . '/../config.php';
       function print_table($res) {
         if (!$res) { echo '<div class="text-danger">Query failed</div>'; return; }
         echo '<div class="table-responsive"><table class="table table-sm table-striped"><thead><tr>';

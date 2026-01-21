@@ -1,6 +1,6 @@
 <?php
 // ==============================
-// File: furniture_dashboard.php (Enhanced with Filters)
+// File: furniture_dashboard.php (FINAL - Fixed SQL + UI Design)
 // 用途:顯示供應商的傢俱 (Furniture) 列表,含進階過濾功能
 // ==============================
 require_once __DIR__ . '/config.php';
@@ -11,52 +11,36 @@ $search = trim($_GET['search'] ?? '');
 $min_price = isset($_GET['min_price']) && is_numeric($_GET['min_price']) ? (int)$_GET['min_price'] : 0;
 $max_price = isset($_GET['max_price']) && is_numeric($_GET['max_price']) ? (int)$_GET['max_price'] : 999999;
 $supplier_id = isset($_GET['supplier_id']) && is_numeric($_GET['supplier_id']) ? (int)$_GET['supplier_id'] : '';
-$color = trim($_GET['color'] ?? '');
+$color = ''; // Color filter disabled
 $size = trim($_GET['size'] ?? '');
 $sort_by = isset($_GET['sort_by']) ? $_GET['sort_by'] : 'recent';
 
+// 构建 SQL 查询 - 使用 real_escape_string 避免 bind_param 问题
 $sql = "SELECT p.*, s.sname FROM Product p 
         JOIN Supplier s ON p.supplierid = s.supplierid 
         WHERE p.category = 'Furniture'";
-$params = [];
-$types = "";
 
 // 關鍵字搜尋
 if (!empty($search)) {
-    $sql .= " AND (p.pname LIKE ? OR p.description LIKE ?)";
-    $params[] = "%$search%";
-    $params[] = "%$search%";
-    $types .= "ss";
+    $search_escaped = $mysqli->real_escape_string($search);
+    $sql .= " AND (p.pname LIKE '%$search_escaped%' OR p.description LIKE '%$search_escaped%')";
 }
 
 // 價格範圍過濾
 if ($min_price > 0 || $max_price < 999999) {
-    $sql .= " AND p.price BETWEEN ? AND ?";
-    $params[] = $min_price;
-    $params[] = $max_price;
-    $types .= "ii";
+    $sql .= " AND p.price BETWEEN $min_price AND $max_price";
 }
 
 // 供應商過濾
 if (!empty($supplier_id)) {
-    $sql .= " AND p.supplierid = ?";
-    $params[] = $supplier_id;
-    $types .= "i";
+    $sql .= " AND p.supplierid = $supplier_id";
 }
 
-// 顏色過濾
-if (!empty($color)) {
-    $sql .= " AND p.color LIKE ?";
-    $params[] = "%$color%";
-    $types .= "s";
-}
-
-// 尺寸過濾
-if (!empty($size)) {
-    $sql .= " AND p.size LIKE ?";
-    $params[] = "%$size%";
-    $types .= "s";
-}
+// 顏色過濾 (已禁用)
+// if (!empty($color)) {
+//     $color_escaped = $mysqli->real_escape_string($color);
+//     $sql .= " AND p.color LIKE '%$color_escaped%'";
+// }
 
 // 排序
 switch ($sort_by) {
@@ -75,12 +59,11 @@ switch ($sort_by) {
         break;
 }
 
-$stmt = $mysqli->prepare($sql);
-if (!empty($params)) {
-    $stmt->bind_param($types, ...$params);
+// 执行查询
+$result = $mysqli->query($sql);
+if (!$result) {
+    die('Query error: ' . $mysqli->error . '<br>SQL: ' . $sql);
 }
-$stmt->execute();
-$result = $stmt->get_result();
 
 // 獲取所有供應商用於過濾下拉菜單
 $supplier_sql = "SELECT DISTINCT s.supplierid, s.sname FROM Supplier s 
@@ -89,15 +72,28 @@ $supplier_sql = "SELECT DISTINCT s.supplierid, s.sname FROM Supplier s
 $supplier_result = $mysqli->query($supplier_sql);
 if (!$supplier_result) die('Query error: ' . $mysqli->error);
 
-// 獲取所有顏色用於過濾下拉菜單
-$color_sql = "SELECT DISTINCT color FROM Product WHERE category = 'Furniture' AND color IS NOT NULL ORDER BY color ASC";
-$color_result = $mysqli->query($color_sql);
-if (!$color_result) die('Query error: ' . $mysqli->error);
+// 獲取每個產品的第一個顏色圖片
+$productFirstColorImages = [];
+$colorImageSql = "SELECT DISTINCT p.productid, pci.image FROM Product p 
+                  LEFT JOIN ProductColorImage pci ON p.productid = pci.productid 
+                  WHERE p.category = 'Furniture' 
+                  ORDER BY p.productid, pci.id ASC";
+$colorImageResult = $mysqli->query($colorImageSql);
+if ($colorImageResult) {
+    $seenProducts = [];
+    while ($row = $colorImageResult->fetch_assoc()) {
+        if (!isset($seenProducts[$row['productid']])) {
+            $productFirstColorImages[$row['productid']] = $row['image'];
+            $seenProducts[$row['productid']] = true;
+        }
+    }
+}
 
-// 獲取所有尺寸用於過濾下拉菜單
-$size_sql = "SELECT DISTINCT size FROM Product WHERE category = 'Furniture' AND size IS NOT NULL ORDER BY size ASC";
-$size_result = $mysqli->query($size_sql);
-if (!$size_result) die('Query error: ' . $mysqli->error);
+// 獲取所有顏色用於過濾下拉菜單 (已禁用)
+$color_result = null; // 设置为 null
+
+// 獲取所有尺寸用於過濾下拉菜單 (已禁用 - size 列不存在)
+$size_result = null; // 设置为 null 以避免后续错误
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -208,6 +204,7 @@ if (!$size_result) die('Query error: ' . $mysqli->error);
             border-radius: 8px;
             cursor: pointer;
             transition: background 0.3s;
+            text-decoration: none !important;
         }
         .btn-clear-filter:hover {
             background: #bdc3c7;
@@ -221,6 +218,29 @@ if (!$size_result) die('Query error: ' . $mysqli->error);
             display: grid;
             grid-template-columns: 250px 1fr;
             gap: 2rem;
+        }
+        .card {
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+            overflow: hidden;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+        }
+        .card-img-top {
+            height: 250px;
+            object-fit: cover;
+        }
+        .card-body {
+            padding: 1.5rem;
+        }
+        .card-title {
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 0.5rem;
         }
         @media (max-width: 768px) {
             .container-with-filter {
@@ -253,12 +273,11 @@ if (!$size_result) die('Query error: ' . $mysqli->error);
                 <?php if (isset($_SESSION['user'])): ?>
                     <li class="nav-item me-2">
                         <a class="nav-link text-muted" href="client/profile.php">
-                            <i class="fas fa-user me-1"></i>Hello <?= htmlspecialchars($_SESSION['user']['name'] ?? 'User') ?>
+                            <i class="fas fa-user me-1"></i>Hello <?= htmlspecialchars($clientData['cname'] ?? $_SESSION['user']['name'] ?? 'User') ?>
                         </a>
                     </li>
                     <li class="nav-item"><a class="nav-link" href="client/my_likes.php">My Likes</a></li>
                     <li class="nav-item"><a class="nav-link" href="client/order_history.php">Order History</a></li>
-                    <li class="nav-item"><a class="nav-link" href="chat.php">Chatroom</a></li>
                     <li class="nav-item"><a class="nav-link" href="logout.php">Logout</a></li>
                 <?php else: ?>
                     <li class="nav-item"><a class="nav-link" href="login.php">Login</a></li>
@@ -289,6 +308,7 @@ if (!$size_result) die('Query error: ' . $mysqli->error);
                 <form method="GET" action="furniture_dashboard.php" id="filterForm">
                     <!-- Search (Hidden) -->
                     <input type="hidden" name="search" value="<?= htmlspecialchars($search) ?>">
+                    <!-- Color filter disabled - no need to pass color parameter -->
 
                     <!-- Price Range Filter -->
                     <div class="filter-group">
@@ -313,31 +333,11 @@ if (!$size_result) die('Query error: ' . $mysqli->error);
                         </select>
                     </div>
 
-                    <!-- Color Filter -->
-                    <div class="filter-group">
-                        <label for="color">Color</label>
-                        <select name="color" id="color" class="form-select">
-                            <option value="">All Colors</option>
-                            <?php while ($c = $color_result->fetch_assoc()): ?>
-                                <option value="<?= htmlspecialchars($c['color']) ?>" <?= $color == $c['color'] ? 'selected' : '' ?>>
-                                    <?= htmlspecialchars($c['color']) ?>
-                                </option>
-                            <?php endwhile; ?>
-                        </select>
-                    </div>
+                    <!-- Color Filter Disabled -->
+                    <!-- Color filter has been removed -->
 
                     <!-- Size Filter -->
-                    <div class="filter-group">
-                        <label for="size">Size</label>
-                        <select name="size" id="size" class="form-select">
-                            <option value="">All Sizes</option>
-                            <?php while ($s = $size_result->fetch_assoc()): ?>
-                                <option value="<?= htmlspecialchars($s['size']) ?>" <?= $size == $s['size'] ? 'selected' : '' ?>>
-                                    <?= htmlspecialchars($s['size']) ?>
-                                </option>
-                            <?php endwhile; ?>
-                        </select>
-                    </div>
+                    <!-- Size Filter Disabled - size column does not exist in Product table -->
 
                     <!-- Sort By -->
                     <div class="filter-group">
@@ -355,7 +355,7 @@ if (!$size_result) die('Query error: ' . $mysqli->error);
                         <button type="submit" class="btn-apply-filter">
                             <i class="fas fa-check me-1"></i>Apply
                         </button>
-                        <a href="furniture_dashboard.php" class="btn-clear-filter" style="text-align: center; text-decoration: none;">
+                        <a href="furniture_dashboard.php" class="btn-clear-filter" style="text-align: center;">
                             <i class="fas fa-times me-1"></i>Clear
                         </a>
                     </div>
@@ -364,8 +364,6 @@ if (!$size_result) die('Query error: ' . $mysqli->error);
 
             <!-- Main Content -->
             <div class="main-content">
-
-
                 <!-- Results Grid -->
                 <div class="row g-4">
                     <?php if ($result->num_rows > 0): ?>
@@ -373,7 +371,16 @@ if (!$size_result) die('Query error: ' . $mysqli->error);
                         <div class="col-lg-4 col-md-6 col-sm-12">
                             <a href="client/product_detail.php?id=<?= htmlspecialchars($prod['productid']) ?>" style="text-decoration: none;">
                                 <div class="card h-100">
-                                    <img src="supplier/product_image.php?id=<?= (int)$prod['productid'] ?>" class="card-img-top" alt="<?= htmlspecialchars($prod['pname']) ?>">
+                                    <?php 
+                                        $prodId = $prod['productid'];
+                                        $imageFile = $productFirstColorImages[$prodId] ?? null;
+                                        if ($imageFile) {
+                                            $imageSrc = 'uploads/products/' . htmlspecialchars($imageFile);
+                                        } else {
+                                            $imageSrc = 'uploads/products/placeholder.jpg';
+                                        }
+                                    ?>
+                                    <img src="<?= $imageSrc ?>" class="card-img-top" alt="<?= htmlspecialchars($prod['pname']) ?>" onerror="this.src='https://via.placeholder.com/300x250?text=No+Image'" style="height: 250px; object-fit: cover;">
                                     <div class="card-body text-center">
                                         <h5 class="card-title"><?= htmlspecialchars($prod['pname']) ?></h5>
                                         <p class="text-muted mb-2">
@@ -405,20 +412,21 @@ if (!$size_result) die('Query error: ' . $mysqli->error);
     <?php
     // Include floating chat widget for logged-in users only
     if (isset($_SESSION['user'])) {
-        include __DIR__ . '/designer/chat_widget.php';
+        include __DIR__ . '/Public/chat_widget.php';
     }
     ?>
 
     <!-- Include chat functionality JavaScript -->
-    <script src="designer/Chatfunction.js"></script>
+    <script src="Public/Chatfunction.js"></script>
     <script>
     document.addEventListener('DOMContentLoaded', function() {
         <?php if (isset($_SESSION['user'])): ?>
         // Initialize chat application
         const chatApp = initApp({
-            apiPath: 'designer/ChatApi.php?action=',
+            apiPath: 'Public/ChatApi.php?action=',
             userId: <?= (int)($_SESSION['user']['clientid'] ?? $_SESSION['user']['id'] ?? 0) ?>,
             userType: '<?= htmlspecialchars($_SESSION['user']['role'] ?? 'client') ?>',
+            userName: '<?= htmlspecialchars($_SESSION['user']['name'] ?? 'User', ENT_QUOTES) ?>',
             rootId: 'chatwidget',
             items: []
         });

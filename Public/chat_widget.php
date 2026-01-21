@@ -10,8 +10,8 @@ $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
 <style>
 /* Floating chat button and panel styles */
-#chatwidget_toggle {position:fixed;right:20px;bottom:20px;z-index:9999;border-radius:50%;width:56px;height:56px;background:#0d6efd;color:#fff;border:none;box-shadow:0 6px 18px rgba(11,27,43,0.18);display:flex;align-items:center;justify-content:center;font-size:22px}
-#chatwidget_panel {position:fixed;right:20px;bottom:20px;z-index:9998;width:520px;max-width:95vw;max-height:95vh;background:#fff;border-radius:12px;box-shadow:0 10px 30px rgba(11,27,43,0.12);overflow:hidden;display:none;flex-direction:column;min-width:377px;min-height:255px;box-sizing:border-box}
+#chatwidget_toggle {position:fixed;right:20px;bottom:20px;z-index:9999;border-radius:50%;width:56px;height:56px;background:#8faae3;color:#fff;border:none;box-shadow:0 6px 18px rgba(11,27,43,0.18);display:flex;align-items:center;justify-content:center;font-size:22px}
+#chatwidget_panel {position:fixed;right:20px;z-index:9998;width:520px;max-width:95vw;max-height:95vh;background:#fff;border-radius:12px;box-shadow:0 10px 30px rgba(11,27,43,0.12);overflow:hidden;display:none;flex-direction:column;min-width:377px;min-height:255px;box-sizing:border-box}
 #chatwidget_panel .header{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#f7f9fc;border-bottom:1px solid #eef3fb}
 #chatwidget_panel .body{display:flex;gap:8px;padding:8px;flex:1 1 auto;min-height:0;box-sizing:border-box}
 #chatwidget_panel .body .left{width:160px;min-width:120px;overflow:auto;border-right:1px solid #eef3fb;padding-right:8px}
@@ -56,7 +56,7 @@ $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
 
 <!-- Preview row styling inserted by assistant -->
 <style>
-.message-preview-column{box-sizing:border-box;padding:8px 12px;border-top:1px solid #eef3fb;border-bottom:1px solid #f8f9fb;background:#ffffff;display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.message-preview-column{box-sizing:border-box;padding:8px 12px;border-top:1px solid #eef3fb;border-bottom:44px solid #f8f9fb;background:#ffffff;display:flex;flex-direction:column;gap:8px;align-items:flex-start;}
 .message-preview-column img{max-width:100%;max-height:360px;border-radius:6px;object-fit:cover}
 .message-preview-column .file-badge{width:56px;height:44px;border-radius:6px;background:#6c757d;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:600}
 .message-preview-column .file-meta{display:flex;flex-direction:column;min-width:0}
@@ -69,12 +69,12 @@ $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
   $redirect = urlencode($_SERVER['REQUEST_URI'] ?? '');
   if (!$logged) :
 ?>
-  <a id="chatwidget_toggle" class="btn-link" href="../login.php?redirect=<?php echo $redirect ?>" aria-label="Log in to open chat" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;border-radius:50%;background:#0d6efd;color:#fff;">
+  <a id="chatwidget_toggle" class="btn-link" href="../login.php?redirect=<?php echo $redirect ?>" aria-label="Log in to open chat" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;border-radius:50%;background:#8faae3;color:#fff;">
     <i class="bi bi-chat-dots" aria-hidden="true" style="font-size:22px;color:#fff;line-height:1"></i>
   </a>
 <?php else: ?>
   <button id="chatwidget_toggle" aria-label="Open chat" style="display:inline-flex;align-items:center;justify-content:center;padding:0;border:0;background:transparent;">
-    <i class="bi bi-chat-dots" aria-hidden="true" style="font-size:22px;color:#0d6efd;line-height:1"></i>
+    <i class="bi bi-chat-dots" aria-hidden="true" style="font-size:22px;color:#8faae3;line-height:1"></i>
   </button>
 <?php endif; ?>
 
@@ -95,11 +95,15 @@ $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
     <div id="chatwidget_divider" role="separator" aria-orientation="vertical" aria-label="Resize chat list"><div class="handle" aria-hidden="true"></div></div>
     <div class="right">
       <div id="chatwidget_messages" class="messages"></div>
+      <!-- attachment preview placeholder row (populated by JS) -->
+      <div id="chatwidget_attachPreviewColumn" class="message-preview-column" style="display:none;width:100%;margin-bottom:8px"></div>
       <div class="composer">
         <input type="file" id="chatwidget_attachInput" class="d-none" />
-        <div id="chatwidget_attachPreviewColumn" style="min-width:0;max-width:120px;display:flex;align-items:center;margin-right:6px"></div>
         <button id="chatwidget_attach" class="btn btn-light btn-sm" type="button" title="Attach" aria-label="Attach file">
           <i class="bi bi-paperclip" aria-hidden="true" style="font-size:16px;line-height:1"></i>
+        </button>
+        <button id="chatwidget_share" class="btn btn-outline-secondary btn-sm" type="button" title="Share page" aria-label="Share design" style="display:none;margin-left:4px">
+          <i class="bi bi-share" aria-hidden="true" style="font-size:14px"></i>
         </button>
         <input id="chatwidget_input" class="form-control form-control-sm" placeholder="Message..." aria-label="Message input" <?php if (!$logged) echo 'disabled title="Log in to send messages"'; ?> >
         <button id="chatwidget_send" class="btn btn-primary btn-sm" <?php if (!$logged) echo 'disabled title="Log in to send messages"'; ?> aria-label="Send message">
@@ -333,9 +337,8 @@ $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
   })();
 })();
 </script>
-
-<!-- Initialize chat widget. This assumes Chatfunction.js and ChatApi.php are reachable at the same paths. -->
-<script src="designer/Chatfunction.js"></script>
+<!-- Initialize chat widget. Allow overriding paths by setting $CHAT_JS_PATH and $CHAT_API_PATH before include -->
+<script src="<?= htmlspecialchars($CHAT_JS_PATH ?? 'Chatfunction.js') ?>"></script>
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
 <script>
   document.addEventListener('DOMContentLoaded', function(){
@@ -345,6 +348,7 @@ $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
       const attachInput = document.getElementById('chatwidget_attachInput');
       const preview = document.getElementById('chatwidget_attachPreviewColumn');
       const sendBtn = document.getElementById('chatwidget_send');
+      let previewPendingShare = null;
 
       function clearPreview(){
         if (!attachInput) return;
@@ -399,7 +403,115 @@ $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
       if (sendBtn) sendBtn.addEventListener('click', function(){ setTimeout(clearPreview, 200); });
     } catch (e) { console.error('chatwidget preview init error', e); }
 
+
     // rootId 'chatwidget' maps to IDs like 'chatwidget_messages', 'chatwidget_input' etc.
-    initApp({ apiPath: 'designer/ChatApi.php?action=', userType: <?= json_encode($role) ?>, userId: <?= json_encode($uid) ?>, rootId: 'chatwidget', items: [] });
+    initApp({ apiPath: <?= json_encode($CHAT_API_PATH ?? 'ChatApi.php?action=') ?>, userType: <?= json_encode($role) ?>, userId: <?= json_encode($uid) ?>, rootId: 'chatwidget', items: [] });
+    // After init, wire the share button if a page provided a payload
+    try {
+      const tryWireShare = () => {
+        const inst = window.chatApps && window.chatApps['chatwidget'];
+        const shareBtn = document.getElementById('chatwidget_share');
+        if (!shareBtn) return;
+        // Prefer server-provided payload when this file is included from a page
+        <?php if (isset($CHAT_SHARE) && is_array($CHAT_SHARE)): ?>
+        const payload = <?= json_encode($CHAT_SHARE) ?>;
+        <?php else: ?>
+        const payload = window.__chat_share_payload || null;
+        <?php endif; ?>
+        if (!payload) { shareBtn.style.display = 'none'; return; }
+        // Prefer the image already rendered on the page (design_detail.php uses `$mainImg`) so
+        // the widget preview uses the same resolved src. The DOM `img.src` will be absolute.
+        try {
+          const pageImg = document.querySelector('.design-image-wrapper img');
+          if (pageImg && pageImg.src) {
+            payload.image = pageImg.src;
+          }
+        } catch (e) {}
+        shareBtn.style.display = '';
+        shareBtn.addEventListener('click', async () => {
+          try {
+            // create or open room with designer
+            const res = await (window.handleChat ? window.handleChat(payload.designerId, { creatorId: <?= json_encode($uid) ?>, otherName: payload.title }) : Promise.resolve({ ok: false }));
+            const roomId = res && res.roomId;
+            const contentHtml = `<div>Client is interested in this design: <a href="${payload.url}" target="_blank" rel="noopener">${payload.title}</a></div>`;
+            if (!roomId) {
+              alert('Unable to open chat to share design.');
+              return;
+            }
+            // Show preview in widget preview column and require confirmation before sending
+            const preview = document.getElementById('chatwidget_attachPreviewColumn');
+            if (!preview) {
+              // fallback to immediate send if preview area missing
+              const attachmentUrl = payload.image || payload.url || null;
+              const attachmentName = payload.title ? (payload.title + '.jpg') : (attachmentUrl ? (attachmentUrl.split('/').pop() || 'design') : 'design');
+              const resp = await inst.apiPost('sendMessage', { sender_type: 'client', sender_id: <?= json_encode($uid) ?>, content: payload.url || payload.title || '', room: roomId, attachment_url: attachmentUrl, attachment_name: attachmentName, message_type: 'design', share_title: payload.title || '', share_url: payload.url || '' });
+              try { if (resp && (resp.ok || resp.message)) inst.appendMessageToUI(resp.message || resp, 'me'); } catch(e){}
+              return;
+            }
+
+            preview.style.display = '';
+            preview.innerHTML = '';
+            // thumbnail or link
+            const imgWrap = document.createElement('div');
+            imgWrap.style.display = 'flex'; imgWrap.style.gap = '12px'; imgWrap.style.alignItems = 'center';
+            if (payload.image) {
+              const img = document.createElement('img'); img.src = payload.image; img.alt = payload.title; img.style.maxWidth = '120px'; img.style.maxHeight = '90px'; img.style.borderRadius = '6px'; imgWrap.appendChild(img);
+            } else {
+              const badge = document.createElement('div'); badge.className = 'file-badge'; badge.textContent = 'IMG'; imgWrap.appendChild(badge);
+            }
+            const meta = document.createElement('div'); meta.className = 'file-meta';
+            const name = document.createElement('div'); name.className = 'name'; name.textContent = payload.title || 'Design';
+            const link = document.createElement('a'); link.href = payload.url; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = 'Open design page'; link.className = 'small text-muted';
+            meta.appendChild(name); meta.appendChild(link);
+            imgWrap.appendChild(meta);
+            preview.appendChild(imgWrap);
+
+            // Prepare pending share object and show Cancel button; main Send will post it
+            previewPendingShare = {
+              roomId: roomId,
+              attachmentUrl: payload.image || payload.url || null,
+              attachmentName: payload.title ? (payload.title + '.jpg') : (payload.image || payload.url || '').split('/').pop() || 'design',
+              share_title: payload.title || '',
+              share_url: payload.url || ''
+            };
+
+            const actions = document.createElement('div'); actions.style.marginTop = '8px';
+            const cancelBtn = document.createElement('button'); cancelBtn.type = 'button'; cancelBtn.className = 'btn btn-secondary btn-sm'; cancelBtn.textContent = 'Cancel';
+            actions.appendChild(cancelBtn);
+            preview.appendChild(actions);
+
+            const cleanup = () => { try { preview.innerHTML = ''; preview.style.display = 'none'; previewPendingShare = null; } catch(e){} };
+
+            cancelBtn.addEventListener('click', () => { cleanup(); });
+
+            // Hook main send button (capture) to send the pending share when user clicks Send
+            const mainSendBtn = document.getElementById('chatwidget_send');
+            if (mainSendBtn) {
+              const sendCapture = async function(e){
+                if (!previewPendingShare) return; // allow normal send
+                e.preventDefault(); e.stopImmediatePropagation();
+                try {
+                  const p = previewPendingShare;
+                  // use message_type 'image' to avoid DB truncation; include share metadata
+                  const resp = await inst.apiPost('sendMessage', { sender_type: 'client', sender_id: <?= json_encode($uid) ?>, content: p.share_url || p.attachmentName || '', room: p.roomId, attachment_url: p.attachmentUrl, attachment_name: p.attachmentName, message_type: 'image', share_title: p.share_title, share_url: p.share_url });
+                  try { if (resp && (resp.ok || resp.message)) inst.appendMessageToUI(resp.message || resp, 'me'); } catch(e){}
+                  try { alert('Design link shared with the designer.'); } catch(e){}
+                } catch (ex) { console.error('share send failed', ex); alert('Failed to share design.'); }
+                cleanup();
+                return false;
+              };
+              // add as capture listener so it runs before other handlers
+              mainSendBtn.addEventListener('click', sendCapture, true);
+            }
+
+            // focus on preview for accessibility
+            preview.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            return;
+          } catch (e) { console.error('chatwidget share error', e); alert('Error sharing design.'); }
+        });
+      };
+      // wait briefly for initApp to register instance
+      setTimeout(tryWireShare, 200);
+    } catch(e) { console.error('share wiring failed', e); }
   });
 </script>
