@@ -84,11 +84,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (!in_array($mime, $allowedMimes, true)) {
                     $error = 'Unsupported file format. Only PDF, JPG, and PNG are allowed.';
                 } else {
-                    $dir = __DIR__ . '/uploads/floor_plan';
-                    if (!is_dir($dir)) mkdir($dir, 0775, true);
+                    $dir = __DIR__ . '/../uploads/floor_plan';
+                    if (!is_dir($dir)) @mkdir($dir, 0777, true);
                     $newName = 'fp_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
                     $dest = $dir . '/' . $newName;
                     if (move_uploaded_file($_FILES['floorplan']['tmp_name'], $dest)) {
+                        @chmod($dest, 0644);
                         $uploadPath = 'uploads/floor_plan/' . $newName;
                     } else {
                         $error = 'Failed to save the uploaded file. Please try again.';
@@ -192,6 +193,11 @@ if (!empty($clientData['ctel'])) {
         .floorplan-upload-area.has-file {
             border-color: #27ae60;
             background-color: #e8f8f0;
+        }
+        .file-input {
+            position: absolute;
+            left: -9999px;
+            opacity: 0;
         }
     </style>
 </head>
@@ -300,7 +306,7 @@ if (!empty($clientData['ctel'])) {
                                     <p class="text-muted small">PDF, JPG, PNG up to 10MB</p>
                                 </div>
                             </label>
-                            <input type="file" id="floorplanUpload" name="floorplan" class="file-input" accept=".pdf,.jpg,.jpeg,.png" required>
+                            <input type="file" id="floorplanUpload" name="floorplan" class="file-input" accept=".pdf,.jpg,.jpeg,.png">
                             
                             <!-- Preview container for images -->
                             <div class="floorplan-preview-container" id="imagePreviewContainer">

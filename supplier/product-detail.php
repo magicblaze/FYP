@@ -502,7 +502,7 @@ function getColorDisplayName($colorInput) {
                     
                     <?php if (!empty($product['long']) || !empty($product['wide']) || !empty($product['tall'])): ?>
                         <div style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #ecf0f1;">
-                            <div style="font-weight: 600; color: #2c3e50; margin-bottom: 0.75rem;">Dimensions:</div>
+                            <div style="font-weight: 600; color: #2c3e50; margin-bottom: 0.75rem;">Size:</div>
                             <?php if (!empty($product['long'])): ?>
                                 <div style="margin-bottom: 0.5rem; margin-left: 1.5rem;"><strong>Length:</strong> <?= htmlspecialchars($product['long']) ?></div>
                             <?php endif; ?>

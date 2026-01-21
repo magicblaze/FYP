@@ -141,7 +141,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $dest = 'supplier/dashboard.php';
                     break;
                 case 'designer':
-                    $dest = 'designer/dashboard.php';
+                    $dest = 'designer/designer_dashboard.php';
                     break;
                 case 'manager':
                     $dest = 'Manager/Manager_MyOrder.html';
