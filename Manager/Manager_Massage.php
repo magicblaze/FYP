@@ -22,10 +22,7 @@
                 <a href="Manager_Massage.php" class="active">Messages</a>
                 <a href="Manager_Schedule.php">Schedule</a>
             </div>
-            <div class="user-info">
-                <span>Welcome, <?php echo htmlspecialchars($user_name); ?></span>
-                <a href="../logout.php" class="btn-logout">Logout</a>
-            </div>
+ 
         </div>
     </nav>
 
