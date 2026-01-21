@@ -85,8 +85,12 @@ if (isset($_GET['from']) && $_GET['from'] === 'my_likes') {
     $backUrl = 'my_likes.php';
 }
 
-// Use DB-driven image endpoint
-$mainImg = '../design_image.php?id=' . (int)$design['designid'];
+// Use DB-driven image endpoint (absolute URL to avoid relative-path issues)
+$baseUrlEarly = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] ? 'https://' : 'http://') . ($_SERVER['HTTP_HOST'] ?? '');
+// compute application root (one level above this `client/` folder) so URLs point to /FYP/design_image.php
+$appRoot = rtrim(dirname(dirname($_SERVER['SCRIPT_NAME'])), '/\\');
+$appPathEarly = $appRoot; // legacy variable used later in templates
+$mainImg = $baseUrlEarly . $appRoot . '/design_image.php?id=' . (int)$design['designid'];
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -364,7 +368,8 @@ $mainImg = '../design_image.php?id=' . (int)$design['designid'];
                     <button type="button" class="btn btn-primary btn-order" onclick="handleOrder(<?= (int)$design['designid'] ?>)">
                         <i class="fas fa-shopping-cart me-2"></i>Order
                     </button>
-                    <button type="button" class="btn btn-info btn-chat" onclick="handleChat(<?= (int)$design['designerid'] ?>)" >
+                    <!-- share button moved into chat widget panel -->
+                    <button type="button" class="btn btn-info btn-chat" onclick="(window.handleChat ? window.handleChat(<?= (int)$design['designerid'] ?>, { creatorId: <?= (int)$clientid ?>, otherName: '<?= htmlspecialchars(addslashes($design['dname']), ENT_QUOTES) ?>' }) : (window.location.href = '../chat.php?designerid=<?= (int)$design['designerid'] ?>'))" >
                         <i class="fas fa-comments me-2"></i>Chat
                     </button>
                 </div>
@@ -408,64 +413,30 @@ $mainImg = '../design_image.php?id=' . (int)$design['designid'];
         <div class="detail-gallery-images">
             <?php while ($r = $others->fetch_assoc()): ?>
                 <a href="design_detail.php?designid=<?= (int)$r['designid'] ?>">
-                    <img src="../design_image.php?id=<?= (int)$r['designid'] ?>" alt="Design">
+                    <img src="<?= htmlspecialchars($baseUrlEarly . $appPathEarly . '/design_image.php?id=' . (int)$r['designid']) ?>" alt="Design">
                 </a>
             <?php endwhile; ?>
         </div>
     </section>
     <?php endif; ?>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
-    <script>
-    // Handle Order Button Click
-    function handleOrder(designid) {
-        // Redirect to order page or open order modal
-        window.location.href = 'order.php?designid=' + designid;
-    }
-
-    // Handle Chat Button Click
-    function handleChat(designerid) {
-        // Redirect to chat page with designer
-        window.location.href = '../chat.php?designerid=' + designerid;
-    }
-
-    // Heart like functionality - Updated for new system
-    document.getElementById('likeHeart').addEventListener('click', function(e) {
-        e.preventDefault();
-        
-        const designid = this.dataset.designid;
-        const heart = this;
-        
-        const formData = new FormData();
-        formData.append('action', 'toggle_like');
-        formData.append('type', 'design');
-        formData.append('id', designid);
-
-        fetch('../api/handle_like.php', {
-            method: 'POST',
-            body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                // Update heart icon
-                if (data.liked) {
-                    heart.classList.add('liked');
-                    heart.textContent = '♥';
-                } else {
-                    heart.classList.remove('liked');
-                    heart.textContent = '♡';
-                }
-                // Update like count
-                document.getElementById('likeCount').textContent = data.likes;
-            } else {
-                alert('Error: ' + (data.message || 'Failed to update like'));
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('An error occurred while updating the like.');
-        });
-    });
-    </script>
+    <!-- Chat widget: include unified PHP widget (handles markup and initialization) -->
+    <?php
+        // Provide server-side share payload so the widget handles sharing internally
+        $baseUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] ? 'https://' : 'http://') . ($_SERVER['HTTP_HOST'] ?? '');
+        // Ensure we include the application path (script directory) so URLs like /FYP/design_image.php are correct
+        $appPath = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\');
+        $CHAT_SHARE = [
+            'designId' => (int)$designid,
+            'title' => $design['dname'] ?? '',
+            'url' => $baseUrl . $_SERVER['REQUEST_URI'],
+            'designerId' => (int)$design['designerid'],
+            'image' => $baseUrl . $appPath . '/design_image.php?id=' . (int)$designid
+        ];
+        $CHAT_JS_PATH = '../Public/Chatfunction.js';
+        $CHAT_API_PATH = '../Public/ChatApi.php?action=';
+        include __DIR__ . '/../Public/chat_widget.php';
+    ?>
 </body>
 </html>

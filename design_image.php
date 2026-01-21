@@ -20,11 +20,23 @@ if (!$stmt) {
 $stmt->bind_param("i", $id);
 $stmt->execute();
 $stmt->bind_result($designFile);
-if (!$stmt->fetch()) {
-    http_response_code(404);
-    exit('Not found');
-}
+$fetched = $stmt->fetch();
 $stmt->close();
+if (!$fetched) {
+        // DB missing mapping: try conventional filenames in uploads/designs/ like design<ID>.*
+        $candidates = [
+            'design' . $id . '.jpg', 'design' . $id . '.jpeg', 'design' . $id . '.png',
+            'design' . $id . '.webp', 'design' . $id . '.gif', 'design' . $id . '.bmp'
+        ];
+        $found = false;
+        foreach ($candidates as $cand) {
+            if (is_file(__DIR__ . '/uploads/designs/' . $cand)) { $designFile = $cand; $found = true; break; }
+        }
+        if (!$found) {
+            http_response_code(404);
+            exit('Not found');
+        }
+}
 
 // Only allow a safe basename to avoid directory traversal
 $base = basename((string)$designFile);

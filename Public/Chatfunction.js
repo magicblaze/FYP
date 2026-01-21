@@ -45,28 +45,16 @@ function initApp(config = {}) {
         throw new Error('Network error: ' + res.status + ' - ' + msg);
       }
       try { return JSON.parse(txt); } catch (e) { return txt; }
-    } catch (e) { console.error('apiPostForm error', e, API + path); throw e; }
-  }
-
-  async function apiGet(path) {
-    try {
-      const res = await fetch(API + path);
-      if (!res.ok) throw new Error('Network error: ' + res.status);
-      const txt = await res.text();
-      try { return JSON.parse(txt); } catch (e) { return txt; }
     } catch (e) {
-      console.error('apiGet error', e, API + path);
+      console.error('apiPostForm error', e, API + path, formData);
       throw e;
     }
   }
 
-  async function apiPost(path, data) {
+  // JSON GET helper
+  async function apiGet(path) {
     try {
-      const res = await fetch(API + path, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      });
+      const res = await fetch(API + path, { method: 'GET' });
       const txt = await res.text();
       if (!res.ok) {
         let msg = txt || ('Status ' + res.status);
@@ -75,7 +63,24 @@ function initApp(config = {}) {
       }
       try { return JSON.parse(txt); } catch (e) { return txt; }
     } catch (e) {
-      console.error('apiPost error', e, API + path, data);
+      console.error('apiGet error', e, API + path);
+      throw e;
+    }
+  }
+
+  // JSON POST helper
+  async function apiPost(path, obj) {
+    try {
+      const res = await fetch(API + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(obj) });
+      const txt = await res.text();
+      if (!res.ok) {
+        let msg = txt || ('Status ' + res.status);
+        try { const j = JSON.parse(txt); msg = j.message || j.error || JSON.stringify(j); } catch(e){}
+        throw new Error('Network error: ' + res.status + ' - ' + msg);
+      }
+      try { return JSON.parse(txt); } catch (e) { return txt; }
+    } catch (e) {
+      console.error('apiPost error', e, API + path, obj);
       throw e;
     }
   }
@@ -115,7 +120,9 @@ function initApp(config = {}) {
       btn.className = 'list-group-item list-group-item-action d-flex align-items-center';
       // ChatApi returns ChatRoom rows; map fields
       btn.dataset.roomId = a.ChatRoomid || a.ChatRoomId || a.id;
-      const name = a.roomname || a.name || `Room ${btn.dataset.roomId}`;
+      const roomKey = a.ChatRoomid || a.ChatRoomId || a.id;
+      const storedOther = (roomKey ? localStorage.getItem('chat_other_name_' + roomKey) : null);
+      const name = a.other_name || a.otherName || storedOther || a.roomname || a.name || `Room ${btn.dataset.roomId}`;
       const title = a.description || a.title || '';
       btn.innerHTML = `<div class="me-2"><div class="rounded-circle bg-secondary text-white d-inline-flex align-items-center justify-content-center" style="width:36px;height:36px">${escapeHtml((name||'')[0]||'R')}</div></div>
         <div class="flex-grow-1 text-start"><div class="fw-semibold">${escapeHtml(name)}</div><div class="small text-muted">${escapeHtml(title)}</div></div>`;
@@ -202,6 +209,19 @@ function initApp(config = {}) {
     }
     const senderName = msgObj.sender_name || msgObj.sender || (msgObj.sender_type ? (msgObj.sender_type + ' ' + (msgObj.sender_id||'')) : '');
     const content = msgObj.content || msgObj.body || '';
+    // render URL content as clickable link
+    let contentHtml = '';
+    try {
+      const txt = String(content || '');
+      if (/^https?:\/\//i.test(txt)) {
+        // If message also has an uploaded file, show a friendly label instead of raw URL
+        const fname = (msgObj.uploaded_file && msgObj.uploaded_file.filename) ? msgObj.uploaded_file.filename : (msgObj.attachment ? (msgObj.attachment.split('/').pop() || txt) : null);
+        const label = fname || txt;
+        contentHtml = `<a href="${escapeHtml(txt)}" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a>`;
+      } else {
+        contentHtml = escapeHtml(stripHtml(txt));
+      }
+    } catch (e) { contentHtml = escapeHtml(stripHtml(content)); }
     const time = msgObj.timestamp || msgObj.created_at || new Date().toISOString();
 
     const wrapper = document.createElement('div');
@@ -219,28 +239,80 @@ function initApp(config = {}) {
     const nameEl = document.createElement('div');
     nameEl.className = 'small text-muted mb-1';
     nameEl.textContent = senderName;
+    // Align sender name according to message side to avoid layout glitches
+    if (who === 'me') {
+      nameEl.classList.add('text-end');
+      // ensure the body column aligns its content to the right for `me` messages
+      try { bodyCol.style.textAlign = 'right'; } catch (e) {}
+    } else {
+      nameEl.classList.remove('text-end');
+      try { bodyCol.style.textAlign = 'left'; } catch (e) {}
+    }
 
     const bubble = document.createElement('div');
     bubble.className = who === 'me' ? 'bg-primary text-white rounded p-2' : 'bg-light rounded p-2';
     const campaignHtml = msgObj.campaign ? `<div class="small text-muted mt-1">Campaign: ${escapeHtml(msgObj.campaign)}</div>` : '';
-    // Attachment rendering: if message has an `attachment` path, render a thumbnail for images or link for other files
+    // Special rendering for `design` share messages: single white card merged into bubble
+    let designHtml = '';
+    try {
+      if ((msgObj.message_type && msgObj.message_type === 'design') || msgObj.share) {
+        const share = msgObj.share || {};
+        const uploaded = msgObj.uploaded_file || null;
+        const imgSrc = (uploaded && uploaded.filepath) || share.image || msgObj.attachment || '';
+        let imgUrl = imgSrc || '';
+        if (imgUrl && !/^https?:\/\//.test(imgUrl)) imgUrl = (location.origin + '/' + imgUrl.replace(/^\/+/, ''));
+        const title = share.title || (uploaded && uploaded.filename) || msgObj.content || '';
+        const url = share.url || msgObj.content || imgUrl || '';
+        designHtml = `<div class=" p-2 border rounded bg-white" style="display:flex;gap:12px;align-items:center">
+            <div style="flex:0 0 72px"><img src="${escapeHtml(imgUrl)}" style="width:72px;height:72px;object-fit:cover;border-radius:6px"/></div>
+            <div style="flex:1;min-width:0">
+              <div class="fw-semibold" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(title)}</div>
+              <div><a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="small text-muted">Open design page</a></div>
+            </div>
+          </div>`;
+      }
+    } catch (e) { designHtml = ''; }
+    // Attachment rendering: prefer `uploaded_file` metadata when available.
     let attachmentHtml = '';
-    if (msgObj.attachment) {
-      const att = String(msgObj.attachment || '');
-      const lower = att.toLowerCase();
-      // build absolute-ish URL if relative
-      let url = att;
-      if (!/^https?:\/\//.test(att)) {
-        url = (location.origin + '/' + att.replace(/^\/+/, ''));
+    let isImageMessage = false;
+    try {
+      const uploaded = msgObj.uploaded_file || null;
+      // prefer filepath from uploaded_file, fall back to legacy `attachment` field
+      const att = String((uploaded && uploaded.filepath) || msgObj.attachment || '');
+      if (att) {
+        // build absolute-ish URL if relative
+        let url = att;
+        if (!/^https?:\/\//.test(att)) {
+          url = (location.origin + '/' + att.replace(/^\/+/, ''));
+        }
+        const lower = (uploaded && uploaded.filename ? uploaded.filename.toLowerCase() : att.toLowerCase());
+        const mime = uploaded && uploaded.mime ? String(uploaded.mime || '') : '';
+        const looksLikeImage = (mime && mime.indexOf('image/') === 0) || /(\.png|\.jpe?g|\.gif|\.webp|\.bmp)$/i.test(lower);
+        if (looksLikeImage) {
+          isImageMessage = true;
+          attachmentHtml = `<div class="mt-2"><img class="chat-attachment-img" src="${escapeHtml(url)}" style="max-width:420px;max-height:60vh;border-radius:8px;display:block;cursor:pointer"/></div>`;
+        } else {
+          const fname = (uploaded && uploaded.filename) ? uploaded.filename : att.split('/').pop();
+          attachmentHtml = `<div class="mt-2"><a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(fname)}</a></div>`;
+        }
       }
-      if (/(\.png|\.jpe?g|\.gif|\.webp|\.bmp)$/i.test(lower)) {
-        attachmentHtml = `<div class="mt-2"><img class="chat-attachment-img" src="${escapeHtml(url)}" style="max-width:420px;max-height:60vh;border-radius:8px;display:block;cursor:pointer"/></div>`;
-      } else {
-        const fname = att.split('/').pop();
-        attachmentHtml = `<div class="mt-2"><a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(fname)}</a></div>`;
+    } catch (e) { attachmentHtml = ''; }
+    // If we rendered a design card, avoid rendering the separate contentHtml (which may be a duplicate URL link)
+    if (designHtml) {
+      // Override bubble styling so the message bubble is white (not the usual colored bubble)
+      bubble.className = 'bg-white text-dark rounded';
+      bubble.innerHTML = `${designHtml}${campaignHtml}<div class="text-muted small mt-1">${new Date(time).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>`;
+    } else {
+      // For plain image attachments, prefer a white bubble instead of a blue one for sender 'me'
+      if (isImageMessage) {
+        bubble.className = 'bg-white text-dark rounded p-2';
       }
+      // Choose time text color: if the bubble uses `text-white` (blue bubble), make the time white for readability
+      let timeClass = 'text-muted';
+      try { if (bubble.className && bubble.className.indexOf('text-white') !== -1) timeClass = 'text-white'; } catch (e) {}
+      const timeHtml = `<div class="${timeClass} small mt-1">${new Date(time).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>`;
+      bubble.innerHTML = `<div>${contentHtml}</div>${attachmentHtml}${campaignHtml}${timeHtml}`;
     }
-    bubble.innerHTML = `<div>${escapeHtml(stripHtml(content))}</div>${attachmentHtml}${campaignHtml}<div class="text-muted small mt-1">${new Date(time).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>`;
 
     bodyCol.appendChild(nameEl);
     bodyCol.appendChild(bubble);
@@ -259,14 +331,27 @@ function initApp(config = {}) {
     try {
       const imgEl = wrapper.querySelector('.chat-attachment-img');
       if (imgEl) {
-        imgEl.addEventListener('click', () => { openPreviewModal(imgEl.src); });
+        imgEl.addEventListener('click', () => {
+          try {
+            // If message content is a URL, navigate to it. Otherwise open preview modal.
+            const msgContent = msgObj.content || msgObj.body || '';
+            if (typeof msgContent === 'string' && /^https?:\/\//i.test(msgContent.trim())) {
+              window.open(msgContent.trim(), '_blank', 'noopener');
+            } else {
+              openPreviewModal(imgEl.src);
+            }
+          } catch (e) { openPreviewModal(imgEl.src); }
+        });
       }
     } catch (e) {}
   }
 
   function selectAgent(agent) {
     currentAgent = agent;
-    if (elements.connectionStatus) elements.connectionStatus.textContent = `Connected to ${agent.roomname || agent.name}`;
+    const rid = agent.ChatRoomid || agent.id || agent.roomId;
+    const stored = (rid ? localStorage.getItem('chat_other_name_' + rid) : null);
+    const displayName = agent.other_name || agent.otherName || stored || agent.roomname || agent.name || '';
+    if (elements.connectionStatus) elements.connectionStatus.textContent = `Connected to ${displayName}`;
     document.querySelectorAll('#agentsList .list-group-item, #agentsListOffcanvas .list-group-item').forEach(el => {
       el.classList.toggle('active', el.dataset.roomId == (agent.ChatRoomid || agent.id));
     });
@@ -274,7 +359,14 @@ function initApp(config = {}) {
     lastMessageId = 0;
     startPolling(roomId);
     if (elements.messages) elements.messages.dataset.roomId = roomId;
-    return loadMessages(roomId);
+    // Load messages and ensure the view scrolls to the newest message after load.
+    const p = loadMessages(roomId);
+    p.then(() => {
+      try { if (elements.messages) elements.messages.scrollTop = elements.messages.scrollHeight; } catch (e) {}
+      // second delayed scroll to handle images or layout shifts
+      setTimeout(() => { try { if (elements.messages) elements.messages.scrollTop = elements.messages.scrollHeight; } catch (e) {} }, 250);
+    }).catch(() => {});
+    return p;
   }
 
   // Resolve currently selected room id from `currentAgent` or DOM fallback
@@ -778,7 +870,76 @@ function initApp(config = {}) {
     setTimeout(updateDividerPos, 50);
   })();
 
-  return {
+  const app = {
     apiGet, apiPost, renderCards, renderAgents, loadAgents, loadMessages, appendMessageToUI, sendMessage, selectAgent
   };
+  // expose app instances globally for pages that embed the widget
+  try {
+    window.chatApps = window.chatApps || {};
+    const key = config.rootId || 'default';
+    window.chatApps[key] = app;
+  } catch (e) {}
+  return app;
 }
+
+window.handleChat = function(designerid, options = {}) {
+  const creatorType = options.creatorType || 'client';
+  const creatorId = (typeof options.creatorId !== 'undefined') ? options.creatorId : (window.chatUserId ?? 0);
+  const otherType = 'designer';
+  const otherId = designerid;
+
+  if (!creatorId) {
+    const target = '../chat.php?designerid=' + encodeURIComponent(designerid);
+    window.location.href = '../login.php?redirect=' + encodeURIComponent(target);
+    return Promise.resolve({ ok: false, reason: 'not_authenticated' });
+  }
+
+  return fetch('../Public/ChatApi.php?action=createRoom', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(Object.assign({ creator_type: creatorType, creator_id: creatorId, other_type: otherType, other_id: otherId }, (options.otherName ? { other_name: options.otherName } : {})))
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data && data.ok && data.room) {
+      const roomId = data.room.ChatRoomid || data.room.ChatRoomId || data.room.id || data.room.roomId;
+      // persist otherName locally as a fallback so the chat UI can display the other participant's name
+      try { if (roomId && options.otherName) localStorage.setItem('chat_other_name_' + roomId, options.otherName); } catch(e){}
+      if (roomId) {
+        // If an embedded chat widget is present, open it and select the created room instead of navigating away
+        try {
+          const instance = (window.chatApps && window.chatApps['chatwidget']) || null;
+          const panel = document.getElementById('chatwidget_panel');
+          const toggle = document.getElementById('chatwidget_toggle');
+          if (panel) { panel.style.display = 'flex'; panel.setAttribute('aria-hidden','false'); }
+          if (toggle) { toggle.style.display = 'none'; }
+          if (instance && typeof instance.selectAgent === 'function') {
+            // Try to load agents then select the newly created room if present
+            instance.loadAgents().then(rooms => {
+              let found = null;
+              try { found = rooms && rooms.find(r => String(r.ChatRoomid || r.id || r.roomId) === String(roomId)); } catch(e){}
+              if (found) return instance.selectAgent(found);
+              // fallback: create a minimal agent and select
+              const minimal = { ChatRoomid: roomId, roomname: options.otherName || (data.room && (data.room.roomname || data.room.name)) || ('User ' + otherId) };
+              return instance.selectAgent(minimal);
+            }).catch(err => {
+              // last-resort: directly load messages for the room
+              try { instance.loadMessages && instance.loadMessages(roomId); } catch(e){}
+            });
+            return { ok: true, roomId };
+          }
+        } catch (e) { console.warn('handleChat widget open failed', e); }
+        // fallback: navigate to chat page
+        window.location.href = '../chat.php?room=' + encodeURIComponent(roomId);
+        return { ok: true, roomId };
+      }
+    }
+    window.location.href = '../chat.php?designerid=' + encodeURIComponent(designerid);
+    return { ok: false };
+  })
+  .catch(err => {
+    console.error('handleChat createRoom error', err);
+    window.location.href = '../chat.php?designerid=' + encodeURIComponent(designerid);
+    return { ok: false, error: err };
+  });
+};

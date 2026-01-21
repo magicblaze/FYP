@@ -129,6 +129,17 @@ try {
           error_log('[ChatApi] failed to fetch uploaded file for message: ' . $e->getMessage());
         }
       }
+      // Detect persisted share metadata encoded in `content` (marker __share)
+      if (!empty($r['content']) && is_string($r['content'])) {
+        $maybe = json_decode($r['content'], true);
+        if (is_array($maybe) && isset($maybe['__share']) && !empty($maybe['share'])) {
+          $r['share'] = $maybe['share'];
+          // When a share is present, present it to clients as message_type 'design'
+          $r['message_type'] = 'design';
+          // For compatibility, ensure attachment points to uploaded file path if available
+          if (empty($r['attachment']) && !empty($r['uploaded_file']['filepath'])) $r['attachment'] = $r['uploaded_file']['filepath'];
+        }
+      }
     }
     if ($since > 0) {
       $filtered = array_filter($rows, function($m) use ($since) {
@@ -148,8 +159,9 @@ try {
     if ($isMultipart) {
       $sender_type = $_POST['sender_type'] ?? null;
       $sender_id = isset($_POST['sender_id']) ? (int)$_POST['sender_id'] : 0;
-      $content = $_POST['content'] ?? '';
-      $room = isset($_POST['room']) ? (int)$_POST['room'] : 0;
+      $data = $_POST;
+      $content = $data['content'] ?? '';
+      $room = isset($data['room']) ? (int)$data['room'] : 0;
       // validate room exists to avoid FK errors
       if ($room <= 0) { send_json(['error'=>'invalid_room','message'=>'Missing room id'], 400); }
       $chk = $pdo->prepare('SELECT ChatRoomid FROM ChatRoom WHERE ChatRoomid=? LIMIT 1'); $chk->execute([$room]); if (!$chk->fetchColumn()) { send_json(['error'=>'invalid_room','message'=>'Room not found','room'=>$room], 400); }
@@ -217,6 +229,15 @@ try {
           }
         }
       }
+      // If this send contains share metadata (from widget preview), persist it inside `content` as JSON
+      if (!empty($_POST['share_title'])) {
+        $shareMeta = [ '__share' => true, 'share' => [
+          'title' => $_POST['share_title'] ?? null,
+          'url' => $_POST['share_url'] ?? null,
+          'image' => $attachmentPath ?? ($_POST['attachment_url'] ?? null)
+        ]];
+        $content = json_encode($shareMeta);
+      }
       // insert with message_type and optional uploaded file reference (fileid)
       if (!empty($uploadedFileId)) {
         $stmt = $pdo->prepare("INSERT INTO Message (sender_type,sender_id,content,message_type,ChatRoomid,fileid) VALUES (?,?,?,?,?,?)");
@@ -226,17 +247,101 @@ try {
         $stmt->execute([$sender_type, $sender_id, $content, ($message_type?:'text'), $room]);
       }
     } else {
-      $data = json_decode(file_get_contents('php://input'), true);
-      $room = isset($data['room']) ? (int)$data['room'] : 0;
-      if ($room <= 0) { send_json(['error'=>'invalid_room','message'=>'Missing room id'], 400); }
-      $chk = $pdo->prepare('SELECT ChatRoomid FROM ChatRoom WHERE ChatRoomid=? LIMIT 1'); $chk->execute([$room]); if (!$chk->fetchColumn()) { send_json(['error'=>'invalid_room','message'=>'Room not found','room'=>$room], 400); }
-      $stmt = $pdo->prepare("INSERT INTO Message (sender_type,sender_id,content,ChatRoomid) VALUES (?,?,?,?)");
-      $stmt->execute([
-        $data['sender_type'],
-        $data['sender_id'],
-        $data['content'],
-        $room
-      ]);
+        $data = json_decode(file_get_contents('php://input'), true);
+        $room = isset($data['room']) ? (int)$data['room'] : 0;
+        if ($room <= 0) { send_json(['error'=>'invalid_room','message'=>'Missing room id'], 400); }
+        $chk = $pdo->prepare('SELECT ChatRoomid FROM ChatRoom WHERE ChatRoomid=? LIMIT 1'); $chk->execute([$room]); if (!$chk->fetchColumn()) { send_json(['error'=>'invalid_room','message'=>'Room not found','room'=>$room], 400); }
+        // Support optional external attachment URL in JSON payload. If provided, create an UploadedFiles record
+        $uploadedFileId = null;
+        if (!empty($data['attachment_url'])) {
+          try {
+            $afile = $data['attachment_url'];
+            $aname = $data['attachment_name'] ?? basename(parse_url($afile, PHP_URL_PATH) ?: $afile);
+            $amime = $data['attachment_mime'] ?? null;
+            $asize = isset($data['attachment_size']) ? (int)$data['attachment_size'] : null;
+            // Try to probe the remote URL for Content-Type/Length to detect images when possible
+            try {
+              $hdrs = @get_headers($afile, 1);
+              if ($hdrs && is_array($hdrs)) {
+                // Content-Type may be present; pick last value if array
+                $ct = $hdrs['Content-Type'] ?? $hdrs['content-type'] ?? null;
+                if (is_array($ct)) $ct = end($ct);
+                if ($ct && !$amime) $amime = $ct;
+                $cl = $hdrs['Content-Length'] ?? $hdrs['Content-length'] ?? null;
+                if (is_array($cl)) $cl = end($cl);
+                if ($cl && !$asize) $asize = (int)$cl;
+              }
+            } catch (Throwable $__e) {
+              // ignore probe failures
+            }
+            // If filename has no extension but we detected an image mime, append a reasonable ext
+            $ext = pathinfo($aname, PATHINFO_EXTENSION);
+            if (empty($ext) && $amime && strpos($amime, 'image/') === 0) {
+              $e = substr($amime, strlen('image/'));
+              if ($e === 'jpeg') $e = 'jpg';
+              if (preg_match('/^[a-z0-9]+$/i', $e)) $aname .= '.' . $e;
+            }
+            // As a last resort, if still no extension and URL has id=NUMBER, craft a filename
+            if (empty(pathinfo($aname, PATHINFO_EXTENSION))) {
+              $q = parse_url($afile, PHP_URL_QUERY) ?: '';
+              if (preg_match('/id=(\d+)/', $q, $m)) {
+                $aname = 'design' . $m[1] . '.jpg';
+                if (!$amime) $amime = 'image/jpeg';
+              }
+            }
+            $insF = $pdo->prepare("INSERT INTO UploadedFiles (uploader_type, uploader_id, filename, filepath, mime, size) VALUES (?,?,?,?,?,?)");
+            $insF->execute([$data['sender_type'] ?? null, $data['sender_id'] ?? null, $aname, $afile, $amime, $asize]);
+            $uploadedFileId = $pdo->lastInsertId();
+          } catch (Throwable $e) {
+            error_log('[ChatApi] failed to record external attachment: ' . $e->getMessage());
+            $uploadedFileId = null;
+          }
+        }
+        // Respect caller-provided message_type (e.g., 'design') when present; otherwise derive from mime
+        $finalMessageType = $data['message_type'] ?? null;
+        // When caller included share metadata, persist it into `content` as JSON so reads can detect it later
+        $contentForInsert = $data['content'] ?? '';
+        if (!empty($data['share_title'])) {
+          $shareMeta = [ '__share' => true, 'share' => [
+            'title' => $data['share_title'] ?? null,
+            'url' => $data['share_url'] ?? null,
+            'image' => $data['attachment_url'] ?? null
+          ]];
+          $contentForInsert = json_encode($shareMeta);
+        }
+        if (!empty($uploadedFileId)) {
+          $msgType = 'file';
+          if (!empty($amime) && strpos($amime, 'image/') === 0) $msgType = 'image';
+          if (empty($finalMessageType)) $finalMessageType = $msgType;
+          $stmt = $pdo->prepare("INSERT INTO Message (sender_type,sender_id,content,message_type,ChatRoomid,fileid) VALUES (?,?,?,?,?,?)");
+          $stmt->execute([
+            $data['sender_type'],
+            $data['sender_id'],
+            $contentForInsert,
+            $finalMessageType ?? 'file',
+            $room,
+            $uploadedFileId
+          ]);
+        } else {
+          if (!empty($finalMessageType)) {
+            $stmt = $pdo->prepare("INSERT INTO Message (sender_type,sender_id,content,message_type,ChatRoomid) VALUES (?,?,?,?,?)");
+            $stmt->execute([
+              $data['sender_type'],
+              $data['sender_id'],
+              $contentForInsert,
+              $finalMessageType,
+              $room
+            ]);
+          } else {
+            $stmt = $pdo->prepare("INSERT INTO Message (sender_type,sender_id,content,ChatRoomid) VALUES (?,?,?,?)");
+            $stmt->execute([
+              $data['sender_type'],
+              $data['sender_id'],
+              $contentForInsert,
+              $room
+            ]);
+          }
+        }
     }
     $last = $pdo->lastInsertId();
     // Attempt to return the full inserted row (use messageid PK)
@@ -268,6 +373,17 @@ try {
           if (!isset($row['attachment']) || empty($row['attachment'])) $row['attachment'] = $frow['filepath'];
         }
       } catch (Throwable $e) { error_log('[ChatApi] fetch uploaded file metadata failed: ' . $e->getMessage()); }
+    }
+    // If this was a design share, attach share metadata so clients can render a card
+    // If share metadata was provided (share_title), attach share info so clients can render a card
+    if (!empty($data) && (!empty($data['share_title']) || (!empty($data['message_type']) && $data['message_type'] === 'design'))) {
+      $row['share'] = [
+        'title' => $data['share_title'] ?? ($row['uploaded_file']['filename'] ?? null),
+        'url' => $data['share_url'] ?? ($row['content'] ?? null),
+        'image' => $row['uploaded_file']['filepath'] ?? ($data['attachment_url'] ?? null)
+      ];
+      // Present as design to clients immediately
+      $row['message_type'] = 'design';
     }
     send_json(['ok'=>true,'id'=>$last,'message'=>$row]);
     break;
