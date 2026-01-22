@@ -110,7 +110,7 @@ $size_result = null; // 设置为 null 以避免后续错误
             border-radius: 10px;
             padding: 1rem 1.5rem;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
-            margin-bottom: 2rem;
+            margin-bottom: 0.5rem;
         }
         .search-section .form-control {
             border: 2px solid #ecf0f1;
@@ -132,9 +132,6 @@ $size_result = null; // 设置为 null 以避免后续错误
             padding: 1.5rem;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
             margin-bottom: 2rem;
-            height: fit-content;
-            position: sticky;
-            top: 20px;
         }
         .filter-panel h5 {
             color: #2c3e50;
@@ -216,7 +213,7 @@ $size_result = null; // 设置为 null 以避免后续错误
         }
         .container-with-filter {
             display: grid;
-            grid-template-columns: 250px 1fr;
+            grid-template-columns: 1fr;
             gap: 2rem;
         }
         .card {
@@ -299,69 +296,73 @@ $size_result = null; // 设置为 null 以避免后续错误
             </form>
         </div>
 
-        <div class="page-title">Furniture</div>
+        <!-- Filter Panel (Under Search Bar) -->
+        <div class="filter-panel">
+            <h5><i class="fas fa-filter me-2"></i>Filters</h5>
+            <form method="GET" action="furniture_dashboard.php" id="filterForm">
+                <!-- Search (Hidden) -->
+                <input type="hidden" name="search" value="<?= htmlspecialchars($search) ?>">
+                <!-- Color filter disabled - no need to pass color parameter -->
 
-        <div class="container-with-filter">
-            <!-- Filter Panel -->
-            <aside class="filter-panel">
-                <h5><i class="fas fa-filter me-2"></i>Filters</h5>
-                <form method="GET" action="furniture_dashboard.php" id="filterForm">
-                    <!-- Search (Hidden) -->
-                    <input type="hidden" name="search" value="<?= htmlspecialchars($search) ?>">
-                    <!-- Color filter disabled - no need to pass color parameter -->
-
+                <div class="row g-3">
                     <!-- Price Range Filter -->
-                    <div class="filter-group">
-                        <label>Price Range (HK$)</label>
-                        <div class="price-inputs">
-                            <input type="number" name="min_price" class="form-control" placeholder="Min" value="<?= $min_price > 0 ? $min_price : '' ?>" min="0">
-                            <span class="price-separator">-</span>
-                            <input type="number" name="max_price" class="form-control" placeholder="Max" value="<?= $max_price < 999999 ? $max_price : '' ?>" min="0">
+                    <div class="col-md-3">
+                        <div class="filter-group">
+                            <label>Price Range (HK$)</label>
+                            <div class="price-inputs">
+                                <input type="number" name="min_price" class="form-control" placeholder="Min" value="<?= $min_price > 0 ? $min_price : '' ?>" min="0">
+                                <span class="price-separator">-</span>
+                                <input type="number" name="max_price" class="form-control" placeholder="Max" value="<?= $max_price < 999999 ? $max_price : '' ?>" min="0">
+                            </div>
                         </div>
                     </div>
 
                     <!-- Supplier Filter -->
-                    <div class="filter-group">
-                        <label for="supplier_id">Supplier</label>
-                        <select name="supplier_id" id="supplier_id" class="form-select">
-                            <option value="">All Suppliers</option>
-                            <?php while ($supplier = $supplier_result->fetch_assoc()): ?>
-                                <option value="<?= $supplier['supplierid'] ?>" <?= $supplier_id == $supplier['supplierid'] ? 'selected' : '' ?>>
-                                    <?= htmlspecialchars($supplier['sname']) ?>
-                                </option>
-                            <?php endwhile; ?>
-                        </select>
+                    <div class="col-md-3">
+                        <div class="filter-group">
+                            <label for="supplier_id">Supplier</label>
+                            <select name="supplier_id" id="supplier_id" class="form-select">
+                                <option value="">All Suppliers</option>
+                                <?php while ($supplier = $supplier_result->fetch_assoc()): ?>
+                                    <option value="<?= $supplier['supplierid'] ?>" <?= $supplier_id == $supplier['supplierid'] ? 'selected' : '' ?>>
+                                        <?= htmlspecialchars($supplier['sname']) ?>
+                                    </option>
+                                <?php endwhile; ?>
+                            </select>
+                        </div>
                     </div>
 
-                    <!-- Color Filter Disabled -->
-                    <!-- Color filter has been removed -->
-
-                    <!-- Size Filter -->
-                    <!-- Size Filter Disabled - size column does not exist in Product table -->
-
                     <!-- Sort By -->
-                    <div class="filter-group">
-                        <label for="sort_by">Sort By</label>
-                        <select name="sort_by" id="sort_by" class="form-select">
-                            <option value="recent" <?= $sort_by === 'recent' ? 'selected' : '' ?>>Newest</option>
-                            <option value="price_low" <?= $sort_by === 'price_low' ? 'selected' : '' ?>>Price: Low to High</option>
-                            <option value="price_high" <?= $sort_by === 'price_high' ? 'selected' : '' ?>>Price: High to Low</option>
-                            <option value="likes" <?= $sort_by === 'likes' ? 'selected' : '' ?>>Most Liked</option>
-                        </select>
+                    <div class="col-md-3">
+                        <div class="filter-group">
+                            <label for="sort_by">Sort By</label>
+                            <select name="sort_by" id="sort_by" class="form-select">
+                                <option value="recent" <?= $sort_by === 'recent' ? 'selected' : '' ?>>Newest</option>
+                                <option value="price_low" <?= $sort_by === 'price_low' ? 'selected' : '' ?>>Price: Low to High</option>
+                                <option value="price_high" <?= $sort_by === 'price_high' ? 'selected' : '' ?>>Price: High to Low</option>
+                                <option value="likes" <?= $sort_by === 'likes' ? 'selected' : '' ?>>Most Liked</option>
+                            </select>
+                        </div>
                     </div>
 
                     <!-- Filter Buttons -->
-                    <div class="filter-buttons">
-                        <button type="submit" class="btn-apply-filter">
-                            <i class="fas fa-check me-1"></i>Apply
-                        </button>
-                        <a href="furniture_dashboard.php" class="btn-clear-filter" style="text-align: center;">
-                            <i class="fas fa-times me-1"></i>Clear
-                        </a>
+                    <div class="col-md-3">
+                        <div class="filter-group" style="margin-top: 1.85rem;">
+                            <div class="filter-buttons">
+                                <button type="submit" class="btn-apply-filter">
+                                    <i class="fas fa-check me-1"></i>Apply
+                                </button>
+                                <a href="furniture_dashboard.php" class="btn-clear-filter" style="text-align: center;">
+                                    <i class="fas fa-times me-1"></i>Clear
+                                </a>
+                            </div>
+                        </div>
                     </div>
-                </form>
-            </aside>
+                </div>
+            </form>
+        </div>
 
+        <div class="container-with-filter">
             <!-- Main Content -->
             <div class="main-content">
                 <!-- Results Grid -->

@@ -25,11 +25,13 @@ if ($orderId <= 0) {
 }
 
 // Fetch order details with verification that it belongs to the client
-$orderSql = "SELECT o.orderid, o.odate, o.budget, o.Floor_Plan, o.Requirements, o.ostatus, 
-                    d.designid, d.price, d.tag, dz.dname, dz.designerid
+$orderSql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, 
+                    d.designid, d.price, d.tag, dz.dname, dz.designerid,
+                    c.budget, c.floor_plan
              FROM `Order` o
              JOIN Design d ON o.designid = d.designid
              JOIN Designer dz ON d.designerid = dz.designerid
+             JOIN Client c ON o.clientid = c.clientid
              WHERE o.orderid = ? AND o.clientid = ?";
 $orderStmt = $mysqli->prepare($orderSql);
 $orderStmt->bind_param("ii", $orderId, $clientId);
@@ -44,7 +46,7 @@ if ($orderResult->num_rows === 0) {
 $order = $orderResult->fetch_assoc();
 
 // Fetch client details
-$clientStmt = $mysqli->prepare("SELECT cname FROM Client WHERE clientid = ?");
+$clientStmt = $mysqli->prepare("SELECT cname, ctel, cemail, address FROM Client WHERE clientid = ?");
 $clientStmt->bind_param("i", $clientId);
 $clientStmt->execute();
 $clientData = $clientStmt->get_result()->fetch_assoc();
@@ -97,6 +99,11 @@ foreach ($productsTemp as $product) {
     $productTotal += $product['price'] * $product['quantity'];
 }
 $products->data_seek(0);
+
+// Format display variables
+$budgetDisplay = $order['budget'] ?? 0;
+$floorPlanDisplay = $order['floor_plan'] ?? null;
+$phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—';
 ?>
 <!DOCTYPE html>
 <html lang="en">

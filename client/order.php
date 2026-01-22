@@ -23,8 +23,8 @@ if (!$design) { http_response_code(404); die('Design not found.'); }
 $clientId = (int)($_SESSION['user']['clientid'] ?? 0);
 if ($clientId <= 0) { http_response_code(403); die('Invalid session.'); }
 
-// Fetch client details (phone and address) from the Client table
-$clientStmt = $mysqli->prepare("SELECT cname, ctel, cemail, address FROM Client WHERE clientid = ?");
+// Fetch client details (phone, address, floor plan, and budget) from the Client table
+$clientStmt = $mysqli->prepare("SELECT cname, ctel, cemail, address, floor_plan, budget FROM Client WHERE clientid = ?");
 $clientStmt->bind_param("i", $clientId);
 $clientStmt->execute();
 $clientData = $clientStmt->get_result()->fetch_assoc();
@@ -32,12 +32,16 @@ $clientData = $clientStmt->get_result()->fetch_assoc();
 $success = '';
 $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $budget = (int)($_POST['budget'] ?? $design['price']);
+    // Use budget from profile, not from form input
+    $budget = (int)($clientData['budget'] ?? $design['price']);
     $requirements = trim($_POST['requirements'] ?? '');
     $paymentMethod = trim($_POST['payment_method'] ?? '');
+    $floorPlan = $clientData['floor_plan'] ?? null;
 
     // 驗證必填字段
-    if ($budget <= 0) {
+    if (empty($floorPlan)) {
+        $error = 'Please upload a floor plan in your profile before placing an order.';
+    } elseif ($budget <= 0) {
         $error = 'Budget must be greater than 0.';
     } elseif (empty($paymentMethod)) {
         $error = 'Payment method is required.';
@@ -69,45 +73,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    $uploadPath = null;
-    if (!$error && !empty($_FILES['floorplan']['name'])) {
-        $allowedExt = ['pdf','jpg','jpeg','png'];
-        $allowedMimes = ['application/pdf','image/jpeg','image/png'];
-        $maxSize = 10 * 1024 * 1024;
-
-        if ($_FILES['floorplan']['error'] === UPLOAD_ERR_OK && $_FILES['floorplan']['size'] <= $maxSize) {
-            $ext = strtolower(pathinfo($_FILES['floorplan']['name'], PATHINFO_EXTENSION));
-            if (in_array($ext, $allowedExt, true)) {
-                $finfo = finfo_open(FILEINFO_MIME_TYPE);
-                $mime = finfo_file($finfo, $_FILES['floorplan']['tmp_name']);
-                finfo_close($finfo);
-                if (!in_array($mime, $allowedMimes, true)) {
-                    $error = 'Unsupported file format. Only PDF, JPG, and PNG are allowed.';
-                } else {
-                    $dir = __DIR__ . '/../uploads/floor_plan';
-                    if (!is_dir($dir)) @mkdir($dir, 0777, true);
-                    $newName = 'fp_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
-                    $dest = $dir . '/' . $newName;
-                    if (move_uploaded_file($_FILES['floorplan']['tmp_name'], $dest)) {
-                        @chmod($dest, 0644);
-                        $uploadPath = 'uploads/floor_plan/' . $newName;
-                    } else {
-                        $error = 'Failed to save the uploaded file. Please try again.';
-                    }
-                }
-            } else {
-                $error = 'Invalid file type.';
-            }
-        } elseif ($_FILES['floorplan']['error'] !== UPLOAD_ERR_NO_FILE) {
-            $error = 'Upload error. Please try again.';
-        }
-    } elseif (!$error) {
-        // 如果沒有上傳文件，也是錯誤
-        $error = 'Floor Plan is required.';
-    }
     if (!$error) {
-        $stmt = $mysqli->prepare("INSERT INTO `Order` (odate, clientid, budget, Floor_Plan, Requirements, designid, ostatus) VALUES (NOW(), ?, ?, ?, ?, ?, 'Designing')");
-        $stmt->bind_param("iissi", $clientId, $budget, $uploadPath, $requirements, $designid);
+        $stmt = $mysqli->prepare("INSERT INTO `Order` (odate, clientid, Requirements, designid, ostatus) VALUES (NOW(), ?, ?, ?, 'Designing')");
+        $stmt->bind_param("isi", $clientId, $requirements, $designid);
         if ($stmt->execute()) {
             $orderId = $stmt->insert_id;
             $success = 'Order created successfully. Order ID: ' . $orderId;
@@ -128,6 +96,9 @@ $phoneDisplay = '—';
 if (!empty($clientData['ctel'])) {
     $phoneDisplay = (string)$clientData['ctel'];
 }
+
+// Format budget display
+$budgetDisplay = $clientData['budget'] ?? 0;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -293,55 +264,32 @@ if (!empty($clientData['ctel'])) {
                             <p class="text-muted small"><i class="fas fa-info-circle me-1"></i> To update your information, please visit your account settings.</p>
                         </div>
 
-                        <!-- Upload Floor Plan Section -->
+                        <!-- Floor Plan Section (Display Only) -->
                         <div class="order-section">
-                            <h3 class="section-title">Upload Floor Plan</h3>
-                            <p class="text-muted mb-3">Upload your floor plan to help us customize the design for your space</p>
-                            <label for="floorplanUpload" class="file-input-label" id="uploadLabel">
-                                <div class="floorplan-upload-area" id="uploadArea">
-                                    <div class="upload-icon">
-                                        <i class="fas fa-file-upload"></i>
-                                    </div>
-                                    <p>Click to upload</p>
-                                    <p class="text-muted small">PDF, JPG, PNG up to 10MB</p>
-                                </div>
-                            </label>
-                            <input type="file" id="floorplanUpload" name="floorplan" class="file-input" accept=".pdf,.jpg,.jpeg,.png">
-                            
-                            <!-- Preview container for images -->
-                            <div class="floorplan-preview-container" id="imagePreviewContainer">
-                                <div class="d-flex justify-content-between align-items-start">
-                                    <div>
-                                        <p class="text-muted small mb-2"><i class="fas fa-check-circle text-success me-1"></i> File selected:</p>
-                                        <img id="floorplanPreview" class="floorplan-preview" src="" alt="Floor plan preview">
-                                    </div>
-                                    <button type="button" class="remove-file-btn" id="removeFileBtn" title="Remove file">
-                                        <i class="fas fa-times-circle"></i>
-                                    </button>
-                                </div>
-                                <div class="floorplan-file-info mt-2">
-                                    <div class="file-details">
-                                        <div class="file-name" id="fileName"></div>
-                                        <div class="file-size" id="fileSize"></div>
+                            <h3 class="section-title">Floor Plan</h3>
+                            <?php if (!empty($clientData['floor_plan'])): ?>
+                                <div style="background: #e8f8f0; border: 1px solid #27ae60; border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
+                                    <div class="d-flex align-items-center justify-content-between">
+                                        <div class="d-flex align-items-center">
+                                            <i class="fas fa-file-pdf" style="font-size: 1.5rem; color: #27ae60; margin-right: 0.5rem;"></i>
+                                            <div>
+                                                <strong><?= htmlspecialchars(basename($clientData['floor_plan'])) ?></strong>
+                                                <br>
+                                                <small class="text-muted">Floor plan on file</small>
+                                            </div>
+                                        </div>
+                                        <a href="../<?= htmlspecialchars($clientData['floor_plan']) ?>" target="_blank" class="btn btn-sm btn-outline-success">
+                                            <i class="fas fa-download me-1"></i>View
+                                        </a>
                                     </div>
                                 </div>
-                            </div>
-                            
-                            <!-- Preview container for PDF files -->
-                            <div class="floorplan-preview-container" id="pdfPreviewContainer">
-                                <div class="floorplan-file-info">
-                                    <div class="file-icon">
-                                        <i class="fas fa-file-pdf"></i>
-                                    </div>
-                                    <div class="file-details">
-                                        <div class="file-name" id="pdfFileName"></div>
-                                        <div class="file-size" id="pdfFileSize"></div>
-                                    </div>
-                                    <button type="button" class="remove-file-btn" id="removePdfBtn" title="Remove file">
-                                        <i class="fas fa-times-circle"></i>
-                                    </button>
+                                <p class="text-muted small"><i class="fas fa-info-circle me-1"></i> To update your floor plan, please visit your profile.</p>
+                            <?php else: ?>
+                                <div class="alert alert-warning" role="alert">
+                                    <i class="fas fa-exclamation-triangle me-2"></i>
+                                    <strong>No floor plan uploaded!</strong> Please upload a floor plan in your <a href="profile.php">profile</a> before placing an order.
                                 </div>
-                            </div>
+                            <?php endif; ?>
                         </div>
 
                         <!-- Design Requirements Section -->
@@ -431,8 +379,13 @@ if (!empty($clientData['ctel'])) {
                             </div>
 
                             <div class="mt-3 mb-3">
-                                <label for="budget" class="form-label fw-bold">Budget <span style="color: #e74c3c;">*</span></label>
-                                <input class="form-control" type="number" id="budget" name="budget" min="0" value="<?= (int)$design['price'] ?>" required>
+                                <label for="budget" class="form-label fw-bold">Budget</label>
+                                <div class="form-control" style="background-color: #f8f9fa; border-color: #dee2e6; color: #495057; padding: 0.375rem 0.75rem; height: auto;">
+                                    <strong>HK$<?= number_format($budgetDisplay > 0 ? $budgetDisplay : (int)$design['price']) ?></strong>
+                                </div>
+                                <small class="text-muted d-block mt-2"><i class="fas fa-info-circle me-1"></i>Budget is set in your profile and cannot be changed during order placement.</small>
+                                <!-- Hidden input to preserve budget value for form submission -->
+                                <input type="hidden" name="budget" value="<?= $budgetDisplay > 0 ? $budgetDisplay : (int)$design['price'] ?>">
                             </div>
 
                             <div class="mt-4">
@@ -491,86 +444,7 @@ if (!empty($clientData['ctel'])) {
             });
         });
 
-        // File upload functionality
-        document.addEventListener('DOMContentLoaded', function() {
-            const fileInput = document.getElementById('floorplanUpload');
-            const uploadArea = document.getElementById('uploadArea');
-            const uploadLabel = document.getElementById('uploadLabel');
-            const imagePreviewContainer = document.getElementById('imagePreviewContainer');
-            const pdfPreviewContainer = document.getElementById('pdfPreviewContainer');
-            const floorplanPreview = document.getElementById('floorplanPreview');
-            const fileName = document.getElementById('fileName');
-            const fileSize = document.getElementById('fileSize');
-            const pdfFileName = document.getElementById('pdfFileName');
-            const pdfFileSize = document.getElementById('pdfFileSize');
-            const removeFileBtn = document.getElementById('removeFileBtn');
-            const removePdfBtn = document.getElementById('removePdfBtn');
 
-            // Format file size
-            function formatFileSize(bytes) {
-                if (bytes === 0) return '0 Bytes';
-                const k = 1024;
-                const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-                const i = Math.floor(Math.log(bytes) / Math.log(k));
-                return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-            }
-
-            // Handle file selection
-            fileInput.addEventListener('change', function(e) {
-                const file = e.target.files[0];
-                
-                if (file) {
-                    const fileType = file.type;
-                    const fileExtension = file.name.split('.').pop().toLowerCase();
-                    
-                    // Hide both preview containers first
-                    imagePreviewContainer.classList.remove('show');
-                    pdfPreviewContainer.classList.remove('show');
-                    
-                    // Check if it's an image
-                    if (fileType.startsWith('image/') || ['jpg', 'jpeg', 'png'].includes(fileExtension)) {
-                        // Show image preview
-                        const reader = new FileReader();
-                        reader.onload = function(e) {
-                            floorplanPreview.src = e.target.result;
-                            fileName.textContent = file.name;
-                            fileSize.textContent = formatFileSize(file.size);
-                            imagePreviewContainer.classList.add('show');
-                            uploadArea.classList.add('has-file');
-                        };
-                        reader.readAsDataURL(file);
-                    } else if (fileType === 'application/pdf' || fileExtension === 'pdf') {
-                        // Show PDF info
-                        pdfFileName.textContent = file.name;
-                        pdfFileSize.textContent = formatFileSize(file.size);
-                        pdfPreviewContainer.classList.add('show');
-                        uploadArea.classList.add('has-file');
-                    }
-                }
-            });
-
-            // Remove file function
-            function removeFile() {
-                fileInput.value = '';
-                imagePreviewContainer.classList.remove('show');
-                pdfPreviewContainer.classList.remove('show');
-                uploadArea.classList.remove('has-file');
-                floorplanPreview.src = '';
-            }
-
-            // Remove file button handlers
-            removeFileBtn.addEventListener('click', function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                removeFile();
-            });
-
-            removePdfBtn.addEventListener('click', function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                removeFile();
-            });
-        });
     </script>
 </body>
 </html>

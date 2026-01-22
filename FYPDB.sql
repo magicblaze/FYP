@@ -47,13 +47,15 @@ CREATE TABLE `Client` (
   `cemail` varchar(255) DEFAULT NULL,
   `cpassword` varchar(255) NOT NULL,
   `address` varchar(255) DEFAULT NULL,
+  `budget` int NOT NULL,
+  `Floor_Plan` VARCHAR(500) DEFAULT NULL,
   `remember_token` VARCHAR(64) DEFAULT NULL,
   PRIMARY KEY (`clientid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-INSERT INTO `Client` (`clientid`,`cname`,`ctel`,`cemail`,`cpassword`,`address`,`remember_token`) VALUES
-(1, 'Alex Wong', 21232123, 'u3952310@gmail.com', 'User12345', 'ABC Building', NULL),
-(2, 'Tina Chan', 12345678, 'abc321@gmail.com', '123456', '123 Building', NULL);
+INSERT INTO `Client` (`clientid`,`cname`,`ctel`,`cemail`,`cpassword`,`address`,`budget`,`Floor_Plan`,`remember_token`) VALUES
+(1, 'Alex Wong', 21232123, 'u3952310@gmail.com', 'User12345', 'ABC Building', 50000, null, NULL),
+(2, 'Tina Chan', 12345678, 'abc321@gmail.com', '123456', '123 Building', 70000, null, NULL);
 
 -- Manager table
 CREATE TABLE `Manager` (
@@ -129,7 +131,8 @@ INSERT INTO `Supplier` (`supplierid`,`sname`,`stel`,`semail`,`spassword`,`rememb
 CREATE TABLE `Design` (
   `designid` int NOT NULL AUTO_INCREMENT,
   `design` VARCHAR(500) DEFAULT NULL,
-  `price` int NOT NULL,
+  `expect_price` int NOT NULL,
+  `description` TEXT DEFAULT NULL,
   `tag` TEXT NOT NULL,
   `likes` int NOT NULL,
   `designerid` int NOT NULL,
@@ -138,9 +141,9 @@ CREATE TABLE `Design` (
   CONSTRAINT `designerid_pk` FOREIGN KEY (`designerid`) REFERENCES `Designer` (`designerid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-INSERT INTO `Design` (`designid`,`design`,`price`,`tag`,`likes`,`designerid`) VALUES
-(1, 'design.jpg',500 , 'full house,modern','200',1),
-(2, 'design2.jpg',1000, 'kitchen remodel,minimalist','20',1);
+INSERT INTO `Design` (`designid`,`design`,`expect_price`,`description`,`tag`,`likes`,`designerid`) VALUES
+(1, 'design.jpg',500 , 'A modern full house design','full house,modern','200',1),
+(2, 'design2.jpg',1000, 'A minimalist kitchen remodel design','kitchen remodel,minimalist','20',1);
 
 -- Comment_design table
 CREATE TABLE `Comment_design` (
@@ -191,8 +194,6 @@ CREATE TABLE `Order` (
   `orderid` int NOT NULL AUTO_INCREMENT,
   `odate` datetime NOT NULL,
   `clientid` int NOT NULL,
-  `budget` int NOT NULL,
-  `Floor_Plan` VARCHAR(500) DEFAULT NULL,
   `Requirements` varchar(255) DEFAULT NULL,
   `designid` int NOT NULL,
   `ostatus` varchar(255) DEFAULT NULL,
@@ -204,9 +205,9 @@ CREATE TABLE `Order` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 INSERT INTO `Order`
-(`orderid`, `odate`, `clientid`, `budget`, `Floor_Plan`, `Requirements`,`designid`,`ostatus`) VALUES
-(1, '2025-04-12 17:50:00', 1, 1000, NULL, 'abc',2,'Designing'),
-(2, '2025-05-10 12:00:00', 2, 2000, NULL, 'abc',1,'Completed');
+(`orderid`, `odate`, `clientid`, `Requirements`,`designid`,`ostatus`) VALUES
+(1, '2025-04-12 17:50:00', 1, 'abc',2,'Designing'),
+(2, '2025-05-10 12:00:00', 2, 'abc',1,'Completed');
 
 -- Table to store color-image mapping for each product
 CREATE TABLE `ProductColorImage` (
@@ -445,8 +446,8 @@ INSERT INTO `MessageRead` (`messagereadid`, `messageid`, `ChatRoomMemberid`, `is
 (10,4,6,0,NULL),
 (11,5,5,1,'2025-06-01 08:00:00');
 
-INSERT INTO `Order` (`orderid`, `odate`, `clientid`, `budget`, `Floor_Plan`, `Requirements`,`designid`,`ostatus`) VALUES
-(3, '2025-07-01 09:00:00', 1, 1500, NULL, 'Need quick remodel', 1, 'Pending');
+INSERT INTO `Order` (`orderid`, `odate`, `clientid`, `Requirements`,`designid`,`ostatus`) VALUES
+(3, '2025-07-01 09:00:00', 1, 'Need quick remodel', 1, 'Pending');
 
 INSERT INTO `OrderProduct` (`orderproductid`, `productid`, `quantity`, `orderid`, `deliverydate`, `status`, `managerid`, `color`) VALUES
 (3, 3, 50, 3, '2026-01-13', 'Pending', 1, 'White');

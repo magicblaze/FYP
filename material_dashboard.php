@@ -118,7 +118,7 @@ if (!$material_result) die('Query error: ' . $mysqli->error);
             border-radius: 10px;
             padding: 1rem 1.5rem;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
-            margin-bottom: 2rem;
+            margin-bottom: 0.5rem;
         }
         .search-section .form-control {
             border: 2px solid #ecf0f1;
@@ -140,9 +140,6 @@ if (!$material_result) die('Query error: ' . $mysqli->error);
             padding: 1.5rem;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
             margin-bottom: 2rem;
-            height: fit-content;
-            position: sticky;
-            top: 20px;
         }
         .filter-panel h5 {
             color: #2c3e50;
@@ -223,7 +220,7 @@ if (!$material_result) die('Query error: ' . $mysqli->error);
         }
         .container-with-filter {
             display: grid;
-            grid-template-columns: 250px 1fr;
+            grid-template-columns: 1fr;
             gap: 2rem;
         }
         @media (max-width: 768px) {
@@ -283,65 +280,90 @@ if (!$material_result) die('Query error: ' . $mysqli->error);
             </form>
         </div>
 
-        <div class="page-title">Material</div>
+        <!-- Filter Panel (Under Search Bar) -->
+        <div class="filter-panel">
+            <h5><i class="fas fa-filter me-2"></i>Filters</h5>
+            <form method="GET" action="material_dashboard.php" id="filterForm">
+                <!-- Search (Hidden) -->
+                <input type="hidden" name="search" value="<?= htmlspecialchars($search) ?>">
 
-        <div class="container-with-filter">
-            <!-- Filter Panel -->
-            <aside class="filter-panel">
-                <h5><i class="fas fa-filter me-2"></i>Filters</h5>
-                <form method="GET" action="material_dashboard.php" id="filterForm">
-                    <!-- Search (Hidden) -->
-                    <input type="hidden" name="search" value="<?= htmlspecialchars($search) ?>">
-
+                <div class="row g-3">
                     <!-- Price Range Filter -->
-                    <div class="filter-group">
-                        <label>Price Range (HK$)</label>
-                        <div class="price-inputs">
-                            <input type="number" name="min_price" class="form-control" placeholder="Min" value="<?= $min_price > 0 ? $min_price : '' ?>" min="0">
-                            <span class="price-separator">-</span>
-                            <input type="number" name="max_price" class="form-control" placeholder="Max" value="<?= $max_price < 999999 ? $max_price : '' ?>" min="0">
+                    <div class="col-md-2">
+                        <div class="filter-group">
+                            <label>Price Range (HK$)</label>
+                            <div class="price-inputs">
+                                <input type="number" name="min_price" class="form-control" placeholder="Min" value="<?= $min_price > 0 ? $min_price : '' ?>" min="0">
+                                <span class="price-separator">-</span>
+                                <input type="number" name="max_price" class="form-control" placeholder="Max" value="<?= $max_price < 999999 ? $max_price : '' ?>" min="0">
+                            </div>
                         </div>
                     </div>
 
                     <!-- Supplier Filter -->
-                    <div class="filter-group">
-                        <label for="supplier_id">Supplier</label>
-                        <select name="supplier_id" id="supplier_id" class="form-select">
-                            <option value="">All Suppliers</option>
-                            <?php while ($supplier = $supplier_result->fetch_assoc()): ?>
-                                <option value="<?= $supplier['supplierid'] ?>" <?= $supplier_id == $supplier['supplierid'] ? 'selected' : '' ?>>
-                                    <?= htmlspecialchars($supplier['sname']) ?>
-                                </option>
-                            <?php endwhile; ?>
-                        </select>
+                    <div class="col-md-2">
+                        <div class="filter-group">
+                            <label for="supplier_id">Supplier</label>
+                            <select name="supplier_id" id="supplier_id" class="form-select">
+                                <option value="">All Suppliers</option>
+                                <?php while ($supplier = $supplier_result->fetch_assoc()): ?>
+                                    <option value="<?= $supplier['supplierid'] ?>" <?= $supplier_id == $supplier['supplierid'] ? 'selected' : '' ?>>
+                                        <?= htmlspecialchars($supplier['sname']) ?>
+                                    </option>
+                                <?php endwhile; ?>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Material Type Filter -->
+                    <div class="col-md-2">
+                        <div class="filter-group">
+                            <label for="material_type">Material Type</label>
+                            <select name="material_type" id="material_type" class="form-select">
+                                <option value="">All Materials</option>
+                                <?php while ($material = $material_result->fetch_assoc()): ?>
+                                    <option value="<?= htmlspecialchars($material['material']) ?>" <?= $material_type == $material['material'] ? 'selected' : '' ?>>
+                                        <?= htmlspecialchars($material['material']) ?>
+                                    </option>
+                                <?php endwhile; ?>
+                            </select>
+                        </div>
                     </div>
 
                     <!-- Sort By -->
-                    <div class="filter-group">
-                        <label for="sort_by">Sort By</label>
-                        <select name="sort_by" id="sort_by" class="form-select">
-                            <option value="recent" <?= $sort_by === 'recent' ? 'selected' : '' ?>>Newest</option>
-                            <option value="price_low" <?= $sort_by === 'price_low' ? 'selected' : '' ?>>Price: Low to High</option>
-                            <option value="price_high" <?= $sort_by === 'price_high' ? 'selected' : '' ?>>Price: High to Low</option>
-                            <option value="likes" <?= $sort_by === 'likes' ? 'selected' : '' ?>>Most Liked</option>
-                        </select>
+                    <div class="col-md-2">
+                        <div class="filter-group">
+                            <label for="sort_by">Sort By</label>
+                            <select name="sort_by" id="sort_by" class="form-select">
+                                <option value="recent" <?= $sort_by === 'recent' ? 'selected' : '' ?>>Newest</option>
+                                <option value="price_low" <?= $sort_by === 'price_low' ? 'selected' : '' ?>>Price: Low to High</option>
+                                <option value="price_high" <?= $sort_by === 'price_high' ? 'selected' : '' ?>>Price: High to Low</option>
+                                <option value="likes" <?= $sort_by === 'likes' ? 'selected' : '' ?>>Most Liked</option>
+                            </select>
+                        </div>
                     </div>
 
                     <!-- Filter Buttons -->
-                    <div class="filter-buttons">
-                        <button type="submit" class="btn-apply-filter">
-                            <i class="fas fa-check me-1"></i>Apply
-                        </button>
-                        <a href="material_dashboard.php" class="btn-clear-filter" style="text-align: center; text-decoration: none;">
-                            <i class="fas fa-times me-1"></i>Clear
-                        </a>
+                    <div class="col-md-4">
+                        <div class="filter-group" style="margin-top: 1.85rem;">
+                            <div class="filter-buttons">
+                                <button type="submit" class="btn-apply-filter">
+                                    <i class="fas fa-check me-1"></i>Apply
+                                </button>
+                                <a href="material_dashboard.php" class="btn-clear-filter" style="text-align: center; text-decoration: none;">
+                                    <i class="fas fa-times me-1"></i>Clear
+                                </a>
+                            </div>
+                        </div>
                     </div>
-                </form>
-            </aside>
+                </div>
+            </form>
+        </div>
 
+
+        <div class="container-with-filter">
             <!-- Main Content -->
             <div class="main-content">
-
                 <!-- Results Grid -->
                 <div class="row g-4">
                     <?php if ($result->num_rows > 0): ?>

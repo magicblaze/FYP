@@ -16,7 +16,7 @@ if (empty($_SESSION['user'])) {
 $designid = isset($_GET['designid']) ? (int)$_GET['designid'] : 0;
 if ($designid <= 0) { http_response_code(404); die('Design not found.'); }
 
-$dsql = "SELECT d.designid, d.price, d.likes, d.tag, dz.dname, d.designerid
+$dsql = "SELECT d.designid, d.expect_price, d.likes, d.tag, d.description, dz.dname, d.designerid
          FROM Design d
          JOIN Designer dz ON d.designerid = dz.designerid
          WHERE d.designid = ?";
@@ -62,7 +62,7 @@ $commentCount = $comments->num_rows;
 $rawTags = (string)($design['tag'] ?? '');
 $tags = array_filter(array_map('trim', explode(',', $rawTags)));
 
-$o = $mysqli->prepare("SELECT designid, price FROM Design WHERE designerid=? AND designid<>? LIMIT 6");
+$o = $mysqli->prepare("SELECT designid, expect_price, description FROM Design WHERE designerid=? AND designid<>? LIMIT 6");
 $o->bind_param("ii", $design['designerid'], $designid);
 $o->execute();
 $others = $o->get_result();
@@ -148,10 +148,43 @@ $mainImg = $baseUrlEarly . $appRoot . '/design_image.php?id=' . (int)$design['de
         }
 
         .design-price {
-            font-size: 1.8rem;
-            color: #e74c3c;
-            font-weight: 700;
             margin-bottom: 1rem;
+        }
+
+        .design-price .price-label {
+            font-size: 0.9rem;
+            color: #7f8c8d;
+            font-weight: 500;
+            display: block;
+            margin-bottom: 0.25rem;
+        }
+
+        .design-price .price-value {
+            font-size: 1.8rem;
+            color: #27ae60;
+            font-weight: 700;
+        }
+
+        .design-description {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+            border-left: 4px solid #3498db;
+        }
+
+        .design-description h6 {
+            color: #2c3e50;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+        }
+
+        .design-description p {
+            color: #5a6c7d;
+            line-height: 1.6;
+            margin: 0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
         }
 
         .design-stats {
@@ -222,6 +255,16 @@ $mainImg = $baseUrlEarly . $appRoot . '/design_image.php?id=' . (int)$design['de
             font-size: 0.85rem;
             margin-right: 0.5rem;
             margin-bottom: 0.5rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            user-select: none;
+        }
+
+        .tag:hover {
+            background-color: #3498db;
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(52, 152, 219, 0.3);
         }
 
         .comments-section {
@@ -339,7 +382,10 @@ $mainImg = $baseUrlEarly . $appRoot . '/design_image.php?id=' . (int)$design['de
                 </div>
 
                 <div class="design-title"><?= htmlspecialchars($design['dname']) ?></div>
-                <div class="design-price">HK$<?= number_format((float)$design['price']) ?></div>
+                <div class="design-price">
+                    <span class="price-label">Expected Price:</span>
+                    <span class="price-value">HK$<?= number_format((float)$design['expect_price']) ?></span>
+                </div>
 
                 <div class="design-stats">
                     <div class="likes-count">
@@ -354,11 +400,17 @@ $mainImg = $baseUrlEarly . $appRoot . '/design_image.php?id=' . (int)$design['de
                     <div><i class="fas fa-user me-2"></i><strong>Designer:</strong> <?= htmlspecialchars($design['dname']) ?></div>
                 </div>
 
+                <?php if (!empty($design['description'])): ?>
+                <div class="design-description">
+                    <p><?= nl2br(htmlspecialchars($design['description'])) ?></p>
+                </div>
+                <?php endif; ?>
+
                 <?php if (!empty($tags)): ?>
                 <div class="design-tags">
                     <h6>Tags</h6>
                     <?php foreach ($tags as $tag): ?>
-                        <span class="tag"><?= htmlspecialchars($tag) ?></span>
+                        <span class="tag" onclick="searchTag('<?= htmlspecialchars(addslashes($tag), ENT_QUOTES) ?>')"><?= htmlspecialchars($tag) ?></span>
                     <?php endforeach; ?>
                 </div>
                 <?php endif; ?>
@@ -426,6 +478,12 @@ $mainImg = $baseUrlEarly . $appRoot . '/design_image.php?id=' . (int)$design['de
     function handleOrder(designId) {
         // 重定向到訂單頁面
         window.location.href = 'order.php?designid=' + designId;
+    }
+
+    // 處理標籤點擊事件，重定向到設計儀表板並搜索該標籤
+    function searchTag(tag) {
+        const encodedTag = encodeURIComponent(tag);
+        window.location.href = '../design_dashboard.php?tag=' + encodedTag;
     }
     </script>
 

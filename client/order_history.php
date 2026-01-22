@@ -24,11 +24,13 @@ $clientStmt->execute();
 $clientData = $clientStmt->get_result()->fetch_assoc();
 
 // Fetch orders for the logged-in client
-$sql = "SELECT o.orderid, o.odate, o.budget, o.Floor_Plan, o.Requirements, o.ostatus, 
-               d.designid, d.price, d.tag, dz.dname
+$sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, 
+               d.designid, d.price, d.tag, dz.dname,
+               c.budget, c.floor_plan
         FROM `Order` o
         JOIN Design d ON o.designid = d.designid
         JOIN Designer dz ON d.designerid = dz.designerid
+        JOIN Client c ON o.clientid = c.clientid
         WHERE o.clientid = ?
         ORDER BY o.odate DESC";
 $stmt = $mysqli->prepare($sql);
