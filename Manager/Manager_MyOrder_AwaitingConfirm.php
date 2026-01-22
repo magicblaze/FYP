@@ -1,5 +1,16 @@
 <?php
+session_start();
 require_once dirname(__DIR__) . '/config.php';
+
+// 检查用户是否以经理身份登录
+if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'manager') {
+    header('Location: ../login.php?redirect=' . urlencode($_SERVER['REQUEST_URI']));
+    exit;
+}
+
+$user = $_SESSION['user'];
+$user_id = $user['managerid'];
+$user_name = $user['name'];
 
 // 定义一个安全的查询函数，自动检查连接
 function safe_mysqli_query($mysqli, $sql) {
@@ -25,8 +36,11 @@ function safe_mysqli_query($mysqli, $sql) {
 // 获取搜索参数
 $search = isset($_GET['search']) ? mysqli_real_escape_string($mysqli, $_GET['search']) : '';
 
-// 构建查询条件
-$where_conditions = array("o.ostatus = 'Pending' OR o.ostatus = 'pending'");
+// 构建查询条件 - 只显示当前经理的待处理订单
+$where_conditions = array(
+    "(o.ostatus = 'Pending' OR o.ostatus = 'pending')",
+    "EXISTS (SELECT 1 FROM OrderProduct op WHERE op.orderid = o.orderid AND op.managerid = $user_id)"
+);
 
 if(!empty($search)) {
     $search_conditions = array();
@@ -40,11 +54,11 @@ if(!empty($search)) {
 
 $where_clause = !empty($where_conditions) ? "WHERE " . implode(" AND ", $where_conditions) : "";
 
-// 获取所有待处理订单
+// 获取所有待处理订单 - UPDATED FOR NEW DATE STRUCTURE
 $sql = "SELECT o.orderid, o.odate, o.budget, o.Requirements, o.ostatus,
                c.clientid, c.cname as client_name, c.cemail as client_email, c.ctel as client_phone,
                d.designid, d.design as design_image, d.price as design_price, d.tag as design_tag,
-               s.FinishDate
+               s.OrderFinishDate, s.DesignFinishDate
         FROM `Order` o
         LEFT JOIN `Client` c ON o.clientid = c.clientid
         LEFT JOIN `Design` d ON o.designid = d.designid
@@ -55,13 +69,14 @@ $sql = "SELECT o.orderid, o.odate, o.budget, o.Requirements, o.ostatus,
 // 使用安全的查询函数
 $result = safe_mysqli_query($mysqli, $sql);
 
-// 计算统计信息
+// 计算统计信息 - 只统计当前经理的订单
 $stats_sql = "SELECT 
                 COUNT(*) as total_pending,
                 SUM(o.budget) as total_budget,
                 AVG(o.budget) as avg_budget
               FROM `Order` o
-              WHERE o.ostatus = 'Pending' OR o.ostatus = 'pending'";
+              WHERE (o.ostatus = 'Pending' OR o.ostatus = 'pending')
+              AND EXISTS (SELECT 1 FROM OrderProduct op WHERE op.orderid = o.orderid AND op.managerid = $user_id)";
 $stats_result = safe_mysqli_query($mysqli, $stats_sql);
 $stats = mysqli_fetch_assoc($stats_result);
 ?>
@@ -80,17 +95,21 @@ $stats = mysqli_fetch_assoc($stats_result);
         <div class="nav-container">
             <a href="#" class="nav-brand">HappyDesign</a>
             <div class="nav-links">
-                <a href="Manager_introduct.html">Introduct</a>
-                <a href="Manager_MyOrder.html">MyOrder</a>
-                <a href="Manager_Massage.html">Massage</a>
-                <a href="Manager_Schedule.html">Schedule</a>
+                <a href="Manager_introduct.php">Introduct</a>
+                <a href="Manager_MyOrder.php">MyOrder</a>
+                <a href="Manager_Massage.php">Massage</a>
+                <a href="Manager_Schedule.php">Schedule</a>
+            </div>
+            <div class="user-info">
+                <span>Welcome, <?php echo htmlspecialchars($user_name); ?></span>
+                <a href="../logout.php" class="btn-logout">Logout</a>
             </div>
         </div>
     </nav>
 
     <!-- 主要内容 -->
     <div class="page-container">
-        <h1 class="page-title">Pending Orders</h1>
+        <h1 class="page-title">Pending Orders - <?php echo htmlspecialchars($user_name); ?></h1>
         
         <?php if(isset($_GET['msg']) && $_GET['msg'] == 'approved'): ?>
             <div class="alert alert-success">
@@ -158,7 +177,8 @@ $stats = mysqli_fetch_assoc($stats_result);
                         <th>Design</th>
                         <th>Requirements</th>
                         <th>Status</th>
-                        <th>Scheduled Finish Date</th>
+                        <th>Order Finish Date</th>
+                        <th>Design Finish Date</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -198,8 +218,17 @@ $stats = mysqli_fetch_assoc($stats_result);
                         </td>
                         <td>
                             <?php 
-                            if(isset($row["FinishDate"]) && $row["FinishDate"] != '0000-00-00 00:00:00'){
-                                echo date('Y-m-d H:i', strtotime($row["FinishDate"]));
+                            if(isset($row["OrderFinishDate"]) && $row["OrderFinishDate"] != '0000-00-00 00:00:00'){
+                                echo date('Y-m-d H:i', strtotime($row["OrderFinishDate"]));
+                            } else {
+                                echo '<span class="text-muted">Not scheduled</span>';
+                            }
+                            ?>
+                        </td>
+                        <td>
+                            <?php 
+                            if(isset($row["DesignFinishDate"]) && $row["DesignFinishDate"] != '0000-00-00 00:00:00'){
+                                echo date('Y-m-d H:i', strtotime($row["DesignFinishDate"]));
                             } else {
                                 echo '<span class="text-muted">Not scheduled</span>';
                             }
@@ -240,9 +269,9 @@ $stats = mysqli_fetch_assoc($stats_result);
         <!-- 返回按钮 -->
         <div class="d-flex justify-between mt-4">
             <div class="btn-group">
-                <button onclick="window.location.href='Manager_MyOrder.html'" 
+                <button onclick="window.location.href='Manager_MyOrder.php'" 
                         class="btn btn-secondary">Back to Orders Manager</button>
-                        
+
             </div>
         </div>
     </div>
@@ -282,7 +311,7 @@ $stats = mysqli_fetch_assoc($stats_result);
             
             // Esc键返回
             if(e.key === 'Escape') {
-                window.location.href = 'Manager_MyOrder.html';
+                window.location.href = 'Manager_MyOrder.php';
             }
         });
         
@@ -352,7 +381,7 @@ $stats = mysqli_fetch_assoc($stats_result);
     
     // 自动检查新订单（每60秒）
     function checkForNewOrders() {
-        fetch('check_new_orders.php')
+        fetch('check_new_orders.php?manager_id=<?php echo $user_id; ?>')
             .then(response => response.json())
             .then(data => {
                 if(data.newOrders > 0) {
@@ -438,4 +467,3 @@ $stats = mysqli_fetch_assoc($stats_result);
     </style>
 </body>
 </html>
-

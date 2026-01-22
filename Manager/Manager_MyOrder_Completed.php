@@ -1,19 +1,35 @@
 <?php
 require_once dirname(__DIR__) . '/config.php';
+session_start();
 
-// 查询已完成订单
-$sql = "SELECT o.orderid, o.odate, o.budget, o.Requirements, o.ostatus,
+// 检查用户是否以经理身份登录
+if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'manager') {
+    header('Location: ../login.php?redirect=' . urlencode($_SERVER['REQUEST_URI']));
+    exit;
+}
+
+$user = $_SESSION['user'];
+$user_id = $user['managerid'];
+$user_name = $user['name'];
+
+// 查询已完成订单 - UPDATED FOR NEW DATE STRUCTURE - 只显示该经理的订单
+$sql = "SELECT DISTINCT o.orderid, o.odate, o.budget, o.Requirements, o.ostatus,
                c.clientid, c.cname as client_name,
                d.designid, d.price as design_price, d.tag as design_tag,
-               s.FinishDate
+               s.OrderFinishDate, s.DesignFinishDate
         FROM `Order` o
         LEFT JOIN `Client` c ON o.clientid = c.clientid
         LEFT JOIN `Design` d ON o.designid = d.designid
         LEFT JOIN `Schedule` s ON o.orderid = s.orderid
-        WHERE o.ostatus = 'Completed' OR o.ostatus = 'completed'
-        ORDER BY s.FinishDate DESC";
+        LEFT JOIN `OrderProduct` op ON o.orderid = op.orderid
+        WHERE (o.ostatus = 'Completed' OR o.ostatus = 'completed')
+        AND op.managerid = ?
+        ORDER BY s.OrderFinishDate DESC";
 
-$result = mysqli_query($mysqli, $sql);
+$stmt = mysqli_prepare($mysqli, $sql);
+mysqli_stmt_bind_param($stmt, "i", $user_id);
+mysqli_stmt_execute($stmt);
+$result = mysqli_stmt_get_result($stmt);
 ?>
 
 <!DOCTYPE html>
@@ -30,10 +46,14 @@ $result = mysqli_query($mysqli, $sql);
         <div class="nav-container">
             <a href="#" class="nav-brand">HappyDesign</a>
             <div class="nav-links">
-                <a href="Manager_introduct.html">Introduct</a>
-                <a href="Manager_MyOrder.html">MyOrder</a>
-                <a href="Manager_Massage.html">Massage</a>
-                <a href="Manager_Schedule.html">Schedule</a>
+                <a href="Manager_introduct.php">Introduct</a>
+                <a href="Manager_MyOrder.php">MyOrder</a>
+                <a href="Manager_Massage.php">Massage</a>
+                <a href="Manager_Schedule.php">Schedule</a>
+            </div>
+            <div class="user-info">
+                <span>Welcome, <?php echo htmlspecialchars($user_name); ?></span>
+                <a href="../logout.php" class="btn-logout">Logout</a>
             </div>
         </div>
     </nav>
@@ -74,10 +94,16 @@ $result = mysqli_query($mysqli, $sql);
                 <div class="stat-label">Total Completed Orders</div>
             </div>
             <?php
+            // 更新预算查询以包含manager id过滤
             $budget_sql = "SELECT SUM(o.budget) as total_budget 
-                           FROM `Order` o 
-                           WHERE o.ostatus = 'Completed' OR o.ostatus = 'completed'";
-            $budget_result = mysqli_query($mysqli, $budget_sql);
+                           FROM `Order` o
+                           LEFT JOIN `OrderProduct` op ON o.orderid = op.orderid
+                           WHERE (o.ostatus = 'Completed' OR o.ostatus = 'completed')
+                           AND op.managerid = ?";
+            $budget_stmt = mysqli_prepare($mysqli, $budget_sql);
+            mysqli_stmt_bind_param($budget_stmt, "i", $user_id);
+            mysqli_stmt_execute($budget_stmt);
+            $budget_result = mysqli_stmt_get_result($budget_stmt);
             $budget_row = mysqli_fetch_assoc($budget_result);
             $total_budget = $budget_row['total_budget'] ?? 0;
             $avg_budget = $total_completed > 0 ? $total_budget / $total_completed : 0;
@@ -104,7 +130,8 @@ $result = mysqli_query($mysqli, $sql);
                         <th>Design</th>
                         <th>Requirements</th>
                         <th>Status</th>
-                        <th>Completed Date</th>
+                        <th>Order Completed Date</th>
+                        <th>Design Completed Date</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -135,8 +162,17 @@ $result = mysqli_query($mysqli, $sql);
                         </td>
                         <td>
                             <?php 
-                            if(isset($row["FinishDate"]) && $row["FinishDate"] != '0000-00-00 00:00:00'){
-                                echo date('Y-m-d H:i', strtotime($row["FinishDate"]));
+                            if(isset($row["OrderFinishDate"]) && $row["OrderFinishDate"] != '0000-00-00 00:00:00'){
+                                echo date('Y-m-d H:i', strtotime($row["OrderFinishDate"]));
+                            } else {
+                                echo '<span class="text-muted">N/A</span>';
+                            }
+                            ?>
+                        </td>
+                        <td>
+                            <?php 
+                            if(isset($row["DesignFinishDate"]) && $row["DesignFinishDate"] != '0000-00-00 00:00:00'){
+                                echo date('Y-m-d H:i', strtotime($row["DesignFinishDate"]));
                             } else {
                                 echo '<span class="text-muted">N/A</span>';
                             }
@@ -161,14 +197,18 @@ $result = mysqli_query($mysqli, $sql);
         
         mysqli_free_result($result);
         if(isset($budget_result)) mysqli_free_result($budget_result);
-        mysqli_close($mysqli);
+        if(isset($stmt)) mysqli_stmt_close($stmt);
+        if(isset($budget_stmt)) mysqli_stmt_close($budget_stmt);
+        if(isset($mysqli) && $mysqli) {
+            mysqli_close($mysqli);
+        }
         ?>
         
         <!-- 页面按钮 -->
         <div class="d-flex justify-between mt-4">
             <div class="btn-group">
                 <button onclick="printThisPage()" class="btn btn-primary">Print This Page</button>
-                <button onclick="window.location.href='Manager_MyOrder.html'" 
+                <button onclick="window.location.href='Manager_MyOrder.php'" 
                         class="btn btn-secondary">Back to Orders Manager</button>
                         
             </div>
@@ -187,26 +227,22 @@ $result = mysqli_query($mysqli, $sql);
         }
     }
     
-
     function printThisPage() {
         window.print();
     }
     
     document.addEventListener('DOMContentLoaded', function() {
-
         document.addEventListener('keydown', function(e) {
-
             if(e.ctrlKey && e.key === 'p') {
                 e.preventDefault();
                 printThisPage();
             }
 
             if(e.key === 'Escape') {
-                window.location.href = 'Manager_MyOrder.html';
+                window.location.href = 'Manager_MyOrder.php';
             }
         });
     });
-
     </script>
 </body>
 </html>

@@ -1,27 +1,47 @@
+<?php
+require_once dirname(__DIR__) . '/config.php';
+session_start();
+
+// Check if user is logged in as manager
+if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'manager') {
+    header('Location: ../login.php?redirect=Manager/Manager_MyOrder.php');
+    exit;
+}
+
+// Get manager info
+$user = $_SESSION['user'];
+$user_id = $user['managerid'];
+$user_name = $user['name'];
+?>
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="../css/Manager_style.css">
     <title>HappyDesign - Order Management</title>
-    
+
 </head>
 <body>
     <nav class="nav-bar">
         <div class="nav-container">
             <a href="#" class="nav-brand">HappyDesign</a>
             <div class="nav-links">
-                <a href="Manager_introduct.html" class="active">Introduct</a>
-                <a href="Manager_MyOrder.html">MyOrder</a>
-                <a href="Manager_Massage.html">Massage</a>
-                <a href="Manager_Schedule.html">Schedule</a>
+                <a href="Manager_introduct.php" class="active">Introduct</a>
+                <a href="Manager_MyOrder.php">MyOrder</a>
+                <a href="Manager_Massage.php">Massage</a>
+                <a href="Manager_Schedule.php">Schedule</a>
+            </div>
+            <div class="user-info">
+                <span>Welcome, <?php echo htmlspecialchars($user_name); ?></span>
+                <a href="../logout.php" class="btn-logout">Logout</a>
             </div>
         </div>
     </nav>
 
     <div class="page-container">
-        <h1 class="page-title">Order Management</h1>
+        <h1 class="page-title">Order Management - Welcome <?php echo htmlspecialchars($user_name); ?></h1>
         
         <div class="card">
             <div class="card-body">
@@ -29,7 +49,7 @@
                     <button class="btn btn-primary" onclick="location.href='Manager_MyOrder_TotalOrder.php'">Total Order</button>
                     <button class="btn btn-warning" onclick="location.href='Manager_MyOrder_AwaitingConfirm.php'">Awaiting Confirm</button>
                     <button class="btn btn-success" onclick="location.href='Manager_MyOrder_Completed.php'">Completed</button>
-                    <button class="btn btn-info" onclick="location.href='Manager_MyOrder_buyProduct.php'">Buy Product</button>
+                    <button class="btn btn-info" onclick="location.href='Manager_MyOrder_buyProduct.php'">Help to Designing</button>
                     <button class="btn btn-danger" onclick="location.href='Manager_MyOrder_Rejected.php'">Rejected</button>
                 </div>
             </div>
@@ -37,7 +57,6 @@
     </div>
 
     <script>
-
         document.addEventListener('DOMContentLoaded', function() {
             const currentPage = window.location.pathname.split('/').pop();
             const navLinks = document.querySelectorAll('.nav-links a');

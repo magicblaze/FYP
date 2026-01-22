@@ -1,12 +1,23 @@
 <?php
+session_start();
 require_once dirname(__DIR__) . '/config.php';
+
+// 检查用户是否以经理身份登录
+if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'manager') {
+    header('Location: ../login.php?redirect=' . urlencode($_SERVER['REQUEST_URI']));
+    exit;
+}
+
+$user = $_SESSION['user'];
+$user_id = $user['managerid'];
+$user_name = $user['name'];
 
 // 获取状态过滤参数
 $status_filter = isset($_GET['status']) ? $_GET['status'] : 'all';
 $search = isset($_GET['search']) ? mysqli_real_escape_string($mysqli, $_GET['search']) : '';
 
-// 构建查询条件
-$where_conditions = array();
+// 构建查询条件 - 只显示当前经理的订单
+$where_conditions = array("EXISTS (SELECT 1 FROM OrderProduct op WHERE op.orderid = o.orderid AND op.managerid = $user_id)");
 
 if($status_filter != 'all') {
     $status_filter = mysqli_real_escape_string($mysqli, $status_filter);
@@ -24,11 +35,11 @@ if(!empty($search)) {
 
 $where_clause = !empty($where_conditions) ? "WHERE " . implode(" AND ", $where_conditions) : "";
 
-// 构建SQL查询
+// 构建SQL查询 - UPDATED FOR NEW DATE STRUCTURE
 $sql = "SELECT o.orderid, o.odate, o.budget, o.Requirements, o.ostatus,
                c.clientid, c.cname as client_name,
                d.designid, d.price as design_price, d.tag as design_tag,
-               s.FinishDate
+               s.OrderFinishDate, s.DesignFinishDate
         FROM `Order` o
         LEFT JOIN `Client` c ON o.clientid = c.clientid
         LEFT JOIN `Design` d ON o.designid = d.designid
@@ -38,13 +49,15 @@ $sql = "SELECT o.orderid, o.odate, o.budget, o.Requirements, o.ostatus,
 
 $result = mysqli_query($mysqli, $sql);
 
-// 获取总数
-$count_sql = "SELECT COUNT(*) as total FROM `Order` o $where_clause";
+// 获取总数 - 只统计当前经理的订单
+$count_sql = "SELECT COUNT(*) as total 
+              FROM `Order` o 
+              WHERE EXISTS (SELECT 1 FROM OrderProduct op WHERE op.orderid = o.orderid AND op.managerid = $user_id)";
 $count_result = mysqli_query($mysqli, $count_sql);
 $count_row = mysqli_fetch_assoc($count_result);
 $total_orders = $count_row['total'];
 
-// 获取统计数据
+// 获取统计数据 - 只统计当前经理的订单
 $stats_sql = "SELECT 
                 COUNT(*) as total_orders,
                 SUM(o.budget) as total_budget,
@@ -52,11 +65,11 @@ $stats_sql = "SELECT
                 SUM(CASE WHEN o.ostatus = 'Pending' THEN 1 ELSE 0 END) as pending_count,
                 SUM(CASE WHEN o.ostatus = 'Designing' THEN 1 ELSE 0 END) as designing_count,
                 SUM(CASE WHEN o.ostatus = 'Completed' THEN 1 ELSE 0 END) as completed_count
-              FROM `Order` o";
+              FROM `Order` o
+              WHERE EXISTS (SELECT 1 FROM OrderProduct op WHERE op.orderid = o.orderid AND op.managerid = $user_id)";
 $stats_result = mysqli_query($mysqli, $stats_sql);
 $stats = mysqli_fetch_assoc($stats_result);
 ?>
-
 <!DOCTYPE html>
 <html>
 <head>
@@ -70,17 +83,21 @@ $stats = mysqli_fetch_assoc($stats_result);
         <div class="nav-container">
             <a href="#" class="nav-brand">HappyDesign</a>
             <div class="nav-links">
-                <a href="Manager_introduct.html">Introduct</a>
-                <a href="Manager_MyOrder.html">MyOrder</a>
-                <a href="Manager_Massage.html">Massage</a>
-                <a href="Manager_Schedule.html">Schedule</a>
+                <a href="Manager_introduct.php">Introduct</a>
+                <a href="Manager_MyOrder.php">MyOrder</a>
+                <a href="Manager_Massage.php">Massage</a>
+                <a href="Manager_Schedule.php">Schedule</a>
+            </div>
+            <div class="user-info">
+                <span>Welcome, <?php echo htmlspecialchars($user_name); ?></span>
+                <a href="../logout.php" class="btn-logout">Logout</a>
             </div>
         </div>
     </nav>
 
     <!-- 主要内容 -->
     <div class="page-container">
-        <h1 class="page-title">Total Orders</h1>
+        <h1 class="page-title">Total Orders - <?php echo htmlspecialchars($user_name); ?></h1>
         
         <!-- 搜索框 -->
         <div class="search-box">
@@ -171,7 +188,8 @@ $stats = mysqli_fetch_assoc($stats_result);
                         <th>Design</th>
                         <th>Requirement</th>
                         <th>Status</th>
-                        <th>Scheduled Date</th>
+                        <th>Order Finish Date</th>
+                        <th>Design Finish Date</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -222,8 +240,17 @@ $stats = mysqli_fetch_assoc($stats_result);
                         </td>
                         <td>
                             <?php 
-                            if(isset($row["FinishDate"]) && $row["FinishDate"] != '0000-00-00 00:00:00'){
-                                echo date('Y-m-d H:i', strtotime($row["FinishDate"]));
+                            if(isset($row["OrderFinishDate"]) && $row["OrderFinishDate"] != '0000-00-00 00:00:00'){
+                                echo date('Y-m-d H:i', strtotime($row["OrderFinishDate"]));
+                            } else {
+                                echo '<span class="text-muted">Not scheduled</span>';
+                            }
+                            ?>
+                        </td>
+                        <td>
+                            <?php 
+                            if(isset($row["DesignFinishDate"]) && $row["DesignFinishDate"] != '0000-00-00 00:00:00'){
+                                echo date('Y-m-d H:i', strtotime($row["DesignFinishDate"]));
                             } else {
                                 echo '<span class="text-muted">Not scheduled</span>';
                             }
@@ -263,8 +290,8 @@ $stats = mysqli_fetch_assoc($stats_result);
         
         <!-- 返回按钮 -->
         <div class="d-flex justify-between mt-4">
-            <button onclick="window.location.href='Manager_MyOrder.html'" 
-                    class="btn btn-secondary">Back to MyOrders</button>
+            <button onclick="window.location.href='Manager_MyOrder.php'" 
+                    class="btn btn-secondary">Back to Orders Manager</button>
             <div class="d-flex align-center gap-2">
                 <span class="text-muted">Last updated: <?php echo date('Y-m-d H:i:s'); ?></span>
             </div>
@@ -322,7 +349,7 @@ $stats = mysqli_fetch_assoc($stats_result);
             
             // Esc键返回
             if(e.key === 'Escape') {
-                window.location.href = 'Manager_MyOrder.html';
+                window.location.href = 'Manager_MyOrder.php';
             }
         });
         
