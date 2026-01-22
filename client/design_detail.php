@@ -429,6 +429,35 @@ $mainImg = $baseUrlEarly . $appRoot . '/design_image.php?id=' . (int)$design['de
     }
     </script>
 
+        <script>
+        // Like toggle for designs (AJAX)
+        (function(){
+            const heart = document.getElementById('likeHeart');
+            if (!heart) return;
+            heart.addEventListener('click', function(e){
+                e.preventDefault();
+                const designid = this.dataset.designid;
+                const btn = this;
+                const formData = new FormData();
+                formData.append('action', 'toggle_like');
+                formData.append('type', 'design');
+                formData.append('id', designid);
+
+                fetch('../api/handle_like.php', { method: 'POST', body: formData })
+                    .then(r=>r.json())
+                    .then(data=>{
+                        if (data && data.success) {
+                            if (data.liked) { btn.classList.add('liked'); btn.textContent='♥'; }
+                            else { btn.classList.remove('liked'); btn.textContent='♡'; }
+                            const lc = document.getElementById('likeCount'); if (lc) lc.textContent = data.likes;
+                        } else {
+                            alert('Error: ' + (data.message || 'Failed to update like'));
+                        }
+                    }).catch(err=>{ console.error(err); alert('An error occurred while updating the like.'); });
+            });
+        })();
+        </script>
+
     <!-- Chat widget: include unified PHP widget (handles markup and initialization) -->
     <?php
         // Provide server-side share payload so the widget handles sharing internally
@@ -442,8 +471,6 @@ $mainImg = $baseUrlEarly . $appRoot . '/design_image.php?id=' . (int)$design['de
             'designerId' => (int)$design['designerid'],
             'image' => $baseUrl . $appPath . '/design_image.php?id=' . (int)$designid
         ];
-        $CHAT_JS_PATH = '../Public/Chatfunction.js';
-        $CHAT_API_PATH = '../Public/ChatApi.php?action=';
         include __DIR__ . '/../Public/chat_widget.php';
     ?>
 </body>

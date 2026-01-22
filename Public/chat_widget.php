@@ -6,6 +6,14 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 $logged = isset($_SESSION['user']) && !empty($_SESSION['user']);
 $role = $_SESSION['user']['role'] ?? 'client';
 $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
+// Centralized paths (use absolute project paths so pages don't need to set these)
+$CHAT_API_PATH = '/FYP/Public/ChatApi.php?action=';
+$CHAT_JS_SRC = '/FYP/Public/Chatfunction.js';
+// Suggestions API path (resolve relative to app root)
+$scriptPath = $_SERVER['SCRIPT_NAME'] ?? '';
+$parts = explode('/', ltrim($scriptPath, '/'));
+$APP_ROOT = isset($parts[0]) && $parts[0] !== '' ? '/' . $parts[0] : '';
+$SUGGESTIONS_API = $APP_ROOT . '/api/get_chat_suggestions.php';
 ?>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
 <style>
@@ -90,6 +98,7 @@ $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
       <div id="chatwidget_typingIndicator" class="small text-muted"></div>
     </div>
     <div>
+      <button id="chatwidget_new" class="btn btn-sm btn-outline-primary" type="button" title="New chat" aria-label="Create chat">+ New</button>
       <button id="chatwidget_close" aria-label="Close">✕</button>
     </div>
   </div>
@@ -107,7 +116,7 @@ $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
         <button id="chatwidget_attach" class="btn btn-light btn-sm" type="button" title="Attach" aria-label="Attach file">
           <i class="bi bi-paperclip" aria-hidden="true" style="font-size:16px;line-height:1"></i>
         </button>
-        <button id="chatwidget_share" class="btn btn-outline-secondary btn-sm" type="button" title="Share page" aria-label="Share design" style="display:none;margin-left:4px">
+        <button id="chatwidget_share" class="btn btn-outline-secondary btn-sm" type="button" title="Share page" aria-label="Share design" style="margin-left:4px">
           <i class="bi bi-share" aria-hidden="true" style="font-size:14px"></i>
         </button>
         <input id="chatwidget_input" class="form-control form-control-sm" placeholder="Type a message..." aria-label="Message input" <?php if (!$logged) echo 'disabled title="Log in to send messages"'; ?> >
@@ -342,8 +351,119 @@ $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
   })();
 })();
 </script>
-<!-- Initialize chat widget. Allow overriding paths by setting $CHAT_JS_PATH and $CHAT_API_PATH before include -->
-<script src="<?= htmlspecialchars($CHAT_JS_PATH ?? 'Chatfunction.js') ?>"></script>
+<!-- Chat chooser modal -->
+<style>
+.chat-chooser-backdrop{position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(0,0,0,0.35);display:none;align-items:center;justify-content:center;z-index:100020}
+.chat-chooser{background:#fff;border-radius:8px;padding:12px;width:420px;max-width:94vw;box-shadow:0 8px 30px rgba(11,27,43,0.2)}
+.chat-chooser .list{max-height:300px;overflow:auto;margin-top:8px}
+.chat-chooser .item{display:flex;align-items:center;gap:8px;padding:8px;border-radius:6px;cursor:pointer}
+.chat-chooser .item:hover{background:#f7f9fc}
+.chat-chooser .avatar{width:36px;height:36px;border-radius:50%;background:#ddd;display:inline-block;flex:0 0 36px}
+.chat-chooser .title{font-weight:600}
+.chat-chooser .subtitle{font-size:0.85rem;color:#666}
+.chat-chooser .section-title{font-size:0.9rem;font-weight:600;margin-top:8px}
+</style>
+
+<div id="chatwidget_chooser_backdrop" class="chat-chooser-backdrop" role="dialog" aria-hidden="true">
+  <div class="chat-chooser" role="document" aria-label="Choose a user to chat with">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+      <div style="font-weight:700">Start a chat</div>
+      <div><button id="chatwidget_chooser_close" class="btn btn-sm btn-light">Close</button></div>
+    </div>
+    <div id="chatwidget_chooser_status" class="small text-muted">Recommended users appear first</div>
+    <div id="chatwidget_chooser_list" class="list">
+      <!-- sections appended here -->
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const newBtn = document.getElementById('chatwidget_new');
+  const chooser = document.getElementById('chatwidget_chooser_backdrop');
+  const chooserList = document.getElementById('chatwidget_chooser_list');
+  const chooserClose = document.getElementById('chatwidget_chooser_close');
+  const status = document.getElementById('chatwidget_chooser_status');
+
+  function showChooser(){ chooser.style.display='flex'; chooser.setAttribute('aria-hidden','false'); chooserList.innerHTML=''; status.textContent='Loading...'; fetchSuggestions(); }
+  function hideChooser(){ chooser.style.display='none'; chooser.setAttribute('aria-hidden','true'); }
+
+  newBtn && newBtn.addEventListener('click', showChooser);
+  chooserClose && chooserClose.addEventListener('click', hideChooser);
+  chooser.addEventListener('click', (e)=>{ if (e.target === chooser) hideChooser(); });
+
+  async function fetchSuggestions(){
+    try {
+      const res = await fetch(<?= json_encode($SUGGESTIONS_API) ?>);
+      const data = await res.json();
+      if (data.error) { status.textContent = 'Error: ' + data.error; return; }
+      status.textContent = '';
+      // build sections
+      if (data.recommended && data.recommended.length){
+        const h = document.createElement('div'); h.className='section-title'; h.textContent='Recommended'; chooserList.appendChild(h);
+        data.recommended.forEach(u => chooserList.appendChild(renderUserItem(u, true)));
+      }
+      if (data.others && data.others.length){
+        const h2 = document.createElement('div'); h2.className='section-title'; h2.textContent='Users you may like'; chooserList.appendChild(h2);
+        data.others.forEach(u => chooserList.appendChild(renderUserItem(u, false)));
+      }
+      if ((!data.recommended || !data.recommended.length) && (!data.others || !data.others.length)){
+        chooserList.textContent = 'No users found.';
+      }
+    } catch (e) {
+      status.textContent = 'Failed to load suggestions';
+      console.error(e);
+    }
+  }
+
+  function renderUserItem(u, recommended){
+    const el = document.createElement('div'); el.className='item'; el.tabIndex=0;
+    const av = document.createElement('div'); av.className='avatar'; if (u.avatar) av.style.backgroundImage = 'url('+u.avatar+')', av.style.backgroundSize='cover';
+    const meta = document.createElement('div'); meta.style.flex='1';
+    const name = document.createElement('div'); name.className='title'; name.textContent = u.name || ('User '+u.id);
+    const role = document.createElement('div'); role.className='subtitle'; role.textContent = u.role || '';
+    meta.appendChild(name); meta.appendChild(role);
+    const action = document.createElement('div'); action.innerHTML = '<button class="btn btn-sm btn-primary">Chat</button>';
+    el.appendChild(av); el.appendChild(meta); el.appendChild(action);
+    el.addEventListener('click', ()=> openChatWith(u));
+    return el;
+  }
+
+  async function openChatWith(u){
+    try {
+      // Prefer window.handleChat if available (Chatfunction.js or app provides it)
+      if (window.handleChat) {
+        const res = await window.handleChat(u.id, { otherName: u.name });
+        if (res && (res.ok || res.roomId)) {
+          hideChooser();
+          // open widget and focus room if chat app instance exists
+          const inst = window.chatApps && window.chatApps['chatwidget'];
+          if (inst && inst.openRoom) inst.openRoom(res.roomId || res.roomId);
+          // ensure widget visible
+          document.getElementById('chatwidget_panel').style.display='flex'; document.getElementById('chatwidget_toggle').style.display='none';
+          return;
+        }
+      }
+      // fallback: try to call ChatApi createRoom if available
+      const apiPath = <?= json_encode($CHAT_API_PATH) ?>;
+      const createUrl = apiPath + 'createRoom';
+      const payload = { other_id: u.id };
+      const r = await fetch(createUrl, { method:'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+      const jr = await r.json();
+      if (jr && (jr.ok || jr.roomId)){
+        hideChooser();
+        const inst = window.chatApps && window.chatApps['chatwidget'];
+        if (inst && inst.openRoom) inst.openRoom(jr.roomId || jr.roomId);
+        document.getElementById('chatwidget_panel').style.display='flex'; document.getElementById('chatwidget_toggle').style.display='none';
+        return;
+      }
+      alert('Unable to open chat with that user.');
+    } catch (e) { console.error(e); alert('Failed to open chat.'); }
+  }
+})();
+</script>
+<!-- Initialize chat widget. Chatfunction and API paths are centralized here -->
+<script src="<?= htmlspecialchars($CHAT_JS_SRC) ?>"></script>
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
 <script>
   document.addEventListener('DOMContentLoaded', function(){
@@ -410,7 +530,12 @@ $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
 
 
     // rootId 'chatwidget' maps to IDs like 'chatwidget_messages', 'chatwidget_input' etc.
-    initApp({ apiPath: <?= json_encode($CHAT_API_PATH ?? 'ChatApi.php?action=') ?>, userType: <?= json_encode($role) ?>, userId: <?= json_encode($uid) ?>, rootId: 'chatwidget', items: [] });
+    try {
+      if (typeof initApp === 'function') {
+        window.chatApps = window.chatApps || {};
+        window.chatApps['chatwidget'] = initApp({ apiPath: <?= json_encode($CHAT_API_PATH) ?>, userType: <?= json_encode($role) ?>, userId: <?= json_encode($uid) ?>, userName: <?= json_encode($_SESSION['user']['name'] ?? '') ?>, rootId: 'chatwidget', items: [] });
+      }
+    } catch(e) { console.error('chatwidget initApp failed', e); }
     // After init, wire the share button if a page provided a payload
     try {
       const tryWireShare = () => {
@@ -423,7 +548,12 @@ $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
         <?php else: ?>
         const payload = window.__chat_share_payload || null;
         <?php endif; ?>
-        if (!payload) { shareBtn.style.display = 'none'; return; }
+        // Always show the share button so users can open the share chooser on any page.
+        shareBtn.style.display = '';
+        // If no page-specific payload was provided, leave the default share chooser behavior
+        // (the separate share modal script wires `shareBtn` to open the chooser). Only
+        // attach the special quick-share handler when a payload exists.
+        if (!payload) { return; }
         // Prefer the image already rendered on the page (design_detail.php uses `$mainImg`) so
         // the widget preview uses the same resolved src. The DOM `img.src` will be absolute.
         try {
@@ -432,8 +562,9 @@ $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
             payload.image = pageImg.src;
           }
         } catch (e) {}
-        shareBtn.style.display = '';
-        shareBtn.addEventListener('click', async () => {
+        // Avoid adding multiple handlers
+        if (!shareBtn.dataset.shareHandler) {
+          shareBtn.addEventListener('click', async () => {
           try {
             // create or open room with designer
             const res = await (window.handleChat ? window.handleChat(payload.designerId, { creatorId: <?= json_encode($uid) ?>, otherName: payload.title }) : Promise.resolve({ ok: false }));
@@ -513,10 +644,123 @@ $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
             preview.scrollIntoView({ behavior: 'smooth', block: 'center' });
             return;
           } catch (e) { console.error('chatwidget share error', e); alert('Error sharing design.'); }
-        });
+          });
+          shareBtn.dataset.shareHandler = '1';
+        }
       };
       // wait briefly for initApp to register instance
       setTimeout(tryWireShare, 200);
     } catch(e) { console.error('share wiring failed', e); }
   });
+</script>
+<!-- Share chooser modal (liked designs grid) -->
+<style>
+.chat-share-backdrop{position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(0,0,0,0.35);display:none;align-items:center;justify-content:center;z-index:100030}
+.chat-share{background:#fff;border-radius:8px;padding:12px;width:640px;max-width:96vw;box-shadow:0 8px 40px rgba(11,27,43,0.25)}
+.chat-share .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px;max-height:50vh;overflow:auto}
+.chat-share .card{border:1px solid #eef3fb;border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:6px;cursor:pointer}
+.chat-share .thumb{width:100%;height:96px;background:#eee;border-radius:6px;background-size:cover;background-position:center}
+.chat-share .meta{font-size:0.9rem}
+.chat-share .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:8px}
+@media (max-width:640px){ .chat-share .grid{grid-template-columns:repeat(2,1fr)} }
+</style>
+
+<div id="chatwidget_share_backdrop" class="chat-share-backdrop" role="dialog" aria-hidden="true">
+  <div class="chat-share" role="document" aria-label="Share a design">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <div style="font-weight:700">Share a design</div>
+      <div><button id="chatwidget_share_close" class="btn btn-sm btn-light">Close</button></div>
+    </div>
+    <div id="chatwidget_share_status" class="small text-muted">Your liked designs</div>
+    <div id="chatwidget_share_grid" class="grid" style="margin-top:8px"></div>
+    <div class="actions"><button id="chatwidget_share_send" class="btn btn-primary" disabled>Send Selected</button></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const shareBtn = document.getElementById('chatwidget_share');
+  const backdrop = document.getElementById('chatwidget_share_backdrop');
+  const grid = document.getElementById('chatwidget_share_grid');
+  const status = document.getElementById('chatwidget_share_status');
+  const closeBtn = document.getElementById('chatwidget_share_close');
+  const sendBtn = document.getElementById('chatwidget_share_send');
+  let selectedDesign = null;
+
+  function showShare(){ backdrop.style.display='flex'; backdrop.setAttribute('aria-hidden','false'); loadLikedDesigns(); }
+  function hideShare(){ backdrop.style.display='none'; backdrop.setAttribute('aria-hidden','true'); grid.innerHTML=''; selectedDesign=null; sendBtn.disabled=true; }
+  shareBtn && shareBtn.addEventListener('click', showShare);
+  closeBtn && closeBtn.addEventListener('click', hideShare);
+  backdrop && backdrop.addEventListener('click', (e)=>{ if (e.target===backdrop) hideShare(); });
+
+  async function loadLikedDesigns(){
+    try {
+      status.textContent = 'Loading...';
+      grid.innerHTML = '';
+      const res = await fetch(<?= json_encode($SUGGESTIONS_API) ?>);
+      const j = await res.json();
+      console.debug('chatwidget: suggestions response', j);
+      if (j && j.error) {
+        status.textContent = (j.error === 'not_logged_in') ? 'Please log in to see your liked designs.' : ('Error: ' + j.error);
+        return;
+      }
+      const list = (j && j.liked_designs && j.liked_designs.length) ? j.liked_designs : (j && j.recommended_designs ? j.recommended_designs : []);
+      if (!list.length) { status.textContent='liked item will display here.'; return; }
+      status.textContent='Select a design to share';
+      // build cards
+      const base = ((location.protocol==='https:')? 'https:' : 'http:') + '//' + (location.host || '');
+      list.forEach(d => {
+        const c = document.createElement('div'); c.className='card'; c.tabIndex=0;
+        const thumb = document.createElement('div'); thumb.className='thumb';
+        // try to use image URL if available, else a placeholder
+        const img = (d.image) ? d.image : (d.url ? d.url : null);
+        if (img) thumb.style.backgroundImage = 'url("' + img + '")';
+        const title = document.createElement('div'); title.className='meta'; title.textContent = d.title || ('Design #' + (d.designid || d.designid));
+        const sub = document.createElement('div'); sub.className='small text-muted'; sub.textContent = (d.likes? d.likes + ' likes' : '') + (d.price ? ' · HK$' + d.price : '');
+        c.appendChild(thumb); c.appendChild(title); c.appendChild(sub);
+        c.addEventListener('click', ()=>{ selectCard(c,d); });
+        grid.appendChild(c);
+      });
+    } catch (e) { console.error('load liked designs failed', e); status.textContent='Failed to load designs'; }
+  }
+
+  function selectCard(card, data){
+    // clear previous selection style
+    Array.from(grid.children).forEach(ch => ch.style.outline='');
+    card.style.outline = '2px solid #5b8cff';
+    selectedDesign = data;
+    sendBtn.disabled = false;
+  }
+
+  sendBtn && sendBtn.addEventListener('click', async ()=>{
+    if (!selectedDesign) return;
+    try {
+      // Try to send to currently open room in widget instance
+      const inst = window.chatApps && window.chatApps['chatwidget'];
+      if (inst && inst.currentRoom) {
+        const roomId = inst.currentRoom;
+        const resp = await inst.apiPost('sendMessage', { sender_type: 'client', sender_id: <?= json_encode($uid) ?>, content: selectedDesign.url || selectedDesign.title || '', room: roomId, attachment_url: selectedDesign.image || selectedDesign.url || '', attachment_name: (selectedDesign.title||'design') + '.jpg', message_type: 'design', share_title: selectedDesign.title || '', share_url: selectedDesign.url || '' });
+        try { if (resp && (resp.ok || resp.message)) inst.appendMessageToUI(resp.message || resp, 'me'); } catch(e){}
+        hideShare();
+        return;
+      }
+      // fallback: open chooser to pick recipient (reuse chat chooser button)
+      // If handleChat exists, open chat to design's designer if known
+      if (selectedDesign && selectedDesign.designerid && window.handleChat) {
+        const r = await window.handleChat(selectedDesign.designerid, { otherName: selectedDesign.title });
+        const roomId = r && (r.roomId || r.roomid);
+        if (roomId) {
+          const inst2 = window.chatApps && window.chatApps['chatwidget'];
+          if (inst2) {
+            const resp = await inst2.apiPost('sendMessage', { sender_type: 'client', sender_id: <?= json_encode($uid) ?>, content: selectedDesign.url || selectedDesign.title || '', room: roomId, attachment_url: selectedDesign.image || selectedDesign.url || '', attachment_name: (selectedDesign.title||'design') + '.jpg', message_type: 'design', share_title: selectedDesign.title || '', share_url: selectedDesign.url || '' });
+            try { if (resp && (resp.ok || resp.message)) inst2.appendMessageToUI(resp.message || resp, 'me'); } catch(e){}
+          }
+          hideShare();
+          return;
+        }
+      }
+      alert('Please open a chat or choose a recipient first.');
+    } catch (e) { console.error('share send failed', e); alert('Failed to send shared design.'); }
+  });
+})();
 </script>
