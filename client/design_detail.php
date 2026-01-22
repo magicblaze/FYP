@@ -369,7 +369,7 @@ $mainImg = $baseUrlEarly . $appRoot . '/design_image.php?id=' . (int)$design['de
                         <i class="fas fa-shopping-cart me-2"></i>Order
                     </button>
                     <!-- share button moved into chat widget panel -->
-                    <button type="button" class="btn btn-info btn-chat" onclick="(window.handleChat ? window.handleChat(<?= (int)$design['designerid'] ?>, { creatorId: <?= (int)$clientid ?>, otherName: '<?= htmlspecialchars(addslashes($design['dname']), ENT_QUOTES) ?>' }) : (window.location.href = '../chat.php?designerid=<?= (int)$design['designerid'] ?>'))" >
+                    <button type="button" class="btn btn-info btn-chat" onclick="(window.handleChat ? window.handleChat(<?= (int)$design['designerid'] ?>, { creatorId: <?= (int)$clientid ?>, otherName: '<?= htmlspecialchars(addslashes($design['dname']), ENT_QUOTES) ?>' }) : (window.location.href = (location.pathname || '') + '?designerid=<?= (int)$design['designerid'] ?>'))" >
                         <i class="fas fa-comments me-2"></i>Chat
                     </button>
                 </div>
@@ -459,19 +459,6 @@ $mainImg = $baseUrlEarly . $appRoot . '/design_image.php?id=' . (int)$design['de
         </script>
 
     <!-- Chat widget: include unified PHP widget (handles markup and initialization) -->
-    <?php
-        // Provide server-side share payload so the widget handles sharing internally
-        $baseUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] ? 'https://' : 'http://') . ($_SERVER['HTTP_HOST'] ?? '');
-        // Ensure we include the application path (script directory) so URLs like /FYP/design_image.php are correct
-        $appPath = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\');
-        $CHAT_SHARE = [
-            'designId' => (int)$designid,
-            'title' => $design['dname'] ?? '',
-            'url' => $baseUrl . $_SERVER['REQUEST_URI'],
-            'designerId' => (int)$design['designerid'],
-            'image' => $baseUrl . $appPath . '/design_image.php?id=' . (int)$designid
-        ];
-        include __DIR__ . '/../Public/chat_widget.php';
-    ?>
+    <?php include __DIR__ . '/../Public/chat_widget.php'; ?>
 </body>
 </html>

@@ -3,6 +3,8 @@ function initApp(config = {}) {
   const userId = config.userId ?? 0;
   const userType = config.userType || 'client';
   const userName = config.userName || '';
+  // expose current user globally so URL handlers can access it
+  try { window.chatUserId = userId; window.chatUserType = userType; } catch (e) {}
   const items = config.items || [];
 
   // Optionally namespace element ids when used as an embeddable widget.
@@ -439,6 +441,20 @@ function initApp(config = {}) {
       if (scanned) return scanned;
     } catch (e) { console.warn('room scan failed', e); }
     return null;
+  }
+
+  function openRoom(roomId) {
+    try {
+      const id = parseInt(roomId, 10);
+      if (!id) return Promise.resolve();
+      // try to find the room in loaded agents, otherwise select minimal
+      return loadAgents().then(rooms => {
+        let found = null;
+        try { found = rooms && rooms.find(r => String(r.ChatRoomid || r.id || r.roomId) === String(id)); } catch(e){}
+        if (found) return selectAgent(found);
+        return selectAgent({ ChatRoomid: id, roomname: 'Room ' + id });
+      }).catch(err => { return selectAgent({ ChatRoomid: id, roomname: 'Room ' + id }); });
+    } catch (e) { return Promise.resolve(); }
   }
 
   async function sendMessage() {
@@ -900,7 +916,7 @@ function initApp(config = {}) {
   })();
 
   const app = {
-    apiGet, apiPost, renderCards, renderAgents, loadAgents, loadMessages, appendMessageToUI, sendMessage, selectAgent
+    apiGet, apiPost, renderCards, renderAgents, loadAgents, loadMessages, appendMessageToUI, sendMessage, selectAgent, getSelectedRoomId, openRoom
   };
   // expose app instances globally for pages that embed the widget
   try {
@@ -918,8 +934,9 @@ window.handleChat = function(designerid, options = {}) {
   const otherId = designerid;
 
   if (!creatorId) {
-    const target = '../chat.php?designerid=' + encodeURIComponent(designerid);
-    window.location.href = '../login.php?redirect=' + encodeURIComponent(target);
+    // Not authenticated — redirect to login and preserve designer intent in the redirect query
+    const redirectTarget = location.pathname + (location.pathname.indexOf('?') === -1 ? '?' : '&') + 'designerid=' + encodeURIComponent(designerid);
+    window.location.href = '../login.php?redirect=' + encodeURIComponent(redirectTarget);
     return Promise.resolve({ ok: false, reason: 'not_authenticated' });
   }
 
@@ -936,39 +953,67 @@ window.handleChat = function(designerid, options = {}) {
       try { if (roomId && options.otherName) localStorage.setItem('chat_other_name_' + roomId, options.otherName); } catch(e){}
       if (roomId) {
         // If an embedded chat widget is present, open it and select the created room instead of navigating away
-        try {
-          const instance = (window.chatApps && window.chatApps['chatwidget']) || null;
-          const panel = document.getElementById('chatwidget_panel');
-          const toggle = document.getElementById('chatwidget_toggle');
-          if (panel) { panel.style.display = 'flex'; panel.setAttribute('aria-hidden','false'); }
-          if (toggle) { toggle.style.display = 'none'; }
-          if (instance && typeof instance.selectAgent === 'function') {
-            // Try to load agents then select the newly created room if present
-            instance.loadAgents().then(rooms => {
-              let found = null;
-              try { found = rooms && rooms.find(r => String(r.ChatRoomid || r.id || r.roomId) === String(roomId)); } catch(e){}
-              if (found) return instance.selectAgent(found);
-              // fallback: create a minimal agent and select
-              const minimal = { ChatRoomid: roomId, roomname: options.otherName || (data.room && (data.room.roomname || data.room.name)) || ('User ' + otherId) };
-              return instance.selectAgent(minimal);
-            }).catch(err => {
-              // last-resort: directly load messages for the room
-              try { instance.loadMessages && instance.loadMessages(roomId); } catch(e){}
-            });
-            return { ok: true, roomId };
-          }
-        } catch (e) { console.warn('handleChat widget open failed', e); }
-        // fallback: navigate to chat page
-        window.location.href = '../chat.php?room=' + encodeURIComponent(roomId);
-        return { ok: true, roomId };
+          try {
+            const instance = (window.chatApps && window.chatApps['chatwidget']) || null;
+            const panel = document.getElementById('chatwidget_panel');
+            const toggle = document.getElementById('chatwidget_toggle');
+            if (panel) { panel.style.display = 'flex'; panel.setAttribute('aria-hidden','false'); }
+            if (toggle) { toggle.style.display = 'none'; }
+            if (instance && typeof instance.selectAgent === 'function') {
+              // Try to load agents then select the newly created room if present
+              instance.loadAgents().then(rooms => {
+                let found = null;
+                try { found = rooms && rooms.find(r => String(r.ChatRoomid || r.id || r.roomId) === String(roomId)); } catch(e){}
+                if (found) return instance.selectAgent(found);
+                // fallback: create a minimal agent and select
+                const minimal = { ChatRoomid: roomId, roomname: options.otherName || (data.room && (data.room.roomname || data.room.name)) || ('User ' + otherId) };
+                return instance.selectAgent(minimal);
+              }).catch(err => {
+                // last-resort: directly load messages for the room
+                try { instance.loadMessages && instance.loadMessages(roomId); } catch(e){}
+              });
+              return { ok: true, roomId };
+            }
+          } catch (e) { console.warn('handleChat widget open failed', e); }
+          // fallback: reload current page with ?room= so the included chat code can pick it up
+          const newSearch = (location.pathname || '') + (location.pathname.indexOf('?') === -1 ? '?' : '&') + 'room=' + encodeURIComponent(roomId);
+          window.location.href = newSearch;
+          return { ok: true, roomId };
       }
     }
-    window.location.href = '../chat.php?designerid=' + encodeURIComponent(designerid);
+    // fallback: reload current page with designerid param so URL handler will attempt to open chat
+    const newSearchFail = (location.pathname || '') + (location.pathname.indexOf('?') === -1 ? '?' : '&') + 'designerid=' + encodeURIComponent(designerid);
+    window.location.href = newSearchFail;
     return { ok: false };
   })
   .catch(err => {
     console.error('handleChat createRoom error', err);
-    window.location.href = '../chat.php?designerid=' + encodeURIComponent(designerid);
+    const newSearchErr = (location.pathname || '') + (location.pathname.indexOf('?') === -1 ? '?' : '&') + 'designerid=' + encodeURIComponent(designerid);
+    window.location.href = newSearchErr;
     return { ok: false, error: err };
   });
 };
+
+// If page URL contains designerid or room parameters, process them automatically
+(function(){
+  try {
+    const qs = new URLSearchParams(location.search);
+    const did = qs.get('designerid');
+    const rid = qs.get('room');
+    // prefer designerid (intent to start chat)
+    if (did && !isNaN(parseInt(did,10))) {
+      // delay slightly to allow pages to call initApp and register chatApps
+      setTimeout(() => {
+        if (window.handleChat) {
+          window.handleChat(parseInt(did,10), { creatorId: window.chatUserId || 0 });
+        }
+      }, 250);
+    } else if (rid && !isNaN(parseInt(rid,10))) {
+      setTimeout(() => {
+        const inst = window.chatApps && (window.chatApps['chatwidget'] || window.chatApps['default'] || window.chatApps['chatpage']);
+        if (inst && typeof inst.selectAgent === 'function') return inst.selectAgent({ ChatRoomid: parseInt(rid,10) });
+        if (inst && typeof inst.openRoom === 'function') return inst.openRoom(parseInt(rid,10));
+      }, 250);
+    }
+  } catch(e) { /* ignore */ }
+})();

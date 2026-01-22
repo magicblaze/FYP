@@ -5,8 +5,9 @@ header('Content-Type: application/json; charset=utf-8');
 // Determine user id consistently with `Public/chat_widget.php`
 $uid = 0;
 if (isset($_SESSION['user']) && is_array($_SESSION['user'])) {
-  $role = $_SESSION['user']['role'] ?? 'client';
-  $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
+  $roleRaw = $_SESSION['user']['role'] ?? 'client';
+  $role = strtolower($roleRaw ?: 'client');
+  $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['clientid'] ?? $_SESSION['user']['id'] ?? 0);
 }
 if (!$uid) {
   echo json_encode(['error'=>'not_logged_in']);
@@ -58,6 +59,8 @@ $recommended = [];
 $others = [];
 $recommended_designs = [];
  $liked_designs = [];
+ $liked_products = [];
+ $recommended_products = [];
 
 
 // Strategy:
@@ -67,7 +70,7 @@ $recommended_designs = [];
 
 // 1) Try to get distinct target users from likes table
 $likesQry = "SELECT DISTINCT target_user_id FROM likes WHERE user_id = ? AND target_user_id IS NOT NULL LIMIT 20";
-if ($stmt = $mysqli->prepare($likesQry)) {
+if ($stmt = @$mysqli->prepare($likesQry)) {
   $stmt->bind_param('i', $uid);
   $stmt->execute();
   $res = $stmt->get_result();
@@ -76,12 +79,10 @@ if ($stmt = $mysqli->prepare($likesQry)) {
   $stmt->close();
   if (count($ids)) {
     $in = implode(',', array_fill(0, count($ids), '?'));
-    // prepare dynamic statement
     $types = str_repeat('i', count($ids));
     $sql = "SELECT id, name, role, avatar FROM users WHERE id IN ($in) LIMIT 20";
     $stmt2 = $mysqli->prepare($sql);
     if ($stmt2) {
-      // bind params dynamically
       $ref = [];
       $ref[] = & $types;
       foreach ($ids as $k => $v) $ref[] = & $ids[$k];
@@ -92,6 +93,29 @@ if ($stmt = $mysqli->prepare($likesQry)) {
         $recommended[] = ['id'=> (int)$u['id'], 'name'=>$u['name'] ?? '', 'role'=>$u['role'] ?? '', 'avatar'=>$u['avatar'] ?? ''];
       }
       $stmt2->close();
+    }
+  }
+}
+
+// Fallback: if we didn't get recommended users, try designers from DesignLike
+if (!count($recommended)) {
+  $designerIds = [];
+  $dl = @$mysqli->prepare("SELECT DISTINCT d.designerid FROM DesignLike dl JOIN Design d ON dl.designid = d.designid WHERE dl.clientid = ? LIMIT 20");
+  if ($dl) {
+    $dl->bind_param('i', $uid);
+    $dl->execute();
+    $dres = $dl->get_result();
+    while ($row = $dres->fetch_assoc()) { $designerIds[] = (int)$row['designerid']; }
+    $dl->close();
+  }
+  if (count($designerIds)) {
+    $in = implode(',', array_map('intval', $designerIds));
+    $q = "SELECT designerid, dname FROM Designer WHERE designerid IN ($in) LIMIT 20";
+    $r = $mysqli->query($q);
+    if ($r) {
+      while ($u = $r->fetch_assoc()) {
+        $recommended[] = ['id'=> (int)$u['designerid'], 'name'=>$u['dname'] ?? '', 'role'=>'designer', 'avatar'=> ''];
+      }
     }
   }
 }
@@ -129,13 +153,15 @@ try {
   // Fetch liked designs details for use in share grid
   if (count($likedIds)) {
     $in = implode(',', array_map('intval', $likedIds));
-    $qlike = $mysqli->query("SELECT designid, dname, price, likes, designerid FROM Design WHERE designid IN ($in) LIMIT 20");
+    $in = implode(',', array_map('intval', $likedIds));
+    $qlike_sql = "SELECT designid, design AS title, price, likes, designerid FROM Design WHERE designid IN ($in) LIMIT 20";
+    $qlike = $mysqli->query($qlike_sql);
     if ($qlike) {
       while ($r = $qlike->fetch_assoc()) {
         $id = (int)$r['designid'];
         $liked_designs[] = [
           'designid' => $id,
-          'title' => $r['dname'] ?? '',
+          'title' => $r['title'] ?? '',
           'price' => $r['price'] ?? null,
           'likes' => (int)($r['likes'] ?? 0),
           'designerid' => (int)($r['designerid'] ?? 0),
@@ -146,6 +172,52 @@ try {
       $qlike->close();
     }
   }
+
+  // --- Liked products: similar approach using ProductLike + Product + ProductColorImage ---
+  $likedProductIds = [];
+  $pl = $mysqli->prepare("SELECT productid FROM ProductLike WHERE clientid = ?");
+  if ($pl) {
+    $pl->bind_param('i', $clientId);
+    $pl->execute();
+    $pr = $pl->get_result();
+    while ($row = $pr->fetch_assoc()) $likedProductIds[] = (int)$row['productid'];
+    $pl->close();
+  }
+
+  if (count($likedProductIds)) {
+    $in = implode(',', array_map('intval', $likedProductIds));
+    $qprod = $mysqli->query("SELECT productid, pname, price, likes, supplierid FROM Product WHERE productid IN ($in) LIMIT 50");
+    $products = [];
+    if ($qprod) {
+      while ($r = $qprod->fetch_assoc()) $products[] = $r;
+      $qprod->close();
+    }
+    // Get first color image for each product
+    $images = [];
+    $qimg = $mysqli->query("SELECT productid, image FROM ProductColorImage WHERE productid IN ($in) ORDER BY productid, id ASC");
+    if ($qimg) {
+      while ($ri = $qimg->fetch_assoc()) {
+        $pid = (int)$ri['productid'];
+        if (!isset($images[$pid])) $images[$pid] = $ri['image'];
+      }
+      $qimg->close();
+    }
+    foreach ($products as $p) {
+      $pid = (int)$p['productid'];
+      $imgPath = isset($images[$pid]) ? $images[$pid] : null;
+      $liked_products[] = [
+        'productid' => $pid,
+        'title' => $p['pname'] ?? '',
+        'price' => $p['price'] ?? null,
+        'likes' => (int)($p['likes'] ?? 0),
+        'supplierid' => (int)($p['supplierid'] ?? 0),
+        'image' => $imgPath ? ($baseUrl . '/uploads/products/' . ltrim($imgPath, '/')) : null,
+        'url' => $baseUrl . '/client/product_detail.php?id=' . $pid
+      ];
+    }
+  }
+
+  $debugInfo['liked_count_fetched'] = count($likedIds);
 
   $tagCandidates = [];
   if (count($likedIds)) {
@@ -217,7 +289,7 @@ try {
   // ignore and return empty
 }
 
-$out = ['recommended'=>$recommended, 'others'=>$others, 'recommended_designs'=>$recommended_designs, 'liked_designs'=>$liked_designs];
+$out = ['recommended'=>$recommended, 'others'=>$others, 'recommended_designs'=>$recommended_designs, 'liked_designs'=>$liked_designs, 'liked_products'=>$liked_products, 'recommended_products'=>$recommended_products];
 // Optional debug output for troubleshooting from the browser: ?debug=1
 if (isset($_GET['debug']) && $_GET['debug']) {
   $out['debug'] = [
@@ -226,5 +298,9 @@ if (isset($_GET['debug']) && $_GET['debug']) {
     'liked_ids' => array_map(function($d){ return isset($d['designid']) ? (int)$d['designid'] : null; }, $liked_designs)
   ];
 }
+// If no liked or recommended designs/users were found, include a minimal debug block
+// so the widget can display why the lists are empty (helpful when called from browser).
+// keep response minimal; do not include internal debug data in normal responses
+
 echo json_encode($out);
 
