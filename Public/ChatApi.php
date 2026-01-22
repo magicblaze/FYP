@@ -261,20 +261,26 @@ try {
       }
       // If this send contains share metadata (from widget preview), persist it inside `content` as JSON
       if (!empty($_POST['share_title'])) {
+        $share_type = $_POST['share_type'] ?? null;
         $shareMeta = [ '__share' => true, 'share' => [
           'title' => $_POST['share_title'] ?? null,
           'url' => $_POST['share_url'] ?? null,
-          'image' => $attachmentPath ?? ($_POST['attachment_url'] ?? null)
+          'image' => $attachmentPath ?? ($_POST['attachment_url'] ?? null),
+          'type' => $share_type
         ]];
         $content = json_encode($shareMeta);
+        // Do NOT force a non-existent DB enum value; keep $message_type as a DB-safe value
+        // (it will typically be 'file' if an upload was included, or 'text' otherwise)
       }
       // insert with message_type and optional uploaded file reference (fileid)
+      $allowed_types = ['text','image','file'];
+      $safeType = in_array($message_type, $allowed_types) ? $message_type : ($uploadedFileId ? 'file' : 'text');
       if (!empty($uploadedFileId)) {
         $stmt = $pdo->prepare("INSERT INTO Message (sender_type,sender_id,content,message_type,ChatRoomid,fileid) VALUES (?,?,?,?,?,?)");
-        $stmt->execute([$sender_type, $sender_id, $content, ($message_type?:'file'), $room, $uploadedFileId]);
+        $stmt->execute([$sender_type, $sender_id, $content, $safeType, $room, $uploadedFileId]);
       } else {
         $stmt = $pdo->prepare("INSERT INTO Message (sender_type,sender_id,content,message_type,ChatRoomid) VALUES (?,?,?,?,?)");
-        $stmt->execute([$sender_type, $sender_id, $content, ($message_type?:'text'), $room]);
+        $stmt->execute([$sender_type, $sender_id, $content, $safeType, $room]);
       }
     } else {
         $data = json_decode(file_get_contents('php://input'), true);
@@ -332,34 +338,41 @@ try {
         // When caller included share metadata, persist it into `content` as JSON so reads can detect it later
         $contentForInsert = $data['content'] ?? '';
         if (!empty($data['share_title'])) {
+          $share_type = $data['share_type'] ?? null;
           $shareMeta = [ '__share' => true, 'share' => [
             'title' => $data['share_title'] ?? null,
             'url' => $data['share_url'] ?? null,
-            'image' => $data['attachment_url'] ?? null
+            'image' => $data['attachment_url'] ?? null,
+            'type' => $share_type
           ]];
           $contentForInsert = json_encode($shareMeta);
+          // Do not set an unsupported message_type value; rely on existing finalMessageType or defaults
         }
         if (!empty($uploadedFileId)) {
           $msgType = 'file';
           if (!empty($amime) && strpos($amime, 'image/') === 0) $msgType = 'image';
           if (empty($finalMessageType)) $finalMessageType = $msgType;
+          $allowed_types = ['text','image','file'];
+          $safeFinal = in_array($finalMessageType, $allowed_types) ? $finalMessageType : 'file';
           $stmt = $pdo->prepare("INSERT INTO Message (sender_type,sender_id,content,message_type,ChatRoomid,fileid) VALUES (?,?,?,?,?,?)");
           $stmt->execute([
             $data['sender_type'],
             $data['sender_id'],
             $contentForInsert,
-            $finalMessageType ?? 'file',
+            $safeFinal,
             $room,
             $uploadedFileId
           ]);
         } else {
+          $allowed_types = ['text','image','file'];
           if (!empty($finalMessageType)) {
+            $safeFinal = in_array($finalMessageType, $allowed_types) ? $finalMessageType : 'text';
             $stmt = $pdo->prepare("INSERT INTO Message (sender_type,sender_id,content,message_type,ChatRoomid) VALUES (?,?,?,?,?)");
             $stmt->execute([
               $data['sender_type'],
               $data['sender_id'],
               $contentForInsert,
-              $finalMessageType,
+              $safeFinal,
               $room
             ]);
           } else {
@@ -410,10 +423,10 @@ try {
       $row['share'] = [
         'title' => $data['share_title'] ?? ($row['uploaded_file']['filename'] ?? null),
         'url' => $data['share_url'] ?? ($row['content'] ?? null),
-        'image' => $row['uploaded_file']['filepath'] ?? ($data['attachment_url'] ?? null)
+        'image' => $row['uploaded_file']['filepath'] ?? ($data['attachment_url'] ?? null),
+        'type' => $data['share_type'] ?? null
       ];
-      // Present as design to clients immediately
-      $row['message_type'] = 'design';
+      // Do not override the stored message_type (DB may restrict allowed values)
     }
     send_json(['ok'=>true,'id'=>$last,'message'=>$row]);
     break;

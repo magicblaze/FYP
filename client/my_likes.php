@@ -446,3 +446,5 @@ $total_count = $products_count + $designs_count;
 
 </body>
 </html>
+
+<?php include __DIR__ . '/../Public/chat_widget.php'; ?>

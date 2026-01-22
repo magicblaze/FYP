@@ -351,8 +351,6 @@ $result = $stmt->get_result();
     </script>
     <?php
         // Initialize chat widget for designer pages (no pre-filled share payload)
-        $CHAT_JS_PATH = '../Public/Chatfunction.js';
-        $CHAT_API_PATH = '../Public/ChatApi.php?action=';
         $CHAT_SHARE = null;
         include __DIR__ . '/../Public/chat_widget.php';
     ?>

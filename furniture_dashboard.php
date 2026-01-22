@@ -416,24 +416,7 @@ $size_result = null; // 设置为 null 以避免后续错误
     }
     ?>
 
-    <!-- Include chat functionality JavaScript -->
-    <script src="Public/Chatfunction.js"></script>
-    <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        <?php if (isset($_SESSION['user'])): ?>
-        // Initialize chat application
-        const chatApp = initApp({
-            apiPath: 'Public/ChatApi.php?action=',
-            userId: <?= (int)($_SESSION['user']['clientid'] ?? $_SESSION['user']['id'] ?? 0) ?>,
-            userType: '<?= htmlspecialchars($_SESSION['user']['role'] ?? 'client') ?>',
-            userName: '<?= htmlspecialchars($_SESSION['user']['name'] ?? 'User', ENT_QUOTES) ?>',
-            rootId: 'chatwidget',
-            items: []
-        });
-        
-        console.log('Chat widget initialized');
-        <?php endif; ?>
-    });
+    <!-- Chatfunction and initialization moved into Public/chat_widget.php -->
     </script>
     <!-- ==================== End Chat Widget Integration ==================== -->
 

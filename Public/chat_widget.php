@@ -6,6 +6,14 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 $logged = isset($_SESSION['user']) && !empty($_SESSION['user']);
 $role = $_SESSION['user']['role'] ?? 'client';
 $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
+// Centralized paths (use absolute project paths so pages don't need to set these)
+$CHAT_API_PATH = '/FYP/Public/ChatApi.php?action=';
+$CHAT_JS_SRC = '/FYP/Public/Chatfunction.js';
+// Suggestions API path (resolve relative to app root)
+$scriptPath = $_SERVER['SCRIPT_NAME'] ?? '';
+$parts = explode('/', ltrim($scriptPath, '/'));
+$APP_ROOT = isset($parts[0]) && $parts[0] !== '' ? '/' . $parts[0] : '';
+$SUGGESTIONS_API = $APP_ROOT . '/api/get_chat_suggestions.php';
 ?>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
 <style>
@@ -27,6 +35,19 @@ $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
   #chatwidget_panel .body .right { width:100%; min-height:140px; }
   #chatwidget_panel .messages { min-height:120px; }
   #chatwidget_toggle { right:20px; bottom:20px; width:48px; height:48px; }
+  #chatwidget_attachPreviewColumn { position: absolute !important; left: 0; right: 0; margin-bottom: 0; width: 100%; z-index: 10005 !important;}
+  #chatwidget_panel.preview-visible .messages { padding-bottom: 220px; }
+  #chatwidget_panel .composer { z-index: 10000; }
+}
+/* Float preview above composer and stick to it by JS-calculated offset */
+@media (min-width: 700px) {
+  #chatwidget_attachPreviewColumn {
+    position: absolute !important;
+    left: 0; right: 0; bottom: 72px; margin-bottom: 0; width: 100%;
+    z-index: 10005 !important;
+  }
+  #chatwidget_panel.preview-visible .messages { padding-bottom: 220px; }
+  #chatwidget_panel .composer { z-index: 10000; }
 }
 
 @media (max-width: 420px) {
@@ -56,7 +77,7 @@ $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
 
 <!-- Preview row styling inserted by assistant -->
 <style>
-.message-preview-column{box-sizing:border-box;padding:8px 12px;border-top:1px solid #eef3fb;border-bottom:44px solid #f8f9fb;background:#ffffff;display:flex;flex-direction:column;gap:8px;align-items:flex-start;}
+.message-preview-column{box-sizing:border-box;padding:8px 12px;border-top:1px solid #eef3fb;border-bottom:0px solid #f8f9fb;background:#ffffff;display:flex;flex-direction:column;gap:8px;align-items:flex-start;}
 .message-preview-column img{max-width:100%;max-height:360px;border-radius:6px;object-fit:cover}
 .message-preview-column .file-badge{width:56px;height:44px;border-radius:6px;background:#6c757d;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:600}
 .message-preview-column .file-meta{display:flex;flex-direction:column;min-width:0}
@@ -95,19 +116,20 @@ $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
   </div>
   <div id="chatwidget_body" class="body">
     <div class="left">
+      <div class="d-flex justify-content-center"><button id="chatwidget_new" class="btn btn-sm btn-outline-primary m-2" type="button" title="New chat" aria-label="Create chat">+ Open Chat</button></div>
       <div id="chatwidget_agentsList" class="list-group mb-2" style="max-height:100%;overflow:auto;"></div>
     </div>
     <div id="chatwidget_divider" role="separator" aria-orientation="vertical" aria-label="Resize chat list"><div class="handle" aria-hidden="true"></div></div>
     <div class="right">
       <div id="chatwidget_messages" class="messages"></div>
       <!-- attachment preview placeholder row (populated by JS) -->
-      <div id="chatwidget_attachPreviewColumn" class="message-preview-column" style="display:none;width:100%;margin-bottom:8px"></div>
+      <div id="chatwidget_attachPreviewColumn" class="message-preview-column" style="display:none;width:100%;margin-bottom:0px;position:relative;z-index:10005"></div>
       <div class="composer">
         <input type="file" id="chatwidget_attachInput" class="d-none" />
         <button id="chatwidget_attach" class="btn btn-light btn-sm" type="button" title="Attach" aria-label="Attach file">
           <i class="bi bi-paperclip" aria-hidden="true" style="font-size:16px;line-height:1"></i>
         </button>
-        <button id="chatwidget_share" class="btn btn-outline-secondary btn-sm" type="button" title="Share page" aria-label="Share design" style="display:none;margin-left:4px">
+        <button id="chatwidget_share" class="btn btn-outline-secondary btn-sm" type="button" title="Share page" aria-label="Share design" style="margin-left:4px">
           <i class="bi bi-share" aria-hidden="true" style="font-size:14px"></i>
         </button>
         <input id="chatwidget_input" class="form-control form-control-sm" placeholder="Type a message..." aria-label="Message input" <?php if (!$logged) echo 'disabled title="Log in to send messages"'; ?> >
@@ -213,6 +235,111 @@ $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
     const pos = loadPos(storageKey);
     if (pos) applyPosTo(target, pos);
   }
+
+  function showSharePreviewQueue(items, roomId, inst) {
+    // send items one-by-one with preview; provide a light progress indicator
+    let idx = 0;
+    let failures = 0;
+    const total = items.length;
+    const statusEl = document.getElementById('chatwidget_share_status');
+    if (statusEl) statusEl.textContent = `Sending 0 / ${total}...`;
+    async function next() {
+      if (idx >= items.length) {
+        if (statusEl) statusEl.textContent = `Done. Sent ${total - failures}/${total}. ${failures? failures + ' failed':''}`;
+        // small delay then close
+        setTimeout(() => { hideShare(); }, 900);
+        return;
+      }
+      const it = items[idx++];
+      openPreviewModal(it, async (text) => {
+        const payload = {
+          sender_type: 'client',
+          sender_id: <?= json_encode($uid) ?>,
+          content: it.url || it.title || '',
+          room: roomId,
+          attachment_url: it.image || it.url || '',
+          attachment_name: (it.title||it.type||'item') + '.jpg',
+          message_type: 'design',
+          share_title: it.title || '',
+          share_url: it.url || '',
+          share_type: it.type === 'product' ? 'product' : 'design',
+          text: text || ''
+        };
+        try {
+          console.debug('chatwidget: sending share payload', payload);
+          let resp = null;
+          if (inst && typeof inst.apiPost === 'function') {
+            resp = await inst.apiPost('sendMessage', payload);
+          } else {
+            // fallback: call API directly
+            const apiPath = <?= json_encode($CHAT_API_PATH) ?>;
+            const r = await fetch(apiPath + 'sendMessage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const txt = await r.text();
+            if (!r.ok) {
+              try { const j = JSON.parse(txt); throw new Error(j.message || j.error || txt || ('Status ' + r.status)); } catch(ex) { throw new Error(txt || ('Status ' + r.status)); }
+            }
+            try { resp = JSON.parse(txt); } catch(e) { resp = txt; }
+          }
+          console.debug('chatwidget: send response', resp);
+          if (!(resp && (resp.ok || resp.message || resp.id))) {
+            failures++;
+            console.warn('Failed to send item', resp);
+          }
+          if (statusEl) statusEl.textContent = `Sending ${Math.min(idx,total)} / ${total}...`;
+        } catch(e){ failures++; console.error('send preview failed',e); if (statusEl) statusEl.textContent = `Error sending ${idx} / ${total}`; }
+        // yield to the event loop to keep UI responsive
+        setTimeout(next, 120);
+      });
+    }
+    next();
+  }
+
+  function openPreviewModal(item, onSend) {
+    // create a simple preview modal for single item with text input
+    let modal = document.getElementById('sharePreviewModal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'sharePreviewModal';
+      modal.className = 'modal fade';
+      modal.innerHTML = `
+        <div class="modal-dialog modal-sm">
+          <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">Preview Share</h5></div>
+            <div class="modal-body">
+              <div id="previewItem"></div>
+              <div class="form-group mt-2"><textarea id="previewText" class="form-control" placeholder="Add a message (optional)"></textarea></div>
+            </div>
+            <div class="modal-footer">
+              <button id="previewCancel" class="btn btn-sm btn-secondary">Cancel</button>
+              <button id="previewSend" class="btn btn-sm btn-primary">Send</button>
+            </div>
+          </div>
+        </div>`;
+      document.body.appendChild(modal);
+    }
+    const previewItem = modal.querySelector('#previewItem');
+    previewItem.innerHTML = `<div style="display:flex;gap:8px;align-items:center"><img src="${item.image||item.url||''}" style="width:48px;height:48px;object-fit:cover"/><div><strong>${item.title||'Item'}</strong><div style="font-size:12px;color:#666">${item.type||''}</div></div></div>`;
+    const ta = modal.querySelector('#previewText'); ta.value = '';
+    const btnSend = modal.querySelector('#previewSend');
+    const btnCancel = modal.querySelector('#previewCancel');
+    // lightweight modal show/hide without Bootstrap JS
+    modal.style.position = 'fixed';
+    modal.style.left = '0'; modal.style.top = '0'; modal.style.right = '0'; modal.style.bottom = '0';
+    modal.style.display = 'flex'; modal.style.alignItems = 'center'; modal.style.justifyContent = 'center';
+    modal.style.background = 'rgba(0,0,0,0.35)'; modal.style.zIndex = '100040';
+    // ensure inner dialog constrained
+    const dialog = modal.querySelector('.modal-dialog'); if (dialog) { dialog.style.maxWidth = '420px'; width = dialog.style.width; }
+    btnCancel.onclick = ()=>{ modal.style.display = 'none'; };
+    btnSend.onclick = ()=>{
+      const text = ta.value.trim();
+      modal.style.display = 'none';
+      onSend(text);
+    };
+  }
+
+    // expose to global scope for other scripts in this file
+    window.showSharePreviewQueue = showSharePreviewQueue;
+    window.openPreviewModal = openPreviewModal;
 
   // Make header the drag handle for the panel (moves the panel)
   const panelHandle = panel.querySelector('.header') || panel;
@@ -342,8 +469,183 @@ $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
   })();
 })();
 </script>
-<!-- Initialize chat widget. Allow overriding paths by setting $CHAT_JS_PATH and $CHAT_API_PATH before include -->
-<script src="<?= htmlspecialchars($CHAT_JS_PATH ?? 'Chatfunction.js') ?>"></script>
+<script>
+// Hide composer when no room selected and keep preview visible above composer
+(function(){
+  try {
+    setTimeout(() => {
+      const inst = window.chatApps && window.chatApps['chatwidget'];
+      const composer = document.querySelector('#chatwidget_panel .composer');
+      const preview = document.getElementById('chatwidget_attachPreviewColumn');
+      // compute and apply bottom offset so preview sticks to composer
+      function applyPreviewOffset() {
+        try {
+          if (!preview) return;
+          const comp = document.querySelector('#chatwidget_panel .composer');
+          // default gap between preview and composer
+          const gap = 8;
+          if (comp && window.getComputedStyle(comp).display !== 'none') {
+            const ch = comp.getBoundingClientRect().height || 0;
+            preview.style.bottom = (ch + gap) + 'px';
+          } else {
+            preview.style.bottom = (8) + 'px';
+          }
+        } catch(e) { console.warn('applyPreviewOffset failed', e); }
+      }
+      // observe composer size changes and preview content changes
+      const moTargets = [];
+      try {
+        if (preview) {
+          const m = new MutationObserver(() => { applyPreviewOffset(); });
+          m.observe(preview, { childList: true, subtree: true, characterData: true });
+          moTargets.push(m);
+        }
+        if (composer) {
+          const m2 = new MutationObserver(() => { applyPreviewOffset(); });
+          m2.observe(composer, { attributes: true, childList: true, subtree: true });
+          moTargets.push(m2);
+        }
+      } catch(e){}
+      // recalc on resize
+      window.addEventListener('resize', applyPreviewOffset);
+      // initial apply and periodic safeguard
+      applyPreviewOffset();
+      const safeIv = setInterval(applyPreviewOffset, 800);
+      function update() {
+        try {
+          const roomId = inst && typeof inst.getSelectedRoomId === 'function' ? inst.getSelectedRoomId() : (document.getElementById('chatwidget_messages') && document.getElementById('chatwidget_messages').dataset && document.getElementById('chatwidget_messages').dataset.roomId);
+          const panelEl = document.getElementById('chatwidget_panel');
+                    if (!roomId) {
+            if (composer) composer.style.display = 'none';
+            if (preview) { preview.style.display = preview.innerHTML.trim() ? '' : 'none'; preview.style.zIndex = 10005; }
+          } else {
+            if (composer) composer.style.display = '';
+            if (preview) { preview.style.display = preview.innerHTML.trim() ? '' : 'none'; preview.style.zIndex = 10005; }
+    }
+          try { if (panelEl && preview) { if (preview.innerHTML.trim()) panelEl.classList.add('preview-visible'); else panelEl.classList.remove('preview-visible'); } } catch(e) {}
+        } catch(e){}
+      }
+      update();
+      const iv = setInterval(update, 500);
+      window.addEventListener('beforeunload', () => clearInterval(iv));
+      window.addEventListener('beforeunload', () => clearInterval(safeIv));
+    }, 300);
+  } catch(e){}
+})();
+</script>
+<!-- Chat chooser modal -->
+<style>
+.chat-chooser-backdrop{position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(0,0,0,0.35);display:none;align-items:center;justify-content:center;z-index:100020}
+.chat-chooser{background:#fff;border-radius:8px;padding:12px;width:420px;max-width:94vw;box-shadow:0 8px 30px rgba(11,27,43,0.2)}
+.chat-chooser .list{max-height:300px;overflow:auto;margin-top:8px}
+.chat-chooser .item{display:flex;align-items:center;gap:8px;padding:8px;border-radius:6px;cursor:pointer}
+.chat-chooser .item:hover{background:#f7f9fc}
+.chat-chooser .avatar{width:36px;height:36px;border-radius:50%;background:#ddd;display:inline-block;flex:0 0 36px}
+.chat-chooser .title{font-weight:600}
+.chat-chooser .subtitle{font-size:0.85rem;color:#666}
+.chat-chooser .section-title{font-size:0.9rem;font-weight:600;margin-top:8px}
+</style>
+
+<div id="chatwidget_chooser_backdrop" class="chat-chooser-backdrop" role="dialog" aria-hidden="true">
+  <div class="chat-chooser" role="document" aria-label="Choose a user to chat with">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+      <div style="font-weight:700">Start a chat</div>
+      <div><button id="chatwidget_chooser_close" class="btn btn-sm btn-light">Close</button></div>
+    </div>
+    <div id="chatwidget_chooser_status" class="small text-muted">Recommended users appear first</div>
+    <div id="chatwidget_chooser_list" class="list">
+      <!-- sections appended here -->
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const newBtn = document.getElementById('chatwidget_new');
+  const chooser = document.getElementById('chatwidget_chooser_backdrop');
+  const chooserList = document.getElementById('chatwidget_chooser_list');
+  const chooserClose = document.getElementById('chatwidget_chooser_close');
+  const status = document.getElementById('chatwidget_chooser_status');
+
+  function showChooser(){ chooser.style.display='flex'; chooser.setAttribute('aria-hidden','false'); chooserList.innerHTML=''; status.textContent='Loading...'; fetchSuggestions(); }
+  function hideChooser(){ chooser.style.display='none'; chooser.setAttribute('aria-hidden','true'); }
+
+  newBtn && newBtn.addEventListener('click', showChooser);
+  chooserClose && chooserClose.addEventListener('click', hideChooser);
+  chooser.addEventListener('click', (e)=>{ if (e.target === chooser) hideChooser(); });
+
+  async function fetchSuggestions(){
+    try {
+      const res = await fetch(<?= json_encode($SUGGESTIONS_API) ?>);
+      const data = await res.json();
+      if (data.error) { status.textContent = 'Error: ' + data.error; return; }
+      status.textContent = '';
+      // build sections
+      if (data.recommended && data.recommended.length){
+        const h = document.createElement('div'); h.className='section-title'; h.textContent='Recommended'; chooserList.appendChild(h);
+        data.recommended.forEach(u => chooserList.appendChild(renderUserItem(u, true)));
+      }
+      if (data.others && data.others.length){
+        const h2 = document.createElement('div'); h2.className='section-title'; h2.textContent='Users you may like'; chooserList.appendChild(h2);
+        data.others.forEach(u => chooserList.appendChild(renderUserItem(u, false)));
+      }
+      if ((!data.recommended || !data.recommended.length) && (!data.others || !data.others.length)){
+        chooserList.textContent = 'No users found.';
+      }
+    } catch (e) {
+      status.textContent = 'Failed to load suggestions';
+      console.error(e);
+    }
+  }
+
+  function renderUserItem(u, recommended){
+    const el = document.createElement('div'); el.className='item'; el.tabIndex=0;
+    const av = document.createElement('div'); av.className='avatar'; if (u.avatar) av.style.backgroundImage = 'url('+u.avatar+')', av.style.backgroundSize='cover';
+    const meta = document.createElement('div'); meta.style.flex='1';
+    const name = document.createElement('div'); name.className='title'; name.textContent = u.name || ('User '+u.id);
+    const role = document.createElement('div'); role.className='subtitle'; role.textContent = u.role || '';
+    meta.appendChild(name); meta.appendChild(role);
+    const action = document.createElement('div'); action.innerHTML = '<button class="btn btn-sm btn-primary">Chat</button>';
+    el.appendChild(av); el.appendChild(meta); el.appendChild(action);
+    el.addEventListener('click', ()=> openChatWith(u));
+    return el;
+  }
+
+  async function openChatWith(u){
+    try {
+      // Prefer window.handleChat if available (Chatfunction.js or app provides it)
+      if (window.handleChat) {
+        const res = await window.handleChat(u.id, { otherName: u.name });
+        if (res && (res.ok || res.roomId)) {
+          hideChooser();
+          // open widget and focus room if chat app instance exists
+          const inst = window.chatApps && window.chatApps['chatwidget'];
+          if (inst && inst.openRoom) inst.openRoom(res.roomId || res.roomId);
+          // ensure widget visible
+          document.getElementById('chatwidget_panel').style.display='flex'; document.getElementById('chatwidget_toggle').style.display='none';
+          return;
+        }
+      }
+      // fallback: try to call ChatApi createRoom if available
+      const apiPath = <?= json_encode($CHAT_API_PATH) ?>;
+      const createUrl = apiPath + 'createRoom';
+      const payload = { other_id: u.id };
+      const r = await fetch(createUrl, { method:'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+      const jr = await r.json();
+      if (jr && (jr.ok || jr.roomId)){
+        hideChooser();
+        const inst = window.chatApps && window.chatApps['chatwidget'];
+        if (inst && inst.openRoom) inst.openRoom(jr.roomId || jr.roomId);
+        document.getElementById('chatwidget_panel').style.display='flex'; document.getElementById('chatwidget_toggle').style.display='none';
+        return;
+      }
+      alert('Unable to open chat with that user.');
+    } catch (e) { console.error(e); alert('Failed to open chat.'); }
+  }
+})();
+</script>
+<!-- Initialize chat widget. Chatfunction and API paths are centralized here -->
+<script src="<?= htmlspecialchars($CHAT_JS_SRC) ?>"></script>
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
 <script>
   document.addEventListener('DOMContentLoaded', function(){
@@ -410,7 +712,12 @@ $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
 
 
     // rootId 'chatwidget' maps to IDs like 'chatwidget_messages', 'chatwidget_input' etc.
-    initApp({ apiPath: <?= json_encode($CHAT_API_PATH ?? 'ChatApi.php?action=') ?>, userType: <?= json_encode($role) ?>, userId: <?= json_encode($uid) ?>, rootId: 'chatwidget', items: [] });
+    try {
+      if (typeof initApp === 'function') {
+        window.chatApps = window.chatApps || {};
+        window.chatApps['chatwidget'] = initApp({ apiPath: <?= json_encode($CHAT_API_PATH) ?>, userType: <?= json_encode($role) ?>, userId: <?= json_encode($uid) ?>, userName: <?= json_encode($_SESSION['user']['name'] ?? '') ?>, rootId: 'chatwidget', items: [] });
+      }
+    } catch(e) { console.error('chatwidget initApp failed', e); }
     // After init, wire the share button if a page provided a payload
     try {
       const tryWireShare = () => {
@@ -423,7 +730,12 @@ $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
         <?php else: ?>
         const payload = window.__chat_share_payload || null;
         <?php endif; ?>
-        if (!payload) { shareBtn.style.display = 'none'; return; }
+        // Always show the share button so users can open the share chooser on any page.
+        shareBtn.style.display = '';
+        // If no page-specific payload was provided, leave the default share chooser behavior
+        // (the separate share modal script wires `shareBtn` to open the chooser). Only
+        // attach the special quick-share handler when a payload exists.
+        if (!payload) { return; }
         // Prefer the image already rendered on the page (design_detail.php uses `$mainImg`) so
         // the widget preview uses the same resolved src. The DOM `img.src` will be absolute.
         try {
@@ -432,8 +744,9 @@ $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
             payload.image = pageImg.src;
           }
         } catch (e) {}
-        shareBtn.style.display = '';
-        shareBtn.addEventListener('click', async () => {
+        // Avoid adding multiple handlers
+        if (!shareBtn.dataset.shareHandler) {
+          shareBtn.addEventListener('click', async () => {
           try {
             // create or open room with designer
             const res = await (window.handleChat ? window.handleChat(payload.designerId, { creatorId: <?= json_encode($uid) ?>, otherName: payload.title }) : Promise.resolve({ ok: false }));
@@ -492,31 +805,227 @@ $uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
             // Hook main send button (capture) to send the pending share when user clicks Send
             const mainSendBtn = document.getElementById('chatwidget_send');
             if (mainSendBtn) {
-              const sendCapture = async function(e){
-                if (!previewPendingShare) return; // allow normal send
-                e.preventDefault(); e.stopImmediatePropagation();
-                try {
-                  const p = previewPendingShare;
-                  // use message_type 'image' to avoid DB truncation; include share metadata
-                  const resp = await inst.apiPost('sendMessage', { sender_type: 'client', sender_id: <?= json_encode($uid) ?>, content: p.share_url || p.attachmentName || '', room: p.roomId, attachment_url: p.attachmentUrl, attachment_name: p.attachmentName, message_type: 'image', share_title: p.share_title, share_url: p.share_url });
-                  try { if (resp && (resp.ok || resp.message)) inst.appendMessageToUI(resp.message || resp, 'me'); } catch(e){}
-                  try { alert('Design link shared with the designer.'); } catch(e){}
-                } catch (ex) { console.error('share send failed', ex); alert('Failed to share design.'); }
-                cleanup();
-                return false;
-              };
-              // add as capture listener so it runs before other handlers
-              mainSendBtn.addEventListener('click', sendCapture, true);
+              // ensure we don't add duplicate handlers
+              if (!mainSendBtn._shareSendHandler) {
+                const sendCapture = async function(e){
+                  if (!previewPendingShare) return; // allow normal send
+                  e.preventDefault(); e.stopImmediatePropagation();
+                  try {
+                    const p = previewPendingShare;
+                    const payload = { sender_type: 'client', sender_id: <?= json_encode($uid) ?>, content: p.share_url || p.attachmentName || '', room: p.roomId, attachment_url: p.attachmentUrl, attachment_name: p.attachmentName, message_type: 'design', share_title: p.share_title, share_url: p.share_url, share_type: 'design', text: (document.getElementById('chatwidget_share_preview_text') ? document.getElementById('chatwidget_share_preview_text').value : '') };
+                    const resp = (inst && typeof inst.apiPost === 'function') ? await inst.apiPost('sendMessage', payload) : await (fetch(<?= json_encode($CHAT_API_PATH) ?> + 'sendMessage', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) }).then(r=>r.json()));
+                    if (resp && (resp.ok || resp.message || resp.id)) {
+                      try { if (inst && inst.appendMessageToUI) inst.appendMessageToUI(resp.message || resp, 'me'); } catch(e){}
+                    } else {
+                      console.warn('share send failed response', resp);
+                    }
+                  } catch (ex) { console.error('share send failed', ex); }
+                  cleanup();
+                  return false;
+                };
+                mainSendBtn._shareSendHandler = sendCapture;
+                mainSendBtn.addEventListener('click', sendCapture, true);
+              }
             }
 
             // focus on preview for accessibility
             preview.scrollIntoView({ behavior: 'smooth', block: 'center' });
             return;
           } catch (e) { console.error('chatwidget share error', e); alert('Error sharing design.'); }
-        });
+          });
+          shareBtn.dataset.shareHandler = '1';
+        }
       };
       // wait briefly for initApp to register instance
       setTimeout(tryWireShare, 200);
     } catch(e) { console.error('share wiring failed', e); }
   });
+</script>
+<!-- Share chooser modal (liked designs grid) -->
+<style>
+.chat-share-backdrop{position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(0,0,0,0.35);display:none;align-items:center;justify-content:center;z-index:100030}
+.chat-share{background:#fff;border-radius:8px;padding:12px;width:640px;max-width:96vw;box-shadow:0 8px 40px rgba(11,27,43,0.25)}
+.chat-share .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px;max-height:50vh;overflow:auto}
+.chat-share .card{border:1px solid #eef3fb;border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:6px;cursor:pointer}
+.chat-share .thumb{width:100%;height:96px;background:#eee;border-radius:6px;background-size:cover;background-position:center}
+.chat-share .meta{font-size:0.9rem}
+.chat-share .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:8px}
+@media (max-width:640px){ .chat-share .grid{grid-template-columns:repeat(2,1fr)} }
+</style>
+
+<div id="chatwidget_share_backdrop" class="chat-share-backdrop" role="dialog" aria-hidden="true">
+  <div class="chat-share" role="document" aria-label="Share">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <div style="font-weight:700">Share</div>
+      <div><button id="chatwidget_share_close" class="btn btn-sm btn-light">Close</button></div>
+    </div>
+    <div id="chatwidget_share_status" class="small text-muted">Your liked designs</div>
+    <div id="chatwidget_share_grid" class="grid" style="margin-top:8px"></div>
+    <button id="chatwidget_share_send" class="btn btn-primary ms-2" disabled>Send Selected</button></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const shareBtn = document.getElementById('chatwidget_share');
+  const backdrop = document.getElementById('chatwidget_share_backdrop');
+  const grid = document.getElementById('chatwidget_share_grid');
+  const status = document.getElementById('chatwidget_share_status');
+  const closeBtn = document.getElementById('chatwidget_share_close');
+  const sendBtn = document.getElementById('chatwidget_share_send');
+  let selectedDesign = null;
+  let selectedDesigns = [];
+  let currentShareList = [];
+
+  function showShare(){ backdrop.style.display='flex'; backdrop.setAttribute('aria-hidden','false'); loadLikedDesigns(); }
+  function hideShare(){ backdrop.style.display='none'; backdrop.setAttribute('aria-hidden','true'); grid.innerHTML=''; selectedDesign=null; sendBtn.disabled=true; }
+  shareBtn && shareBtn.addEventListener('click', showShare);
+  closeBtn && closeBtn.addEventListener('click', hideShare);
+  backdrop && backdrop.addEventListener('click', (e)=>{ if (e.target===backdrop) hideShare(); });
+
+  async function loadLikedDesigns(){
+    try {
+      status.textContent = 'Loading...';
+      grid.innerHTML = '';
+      const res = await fetch(<?= json_encode($SUGGESTIONS_API) ?>);
+      const j = await res.json();
+      console.debug('chatwidget: suggestions response', j);
+      if (j && j.error) {
+        status.textContent = (j.error === 'not_logged_in') ? 'Please log in to see your liked designs.' : ('Error: ' + j.error);
+        return;
+      }
+      // normalize liked designs and products into a single list of items
+      let list = [];
+      if (j && j.liked_designs && j.liked_designs.length) {
+        j.liked_designs.forEach(d => {
+          list.push({ id: d.designid || d.designId || d.id, type: 'design', title: d.title || '', price: d.price || null, likes: d.likes || 0, image: d.image || null, url: d.url || null, ownerid: d.designerid || d.designerId || 0 });
+        });
+      } else if (j && j.recommended_designs && j.recommended_designs.length) {
+        j.recommended_designs.forEach(d => {
+          list.push({ id: d.designid || d.designId || d.id, type: 'design', title: d.title || '', price: d.price || null, likes: d.likes || 0, image: d.image || null, url: d.url || null, ownerid: d.designerid || d.designerId || 0 });
+        });
+      }
+      // append liked products if any
+      if (j && j.liked_products && j.liked_products.length) {
+        j.liked_products.forEach(p => {
+          list.push({ id: p.productid || p.productId || p.id, type: 'product', title: p.title || p.pname || '', price: p.price || null, likes: p.likes || 0, image: p.image || null, url: p.url || null, ownerid: p.supplierid || p.supplierId || 0 });
+        });
+      }
+      if (!list.length) { status.textContent='liked item will display here.'; return; }
+      status.textContent='liked item will display here. Click to select.';
+      // build cards
+      const base = ((location.protocol==='https:')? 'https:' : 'http:') + '//' + (location.host || '');
+      // store current list for bulk actions
+      currentShareList = list.slice();
+      list.forEach(d => {
+        const c = document.createElement('div'); c.className='card'; c.tabIndex=0; c.dataset.itemId = d.id || '';
+        c.dataset.itemType = d.type || 'design';
+        const thumb = document.createElement('div'); thumb.className='thumb';
+        // try to use image URL if available, else a placeholder
+        const img = (d.image) ? d.image : (d.url ? d.url : null);
+        if (img) thumb.style.backgroundImage = 'url("' + img + '")';
+        const title = document.createElement('div'); title.className='meta'; title.textContent = d.title || (d.type === 'product' ? ('Product #' + (d.id||'')) : ('Design #' + (d.id||'')));
+        const sub = document.createElement('div'); sub.className='small text-muted'; sub.textContent = (d.likes? d.likes + ' likes' : '') + (d.price ? ' · HK$' + d.price : '');
+        c.appendChild(thumb); c.appendChild(title); c.appendChild(sub);
+        c.addEventListener('click', ()=>{ toggleCardSelection(c,d); });
+        grid.appendChild(c);
+      });
+    } catch (e) { console.error('load liked designs failed', e); status.textContent='Failed to load designs'; }
+  }
+
+  function toggleCardSelection(card, data){
+    const id = data.id || data.designid || data.productid || data.designId || data.productId || data.id;
+    const idx = selectedDesigns.findIndex(s => (s.designid||s.designId||s.id) == id);
+    if (idx === -1) {
+      // select
+      card.style.outline = '2px solid #5b8cff';
+      selectedDesigns.push(data);
+    } else {
+      // deselect
+      card.style.outline = '';
+      selectedDesigns.splice(idx,1);
+    }
+    // set single-selection convenience
+    selectedDesign = selectedDesigns.length === 1 ? selectedDesigns[0] : null;
+    sendBtn.disabled = selectedDesigns.length === 0;
+  }
+
+  // select all visible cards
+  function selectAllCards(){
+    selectedDesigns = [];
+    Array.from(grid.children).forEach((ch, i) => {
+      ch.style.outline = '2px solid #5b8cff';
+      const d = currentShareList[i]; if (d) selectedDesigns.push(d);
+    });
+    selectedDesign = selectedDesigns.length === 1 ? selectedDesigns[0] : null;
+    sendBtn.disabled = selectedDesigns.length === 0;
+  }
+
+  sendBtn && sendBtn.addEventListener('click', async ()=>{
+    if (!selectedDesigns || !selectedDesigns.length) return;
+    try {
+      const inst = window.chatApps && window.chatApps['chatwidget'];
+      // If a room is open in the widget, send all selected into that room
+      let roomId = null;
+      if (inst) {
+        try { roomId = (typeof inst.getSelectedRoomId === 'function') ? inst.getSelectedRoomId() : (inst.currentRoom || inst.currentRoomId); } catch(e) { roomId = (inst.currentRoom || inst.currentRoomId); }
+        // fallback to messages dataset
+        if (!roomId && document.getElementById('chatwidget_messages') && document.getElementById('chatwidget_messages').dataset) roomId = document.getElementById('chatwidget_messages').dataset.roomId;
+      }
+      if (roomId) {
+        // send selected items sequentially (one message per item) without per-item modal
+        try {
+          sendBtn.disabled = true;
+          const total = selectedDesigns.length; let sent = 0; let failed = 0;
+          const statusEl = document.getElementById('chatwidget_share_status');
+          if (statusEl) statusEl.textContent = `Sending 0 / ${total}...`;
+          for (const sd of selectedDesigns) {
+            const payload = {
+              sender_type: 'client', sender_id: <?= json_encode($uid) ?>,
+              content: sd.url || sd.title || '', room: roomId,
+              attachment_url: sd.image || sd.url || '', attachment_name: (sd.title||sd.type||'item') + '.jpg',
+              message_type: 'design', share_title: sd.title || '', share_url: sd.url || '', share_type: sd.type === 'product' ? 'product' : 'design'
+            };
+            try {
+              const resp = (inst && typeof inst.apiPost === 'function') ? await inst.apiPost('sendMessage', payload) : await (fetch(<?= json_encode($CHAT_API_PATH) ?> + 'sendMessage', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) }).then(r=>r.json()));
+              if (resp && (resp.ok || resp.message || resp.id)) {
+                try { if (inst && inst.appendMessageToUI) inst.appendMessageToUI(resp.message || resp, 'me'); } catch(e){}
+                sent++;
+              } else { failed++; }
+            } catch(e) { console.error('batch send item failed', e); failed++; }
+            if (statusEl) statusEl.textContent = `Sending ${sent} / ${total}...`;
+            // yield to UI thread
+            await new Promise(res => setTimeout(res, 80));
+          }
+          if (statusEl) statusEl.textContent = `Done. Sent ${sent}/${total}. ${failed? failed + ' failed':''}`;
+        } catch(e) { console.error('batch share error', e); }
+        sendBtn.disabled = false; hideShare(); return;
+      }
+      // No room open: attempt per-designer send using handleChat if available
+      if (window.handleChat) {
+        for (const sd of selectedDesigns) {
+          try {
+            const owner = sd.ownerid || sd.designerid || sd.supplierid || sd.ownerId || 0;
+            const r = await window.handleChat(owner, { otherName: sd.title });
+            const roomId = r && (r.roomId || r.roomid);
+            if (roomId) {
+              const inst2 = window.chatApps && window.chatApps['chatwidget'];
+              if (inst2) {
+                const mtype = 'design';
+                await inst2.apiPost('sendMessage', { sender_type: 'client', sender_id: <?= json_encode($uid) ?>, content: sd.url || sd.title || '', room: roomId, attachment_url: sd.image || sd.url || '', attachment_name: (sd.title||sd.type||'item') + '.jpg', message_type: mtype, share_title: sd.title || '', share_url: sd.url || '' });
+              }
+            }
+          } catch(e) { console.error('send to designer failed', e); }
+        }
+        hideShare();
+        return;
+      }
+      alert('Please open a chat first or enable handleChat to create recipient rooms.');
+    } catch (e) { console.error('share send failed', e); alert('Failed to send shared designs.'); }
+  });
+
+  // wire select-all button
+  const selectAllBtn = document.getElementById('chatwidget_share_select_all');
+  if (selectAllBtn) selectAllBtn.addEventListener('click', selectAllCards);
+})();
 </script>

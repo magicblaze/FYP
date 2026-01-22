@@ -397,25 +397,7 @@ if (!$material_result) die('Query error: ' . $mysqli->error);
     }
     ?>
 
-    <!-- Include chat functionality JavaScript -->
-    <script src="Public/Chatfunction.js"></script>
-    <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        <?php if (isset($_SESSION['user'])): ?>
-        // Initialize chat application
-        const chatApp = initApp({
-            apiPath: 'Public/ChatApi.php?action=',
-            userId: <?= (int)($_SESSION['user']['clientid'] ?? $_SESSION['user']['id'] ?? 0) ?>,
-            userType: '<?= htmlspecialchars($_SESSION['user']['role'] ?? 'client') ?>',
-            userName: '<?= htmlspecialchars($_SESSION['user']['name'] ?? 'User', ENT_QUOTES) ?>',
-            rootId: 'chatwidget',
-            items: []
-        });
-        
-        console.log('Chat widget initialized');
-        <?php endif; ?>
-    });
-    </script>
+    <!-- Chatfunction and initialization moved into Public/chat_widget.php -->
     <!-- ==================== End Chat Widget Integration ==================== -->
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>

@@ -306,3 +306,5 @@ if (!empty($clientData['ctel'])) {
     </script>
 </body>
 </html>
+
+<?php include __DIR__ . '/../Public/chat_widget.php'; ?>
