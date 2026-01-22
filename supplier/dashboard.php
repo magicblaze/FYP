@@ -257,7 +257,7 @@ $colorImageStmt->close();
         <nav>
             <ul class="nav align-items-center">
                 <li class="nav-item me-2">
-                    <a class="nav-link text-muted" href="#">
+                    <a class="nav-link text-muted" href="supplier_profile.php">
                         <i class="fas fa-user me-1"></i>Hello <?= htmlspecialchars($supplierName) ?>
                     </a>
                 </li>
