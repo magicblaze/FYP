@@ -39,6 +39,7 @@ DROP TABLE IF EXISTS `ProductLike`;
 DROP TABLE IF EXISTS `DesignLike`;
 DROP TABLE IF EXISTS `MessageRead`;
 DROP TABLE IF EXISTS `UploadedFiles`;
+DROP TABLE IF EXISTS `DesignImage`;
 
 -- Client table
 CREATE TABLE `Client` (
@@ -435,6 +436,16 @@ INSERT INTO `DesignLike` (`designlikeid`, `clientid`, `designid`) VALUES
 (1, 1, 1),
 (2, 2, 2);
 
+CREATE TABLE IF NOT EXISTS `DesignImage` (
+  `imageid` int NOT NULL AUTO_INCREMENT,
+  `designid` int NOT NULL,
+  `image_filename` varchar(500) NOT NULL,
+  `image_order` int DEFAULT 1,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`imageid`),
+  KEY `designid_idx` (`designid`),
+  CONSTRAINT `fk_designimage_designid` FOREIGN KEY (`designid`) REFERENCES `Design` (`designid`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Re-enable Foreign Key Checks
 SET FOREIGN_KEY_CHECKS = 1;

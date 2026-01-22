@@ -1,7 +1,7 @@
 <?php
 // ==============================
 // File: designer/design-detail.php
-// Display design details
+// Display design details with multiple images
 // ==============================
 require_once __DIR__ . '/../config.php';
 session_start();
@@ -19,16 +19,22 @@ $stmt->execute();
 $design = $stmt->get_result()->fetch_assoc();
 if (!$design) { http_response_code(404); die('Design not found.'); }
 
-// Get design image
-$designImg = null;
-if (!empty($design['design'])) {
-    $designImg = '../uploads/designs/' . htmlspecialchars($design['design']);
-} else {
-    $designImg = '../uploads/designs/placeholder.jpg';
+// Get all design images
+$imagesql = "SELECT imageid, image_filename FROM DesignImage WHERE designid = ? ORDER BY image_order ASC";
+$imageStmt = $mysqli->prepare($imagesql);
+$imageStmt->bind_param("i", $designid);
+$imageStmt->execute();
+$imageResult = $imageStmt->get_result();
+$designImages = [];
+while ($row = $imageResult->fetch_assoc()) {
+    $designImages[] = $row;
 }
+$imageStmt->close();
 
-// Define designer name
-$designerName = isset($_SESSION['user']['name']) ? $_SESSION['user']['name'] : 'Guest';
+// If no images in DesignImage table, fall back to main design image
+if (empty($designImages) && !empty($design['design'])) {
+    $designImages[] = ['imageid' => 0, 'image_filename' => $design['design']];
+}
 
 // Get comments for this design
 $commentSql = "SELECT cd.*, c.cname FROM Comment_design cd 
@@ -44,6 +50,9 @@ while ($row = $commentResult->fetch_assoc()) {
     $comments[] = $row;
 }
 $commentStmt->close();
+
+// Define designer name
+$designerName = isset($_SESSION['user']['name']) ? $_SESSION['user']['name'] : 'Guest';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -64,24 +73,136 @@ $commentStmt->close();
             padding: 2rem 1rem;
         }
 
-        .design-image-wrapper {
+        .design-image-section {
             flex: 0 0 auto;
             width: 500px;
-            height: 500px;
+        }
+
+        .design-carousel-wrapper {
             border-radius: 12px;
             overflow: hidden;
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
             background-color: #f8f9fa;
+            margin-bottom: 1rem;
+        }
+
+        .design-carousel {
+            position: relative;
+            width: 100%;
+            height: 500px;
+            background-color: #f8f9fa;
             display: flex;
             align-items: center;
             justify-content: center;
+            overflow: hidden;
         }
 
-        .design-image-wrapper img {
+        .carousel-item {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .carousel-item.active {
+            display: flex;
+            opacity: 1;
+        }
+
+        .carousel-item img {
+            max-width: 90%;
+            max-height: 90%;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+        }
+
+        .carousel-controls {
+            position: absolute;
+            top: 50%;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            padding: 0 1rem;
+            transform: translateY(-50%);
+            pointer-events: none;
+        }
+
+        .carousel-btn {
+            pointer-events: all;
+            background: rgba(0, 0, 0, 0.5);
+            color: white;
+            border: none;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .carousel-btn:hover {
+            background: rgba(0, 0, 0, 0.8);
+        }
+
+        .carousel-indicators {
+            position: absolute;
+            bottom: 1rem;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 0.5rem;
+            z-index: 10;
+        }
+
+        .indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.5);
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .indicator.active {
+            background: white;
+        }
+
+        .thumbnail-strip {
+            display: flex;
+            gap: 0.5rem;
+            padding: 0.5rem;
+            background: white;
+            overflow-x: auto;
+        }
+
+        .thumbnail {
+            width: 80px;
+            height: 80px;
+            border-radius: 6px;
+            overflow: hidden;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: border-color 0.3s;
+            flex-shrink: 0;
+        }
+
+        .thumbnail img {
             width: 100%;
             height: 100%;
             object-fit: cover;
-            transition: opacity 0.3s ease;
+        }
+
+        .thumbnail.active {
+            border-color: #3498db;
         }
 
         .design-panel {
@@ -110,6 +231,17 @@ $commentStmt->close();
             color: #e74c3c;
             font-weight: 700;
             margin-bottom: 1.5rem;
+        }
+
+        .design-description {
+            color: #5a6c7d;
+            font-size: 0.95rem;
+            line-height: 1.6;
+            margin-bottom: 1.5rem;
+            padding: 1rem;
+            background-color: #f8f9fa;
+            border-left: 4px solid #3498db;
+            border-radius: 4px;
         }
 
         .design-meta {
@@ -184,10 +316,12 @@ $commentStmt->close();
                 gap: 1.5rem;
             }
 
-            .design-image-wrapper {
+            .design-image-section {
                 width: 100%;
-                max-width: 400px;
-                margin: 0 auto;
+            }
+
+            .design-carousel {
+                height: 350px;
             }
 
             .design-panel {
@@ -222,9 +356,48 @@ $commentStmt->close();
 
     <main>
         <div class="design-detail-wrapper">
-            <!-- Design Image -->
-            <div class="design-image-wrapper">
-                <img id="designImage" src="<?= htmlspecialchars($designImg) ?>" alt="Design #<?= $designid ?>">
+            <!-- Design Images Section -->
+            <div class="design-image-section">
+                <div class="design-carousel-wrapper">
+                    <div class="design-carousel" id="designCarousel">
+                        <?php foreach ($designImages as $index => $image): ?>
+                            <div class="carousel-item <?= $index === 0 ? 'active' : '' ?>">
+                                <img src="<?= htmlspecialchars('../uploads/designs/' . $image['image_filename']) ?>" alt="Design Image <?= $index + 1 ?>">
+                            </div>
+                        <?php endforeach; ?>
+
+                        <!-- Show navigation arrows only if multiple images -->
+                        <?php if (count($designImages) > 1): ?>
+                        <div class="carousel-controls">
+                            <button class="carousel-btn" onclick="previousImage()" title="Previous image">
+                                <i class="fas fa-chevron-left"></i>
+                            </button>
+                            <button class="carousel-btn" onclick="nextImage()" title="Next image">
+                                <i class="fas fa-chevron-right"></i>
+                            </button>
+                        </div>
+                        <?php endif; ?>
+
+                        <!-- Show indicators only if multiple images -->
+                        <?php if (count($designImages) > 1): ?>
+                            <div class="carousel-indicators">
+                                <?php foreach ($designImages as $index => $image): ?>
+                                    <div class="indicator <?= $index === 0 ? 'active' : '' ?>" onclick="goToImage(<?= $index ?>)" title="Image <?= $index + 1 ?>"></div>
+                                <?php endforeach; ?>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+
+                    <?php if (count($designImages) > 1): ?>
+                        <div class="thumbnail-strip">
+                            <?php foreach ($designImages as $index => $image): ?>
+                                <div class="thumbnail <?= $index === 0 ? 'active' : '' ?>" onclick="goToImage(<?= $index ?>)">
+                                    <img src="<?= htmlspecialchars('../uploads/designs/' . $image['image_filename']) ?>" alt="Thumbnail <?= $index + 1 ?>">
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
             </div>
 
             <div class="design-panel">
@@ -235,9 +408,15 @@ $commentStmt->close();
                 </div>
 
                 <div class="design-title">Design #<?= $designid ?></div>
-                <div class="design-price">HK$<?= number_format((float)$design['price']) ?></div>
+                <div class="design-price">HK$<?= number_format((float)($design['expect_price'] ?? 0)) ?></div>
 
-
+                <!-- Design Description -->
+                <?php if (!empty($design['description'])): ?>
+                <div class="design-description">
+                    <strong>Description:</strong><br>
+                    <?= htmlspecialchars($design['description']) ?>
+                </div>
+                <?php endif; ?>
 
                 <!-- Design Tags -->
                 <?php if (!empty($design['tag'])): ?>
@@ -256,7 +435,7 @@ $commentStmt->close();
                 <div class="design-stats">
                     <div class="likes-count">
                         <i class="fas fa-heart text-danger"></i>
-                        <span><?= $design['likes'] ?> Likes</span>
+                        <span><?= $design['likes'] ?? 0 ?> Likes</span>
                     </div>
                 </div>
             </div>
@@ -290,5 +469,45 @@ $commentStmt->close();
     </main>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
+    <script>
+        let currentImageIndex = 0;
+        const totalImages = <?= count($designImages) ?>;
+
+        function showImage(index) {
+            const items = document.querySelectorAll('.carousel-item');
+            const indicators = document.querySelectorAll('.indicator');
+            const thumbnails = document.querySelectorAll('.thumbnail');
+
+            items.forEach(item => item.classList.remove('active'));
+            indicators.forEach(ind => ind.classList.remove('active'));
+            thumbnails.forEach(thumb => thumb.classList.remove('active'));
+
+            items[index].classList.add('active');
+            if (indicators[index]) indicators[index].classList.add('active');
+            if (thumbnails[index]) thumbnails[index].classList.add('active');
+
+            currentImageIndex = index;
+        }
+
+        function nextImage() {
+            const nextIndex = (currentImageIndex + 1) % totalImages;
+            showImage(nextIndex);
+        }
+
+        function previousImage() {
+            const prevIndex = (currentImageIndex - 1 + totalImages) % totalImages;
+            showImage(prevIndex);
+        }
+
+        function goToImage(index) {
+            showImage(index);
+        }
+
+        // Keyboard navigation
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'ArrowRight') nextImage();
+            if (event.key === 'ArrowLeft') previousImage();
+        });
+    </script>
 </body>
 </html>
