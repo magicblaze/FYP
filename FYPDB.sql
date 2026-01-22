@@ -22,6 +22,7 @@ DROP TABLE IF EXISTS `ProductColorImage`;
 DROP TABLE IF EXISTS `Client`;
 DROP TABLE IF EXISTS `Manager`;
 DROP TABLE IF EXISTS `Contractors`;
+DROP TABLE IF EXISTS `Worker`;
 DROP TABLE IF EXISTS `Designer`;
 DROP TABLE IF EXISTS `Supplier`;
 DROP TABLE IF EXISTS `Material`;
@@ -90,8 +91,28 @@ CREATE TABLE `Contractors` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 INSERT INTO `Contractors` (`contractorid`,`cname`,`ctel`,`cemail`,`cpassword`,`price`,`introduction`,`certification`,`managerid`,`remember_token`) VALUES
-(1, 'abc Contractors company', 12312312, 'abc123@gmail.com', 'Contractors12345',600,null,null,1, NULL),
+(1, 'abc Contractors company', 12312312, 'abc123@gmail.com', 'Contractors12345',600,'welcome abc Contractors company!!',null,1, NULL),
 (2, '123 Contractors company', 12301230, 'abc@gmail.com', '12345678',700,null,null,2, NULL);
+
+-- Worker table
+CREATE TABLE `Worker` (
+  `workerid` int NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) NOT NULL,
+  `email` varchar(255) DEFAULT NULL,
+  `phone` varchar(32) DEFAULT NULL,
+  `certificate` varchar(255) DEFAULT NULL,
+  `contractorid` int NOT NULL,
+  PRIMARY KEY (`workerid`),
+  KEY `contractorid_Worker_idx` (`contractorid`),
+  CONSTRAINT `fk_worker_contractorid` FOREIGN KEY (`contractorid`) REFERENCES `Contractors` (`contractorid`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Worker sample data
+INSERT INTO `Worker` (`name`, `email`, `phone`, `certificate`, `contractorid`) VALUES
+('Andy wong', 'abcwork001@gmail.com', '78945699', 'Renovation and Repair Certificate', 1),
+('King Wong', 'abcwork002@gmail.com', '87879898', 'Renovation and Repair Certificate', 1),
+('law bee', 'abcwork003@gmail.com', '34346789', 'Certificate Course in Quality Decoration Service Management (Level 1)', 1),
+('Call bee', '123work009@gmail.com', '65494569', 'Renovation and Repair Certificate', 2);
 
 -- Designer table
 CREATE TABLE `Designer` (
