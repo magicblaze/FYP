@@ -17,6 +17,7 @@
 SET FOREIGN_KEY_CHECKS = 0;
 
 -- Drop existing tables to ensure clean slate
+DROP TABLE IF EXISTS `DesignedPicture`;
 DROP TABLE IF EXISTS `Product`;
 DROP TABLE IF EXISTS `ProductColorImage`;
 DROP TABLE IF EXISTS `Client`;
@@ -152,7 +153,7 @@ INSERT INTO `Supplier` (`supplierid`,`sname`,`stel`,`semail`,`spassword`,`rememb
 -- Design table
 CREATE TABLE `Design` (
   `designid` int NOT NULL AUTO_INCREMENT,
-  `design` VARCHAR(500) DEFAULT NULL,
+  `designName` VARCHAR(255) NOT NULL,
   `expect_price` int NOT NULL,
   `description` TEXT DEFAULT NULL,
   `tag` TEXT NOT NULL,
@@ -163,9 +164,9 @@ CREATE TABLE `Design` (
   CONSTRAINT `designerid_pk` FOREIGN KEY (`designerid`) REFERENCES `Designer` (`designerid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-INSERT INTO `Design` (`designid`,`design`,`expect_price`,`description`,`tag`,`likes`,`designerid`) VALUES
-(1, 'design.jpg',500 , 'A modern full house design','full house,modern','200',1),
-(2, 'design2.jpg',1000, 'A minimalist kitchen remodel design','kitchen remodel,minimalist','20',1);
+INSERT INTO `Design` (`designid`,`designName`,`expect_price`,`description`,`tag`,`likes`,`designerid`) VALUES
+(1, 'Modern Full House Design', 500 , 'A modern full house design','full house,modern','200',1),
+(2, 'Minimalist Kitchen Remodel Design', 1000, 'A minimalist kitchen remodel design','kitchen remodel,minimalist','20',1);
 
 -- Comment_design table
 CREATE TABLE `Comment_design` (
@@ -219,6 +220,7 @@ CREATE TABLE `Order` (
   `Requirements` varchar(255) DEFAULT NULL,
   `designid` int NOT NULL,
   `ostatus` varchar(255) DEFAULT NULL,
+  `designedPicture` VARCHAR(500) DEFAULT NULL,
   PRIMARY KEY (`orderid`),
   KEY `clientid_pk_idx` (`clientid`),
   KEY `designid_pk_idx` (`designid`),
@@ -227,9 +229,9 @@ CREATE TABLE `Order` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 INSERT INTO `Order`
-(`orderid`, `odate`, `clientid`, `Requirements`,`designid`,`ostatus`) VALUES
-(1, '2025-04-12 17:50:00', 1, 'abc',2,'Designing'),
-(2, '2025-05-10 12:00:00', 2, 'abc',1,'Completed');
+(`orderid`, `odate`, `clientid`, `Requirements`,`designid`,`ostatus`,`designedPicture`) VALUES
+(1, '2025-04-12 17:50:00', 1, 'abc',2,'Designing',NULL),
+(2, '2025-05-10 12:00:00', 2, 'abc',1,'Completed',NULL);
 
 -- Table to store color-image mapping for each product
 CREATE TABLE `ProductColorImage` (
@@ -436,7 +438,7 @@ INSERT INTO `DesignLike` (`designlikeid`, `clientid`, `designid`) VALUES
 (1, 1, 1),
 (2, 2, 2);
 
-CREATE TABLE IF NOT EXISTS `DesignImage` (
+CREATE TABLE `DesignImage` (
   `imageid` int NOT NULL AUTO_INCREMENT,
   `designid` int NOT NULL,
   `image_filename` varchar(500) NOT NULL,
@@ -445,6 +447,28 @@ CREATE TABLE IF NOT EXISTS `DesignImage` (
   PRIMARY KEY (`imageid`),
   KEY `designid_idx` (`designid`),
   CONSTRAINT `fk_designimage_designid` FOREIGN KEY (`designid`) REFERENCES `Design` (`designid`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO `DesignImage` (`imageid`, `designid`, `image_filename`, `image_order`) VALUES
+(1, 1, 'design.jpg', 1),
+(2, 1, 'design2.jpg', 2),
+(3, 2, 'design.jpg', 1);
+
+-- DesignedPicture table to store designed pictures uploaded by designers for orders
+CREATE TABLE `DesignedPicture` (
+  `pictureid` int NOT NULL AUTO_INCREMENT,
+  `orderid` int NOT NULL,
+  `filename` VARCHAR(500) NOT NULL,
+  `upload_date` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `status` ENUM('pending', 'approved', 'rejected') DEFAULT 'pending',
+  `rejection_reason` TEXT DEFAULT NULL,
+  `rejection_date` TIMESTAMP NULL DEFAULT NULL,
+  `is_current` BOOLEAN DEFAULT TRUE,
+  PRIMARY KEY (`pictureid`),
+  KEY `orderid_idx` (`orderid`),
+  KEY `idx_orderid_status` (`orderid`, `status`),
+  KEY `idx_orderid_current` (`orderid`, `is_current`),
+  CONSTRAINT `fk_designed_picture_orderid` FOREIGN KEY (`orderid`) REFERENCES `Order` (`orderid`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Re-enable Foreign Key Checks
@@ -478,8 +502,8 @@ INSERT INTO `MessageRead` (`messagereadid`, `messageid`, `ChatRoomMemberid`, `is
 (10,4,6,0,NULL),
 (11,5,5,1,'2025-06-01 08:00:00');
 
-INSERT INTO `Order` (`orderid`, `odate`, `clientid`, `Requirements`,`designid`,`ostatus`) VALUES
-(3, '2025-07-01 09:00:00', 1, 'Need quick remodel', 1, 'Pending');
+INSERT INTO `Order` (`orderid`, `odate`, `clientid`, `Requirements`,`designid`,`ostatus`,`designedPicture`) VALUES
+(3, '2025-07-01 09:00:00', 1, 'Need quick remodel', 1, 'Pending', NULL);
 
 INSERT INTO `OrderProduct` (`orderproductid`, `productid`, `quantity`, `orderid`, `deliverydate`, `status`, `managerid`, `color`) VALUES
 (3, 3, 50, 3, '2026-01-13', 'Pending', 1, 'White');

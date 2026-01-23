@@ -12,9 +12,12 @@ $max_price = isset($_GET['max_price']) && is_numeric($_GET['max_price']) ? (int)
 $designer_id = isset($_GET['designer_id']) && is_numeric($_GET['designer_id']) ? (int)$_GET['designer_id'] : '';
 $sort_by = isset($_GET['sort_by']) ? $_GET['sort_by'] : 'recent';
 
-$sql = "SELECT d.designid, d.expect_price, d.likes, d.tag, dz.dname, dz.designerid
+$sql = "SELECT d.designid, d.expect_price, d.likes, d.tag, dz.dname, dz.designerid, di.image_filename
         FROM Design d
         JOIN Designer dz ON d.designerid = dz.designerid
+        LEFT JOIN DesignImage di ON d.designid = di.designid AND di.imageid = (
+            SELECT imageid FROM DesignImage WHERE designid = d.designid ORDER BY image_order ASC LIMIT 1
+        )
         WHERE 1=1";
 $params = [];
 $types = "";
@@ -296,13 +299,15 @@ if (!$designer_result) die('Query error: ' . $mysqli->error);
 
                     <!-- Filter Buttons -->
                     <div class="col-md-3">
-                        <div class="filter-buttons">
-                            <button type="submit" class="btn-apply-filter">
-                                <i class="fas fa-check me-1"></i>Apply
-                            </button>
-                            <a href="design_dashboard.php" class="btn-clear-filter" style="text-align: center; text-decoration: none;">
-                                <i class="fas fa-times me-1"></i>Clear
-                            </a>
+                        <div class="filter-group" style="margin-top: 1.85rem;">
+                            <div class="filter-buttons">
+                                <button type="submit" class="btn-apply-filter">
+                                    <i class="fas fa-check me-1"></i>Apply
+                                </button>
+                                <a href="design_dashboard.php" class="btn-clear-filter" style="text-align: center;">
+                                    <i class="fas fa-times me-1"></i>Clear
+                                </a>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -318,8 +323,8 @@ if (!$designer_result) die('Query error: ' . $mysqli->error);
                         <?php while ($row = $result->fetch_assoc()): ?>
                         <div class="col-lg-4 col-md-6 col-sm-12">
                             <a href="client/design_detail.php?designid=<?= htmlspecialchars($row['designid']) ?>" style="text-decoration: none;">
-                                <div class="card h-100">
-                                    <img src="design_image.php?id=<?= (int)$row['designid'] ?>" class="card-img-top" alt="Design by <?= htmlspecialchars($row['dname']) ?>">
+                                    <div class="card h-100">
+                                    <img src="<?= !empty($row['image_filename']) ? htmlspecialchars('uploads/designs/' . $row['image_filename']) : 'design_image.php?id=' . (int)$row['designid'] ?>" class="card-img-top" alt="Design by <?= htmlspecialchars($row['dname']) ?>" style="object-fit: cover; width: 100%; height: 200px;" onerror="this.src='design_image.php?id=<?= (int)$row['designid'] ?>'">
                                     <div class="card-body text-center">
                                         <p class="text-muted mb-2"><?= htmlspecialchars($row['likes']) ?> Likes</p>
                                         <p class="h6 mb-0" style="color: #e74c3c; font-weight: 700;">HK$<?= number_format((int)$row['expect_price']) ?></p>

@@ -16,7 +16,7 @@ if (empty($_SESSION['user'])) {
 $designid = isset($_GET['designid']) ? (int)$_GET['designid'] : 0;
 if ($designid <= 0) { http_response_code(404); die('Design not found.'); }
 
-$dsql = "SELECT d.designid, d.expect_price, d.likes, d.tag, d.description, dz.dname, d.designerid
+$dsql = "SELECT d.designid, d.designName, d.expect_price, d.likes, d.tag, d.description, dz.dname, d.designerid
          FROM Design d
          JOIN Designer dz ON d.designerid = dz.designerid
          WHERE d.designid = ?";
@@ -85,6 +85,18 @@ if (isset($_GET['from']) && $_GET['from'] === 'my_likes') {
     $backUrl = 'my_likes.php';
 }
 
+// Fetch design images from DesignImage table
+$images_sql = "SELECT imageid, designid, image_filename, image_order FROM DesignImage WHERE designid = ? ORDER BY image_order ASC, imageid ASC";
+$images_stmt = $mysqli->prepare($images_sql);
+$images_stmt->bind_param("i", $designid);
+$images_stmt->execute();
+$images_result = $images_stmt->get_result();
+$images = [];
+while ($row = $images_result->fetch_assoc()) {
+    $images[] = $row;
+}
+$imageCount = count($images);
+
 // Use DB-driven image endpoint (absolute URL to avoid relative-path issues)
 $baseUrlEarly = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] ? 'https://' : 'http://') . ($_SERVER['HTTP_HOST'] ?? '');
 // compute application root (one level above this `client/` folder) so URLs point to /FYP/design_image.php
@@ -111,19 +123,137 @@ $mainImg = $baseUrlEarly . $appRoot . '/design_image.php?id=' . (int)$design['de
             padding: 2rem 1rem;
         }
 
-        .design-image-wrapper {
+        .design-image-section {
             flex: 0 0 auto;
             width: 500px;
-            height: 500px;
+        }
+
+        .design-carousel-wrapper {
             border-radius: 12px;
             overflow: hidden;
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            background-color: #f8f9fa;
+            margin-bottom: 1rem;
         }
 
-        .design-image-wrapper img {
+        .design-carousel {
+            position: relative;
+            width: 100%;
+            height: 500px;
+            background-color: #f8f9fa;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .carousel-item {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .carousel-item.active {
+            display: flex;
+            opacity: 1;
+        }
+
+        .carousel-item img {
+            max-width: 90%;
+            max-height: 90%;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+        }
+
+        .carousel-controls {
+            position: absolute;
+            top: 50%;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            padding: 0 1rem;
+            transform: translateY(-50%);
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        .carousel-btn {
+            pointer-events: all;
+            background: rgba(0, 0, 0, 0.5);
+            color: white;
+            border: none;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .carousel-btn:hover {
+            background: rgba(0, 0, 0, 0.8);
+        }
+
+        .carousel-indicators {
+            position: absolute;
+            bottom: 1rem;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 0.5rem;
+            z-index: 10;
+        }
+
+        .indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.5);
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .indicator.active {
+            background: white;
+        }
+
+        .thumbnail-strip {
+            display: flex;
+            gap: 0.5rem;
+            padding: 0.5rem;
+            background: white;
+            overflow-x: auto;
+        }
+
+        .thumbnail {
+            width: 80px;
+            height: 80px;
+            border-radius: 6px;
+            overflow: hidden;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: border-color 0.3s;
+            flex-shrink: 0;
+        }
+
+        .thumbnail img {
             width: 100%;
             height: 100%;
             object-fit: cover;
+        }
+
+        .thumbnail.active {
+            border-color: #3498db;
         }
 
         .design-panel {
@@ -368,9 +498,48 @@ $mainImg = $baseUrlEarly . $appRoot . '/design_image.php?id=' . (int)$design['de
 
     <main>
         <div class="design-detail-wrapper">
-            <!-- Design Image -->
-            <div class="design-image-wrapper">
-                <img src="<?= htmlspecialchars($mainImg) ?>" alt="<?= htmlspecialchars($design['dname']) ?>">
+            <!-- Design Image with Carousel -->
+            <div class="design-image-section">
+                <div class="design-carousel-wrapper">
+                    <div class="design-carousel" id="designCarousel">
+                    <?php foreach ($images as $index => $image): ?>
+                        <div class="carousel-item <?= $index === 0 ? 'active' : '' ?>">
+                            <img src="<?= htmlspecialchars('../uploads/designs/' . $image['image_filename']) ?>" alt="<?= htmlspecialchars($design['dname']) ?> Image <?= $index + 1 ?>">
+                        </div>
+                    <?php endforeach; ?>
+
+                    <!-- Show navigation arrows only if multiple images -->
+                    <?php if ($imageCount > 1): ?>
+                    <div class="carousel-controls">
+                        <button class="carousel-btn" onclick="previousImage()" title="Previous image">
+                            <i class="fas fa-chevron-left"></i>
+                        </button>
+                        <button class="carousel-btn" onclick="nextImage()" title="Next image">
+                            <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
+                    <?php endif; ?>
+
+                    <!-- Show indicators only if multiple images -->
+                    <?php if ($imageCount > 1): ?>
+                        <div class="carousel-indicators">
+                            <?php foreach ($images as $index => $image): ?>
+                                <div class="indicator <?= $index === 0 ? 'active' : '' ?>" onclick="goToImage(<?= $index ?>)" title="Image <?= $index + 1 ?>"></div>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php endif; ?>
+                    </div>
+                </div>
+
+                <?php if ($imageCount > 1): ?>
+                    <div class="thumbnail-strip">
+                        <?php foreach ($images as $index => $image): ?>
+                            <div class="thumbnail <?= $index === 0 ? 'active' : '' ?>" onclick="goToImage(<?= $index ?>)">
+                                <img src="<?= htmlspecialchars('../uploads/designs/' . $image['image_filename']) ?>" alt="Thumbnail <?= $index + 1 ?>">
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
             </div>
 
             <!-- Design Information Panel -->
@@ -381,7 +550,7 @@ $mainImg = $baseUrlEarly . $appRoot . '/design_image.php?id=' . (int)$design['de
                     </button>
                 </div>
 
-                <div class="design-title"><?= htmlspecialchars($design['dname']) ?></div>
+                <div class="design-title"><?= htmlspecialchars($design['designName']) ?></div>
                 <div class="design-price">
                     <span class="price-label">Expected Price:</span>
                     <span class="price-value">HK$<?= number_format((float)$design['expect_price']) ?></span>
@@ -485,6 +654,41 @@ $mainImg = $baseUrlEarly . $appRoot . '/design_image.php?id=' . (int)$design['de
         const encodedTag = encodeURIComponent(tag);
         window.location.href = '../design_dashboard.php?tag=' + encodedTag;
     }
+
+    let currentImageIndex = 0;
+    const totalImages = <?= $imageCount ?>;
+
+    function showImage(index) {
+        const items = document.querySelectorAll('.carousel-item');
+        const indicators = document.querySelectorAll('.indicator');
+        const thumbnails = document.querySelectorAll('.thumbnail');
+        items.forEach(item => item.classList.remove('active'));
+        indicators.forEach(ind => ind.classList.remove('active'));
+        thumbnails.forEach(thumb => thumb.classList.remove('active'));
+        items[index].classList.add('active');
+        if (indicators[index]) indicators[index].classList.add('active');
+        if (thumbnails[index]) thumbnails[index].classList.add('active');
+        currentImageIndex = index;
+    }
+
+    function nextImage() {
+        const nextIndex = (currentImageIndex + 1) % totalImages;
+        showImage(nextIndex);
+    }
+
+    function previousImage() {
+        const prevIndex = (currentImageIndex - 1 + totalImages) % totalImages;
+        showImage(prevIndex);
+    }
+
+    function goToImage(index) {
+        showImage(index);
+    }
+
+    document.addEventListener('keydown', function(event) {
+        if (event.key === 'ArrowRight') nextImage();
+        if (event.key === 'ArrowLeft') previousImage();
+    });
     </script>
 
         <script>

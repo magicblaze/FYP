@@ -25,8 +25,8 @@ $clientData = $clientStmt->get_result()->fetch_assoc();
 
 // Fetch orders for the logged-in client
 $sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, 
-               d.designid, d.price, d.tag, dz.dname,
-               c.budget, c.floor_plan
+               d.designid, d.expect_price, d.tag, dz.dname,
+               c.budget
         FROM `Order` o
         JOIN Design d ON o.designid = d.designid
         JOIN Designer dz ON d.designerid = dz.designerid
@@ -173,14 +173,7 @@ $orders = $stmt->get_result();
             padding-bottom: 0.75rem;
             border-bottom: 2px solid #3498db;
         }
-        .floor-plan-link {
-            color: #3498db;
-            text-decoration: none;
-            font-size: 0.85rem;
-        }
-        .floor-plan-link:hover {
-            text-decoration: underline;
-        }
+
         .view-details-btn {
             display: inline-block;
             margin-top: 0.75rem;
@@ -278,11 +271,7 @@ $orders = $stmt->get_result();
                                         <span class="badge"><?= htmlspecialchars($tag) ?></span>
                                     <?php endforeach; ?>
                                 </div>
-                                <?php if (!empty($order['Floor_Plan'])): ?>
-                                    <a href="../<?= htmlspecialchars($order['Floor_Plan']) ?>" class="floor-plan-link" target="_blank" onclick="event.stopPropagation();">
-                                        <i class="fas fa-file-image me-1"></i>View Floor Plan
-                                    </a>
-                                <?php endif; ?>
+
                             </div>
                             <div class="order-price-info">
                                 <div class="price-label">Budget</div>

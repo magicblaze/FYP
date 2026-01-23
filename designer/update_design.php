@@ -43,6 +43,7 @@ try {
     }
 
     $designId = isset($_POST['designid']) ? intval($_POST['designid']) : 0;
+    $design_name = isset($_POST['design_name']) ? trim($_POST['design_name']) : '';
     $expect_price = isset($_POST['expect_price']) ? intval($_POST['expect_price']) : 0;
     $tag = isset($_POST['tag']) ? trim($_POST['tag']) : '';
     $description = isset($_POST['description']) ? trim($_POST['description']) : '';
@@ -121,12 +122,12 @@ try {
     }
 
     // Update design basic information
-    $updateSql = "UPDATE Design SET expect_price = ?, tag = ?, description = ? WHERE designid = ? AND designerid = ?";
+    $updateSql = "UPDATE Design SET designName = ?, expect_price = ?, tag = ?, description = ? WHERE designid = ? AND designerid = ?";
     $updateStmt = $mysqli->prepare($updateSql);
     if (!$updateStmt) {
         throw new Exception('Prepare failed (update): ' . $mysqli->error);
     }
-    $updateStmt->bind_param("issii", $expect_price, $tag, $description, $designId, $designerId);
+    $updateStmt->bind_param("sissii", $design_name, $expect_price, $tag, $description, $designId, $designerId);
 
     if (!$updateStmt->execute()) {
         throw new Exception('Execute failed (update): ' . $updateStmt->error);

@@ -407,7 +407,8 @@ $designerName = isset($_SESSION['user']['name']) ? $_SESSION['user']['name'] : '
                     </button>
                 </div>
 
-                <div class="design-title">Design #<?= $designid ?></div>
+                <div class="design-title"><?= htmlspecialchars($design['designName'] ?? 'Untitled Design') ?></div>
+                <div style="font-size: 0.9rem; color: #7f8c8d; margin-bottom: 1rem;">Design ID: <?= $designid ?></div>
                 <div class="design-price">HK$<?= number_format((float)($design['expect_price'] ?? 0)) ?></div>
 
                 <!-- Design Description -->

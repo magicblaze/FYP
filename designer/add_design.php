@@ -13,6 +13,7 @@ $success = false;
 $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $design_name = trim($_POST['design_name'] ?? '');
     $expect_price = intval($_POST['expect_price'] ?? 0);
     $description = trim($_POST['description'] ?? '');
     $tag = trim($_POST['tag'] ?? '');
@@ -46,7 +47,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     
     // Validate form data
-    if ($expect_price <= 0) {
+    if (!$design_name) {
+        $error = 'Please enter a design name.';
+    } elseif ($expect_price <= 0) {
         $error = 'Please enter a valid price.';
     } elseif (!$tag) {
         $error = 'Please enter design tags.';
@@ -54,13 +57,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Please upload at least one design image.';
     } else {
         // Insert design into database
-        $stmt = $mysqli->prepare("INSERT INTO Design (design, expect_price, description, tag, likes, designerid) VALUES (?, ?, ?, ?, 0, ?)");
+        $stmt = $mysqli->prepare("INSERT INTO Design (designName, design, expect_price, description, tag, likes, designerid) VALUES (?, ?, ?, ?, ?, 0, ?)");
         if (!$stmt) {
             $error = 'Database error: ' . $mysqli->error;
         } else {
             // Use the first image as the primary design image
             $primaryImage = $uploadedImages[0];
-            $stmt->bind_param("sissi", $primaryImage, $expect_price, $description, $tag, $designerId);
+            $stmt->bind_param("ssissi", $design_name, $primaryImage, $expect_price, $description, $tag, $designerId);
             
             if ($stmt->execute()) {
                 $designId = $stmt->insert_id;
@@ -250,6 +253,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             </div>
                         <?php endif; ?>
                         <form method="post" enctype="multipart/form-data" id="addDesignForm">
+                            <div class="row g-3 mb-2">
+                                <div class="col-md-12">
+                                    <div class="form-section">
+                                        <label class="form-label"><i class="fas fa-heading"></i> Design Name *</label>
+                                        <input type="text" name="design_name" class="form-control" placeholder="e.g. Modern Living Room Design" required>
+                                        <small class="text-muted">Give your design a descriptive name</small>
+                                    </div>
+                                </div>
+                            </div>
+
                             <div class="row g-3 mb-2">
                                 <div class="col-md-12">
                                     <div class="form-section">

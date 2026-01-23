@@ -26,8 +26,8 @@ if ($orderId <= 0) {
 
 // Fetch order details with verification that it belongs to the client
 $orderSql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, 
-                    d.designid, d.price, d.tag, dz.dname, dz.designerid,
-                    c.budget, c.floor_plan
+                    d.designid, d.expect_price, d.tag, dz.dname, dz.designerid,
+                    c.budget
              FROM `Order` o
              JOIN Design d ON o.designid = d.designid
              JOIN Designer dz ON d.designerid = dz.designerid
@@ -66,6 +66,13 @@ $productsStmt->bind_param("i", $orderId);
 $productsStmt->execute();
 $products = $productsStmt->get_result();
 
+// Fetch designed pictures for this order
+$picturesSql = "SELECT * FROM DesignedPicture WHERE orderid = ? ORDER BY upload_date DESC";
+$picturesStmt = $mysqli->prepare($picturesSql);
+$picturesStmt->bind_param("i", $orderId);
+$picturesStmt->execute();
+$pictures = $picturesStmt->get_result();
+
 // Fetch contractors assigned to this order
 $contractorsSql = "SELECT oc.order_Contractorid, oc.contractorid, oc.managerid,
                           c.cname as contractor_name, c.ctel, c.cemail, c.price,
@@ -102,7 +109,6 @@ $products->data_seek(0);
 
 // Format display variables
 $budgetDisplay = $order['budget'] ?? 0;
-$floorPlanDisplay = $order['floor_plan'] ?? null;
 $phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—';
 ?>
 <!DOCTYPE html>
@@ -243,7 +249,7 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—
             margin-bottom: 0.5rem;
             color: #bdc3c7;
         }
-        .price-highlight {
+       .price-highlight {
             color: #27ae60;
             font-weight: 700;
             font-size: 1.1rem;
@@ -263,6 +269,87 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—
             grid-template-columns: 1fr 1fr;
             gap: 1.5rem;
             margin-bottom: 1.5rem;
+        }
+        .designed-picture-gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .picture-card {
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            overflow: hidden;
+            background: white;
+            transition: all 0.3s;
+        }
+        .picture-card:hover {
+            border-color: #3498db;
+            box-shadow: 0 4px 12px rgba(52, 152, 219, 0.2);
+        }
+        .picture-image {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+            cursor: pointer;
+        }
+        .picture-info {
+            padding: 1rem;
+        }
+        .picture-status {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: white;
+            margin-bottom: 0.5rem;
+        }
+        .status-pending {
+            background-color: #f39c12;
+        }
+        .status-approved {
+            background-color: #27ae60;
+        }
+        .status-rejected {
+            background-color: #e74c3c;
+        }
+        .picture-actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 0.75rem;
+        }
+        .picture-actions button {
+            flex: 1;
+            padding: 0.5rem;
+            font-size: 0.85rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .btn-approve {
+            background-color: #27ae60;
+            color: white;
+        }
+        .btn-approve:hover {
+            background-color: #229954;
+        }
+        .btn-reject {
+            background-color: #e74c3c;
+            color: white;
+        }
+        .btn-reject:hover {
+            background-color: #c0392b;
+        }
+        .rejection-reason {
+            background-color: #ffe8e8;
+            border-left: 4px solid #e74c3c;
+            padding: 0.75rem;
+            border-radius: 4px;
+            margin-top: 0.5rem;
+            font-size: 0.9rem;
+            color: #c0392b;
         }
         @media (max-width: 768px) {
             .grid-2 {
@@ -365,7 +452,7 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—
                     </div>
                     <div class="info-row">
                         <span class="info-label">Design Price:</span>
-                        <span class="info-value price-highlight">$<?= number_format((float)$order['price'], 2) ?></span>
+                        <span class="info-value price-highlight">$<?= number_format((float)$order['expect_price'], 2) ?></span>
                     </div>
                     <div class="info-row">
                         <span class="info-label">Design Tags:</span>
@@ -378,18 +465,41 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—
                             ?>
                         </span>
                     </div>
-                    <?php if (!empty($order['Floor_Plan'])): ?>
-                    <div class="info-row">
-                        <span class="info-label">Floor Plan:</span>
-                        <span class="info-value">
-                            <a href="<?= htmlspecialchars($order['Floor_Plan']) ?>" target="_blank" class="text-decoration-none">
-                                <i class="fas fa-file-image me-1"></i>View Floor Plan
-                            </a>
-                        </span>
-                    </div>
-                    <?php endif; ?>
+
                 </div>
             </div>
+
+            <!-- Designed Picture Section -->
+            <div class="section-title">
+                <i class="fas fa-image me-2"></i>Designed Pictures
+            </div>
+            <?php if ($pictures->num_rows > 0): ?>
+                <div class="designed-picture-gallery">
+                    <?php while ($picture = $pictures->fetch_assoc()): ?>
+                        <div class="picture-card">
+                            <img src="../uploads/designed_Picture/<?= htmlspecialchars($picture['filename']) ?>" alt="Designed Picture" class="picture-image" onclick="viewPicture('<?= htmlspecialchars($picture['filename']) ?>')">
+                            <div class="picture-info">
+                                <div class="picture-status status-<?= $picture['status'] ?>"><?= ucfirst($picture['status']) ?></div>
+                                <div style="font-size: 0.85rem; color: #7f8c8d; margin-bottom: 0.5rem;"><?= date('M d, Y H:i', strtotime($picture['upload_date'])) ?></div>
+                                <?php if ($picture['status'] === 'pending'): ?>
+                                    <div class="picture-actions">
+                                        <button class="btn-approve" onclick="approvePicture(<?= $picture['pictureid'] ?>)"><i class="fas fa-check me-1"></i>Approve</button>
+                                        <button class="btn-reject" onclick="openRejectModal(<?= $picture['pictureid'] ?>)"><i class="fas fa-times me-1"></i>Reject</button>
+                                    </div>
+                                <?php endif; ?>
+                                <?php if ($picture['status'] === 'rejected' && !empty($picture['rejection_reason'])): ?>
+                                    <div class="rejection-reason"><strong>Reason:</strong> <?= htmlspecialchars($picture['rejection_reason']) ?></div>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    <?php endwhile; ?>
+                </div>
+            <?php else: ?>
+                <div class="empty-message">
+                    <i class="fas fa-image"></i>
+                    <p>No designed pictures uploaded yet.</p>
+                </div>
+            <?php endif; ?>
 
             <!-- Requirements Section -->
             <?php if (!empty($order['Requirements'])): ?>
@@ -557,7 +667,7 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—
             <div class="info-card">
                 <div class="info-row">
                     <span class="info-label">Design Cost:</span>
-                    <span class="info-value price-highlight">$<?= number_format((float)$order['price'], 2) ?></span>
+                    <span class="info-value price-highlight">$<?= number_format((float)$order['expect_price'], 2) ?></span>
                 </div>
                 <div class="info-row">
                     <span class="info-label">Products/Materials:</span>
@@ -570,7 +680,7 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—
                 <div class="info-row">
                     <span class="info-label">Remaining Budget:</span>
                     <span class="info-value price-highlight">
-                        $<?= number_format((float)$order['budget'] - $order['price'] - $productTotal, 2) ?>
+                        $<?= number_format((float)$order['budget'] - $order['expect_price'] - $productTotal, 2) ?>
                     </span>
                 </div>
             </div>
@@ -585,6 +695,110 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let rejectModalPictureId = null;
+
+        function viewPicture(filename) {
+            const modal = document.createElement('div');
+            modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;z-index:2000;';
+            modal.innerHTML = '<div style="max-width:90%;max-height:90%;"><img src="../uploads/designed_Picture/' + filename + '" style="max-width:100%;max-height:100%;border-radius:8px;" onclick="this.parentElement.parentElement.remove();"><p style="color:white;text-align:center;margin-top:1rem;cursor:pointer;" onclick="this.parentElement.parentElement.remove();">Click to close</p></div>';
+            document.body.appendChild(modal);
+        }
+
+        function approvePicture(pictureId) {
+            if (confirm('Are you sure you want to approve this picture?')) {
+                const formData = new FormData();
+                formData.append('pictureid', pictureId);
+
+                fetch('../client/approve_picture.php', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert(data.message);
+                        location.reload();
+                    } else {
+                        alert('Error: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('An error occurred while approving the picture.');
+                });
+            }
+        }
+
+        function openRejectModal(pictureId) {
+            rejectModalPictureId = pictureId;
+            const modal = document.getElementById('rejectModal');
+            if (!modal) {
+                createRejectModal();
+            }
+            document.getElementById('rejectModal').style.display = 'block';
+        }
+
+        function createRejectModal() {
+            const modal = document.createElement('div');
+            modal.id = 'rejectModal';
+            modal.style.cssText = 'display:none;position:fixed;z-index:1000;left:0;top:0;width:100%;height:100%;background-color:rgba(0,0,0,0.5);';
+            modal.innerHTML = `
+                <div style="background-color:white;margin:10% auto;padding:2rem;border-radius:8px;width:90%;max-width:400px;box-shadow:0 4px 12px rgba(0,0,0,0.2);">
+                    <div style="font-size:1.25rem;font-weight:600;margin-bottom:1rem;">Reject Picture</div>
+                    <textarea id="rejectionReason" placeholder="Please provide a reason for rejection..." style="width:100%;height:100px;padding:0.75rem;border:1px solid #dee2e6;border-radius:4px;font-family:Arial;" required></textarea>
+                    <div style="display:flex;gap:0.5rem;margin-top:1rem;">
+                        <button onclick="closeRejectModal()" style="flex:1;padding:0.75rem;background-color:#bdc3c7;color:white;border:none;border-radius:4px;cursor:pointer;font-weight:500;">Cancel</button>
+                        <button onclick="confirmReject()" style="flex:1;padding:0.75rem;background-color:#e74c3c;color:white;border:none;border-radius:4px;cursor:pointer;font-weight:500;">Reject</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+
+        function closeRejectModal() {
+            document.getElementById('rejectModal').style.display = 'none';
+            document.getElementById('rejectionReason').value = '';
+            rejectModalPictureId = null;
+        }
+
+        function confirmReject() {
+            const reason = document.getElementById('rejectionReason').value.trim();
+            if (!reason) {
+                alert('Please provide a reason for rejection.');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('pictureid', rejectModalPictureId);
+            formData.append('reason', reason);
+
+            fetch('../client/reject_picture.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(data.message);
+                    location.reload();
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while rejecting the picture.');
+            });
+        }
+
+        window.onclick = function(event) {
+            const modal = document.getElementById('rejectModal');
+            if (modal && event.target === modal) {
+                closeRejectModal();
+            }
+        }
+    </script>
 </body>
 </html>
 

@@ -11,7 +11,6 @@ $search = trim($_GET['search'] ?? '');
 $min_price = isset($_GET['min_price']) && is_numeric($_GET['min_price']) ? (int)$_GET['min_price'] : 0;
 $max_price = isset($_GET['max_price']) && is_numeric($_GET['max_price']) ? (int)$_GET['max_price'] : 999999;
 $supplier_id = isset($_GET['supplier_id']) && is_numeric($_GET['supplier_id']) ? (int)$_GET['supplier_id'] : '';
-$material_type = trim($_GET['material_type'] ?? '');
 $sort_by = isset($_GET['sort_by']) ? $_GET['sort_by'] : 'recent';
 
 $sql = "SELECT p.*, s.sname FROM Product p 
@@ -43,12 +42,7 @@ if (!empty($supplier_id)) {
     $types .= "i";
 }
 
-// 材料類型過濾
-if (!empty($material_type)) {
-    $sql .= " AND p.material LIKE ?";
-    $params[] = "%$material_type%";
-    $types .= "s";
-}
+
 
 // 排序
 switch ($sort_by) {
@@ -289,7 +283,7 @@ if (!$material_result) die('Query error: ' . $mysqli->error);
 
                 <div class="row g-3">
                     <!-- Price Range Filter -->
-                    <div class="col-md-2">
+                    <div class="col-md-3">
                         <div class="filter-group">
                             <label>Price Range (HK$)</label>
                             <div class="price-inputs">
@@ -301,7 +295,7 @@ if (!$material_result) die('Query error: ' . $mysqli->error);
                     </div>
 
                     <!-- Supplier Filter -->
-                    <div class="col-md-2">
+                    <div class="col-md-3">
                         <div class="filter-group">
                             <label for="supplier_id">Supplier</label>
                             <select name="supplier_id" id="supplier_id" class="form-select">
@@ -315,23 +309,8 @@ if (!$material_result) die('Query error: ' . $mysqli->error);
                         </div>
                     </div>
 
-                    <!-- Material Type Filter -->
-                    <div class="col-md-2">
-                        <div class="filter-group">
-                            <label for="material_type">Material Type</label>
-                            <select name="material_type" id="material_type" class="form-select">
-                                <option value="">All Materials</option>
-                                <?php while ($material = $material_result->fetch_assoc()): ?>
-                                    <option value="<?= htmlspecialchars($material['material']) ?>" <?= $material_type == $material['material'] ? 'selected' : '' ?>>
-                                        <?= htmlspecialchars($material['material']) ?>
-                                    </option>
-                                <?php endwhile; ?>
-                            </select>
-                        </div>
-                    </div>
-
                     <!-- Sort By -->
-                    <div class="col-md-2">
+                    <div class="col-md-3">
                         <div class="filter-group">
                             <label for="sort_by">Sort By</label>
                             <select name="sort_by" id="sort_by" class="form-select">
@@ -344,13 +323,13 @@ if (!$material_result) die('Query error: ' . $mysqli->error);
                     </div>
 
                     <!-- Filter Buttons -->
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <div class="filter-group" style="margin-top: 1.85rem;">
                             <div class="filter-buttons">
                                 <button type="submit" class="btn-apply-filter">
                                     <i class="fas fa-check me-1"></i>Apply
                                 </button>
-                                <a href="material_dashboard.php" class="btn-clear-filter" style="text-align: center; text-decoration: none;">
+                                <a href="material_dashboard.php" class="btn-clear-filter" style="text-align: center;">
                                     <i class="fas fa-times me-1"></i>Clear
                                 </a>
                             </div>

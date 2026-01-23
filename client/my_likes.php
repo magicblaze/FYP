@@ -34,20 +34,39 @@ $products_stmt->execute();
 $liked_products = $products_stmt->get_result();
 
 // Get liked designs
-$designs_sql = "SELECT d.*, dz.dname 
+$designs_sql = "SELECT d.*, dz.dname, di.image_filename
                 FROM Design d
                 JOIN Designer dz ON d.designerid = dz.designerid
+                LEFT JOIN DesignImage di ON d.designid = di.designid
                 WHERE d.designid IN (
                     SELECT designid FROM DesignLike WHERE clientid = ?
                 )
+                GROUP BY d.designid
                 ORDER BY d.designid DESC";
 $designs_stmt = $mysqli->prepare($designs_sql);
 $designs_stmt->bind_param("i", $clientid);
 $designs_stmt->execute();
 $liked_designs = $designs_stmt->get_result();
 
+// Process designs and get first image for each
+$designs_list = [];
+while ($row = $liked_designs->fetch_assoc()) {
+    if (empty($row['image_filename'])) {
+        $img_sql = "SELECT image_filename FROM DesignImage WHERE designid = ? ORDER BY image_order ASC, imageid ASC LIMIT 1";
+        $img_stmt = $mysqli->prepare($img_sql);
+        $img_stmt->bind_param("i", $row['designid']);
+        $img_stmt->execute();
+        $img_result = $img_stmt->get_result();
+        if ($img_row = $img_result->fetch_assoc()) {
+            $row['image_filename'] = $img_row['image_filename'];
+        }
+        $img_stmt->close();
+    }
+    $designs_list[] = $row;
+}
+
 $products_count = $liked_products->num_rows;
-$designs_count = $liked_designs->num_rows;
+$designs_count = count($designs_list);
 $total_count = $products_count + $designs_count;
 ?>
 <!DOCTYPE html>
@@ -405,10 +424,10 @@ $total_count = $products_count + $designs_count;
                 <i class="fas fa-pencil-ruler"></i> Liked Designs (<?= $designs_count ?>)
             </div>
             <div class="likes-grid">
-                <?php while ($design = $liked_designs->fetch_assoc()): ?>
+                <?php foreach ($designs_list as $design): ?>
                 <div class="like-card">
                     <div class="like-card-image">
-                        <img src="../uploads/designs/<?= htmlspecialchars($design['design']) ?>" alt="<?= htmlspecialchars($design['dname']) ?>">
+                        <img src="../uploads/designs/<?= htmlspecialchars($design['image_filename']) ?>" alt="<?= htmlspecialchars($design['dname']) ?>">
                     </div>
                     <div class="like-card-body">
                         <div class="like-card-title" title="<?= htmlspecialchars($design['dname']) ?>">
@@ -417,7 +436,7 @@ $total_count = $products_count + $designs_count;
                         <div class="like-card-meta">
                             <i class="fas fa-user"></i> Designer
                         </div>
-                        <div class="like-card-price">HK$<?= number_format((float)$design['price']) ?></div>
+                        <div class="like-card-price">HK$<?= number_format((float)$design['expect_price']) ?></div>
                         <div class="like-card-designer">
                             <i class="fas fa-heart"></i> <?= (int)$design['likes'] ?> likes
                         </div>
@@ -428,7 +447,7 @@ $total_count = $products_count + $designs_count;
                         </div>
                     </div>
                 </div>
-                <?php endwhile; ?>
+                <?php endforeach; ?>
             </div>
             <?php endif; ?>
 

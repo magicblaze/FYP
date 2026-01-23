@@ -252,7 +252,7 @@ $result = $stmt->get_result();
                                         ?>
                                     </td>
                                     <td>
-                                        <div class="fw-bold">Design #<?= $row['designid'] ?></div>
+                                        <div class="fw-bold"><?= htmlspecialchars($row['designName']) ?></div>
                                         <small class="text-muted">ID: <?= $row['designid'] ?></small>
                                     </td>
                                     <td>
@@ -266,7 +266,7 @@ $result = $stmt->get_result();
                                     </td>
                                     <td class="text-end pe-4">
                                         <a href="design-detail.php?id=<?= $row['designid'] ?>" class="btn btn-primary action-btn btn-sm" title="View"><i class="fas fa-eye"></i></a>
-                                        <button class="btn btn-warning action-btn btn-sm text-white" title="Edit" data-bs-toggle="modal" data-bs-target="#editModal" data-designid="<?= $row['designid'] ?>" data-price="<?= $row['expect_price'] ?>" data-tag="<?= htmlspecialchars($row['tag'], ENT_QUOTES, 'UTF-8') ?>" data-description="<?= htmlspecialchars($row['description'], ENT_QUOTES, 'UTF-8') ?>" onclick="loadDesignData(this)"><i class="fas fa-pen"></i></button>
+                                        <button class="btn btn-warning action-btn btn-sm text-white" title="Edit" data-bs-toggle="modal" data-bs-target="#editModal" data-designid="<?= $row['designid'] ?>" data-designname="<?= htmlspecialchars($row['designName'], ENT_QUOTES, 'UTF-8') ?>" data-price="<?= $row['expect_price'] ?>" data-tag="<?= htmlspecialchars($row['tag'], ENT_QUOTES, 'UTF-8') ?>" data-description="<?= htmlspecialchars($row['description'], ENT_QUOTES, 'UTF-8') ?>" onclick="loadDesignData(this)"><i class="fas fa-pen"></i></button>
                                         <button class="btn btn-danger action-btn btn-sm" title="Delete" onclick="deleteDesign(<?= $row['designid'] ?>)"><i class="fas fa-trash"></i></button>
                                     </td>
                                 </tr>
@@ -297,6 +297,16 @@ $result = $stmt->get_result();
                     <form id="editDesignForm" enctype="multipart/form-data">
                         <input type="hidden" id="designId" name="designid">
                         
+                        <div class="row g-3 mb-2">
+                            <div class="col-md-12">
+                                <div class="form-section">
+                                    <label class="form-label"><i class="fas fa-heading"></i> Design Name *</label>
+                                    <input type="text" id="designName" name="design_name" class="form-control" placeholder="e.g. Modern Living Room Design" required>
+                                    <small class="text-muted">Give your design a descriptive name</small>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="row g-3 mb-2">
                             <div class="col-md-12">
                                 <div class="form-section">
@@ -441,11 +451,13 @@ $result = $stmt->get_result();
 
         function loadDesignData(button) {
             const designId = button.dataset.designid;
+            const designName = button.dataset.designname;
             const price = button.dataset.price;
             const tag = button.dataset.tag;
             const description = button.dataset.description;
             
             document.getElementById('designId').value = designId;
+            document.getElementById('designName').value = designName || '';
             document.getElementById('designPrice').value = price;
             document.getElementById('designTag').value = tag || '';
             document.getElementById('designDescription').value = description || '';
