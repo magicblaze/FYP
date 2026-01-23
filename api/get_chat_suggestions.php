@@ -58,80 +58,89 @@ if (!$mysqli) {
 $recommended = [];
 $others = [];
 $recommended_designs = [];
- $liked_designs = [];
- $liked_products = [];
- $recommended_products = [];
+$liked_designs = [];
+$liked_products = [];
+$recommended_products = [];
 
+// Strategy: build recommendations from the existing schema
+// - Designers from designs the user liked (DesignLike)
+// - Suppliers from products the user liked (ProductLike)
+// - Recommended designs/products from Design/Product tables
 
-// Strategy:
-// 1) Find designers or suppliers associated with user's liked designs/products
-//    -> assume likes are stored in 'likes' table with columns: userid, item_type, item_id, target_user_id (best-effort)
-// 2) If not available, try to find designers from liked designs via joins
+// 1) Designers from liked designs
+$designerIds = [];
+$dl = @$mysqli->prepare("SELECT DISTINCT d.designerid FROM DesignLike dl JOIN Design d ON dl.designid = d.designid WHERE dl.clientid = ? LIMIT 20");
+if ($dl) {
+  $dl->bind_param('i', $uid);
+  $dl->execute();
+  $dres = $dl->get_result();
+  while ($row = $dres->fetch_assoc()) { $designerIds[] = (int)$row['designerid']; }
+  $dl->close();
+}
 
-// 1) Try to get distinct target users from likes table
-$likesQry = "SELECT DISTINCT target_user_id FROM likes WHERE user_id = ? AND target_user_id IS NOT NULL LIMIT 20";
-if ($stmt = @$mysqli->prepare($likesQry)) {
-  $stmt->bind_param('i', $uid);
-  $stmt->execute();
-  $res = $stmt->get_result();
-  $ids = [];
-  while ($r = $res->fetch_row()) { if ($r[0]) $ids[] = (int)$r[0]; }
-  $stmt->close();
-  if (count($ids)) {
-    $in = implode(',', array_fill(0, count($ids), '?'));
-    $types = str_repeat('i', count($ids));
-    $sql = "SELECT id, name, role, avatar FROM users WHERE id IN ($in) LIMIT 20";
-    $stmt2 = $mysqli->prepare($sql);
-    if ($stmt2) {
-      $ref = [];
-      $ref[] = & $types;
-      foreach ($ids as $k => $v) $ref[] = & $ids[$k];
-      call_user_func_array([$stmt2, 'bind_param'], $ref);
-      $stmt2->execute();
-      $r2 = $stmt2->get_result();
-      while ($u = $r2->fetch_assoc()) {
-        $recommended[] = ['id'=> (int)$u['id'], 'name'=>$u['name'] ?? '', 'role'=>$u['role'] ?? '', 'avatar'=>$u['avatar'] ?? ''];
-      }
-      $stmt2->close();
+// 2) Suppliers from liked products
+$supplierIds = [];
+$pl = @$mysqli->prepare("SELECT DISTINCT p.supplierid FROM ProductLike pl JOIN Product p ON pl.productid = p.productid WHERE pl.clientid = ? LIMIT 20");
+if ($pl) {
+  $pl->bind_param('i', $uid);
+  $pl->execute();
+  $pres = $pl->get_result();
+  while ($row = $pres->fetch_assoc()) { $supplierIds[] = (int)$row['supplierid']; }
+  $pl->close();
+}
+
+// Build recommended list from gathered designer and supplier ids
+if (count($designerIds)) {
+  $in = implode(',', array_map('intval', $designerIds));
+  $q = "SELECT designerid, dname FROM Designer WHERE designerid IN ($in) LIMIT 20";
+  if ($r = $mysqli->query($q)) {
+    while ($u = $r->fetch_assoc()) {
+      $recommended[] = ['id'=> (int)$u['designerid'], 'name'=>$u['dname'] ?? '', 'role'=>'designer', 'avatar'=> ''];
     }
+    $r->close();
+  }
+}
+if (count($supplierIds)) {
+  $in = implode(',', array_map('intval', $supplierIds));
+  $q = "SELECT supplierid, sname FROM Supplier WHERE supplierid IN ($in) LIMIT 20";
+  if ($r = $mysqli->query($q)) {
+    while ($u = $r->fetch_assoc()) {
+      $recommended[] = ['id'=> (int)$u['supplierid'], 'name'=>$u['sname'] ?? '', 'role'=>'supplier', 'avatar'=> ''];
+    }
+    $r->close();
   }
 }
 
-// Fallback: if we didn't get recommended users, try designers from DesignLike
-if (!count($recommended)) {
-  $designerIds = [];
-  $dl = @$mysqli->prepare("SELECT DISTINCT d.designerid FROM DesignLike dl JOIN Design d ON dl.designid = d.designid WHERE dl.clientid = ? LIMIT 20");
-  if ($dl) {
-    $dl->bind_param('i', $uid);
-    $dl->execute();
-    $dres = $dl->get_result();
-    while ($row = $dres->fetch_assoc()) { $designerIds[] = (int)$row['designerid']; }
-    $dl->close();
-  }
-  if (count($designerIds)) {
-    $in = implode(',', array_map('intval', $designerIds));
-    $q = "SELECT designerid, dname FROM Designer WHERE designerid IN ($in) LIMIT 20";
-    $r = $mysqli->query($q);
-    if ($r) {
-      while ($u = $r->fetch_assoc()) {
-        $recommended[] = ['id'=> (int)$u['designerid'], 'name'=>$u['dname'] ?? '', 'role'=>'designer', 'avatar'=> ''];
-      }
-    }
-  }
-}
-
-// 2) Fill 'others' with some users (excluding current user and recommended)
+// 3) Fill 'others' with available designers and suppliers (exclude any already recommended)
 $exclude = array_map('intval', array_column($recommended, 'id'));
-$exclude[] = (int)$uid;
-$where = '';
+// Note: $uid is a client id, not comparable with designer/supplier ids, but keep for safety
+$exclude = array_filter($exclude);
+$othersLimit = 40;
+// Query designers
+$desWhere = '';
 if (count($exclude)) {
-  $where = 'WHERE id NOT IN (' . implode(',', $exclude) . ')';
+  $desWhere = 'WHERE designerid NOT IN (' . implode(',', $exclude) . ')';
 }
-$sql2 = "SELECT id, name, role, avatar FROM users $where LIMIT 40";
-$res2 = $mysqli->query($sql2);
-if ($res2) {
-  while ($u = $res2->fetch_assoc()) {
-    $others[] = ['id'=> (int)$u['id'], 'name'=>$u['name'] ?? '', 'role'=>$u['role'] ?? '', 'avatar'=>$u['avatar'] ?? ''];
+$qdes = "SELECT designerid AS id, dname AS name, 'designer' AS role FROM Designer $desWhere LIMIT $othersLimit";
+if ($r = $mysqli->query($qdes)) {
+  while ($row = $r->fetch_assoc()) {
+    $others[] = ['id'=> (int)$row['id'], 'name'=>$row['name'] ?? '', 'role'=>$row['role'], 'avatar'=>''];
+  }
+  $r->close();
+}
+// If we still need more, query suppliers
+if (count($others) < $othersLimit) {
+  $need = $othersLimit - count($others);
+  $supWhere = '';
+  if (count($exclude)) {
+    $supWhere = 'WHERE supplierid NOT IN (' . implode(',', $exclude) . ')';
+  }
+  $qsup = "SELECT supplierid AS id, sname AS name, 'supplier' AS role FROM Supplier $supWhere LIMIT $need";
+  if ($r2 = $mysqli->query($qsup)) {
+    while ($row = $r2->fetch_assoc()) {
+      $others[] = ['id'=> (int)$row['id'], 'name'=>$row['name'] ?? '', 'role'=>$row['role'], 'avatar'=>''];
+    }
+    $r2->close();
   }
 }
 
@@ -154,7 +163,7 @@ try {
   if (count($likedIds)) {
     $in = implode(',', array_map('intval', $likedIds));
     $in = implode(',', array_map('intval', $likedIds));
-    $qlike_sql = "SELECT designid, design AS title, price, likes, designerid FROM Design WHERE designid IN ($in) LIMIT 20";
+    $qlike_sql = "SELECT designid, design AS title, expect_price AS price, likes, designerid FROM Design WHERE designid IN ($in) LIMIT 20";
     $qlike = $mysqli->query($qlike_sql);
     if ($qlike) {
       while ($r = $qlike->fetch_assoc()) {
@@ -252,7 +261,7 @@ try {
       $conds[] = "tag LIKE '%{$tk}%'";
     }
     $where = '(' . implode(' OR ', $conds) . ') ' . $exclClause;
-    $q = "SELECT designid, price, likes FROM Design WHERE $where ORDER BY likes DESC LIMIT 5";
+    $q = "SELECT designid, expect_price AS price, likes FROM Design WHERE $where ORDER BY likes DESC LIMIT 5";
     $resq = $mysqli->query($q);
     if ($resq) {
       while ($d = $resq->fetch_assoc()) $designs[] = $d;
@@ -262,7 +271,7 @@ try {
 
   if (!count($designs)) {
     // fallback: popular designs not already liked
-    $q2 = "SELECT designid, price, likes FROM Design WHERE 1 $exclClause ORDER BY likes DESC LIMIT 5";
+    $q2 = "SELECT designid, expect_price AS price, likes FROM Design WHERE 1 $exclClause ORDER BY likes DESC LIMIT 5";
     $r2 = $mysqli->query($q2);
     if ($r2) {
       while ($d = $r2->fetch_assoc()) $designs[] = $d;
