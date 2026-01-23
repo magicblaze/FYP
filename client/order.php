@@ -14,7 +14,7 @@ if (empty($_SESSION['user'])) {
 $designid = isset($_GET['designid']) ? (int)$_GET['designid'] : 0;
 if ($designid <= 0) { http_response_code(404); die('Invalid design.'); }
 
-$ds = $mysqli->prepare("SELECT d.designid, d.price, dz.dname, d.tag FROM Design d JOIN Designer dz ON d.designerid = dz.designerid WHERE d.designid=?");
+$ds = $mysqli->prepare("SELECT d.designid, d.expect_price, d.designName, dz.dname, d.tag FROM Design d JOIN Designer dz ON d.designerid = dz.designerid WHERE d.designid=?");
 $ds->bind_param("i", $designid);
 $ds->execute();
 $design = $ds->get_result()->fetch_assoc();
@@ -33,7 +33,7 @@ $success = '';
 $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Use budget from profile, not from form input
-    $budget = (int)($clientData['budget'] ?? $design['price']);
+    $budget = (int)($clientData['budget'] ?? $design['expect_price']);
     $requirements = trim($_POST['requirements'] ?? '');
     $paymentMethod = trim($_POST['payment_method'] ?? '');
     $floorPlan = $clientData['floor_plan'] ?? null;
@@ -371,21 +371,21 @@ $budgetDisplay = $clientData['budget'] ?? 0;
                             <h3 class="section-title">Order Summary</h3>
                             <div class="summary-item">
                                 <span>Design Service:</span>
-                                <span>$<?= number_format((float)$design['price'], 2) ?></span>
+                                <span>$<?= number_format((float)$design['expect_price'], 2) ?></span>
                             </div>
                             <div class="summary-item summary-total">
                                 <span>Total:</span>
-                                <span>$<?= number_format((float)$design['price'], 2) ?></span>
+                                <span>$<?= number_format((float)$design['expect_price'], 2) ?></span>
                             </div>
 
                             <div class="mt-3 mb-3">
                                 <label for="budget" class="form-label fw-bold">Budget</label>
                                 <div class="form-control" style="background-color: #f8f9fa; border-color: #dee2e6; color: #495057; padding: 0.375rem 0.75rem; height: auto;">
-                                    <strong>HK$<?= number_format($budgetDisplay > 0 ? $budgetDisplay : (int)$design['price']) ?></strong>
+                                    <strong>HK$<?= number_format($budgetDisplay > 0 ? $budgetDisplay : (int)$design['expect_price']) ?></strong>
                                 </div>
                                 <small class="text-muted d-block mt-2"><i class="fas fa-info-circle me-1"></i>Budget is set in your profile and cannot be changed during order placement.</small>
                                 <!-- Hidden input to preserve budget value for form submission -->
-                                <input type="hidden" name="budget" value="<?= $budgetDisplay > 0 ? $budgetDisplay : (int)$design['price'] ?>">
+                                <input type="hidden" name="budget" value="<?= $budgetDisplay > 0 ? $budgetDisplay : (int)$design['expect_price'] ?>">
                             </div>
 
                             <div class="mt-4">
