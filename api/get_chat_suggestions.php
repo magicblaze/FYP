@@ -163,18 +163,23 @@ try {
   if (count($likedIds)) {
     $in = implode(',', array_map('intval', $likedIds));
     $in = implode(',', array_map('intval', $likedIds));
-    $qlike_sql = "SELECT designid, design AS title, expect_price AS price, likes, designerid FROM Design WHERE designid IN ($in) LIMIT 20";
+    $qlike_sql = "SELECT d.designid, d.designName AS title, d.expect_price AS price, d.likes, d.designerid,
+                     (SELECT di.image_filename FROM DesignImage di WHERE di.designid = d.designid ORDER BY di.image_order ASC LIMIT 1) AS image_filename
+                   FROM Design d WHERE d.designid IN ($in) LIMIT 20";
     $qlike = $mysqli->query($qlike_sql);
     if ($qlike) {
       while ($r = $qlike->fetch_assoc()) {
         $id = (int)$r['designid'];
+        // Only include designs that have an explicit DesignImage (no fallback)
+        $img = trim((string)($r['image_filename'] ?? ''));
+        if ($img === '') continue;
         $liked_designs[] = [
           'designid' => $id,
           'title' => $r['title'] ?? '',
           'price' => $r['price'] ?? null,
           'likes' => (int)($r['likes'] ?? 0),
           'designerid' => (int)($r['designerid'] ?? 0),
-          'image' => $baseUrl . '/design_image.php?id=' . $id,
+          'image' => $baseUrl . '/uploads/designs/' . ltrim($img, '/'),
           'url' => $baseUrl . '/client/design_detail.php?designid=' . $id
         ];
       }
@@ -261,7 +266,9 @@ try {
       $conds[] = "tag LIKE '%{$tk}%'";
     }
     $where = '(' . implode(' OR ', $conds) . ') ' . $exclClause;
-    $q = "SELECT designid, expect_price AS price, likes FROM Design WHERE $where ORDER BY likes DESC LIMIT 5";
+    $q = "SELECT d.designid, d.expect_price AS price, d.likes,
+             (SELECT di.image_filename FROM DesignImage di WHERE di.designid = d.designid ORDER BY di.image_order ASC LIMIT 1) AS image_filename
+           FROM Design d WHERE $where ORDER BY likes DESC LIMIT 5";
     $resq = $mysqli->query($q);
     if ($resq) {
       while ($d = $resq->fetch_assoc()) $designs[] = $d;
@@ -271,7 +278,9 @@ try {
 
   if (!count($designs)) {
     // fallback: popular designs not already liked
-    $q2 = "SELECT designid, expect_price AS price, likes FROM Design WHERE 1 $exclClause ORDER BY likes DESC LIMIT 5";
+    $q2 = "SELECT d.designid, d.expect_price AS price, d.likes,
+              (SELECT di.image_filename FROM DesignImage di WHERE di.designid = d.designid ORDER BY di.image_order ASC LIMIT 1) AS image_filename
+            FROM Design d WHERE 1 $exclClause ORDER BY likes DESC LIMIT 5";
     $r2 = $mysqli->query($q2);
     if ($r2) {
       while ($d = $r2->fetch_assoc()) $designs[] = $d;
@@ -283,12 +292,15 @@ try {
   $baseUrl = ((isset($_SERVER['HTTPS']) && $_SERVER['HTTPS']) ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? '') . rtrim(dirname(dirname($_SERVER['SCRIPT_NAME'])), '/\\');
   foreach ($designs as $d) {
     $id = (int)$d['designid'];
+    // Only include designs that have an explicit DesignImage (no fallback)
+    $img = trim((string)($d['image_filename'] ?? ''));
+    if ($img === '') continue;
     // try to fetch designerid if present in row
     $designerid = isset($d['designerid']) ? (int)$d['designerid'] : 0;
     $recommended_designs[] = [
       'designid' => $id,
       'designerid' => $designerid,
-      'image' => $baseUrl . '/design_image.php?id=' . $id,
+      'image' => $baseUrl . '/uploads/designs/' . ltrim($img, '/'),
       'price' => $d['price'] ?? null,
       'likes' => (int)($d['likes'] ?? 0),
       'url' => $baseUrl . '/client/design_detail.php?designid=' . $id
