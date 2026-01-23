@@ -12,7 +12,7 @@ $max_price = isset($_GET['max_price']) && is_numeric($_GET['max_price']) ? (int)
 $designer_id = isset($_GET['designer_id']) && is_numeric($_GET['designer_id']) ? (int)$_GET['designer_id'] : '';
 $sort_by = isset($_GET['sort_by']) ? $_GET['sort_by'] : 'recent';
 
-$sql = "SELECT d.designid, d.expect_price, d.likes, d.tag, dz.dname, dz.designerid, di.image_filename
+$sql = "SELECT d.designid, d.designName, d.expect_price, d.likes, d.tag, dz.dname, dz.designerid, di.image_filename
         FROM Design d
         JOIN Designer dz ON d.designerid = dz.designerid
         LEFT JOIN DesignImage di ON d.designid = di.designid AND di.imageid = (
@@ -326,9 +326,9 @@ if (!$designer_result) die('Query error: ' . $mysqli->error);
                                     <div class="card h-100">
                                     <img src="<?= !empty($row['image_filename']) ? htmlspecialchars('uploads/designs/' . $row['image_filename']) : 'design_image.php?id=' . (int)$row['designid'] ?>" class="card-img-top" alt="Design by <?= htmlspecialchars($row['dname']) ?>" style="object-fit: cover; width: 100%; height: 200px;" onerror="this.src='design_image.php?id=<?= (int)$row['designid'] ?>'">
                                     <div class="card-body text-center">
+                                        <p class="h6 mb-2" style="color: #2c3e50; font-weight: 600;"><?= htmlspecialchars($row['designName']) ?></p>
                                         <p class="text-muted mb-2"><?= htmlspecialchars($row['likes']) ?> Likes</p>
                                         <p class="h6 mb-0" style="color: #e74c3c; font-weight: 700;">HK$<?= number_format((int)$row['expect_price']) ?></p>
-                                        <small class="text-muted d-block mt-2">by <?= htmlspecialchars($row['dname']) ?></small>
                                     </div>
                                 </div>
                             </a>
