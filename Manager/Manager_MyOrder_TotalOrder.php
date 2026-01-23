@@ -36,9 +36,9 @@ if(!empty($search)) {
 $where_clause = !empty($where_conditions) ? "WHERE " . implode(" AND ", $where_conditions) : "";
 
 // 构建SQL查询 - UPDATED FOR NEW DATE STRUCTURE
-$sql = "SELECT o.orderid, o.odate, o.budget, o.Requirements, o.ostatus,
-               c.clientid, c.cname as client_name,
-               d.designid, d.price as design_price, d.tag as design_tag,
+$sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus,
+               c.clientid, c.cname as client_name, c.budget,
+               d.designid, d.expect_price as design_price, d.tag as design_tag,
                s.OrderFinishDate, s.DesignFinishDate
         FROM `Order` o
         LEFT JOIN `Client` c ON o.clientid = c.clientid
@@ -60,12 +60,13 @@ $total_orders = $count_row['total'];
 // 获取统计数据 - 只统计当前经理的订单
 $stats_sql = "SELECT 
                 COUNT(*) as total_orders,
-                SUM(o.budget) as total_budget,
-                AVG(o.budget) as avg_budget,
+                SUM(c.budget) as total_budget,
+                AVG(c.budget) as avg_budget,
                 SUM(CASE WHEN o.ostatus = 'Pending' THEN 1 ELSE 0 END) as pending_count,
                 SUM(CASE WHEN o.ostatus = 'Designing' THEN 1 ELSE 0 END) as designing_count,
                 SUM(CASE WHEN o.ostatus = 'Completed' THEN 1 ELSE 0 END) as completed_count
-              FROM `Order` o
+               FROM `Order` o
+              LEFT JOIN `Client` c ON o.clientid = c.clientid
               WHERE EXISTS (SELECT 1 FROM OrderProduct op WHERE op.orderid = o.orderid AND op.managerid = $user_id)";
 $stats_result = mysqli_query($mysqli, $stats_sql);
 $stats = mysqli_fetch_assoc($stats_result);

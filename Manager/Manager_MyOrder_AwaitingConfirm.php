@@ -55,9 +55,9 @@ if(!empty($search)) {
 $where_clause = !empty($where_conditions) ? "WHERE " . implode(" AND ", $where_conditions) : "";
 
 // 获取所有待处理订单 - UPDATED FOR NEW DATE STRUCTURE
-$sql = "SELECT o.orderid, o.odate, o.budget, o.Requirements, o.ostatus,
-               c.clientid, c.cname as client_name, c.cemail as client_email, c.ctel as client_phone,
-               d.designid, d.design as design_image, d.price as design_price, d.tag as design_tag,
+$sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus,
+               c.clientid, c.cname as client_name, c.cemail as client_email, c.ctel as client_phone, c.budget,
+               d.designid, d.expect_price as design_price, d.tag as design_tag,
                s.OrderFinishDate, s.DesignFinishDate
         FROM `Order` o
         LEFT JOIN `Client` c ON o.clientid = c.clientid
@@ -72,9 +72,10 @@ $result = safe_mysqli_query($mysqli, $sql);
 // 计算统计信息 - 只统计当前经理的订单
 $stats_sql = "SELECT 
                 COUNT(*) as total_pending,
-                SUM(o.budget) as total_budget,
-                AVG(o.budget) as avg_budget
+                SUM(c.budget) as total_budget,
+                AVG(c.budget) as avg_budget
               FROM `Order` o
+              LEFT JOIN `Client` c ON o.clientid = c.clientid
               WHERE (o.ostatus = 'Pending' OR o.ostatus = 'pending')
               AND EXISTS (SELECT 1 FROM OrderProduct op WHERE op.orderid = o.orderid AND op.managerid = $user_id)";
 $stats_result = safe_mysqli_query($mysqli, $stats_sql);
@@ -205,9 +206,7 @@ $stats = mysqli_fetch_assoc($stats_result);
                                 <span>Design #<?php echo htmlspecialchars($row["designid"] ?? 'N/A'); ?></span>
                                 <small>Price: $<?php echo number_format($row["design_price"] ?? 0, 2); ?></small>
                                 <small>Tags: <?php echo htmlspecialchars(substr($row["design_tag"] ?? '', 0, 30)); ?></small>
-                                <?php if(!empty($row["design_image"])): ?>
-                                    <small class="text-muted">Image: <?php echo htmlspecialchars(substr($row["design_image"], 0, 20)); ?>...</small>
-                                <?php endif; ?>
+
                             </div>
                         </td>
                         <td><?php echo htmlspecialchars(substr($row["Requirements"] ?? '', 0, 100)); ?></td>

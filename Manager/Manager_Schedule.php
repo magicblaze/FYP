@@ -50,9 +50,9 @@ if(!empty($status_filter)) {
 $where_clause = !empty($where_conditions) ? "WHERE " . implode(" AND ", $where_conditions) : "";
 
 // 修改：使用 OrderFinishDate 而不是 FinishDate
-$sql = "SELECT o.orderid, o.odate, o.budget, o.Requirements, o.ostatus,
-               c.clientid, c.cname as client_name, c.cemail as client_email, c.ctel as client_phone,
-               d.designid, d.design as design_image, d.price as design_price, d.tag as design_tag,
+$sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus,
+               c.clientid, c.cname as client_name, c.cemail as client_email, c.ctel as client_phone, c.budget,
+               d.designid, d.expect_price as design_price, d.tag as design_tag,
                s.scheduleid, s.OrderFinishDate, s.DesignFinishDate,
                DATEDIFF(s.OrderFinishDate, CURDATE()) as days_remaining
         FROM `Order` o
