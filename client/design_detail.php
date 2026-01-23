@@ -487,7 +487,6 @@ $mainImg = $baseUrlEarly . $appRoot . '/design_image.php?id=' . (int)$design['de
                     </li>
                     <li class="nav-item"><a class="nav-link" href="../client/my_likes.php">My Likes</a></li>
                     <li class="nav-item"><a class="nav-link" href="order_history.php">Order History</a></li>
-                    <li class="nav-item"><a class="nav-link" href="my_likes.php">My Likes</a></li>
                     <li class="nav-item"><a class="nav-link" href="../logout.php">Logout</a></li>
                 <?php else: ?>
                     <li class="nav-item"><a class="nav-link" href="../login.php">Login</a></li>
@@ -633,8 +632,16 @@ $mainImg = $baseUrlEarly . $appRoot . '/design_image.php?id=' . (int)$design['de
         <h3 style="color: #2c3e50; font-weight: 600; margin-bottom: 1rem; font-size: 1.3rem;">Other Designs from <?= htmlspecialchars($design['dname']) ?></h3>
         <div class="detail-gallery-images">
             <?php while ($r = $others->fetch_assoc()): ?>
+                <?php
+                    $img_sql = "SELECT image_filename FROM DesignImage WHERE designid = ? ORDER BY image_order ASC LIMIT 1";
+                    $img_stmt = $mysqli->prepare($img_sql);
+                    $img_stmt->bind_param("i", $r['designid']);
+                    $img_stmt->execute();
+                    $img_result = $img_stmt->get_result()->fetch_assoc();
+                    $img_filename = $img_result ? $img_result['image_filename'] : 'placeholder.jpg';
+                ?>
                 <a href="design_detail.php?designid=<?= (int)$r['designid'] ?>">
-                    <img src="<?= htmlspecialchars($baseUrlEarly . $appPathEarly . '/design_image.php?id=' . (int)$r['designid']) ?>" alt="Design">
+                    <img src="<?= htmlspecialchars('../uploads/designs/' . $img_filename) ?>" alt="Design">
                 </a>
             <?php endwhile; ?>
         </div>

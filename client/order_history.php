@@ -243,6 +243,14 @@ $orders = $stmt->get_result();
                     } elseif (strpos($statusLower, 'cancel') !== false) {
                         $statusClass = 'status-cancelled';
                     }
+                    
+                    // Fetch the first image from DesignImage table
+                    $img_sql = "SELECT image_filename FROM DesignImage WHERE designid = ? ORDER BY image_order ASC LIMIT 1";
+                    $img_stmt = $mysqli->prepare($img_sql);
+                    $img_stmt->bind_param("i", $order['designid']);
+                    $img_stmt->execute();
+                    $img_result = $img_stmt->get_result()->fetch_assoc();
+                    $img_filename = $img_result ? $img_result['image_filename'] : 'placeholder.jpg';
                     ?>
                     <div class="order-card" onclick="window.location.href='order_detail.php?orderid=<?= (int)$order['orderid'] ?>'">
                         <div class="order-header">
@@ -258,7 +266,7 @@ $orders = $stmt->get_result();
                             </span>
                         </div>
                         <div class="order-body">
-                            <img src="../design_image.php?id=<?= (int)$order['designid'] ?>" 
+                            <img src="../uploads/designs/<?= htmlspecialchars($img_filename) ?>" 
                                  class="order-design-image" 
                                  alt="Design #<?= (int)$order['designid'] ?>">
                             <div class="order-details">
