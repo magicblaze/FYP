@@ -55,6 +55,24 @@ if (!isset($pdo) || !($pdo instanceof PDO)) {
   }
 }
 
+// Helper: fetch ENUM values for a column (returns array of values or [] on failure)
+function get_enum_values(PDO $pdo, $table, $column) {
+  try {
+    $q = $pdo->prepare("SHOW COLUMNS FROM `" . addslashes($table) . "` LIKE ?");
+    $q->execute([$column]);
+    $row = $q->fetch(PDO::FETCH_ASSOC);
+    if (!$row || empty($row['Type'])) return [];
+    $type = $row['Type']; // e.g. enum('text','image','file')
+    if (stripos($type, "enum(") !== 0) return [];
+    $inside = substr($type, 5, -1);
+    $vals = str_getcsv($inside, ',', "'");
+    $clean = array_map(function($v){ return trim($v, "'\" "); }, $vals);
+    return $clean;
+  } catch (Throwable $e) {
+    return [];
+  }
+}
+
 $action = $_GET['action'] ?? '';
 
 try {
@@ -159,17 +177,122 @@ try {
           error_log('[ChatApi] failed to fetch uploaded file for message: ' . $e->getMessage());
         }
       }
-      // Detect persisted share metadata encoded in `content` (marker __share)
+      // Prefer DB-stored `message_type` when present. If `message_type` indicates
+      // a structured payload (e.g., 'design' or 'order'), attempt to parse `content`
+      // to expose structured fields to the client. If `message_type` is missing
+      // we fall back to parsing `content` for legacy markers (`__share`, `__order`).
       if (!empty($r['content']) && is_string($r['content'])) {
         $maybe = json_decode($r['content'], true);
-        if (is_array($maybe) && isset($maybe['__share']) && !empty($maybe['share'])) {
-          $r['share'] = $maybe['share'];
-          // When a share is present, present it to clients as message_type 'design'
-          $r['message_type'] = 'design';
-          // For compatibility, ensure attachment points to uploaded file path if available
-          if (empty($r['attachment']) && !empty($r['uploaded_file']['filepath'])) $r['attachment'] = $r['uploaded_file']['filepath'];
+        if (is_array($maybe)) {
+          // If DB explicitly says this is a design/share, honor it
+          if (!empty($r['message_type']) && $r['message_type'] === 'design') {
+            if (!empty($maybe['share'])) {
+              $r['share'] = $maybe['share'];
+              if (empty($r['attachment']) && !empty($r['uploaded_file']['filepath'])) $r['attachment'] = $r['uploaded_file']['filepath'];
+            }
+          }
+          // If DB explicitly marks order, parse order payload
+          if (!empty($r['message_type']) && $r['message_type'] === 'order') {
+            if (!empty($maybe['order']) && is_array($maybe['order'])) {
+              $r['order'] = $maybe['order'];
+              if (empty($r['attachment']) && !empty($maybe['order']['image'])) $r['attachment'] = $maybe['order']['image'];
+            }
+          }
+          // Backwards-compat: if DB did not include message_type, inspect markers
+          if (empty($r['message_type'])) {
+            if (isset($maybe['__share']) && !empty($maybe['share'])) {
+              $r['share'] = $maybe['share'];
+              $r['message_type'] = 'design';
+              if (empty($r['attachment']) && !empty($r['uploaded_file']['filepath'])) $r['attachment'] = $r['uploaded_file']['filepath'];
+            }
+            if (isset($maybe['__order']) && !empty($maybe['order']) && is_array($maybe['order'])) {
+              $r['order'] = $maybe['order'];
+              $r['message_type'] = 'order';
+              if (empty($r['attachment']) && !empty($maybe['order']['image'])) $r['attachment'] = $maybe['order']['image'];
+            }
+          }
+        } else {
+          // Not JSON or unknown format: nothing to extract
         }
       }
+      // If message_type indicates an order or design and we didn't find structured
+      // data above, try to interpret `content` as an ID and resolve it from the DB.
+      try {
+        if (empty($r['order']) && !empty($r['message_type']) && $r['message_type'] === 'order') {
+          $cid = null;
+          if (!empty($r['content']) && is_string($r['content']) && preg_match('/^\d+$/', trim($r['content']))) $cid = (int)trim($r['content']);
+          if ($cid) {
+            $ost = $pdo->prepare("SELECT o.orderid, o.odate, o.clientid, o.designid, o.ostatus, d.designName FROM `Order` o LEFT JOIN Design d ON o.designid = d.designid WHERE o.orderid = ? LIMIT 1");
+            $ost->execute([$cid]);
+            $orow = $ost->fetch();
+            if ($orow) {
+              $r['order'] = [
+                'id' => (int)$orow['orderid'],
+                'url' => '/client/order_detail.php?orderid=' . (int)$orow['orderid'],
+                'designid' => isset($orow['designid']) ? (int)$orow['designid'] : null,
+                'title' => $orow['designName'] ?? '' ,
+                'status' => $orow['ostatus'] ?? null
+              ];
+            }
+          }
+        }
+      } catch (Throwable $__e) { /* ignore resolve failures */ }
+      try {
+        if (empty($r['share']) && !empty($r['message_type']) && $r['message_type'] === 'design') {
+          $did = null;
+          if (!empty($r['content']) && is_string($r['content'])) {
+            $trimc = trim($r['content']);
+            if (preg_match('/^\d+$/', $trimc)) {
+              $did = (int)$trimc;
+            } else {
+              // If content is a URL or contains a query with design id, try to extract it
+              if (stripos($trimc, 'http://') === 0 || stripos($trimc, 'https://') === 0) {
+                $u = @parse_url($trimc);
+                if ($u && !empty($u['query'])) {
+                  parse_str($u['query'], $qs);
+                  if (!empty($qs['designid'])) $did = (int)$qs['designid'];
+                  elseif (!empty($qs['id'])) $did = (int)$qs['id'];
+                }
+                // try to match /design_detail.php?designid=123 or paths with numeric id
+                if (!$did && !empty($u['path'])) {
+                  if (preg_match('/design[_-]?detail(?:\.php)?/i', $u['path']) && !empty($u['query'])) {
+                    // already attempted via query, but keep for safety
+                    if (!empty($qs['designid'])) $did = (int)$qs['designid'];
+                  }
+                  if (!$did && preg_match('/\/(?:designs?|design-detail|design_detail|client\/design_detail)\/([^\/?#]+)/i', $u['path'], $m)) {
+                    if (isset($m[1]) && preg_match('/^(\d+)$/', $m[1])) $did = (int)$m[1];
+                  }
+                  // fallback: find any numeric segment in path
+                  if (!$did && preg_match('/\/(\d+)(?:\/|$)/', $u['path'], $m2)) $did = (int)$m2[1];
+                }
+              }
+            }
+          }
+          if ($did) {
+            $dstmt = $pdo->prepare('SELECT designid, designName, expect_price FROM Design WHERE designid = ? LIMIT 1');
+            $dstmt->execute([$did]);
+            $drow = $dstmt->fetch();
+            if ($drow) {
+              // fetch primary image if available
+              $img = null;
+              try {
+                $im = $pdo->prepare('SELECT image_filename FROM DesignImage WHERE designid = ? ORDER BY image_order ASC LIMIT 1');
+                $im->execute([$did]);
+                $ir = $im->fetch(); if ($ir && !empty($ir['image_filename'])) $img = '/uploads/designs/' . ltrim($ir['image_filename'], '/');
+              } catch (Throwable $__e) {}
+              $r['share'] = [
+                'title' => $drow['designName'] ?? '',
+                'url' => '/client/design_detail.php?designid=' . (int)$drow['designid'],
+                'image' => $img,
+                'type' => 'design',
+                'price' => isset($drow['expect_price']) ? $drow['expect_price'] : null,
+                'designid' => (int)$drow['designid']
+              ];
+              if (empty($r['attachment']) && !empty($img)) $r['attachment'] = $img;
+            }
+          }
+        }
+      } catch (Throwable $__e) { /* ignore */ }
     }
     if ($since > 0) {
       $filtered = array_filter($rows, function($m) use ($since) {
@@ -190,13 +313,25 @@ try {
       $sender_type = $_POST['sender_type'] ?? null;
       $sender_id = isset($_POST['sender_id']) ? (int)$_POST['sender_id'] : 0;
       $data = $_POST;
-      $content = $data['content'] ?? '';
+      // Prefer explicit IDs for structured payloads (order/design) if provided
+      if (!empty($_POST['order_id'])) {
+        $content = (string)(int)$_POST['order_id'];
+        $message_type = 'order';
+      } elseif (!empty($_POST['design_id'])) {
+        $content = (string)(int)$_POST['design_id'];
+        $message_type = 'design';
+      } else {
+        $content = $data['content'] ?? '';
+      }
       $room = isset($data['room']) ? (int)$data['room'] : 0;
       // validate room exists to avoid FK errors
       if ($room <= 0) { send_json(['error'=>'invalid_room','message'=>'Missing room id'], 400); }
       $chk = $pdo->prepare('SELECT ChatRoomid FROM ChatRoom WHERE ChatRoomid=? LIMIT 1'); $chk->execute([$room]); if (!$chk->fetchColumn()) { send_json(['error'=>'invalid_room','message'=>'Room not found','room'=>$room], 400); }
       $attachmentPath = null;
-      $message_type = $_POST['message_type'] ?? 'file';
+      // Allow callers to request structured message types such as 'design' or 'order'.
+      $message_type = $_POST['message_type'] ?? null;
+      // Ensure we only try to insert message_type values supported by DB enum to avoid SQL warnings
+      $supportedTypes = get_enum_values($pdo, 'Message', 'message_type');
       if (!empty($_FILES['attachment'])) {
         $up = $_FILES['attachment'];
         if ($up['error'] !== UPLOAD_ERR_OK) {
@@ -259,22 +394,27 @@ try {
           }
         }
       }
-      // If this send contains share metadata (from widget preview), persist it inside `content` as JSON
+      // If this send contains share metadata (from widget preview), prefer to persist only the design id or the share URL
       if (!empty($_POST['share_title'])) {
-        $share_type = $_POST['share_type'] ?? null;
-        $shareMeta = [ '__share' => true, 'share' => [
-          'title' => $_POST['share_title'] ?? null,
-          'url' => $_POST['share_url'] ?? null,
-          'image' => $attachmentPath ?? ($_POST['attachment_url'] ?? null),
-          'type' => $share_type
-        ]];
-        $content = json_encode($shareMeta);
-        // Do NOT force a non-existent DB enum value; keep $message_type as a DB-safe value
-        // (it will typically be 'file' if an upload was included, or 'text' otherwise)
+        if (!empty($_POST['design_id'])) {
+          $content = (string)(int)$_POST['design_id'];
+          $message_type = 'design';
+        } else {
+          // fallback: store the share URL (less data than full JSON blob)
+          $content = $_POST['share_url'] ?? ($data['content'] ?? '');
+          if (empty($message_type)) $message_type = 'design';
+        }
       }
       // insert with message_type and optional uploaded file reference (fileid)
-      $allowed_types = ['text','image','file'];
-      $safeType = in_array($message_type, $allowed_types) ? $message_type : ($uploadedFileId ? 'file' : 'text');
+      $allowed_types = ['text','image','file','design','order'];
+      $desired = in_array($message_type, $allowed_types) ? $message_type : null;
+      if ($desired && in_array($desired, $supportedTypes)) {
+        $safeType = $desired;
+      } else {
+        if ($uploadedFileId && in_array('file', $supportedTypes)) $safeType = 'file';
+        elseif (!empty($supportedTypes)) $safeType = $supportedTypes[0];
+        else $safeType = 'text';
+      }
       if (!empty($uploadedFileId)) {
         $stmt = $pdo->prepare("INSERT INTO Message (sender_type,sender_id,content,message_type,ChatRoomid,fileid) VALUES (?,?,?,?,?,?)");
         $stmt->execute([$sender_type, $sender_id, $content, $safeType, $room, $uploadedFileId]);
@@ -335,25 +475,42 @@ try {
         }
         // Respect caller-provided message_type (e.g., 'design') when present; otherwise derive from mime
         $finalMessageType = $data['message_type'] ?? null;
-        // When caller included share metadata, persist it into `content` as JSON so reads can detect it later
-        $contentForInsert = $data['content'] ?? '';
+        // Ensure compatibility with DB enum values to avoid warnings/exceptions
+        $supportedTypes = get_enum_values($pdo, 'Message', 'message_type');
+        // Prefer explicit IDs when provided for structured payloads
+        if (!empty($data['order_id'])) {
+          $contentForInsert = (string)(int)$data['order_id'];
+          $finalMessageType = 'order';
+        } elseif (!empty($data['design_id'])) {
+          $contentForInsert = (string)(int)$data['design_id'];
+          $finalMessageType = 'design';
+        } else {
+          // When caller included share metadata, persist it into `content` as JSON so reads can detect it later
+          $contentForInsert = $data['content'] ?? '';
+        }
         if (!empty($data['share_title'])) {
-          $share_type = $data['share_type'] ?? null;
-          $shareMeta = [ '__share' => true, 'share' => [
-            'title' => $data['share_title'] ?? null,
-            'url' => $data['share_url'] ?? null,
-            'image' => $data['attachment_url'] ?? null,
-            'type' => $share_type
-          ]];
-          $contentForInsert = json_encode($shareMeta);
-          // Do not set an unsupported message_type value; rely on existing finalMessageType or defaults
+          if (!empty($data['design_id'])) {
+            $contentForInsert = (string)(int)$data['design_id'];
+            $finalMessageType = 'design';
+          } else {
+            // fallback: store the share URL only
+            $contentForInsert = $data['share_url'] ?? ($contentForInsert ?? '');
+            if (empty($finalMessageType)) $finalMessageType = 'design';
+          }
         }
         if (!empty($uploadedFileId)) {
           $msgType = 'file';
           if (!empty($amime) && strpos($amime, 'image/') === 0) $msgType = 'image';
           if (empty($finalMessageType)) $finalMessageType = $msgType;
-          $allowed_types = ['text','image','file'];
-          $safeFinal = in_array($finalMessageType, $allowed_types) ? $finalMessageType : 'file';
+          $allowed_types = ['text','image','file','design','order'];
+          $desiredFinal = in_array($finalMessageType, $allowed_types) ? $finalMessageType : null;
+          if ($desiredFinal && in_array($desiredFinal, $supportedTypes)) {
+            $safeFinal = $desiredFinal;
+          } else {
+            if (in_array('file', $supportedTypes)) $safeFinal = 'file';
+            elseif (!empty($supportedTypes)) $safeFinal = $supportedTypes[0];
+            else $safeFinal = 'text';
+          }
           $stmt = $pdo->prepare("INSERT INTO Message (sender_type,sender_id,content,message_type,ChatRoomid,fileid) VALUES (?,?,?,?,?,?)");
           $stmt->execute([
             $data['sender_type'],
@@ -364,9 +521,14 @@ try {
             $uploadedFileId
           ]);
         } else {
-          $allowed_types = ['text','image','file'];
-          if (!empty($finalMessageType)) {
-            $safeFinal = in_array($finalMessageType, $allowed_types) ? $finalMessageType : 'text';
+          $allowed_types = ['text','image','file','design','order'];
+            if (!empty($finalMessageType)) {
+              $desiredFinal = in_array($finalMessageType, $allowed_types) ? $finalMessageType : null;
+              if ($desiredFinal && in_array($desiredFinal, $supportedTypes)) {
+                $safeFinal = $desiredFinal;
+              } else {
+                if (!empty($supportedTypes)) $safeFinal = $supportedTypes[0]; else $safeFinal = 'text';
+              }
             $stmt = $pdo->prepare("INSERT INTO Message (sender_type,sender_id,content,message_type,ChatRoomid) VALUES (?,?,?,?,?)");
             $stmt->execute([
               $data['sender_type'],

@@ -354,7 +354,7 @@ CREATE TABLE `Message` (
   `sender_type` ENUM('client', 'designer','manager','Contractors','supplier') NOT NULL,
   `sender_id` int NOT NULL,
   `content` text  NOT NULL,
-  `message_type` ENUM('text', 'image', 'file') DEFAULT 'text',
+  `message_type` ENUM('text', 'image', 'file', 'design', 'order') DEFAULT 'text',
   `fileid` int NULL,
   `ChatRoomid` int NOT NULL,
   `timestamp` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

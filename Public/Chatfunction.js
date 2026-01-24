@@ -445,9 +445,32 @@ function initApp(config = {}) {
 
   function openRoom(roomId) {
     try {
-      const id = parseInt(roomId, 10);
+      // Accept either a numeric id or an object with hints (e.g., { designerid: 12 })
+      if (!roomOrId) return Promise.resolve();
+      if (typeof roomOrId === 'object') {
+        const obj = roomOrId;
+        // If caller provided a designer id, attempt to create/open a room via handleChat
+        if (obj.designerid || obj.designerId) {
+          const did = obj.designerid || obj.designerId;
+          if (window.handleChat) {
+            return window.handleChat(did, { creatorId: window.chatUserId || 0, otherName: obj.otherName || obj.name || '' })
+              .then(res => {
+                const rid = res && (res.roomId || (res.room && (res.room.ChatRoomid || res.room.id)));
+                if (rid) return openRoom(rid);
+                return Promise.resolve();
+              }).catch(() => Promise.resolve());
+          }
+          return Promise.resolve();
+        }
+        // If object already contains room id fields, extract and continue
+        if (obj.roomId || obj.ChatRoomid || obj.id) roomOrId = obj.roomId || obj.ChatRoomid || obj.id;
+        else return Promise.resolve();
+      }
+
+      const id = parseInt(roomOrId, 10);
       if (!id) return Promise.resolve();
-      // try to find the room in loaded agents, otherwise select minimal
+
+      // try to find the room in loaded agents, otherwise select a minimal placeholder
       return loadAgents().then(rooms => {
         let found = null;
         try { found = rooms && rooms.find(r => String(r.ChatRoomid || r.id || r.roomId) === String(id)); } catch(e){}
