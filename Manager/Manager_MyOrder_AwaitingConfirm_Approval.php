@@ -2,7 +2,7 @@
 session_start();
 require_once dirname(__DIR__) . '/config.php';
 
-// 检查用户是否以经理身份登录
+// Check if user is logged in as manager
 if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'manager') {
     header('Location: ../login.php?redirect=' . urlencode($_SERVER['REQUEST_URI']));
     exit;
@@ -12,7 +12,7 @@ $user = $_SESSION['user'];
 $user_id = $user['managerid'];
 $user_name = $user['name'];
 
-// 获取订单ID
+// Get order ID
 $order_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
 if($order_id <= 0) {
@@ -20,7 +20,7 @@ if($order_id <= 0) {
     exit;
 }
 
-// 检查订单是否属于当前经理
+// Check if order belongs to current manager
 $check_manager_sql = "SELECT COUNT(*) as count FROM `OrderProduct` op 
                       JOIN `Manager` m ON op.managerid = m.managerid 
                       WHERE op.orderid = ? AND m.managerid = ?";
@@ -34,7 +34,7 @@ if ($manager_check['count'] == 0) {
     die("You don't have permission to approve this order.");
 }
 
-// 获取订单详情 - UPDATED FOR NEW DATE STRUCTURE
+// Get order details
 $sql = "SELECT o.orderid, o.odate, o.budget, o.Requirements, o.Floor_Plan, o.ostatus,
                c.clientid, c.cname as client_name, c.cemail as client_email, c.ctel as client_phone,
                d.designid, d.design as design_image, d.price as design_price, d.tag as design_tag,
@@ -55,7 +55,7 @@ if(!$order) {
     exit;
 }
 
-// 处理表单提交
+// Handle form submission
 if($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_approval'])) {
     $status = mysqli_real_escape_string($mysqli, $_POST['status']);
     $manager_reply = mysqli_real_escape_string($mysqli, $_POST['manager_reply']);
@@ -63,17 +63,17 @@ if($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_approval'])) {
     $estimated_completion = mysqli_real_escape_string($mysqli, $_POST['estimated_completion']);
     $design_finish_date = mysqli_real_escape_string($mysqli, $_POST['design_finish_date']);
     
-    // 开始事务
+    // Start transaction
     mysqli_begin_transaction($mysqli);
     
     try {
-        // 1. 更新订单状态
+        // 1. Update order status
         $update_order_sql = "UPDATE `Order` SET ostatus = '$status' WHERE orderid = $order_id";
         if(!mysqli_query($mysqli, $update_order_sql)) {
             throw new Exception("Failed to update order status: " . mysqli_error($mysqli));
         }
         
-        // 2. 如果有回复消息，更新到Requirements中
+        // 2. If there's a reply message, update to Requirements
         if(!empty($manager_reply)) {
             $current_time = date('Y-m-d H:i:s');
             $reply_note = "\n\n--- Manager Response (" . $current_time . ") ---\n" . 
@@ -88,10 +88,8 @@ if($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_approval'])) {
                 throw new Exception("Failed to update order requirements: " . mysqli_error($mysqli));
             }
         }
-        
 
-
-    // 3. 更新或创建Schedule记录 - UPDATED FOR NEW DATE STRUCTURE
+        // 3. Update or create Schedule record
         if(!empty($estimated_completion) || !empty($design_finish_date)) {
             $check_schedule_sql = "SELECT scheduleid FROM `Schedule` WHERE orderid = $order_id";
             $schedule_result = mysqli_query($mysqli, $check_schedule_sql);
@@ -115,13 +113,13 @@ if($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_approval'])) {
             }
         }
         
-        // 提交事务
+        // Commit transaction
         mysqli_commit($mysqli);
         
-        // 发送邮件给客户
+        // Send email to client
         $email_sent = sendApprovalEmail($order, $status, $manager_reply, $additional_notes, $estimated_completion, $design_finish_date);
         
-        // 重定向回主页面
+        // Redirect back to main page
         $redirect_url = "Manager_MyOrder_AwaitingConfirm.php?msg=approved&id=" . $order_id;
         if($email_sent) {
             $redirect_url .= "&email=sent";
@@ -133,13 +131,13 @@ if($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_approval'])) {
         exit();
         
     } catch (Exception $e) {
-        // 回滚事务
+        // Rollback transaction
         mysqli_rollback($mysqli);
         $error_message = $e->getMessage();
     }
 }
 
-// 发送邮件函数 - UPDATED FOR NEW DATE STRUCTURE
+// Send approval email function
 function sendApprovalEmail($order, $status, $manager_reply, $additional_notes, $estimated_completion, $design_finish_date) {
     $to = $order['client_email'];
     $subject = "Order #" . $order['orderid'] . " - Status Update";
@@ -192,141 +190,126 @@ function sendApprovalEmail($order, $status, $manager_reply, $additional_notes, $
 
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HappyDesign - Approve Order</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="../css/Manager_style.css">
-    <title>Approve Order #<?php echo $order_id; ?> - HappyDesign</title>
 </head>
-<body>
-    <!-- 导航栏 -->
-    <nav class="nav-bar">
-        <div class="nav-container">
-            <a href="#" class="nav-brand">HappyDesign</a>
-            <div class="nav-links">
-                <a href="Manager_introduct.php">Introduct</a>
-                <a href="Manager_MyOrder.php">MyOrder</a>
-                <a href="Manager_Massage.php">Massage</a>
-                <a href="Manager_Schedule.php">Schedule</a>
-            </div>
-            <div class="user-info">
-                <span>Welcome, <?php echo htmlspecialchars($user_name); ?></span>
-                <a href="../logout.php" class="btn-logout">Logout</a>
-            </div>
-        </div>
-    </nav>
 
-    <!-- 主要内容 -->
-    <div class="page-container">
-        <h1 class="page-title">Approve Order #<?php echo htmlspecialchars($order['orderid']); ?> - <?php echo htmlspecialchars($user_name); ?></h1>
-        
+<body>
+    <!-- Header Navigation -->
+    <header class="bg-white shadow p-3 d-flex justify-content-between align-items-center">
+        <div class="d-flex align-items-center gap-3">
+            <div class="h4 mb-0"><a href="Manager_MyOrder.php" style="text-decoration: none; color: inherit;">HappyDesign</a></div>
+            <nav>
+                <ul class="nav align-items-center gap-2">
+                    <li class="nav-item"><a class="nav-link" href="Manager_introduct.php">Introduct</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="Manager_MyOrder.php">MyOrder</a></li>
+                    <li class="nav-item"><a class="nav-link" href="Manager_Schedule.php">Schedule</a></li>
+                </ul>
+            </nav>
+        </div>
+        <nav>
+            <ul class="nav align-items-center">
+                <li class="nav-item me-2">
+                    <a class="nav-link text-muted" href="#">
+                        <i class="fas fa-user me-1"></i>Hello <?php echo htmlspecialchars($user_name); ?>
+                    </a>
+                </li>
+                <li class="nav-item"><a class="nav-link" href="../logout.php">Logout</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main class="container-lg mt-4">
+        <!-- Page Title -->
+        <div class="page-title">
+            <i class="fas fa-check me-2"></i>Approve Order #<?php echo htmlspecialchars($order['orderid']); ?>
+        </div>
+
         <?php if(isset($error_message)): ?>
-            <div class="alert alert-error">
-                <div>
-                    <strong>Error: <?php echo htmlspecialchars($error_message); ?></strong>
-                    <p class="mb-0">Please try again or contact support if the issue persists.</p>
-                </div>
+            <div class="alert alert-danger mb-4" role="alert">
+                <i class="fas fa-exclamation-circle me-2"></i>
+                <strong>Error:</strong> <?php echo htmlspecialchars($error_message); ?>
             </div>
         <?php endif; ?>
-        
-        <!-- 订单信息卡片 -->
+
+        <!-- Order Information Card -->
         <div class="card mb-4">
-            <div class="card-header">
-                <h2 class="card-title">Order Details</h2>
-            </div>
             <div class="card-body">
+                <h5 class="card-title mb-4">
+                    <i class="fas fa-info-circle me-2"></i>Order Details
+                </h5>
+                
                 <div class="table-container">
                     <table class="table">
-                        <tr>
-                            <th width="20%">Order ID</th>
-                            <td width="30%"><?php echo htmlspecialchars($order['orderid']); ?></td>
-                            <th width="20%">Order Date</th>
-                            <td width="30%"><?php echo date('Y-m-d H:i', strtotime($order['odate'])); ?></td>
-                        </tr>
-                        <tr>
-                            <th>Client</th>
-                            <td colspan="3">
-                                <div class="d-flex flex-column">
-                                    <strong><?php echo htmlspecialchars($order['client_name']); ?></strong>
-                                    <span>Email: <?php echo htmlspecialchars($order['client_email']); ?></span>
-                                    <?php if(!empty($order['client_phone'])): ?>
-                                        <span>Phone: <?php echo htmlspecialchars($order['client_phone']); ?></span>
-                                    <?php endif; ?>
-                                </div>
-                            </td>
-                        </tr>
-                        <tr>
-                            <th>Budget</th>
-                            <td><strong class="text-success">$<?php echo number_format($order['budget'], 2); ?></strong></td>
-                            <th>Current Status</th>
-                            <td>
-                                <span class="status-badge status-pending">
-                                    <?php echo htmlspecialchars($order['ostatus']); ?>
-                                </span>
-                            </td>
-                        </tr>
-                        <tr>
-                            <th>Design</th>
-                            <td colspan="3">
-                                <div class="d-flex flex-column">
-                                    <span>Design #<?php echo htmlspecialchars($order['designid']); ?></span>
-                                    <span>Price: $<?php echo number_format($order['design_price'], 2); ?></span>
-                                    <?php if(!empty($order['design_tag'])): ?>
-                                        <span>Tags: <?php echo htmlspecialchars(substr($order['design_tag'], 0, 100)); ?></span>
-                                    <?php endif; ?>
-                                </div>
-                            </td>
-                        </tr>
-                        <tr>
-                            <th>Requirements</th>
-                            <td colspan="3">
-                                <div class="requirements-box">
-                                    <?php echo nl2br(htmlspecialchars($order['Requirements'] ?? 'No requirements specified')); ?>
-                                </div>
-                            </td>
-                        </tr>
-                        <?php if(!empty($order['Floor_Plan'])): ?>
-                        <tr>
-                            <th>Floor Plan</th>
-                            <td colspan="3"><?php echo htmlspecialchars($order['Floor_Plan']); ?></td>
-                        </tr>
-                        <?php endif; ?>
-                        <tr>
-                            <th>Current Order Finish Date</th>
-                            <td>
-                                <?php 
-                                if(isset($order["OrderFinishDate"]) && $order["OrderFinishDate"] != '0000-00-00 00:00:00'){
-                                    echo date('Y-m-d H:i', strtotime($order["OrderFinishDate"]));
-                                } else {
-                                    echo '<span class="text-muted">Not scheduled</span>';
-                                }
-                                ?>
-                            </td>
-                            <th>Current Design Finish Date</th>
-                            <td>
-                                <?php 
-                                if(isset($order["DesignFinishDate"]) && $order["DesignFinishDate"] != '0000-00-00 00:00:00'){
-                                    echo date('Y-m-d H:i', strtotime($order["DesignFinishDate"]));
-                                } else {
-                                    echo '<span class="text-muted">Not scheduled</span>';
-                                }
-                                ?>
-                            </td>
-                        </tr>
+                        <tbody>
+                            <tr>
+                                <td style="font-weight: 600; width: 20%;">Order ID</td>
+                                <td style="width: 30%;"><?php echo htmlspecialchars($order['orderid']); ?></td>
+                                <td style="font-weight: 600; width: 20%;">Order Date</td>
+                                <td style="width: 30%;"><?php echo date('Y-m-d H:i', strtotime($order['odate'])); ?></td>
+                            </tr>
+                            <tr>
+                                <td style="font-weight: 600;">Client Name</td>
+                                <td colspan="3"><?php echo htmlspecialchars($order['client_name']); ?></td>
+                            </tr>
+                            <tr>
+                                <td style="font-weight: 600;">Email</td>
+                                <td><?php echo htmlspecialchars($order['client_email']); ?></td>
+                                <td style="font-weight: 600;">Phone</td>
+                                <td><?php echo htmlspecialchars($order['client_phone'] ?? 'N/A'); ?></td>
+                            </tr>
+                            <tr>
+                                <td style="font-weight: 600;">Budget</td>
+                                <td><span style="color: #27ae60; font-weight: 600;">$<?php echo number_format($order['budget'], 2); ?></span></td>
+                                <td style="font-weight: 600;">Current Status</td>
+                                <td><span class="status-badge status-pending"><?php echo htmlspecialchars($order['ostatus']); ?></span></td>
+                            </tr>
+                            <tr>
+                                <td style="font-weight: 600;">Design ID</td>
+                                <td><?php echo htmlspecialchars($order['designid']); ?></td>
+                                <td style="font-weight: 600;">Design Price</td>
+                                <td>$<?php echo number_format($order['design_price'], 2); ?></td>
+                            </tr>
+                            <tr>
+                                <td style="font-weight: 600; vertical-align: top;">Requirements</td>
+                                <td colspan="3">
+                                    <div style="max-height: 150px; overflow-y: auto; background-color: #f8f9fa; padding: 10px; border-radius: 6px; border: 1px solid #dee2e6; white-space: pre-wrap; word-wrap: break-word;">
+                                        <?php echo nl2br(htmlspecialchars($order['Requirements'] ?? 'No requirements specified')); ?>
+                                    </div>
+                                </td>
+                            </tr>
+                            <?php if(!empty($order['OrderFinishDate']) && $order['OrderFinishDate'] != '0000-00-00 00:00:00'): ?>
+                            <tr>
+                                <td style="font-weight: 600;">Current Order Finish Date</td>
+                                <td><?php echo date('Y-m-d H:i', strtotime($order['OrderFinishDate'])); ?></td>
+                                <td style="font-weight: 600;">Current Design Finish Date</td>
+                                <td><?php echo isset($order['DesignFinishDate']) && $order['DesignFinishDate'] != '0000-00-00 00:00:00' ? date('Y-m-d H:i', strtotime($order['DesignFinishDate'])) : '<span class="text-muted">Not scheduled</span>'; ?></td>
+                            </tr>
+                            <?php endif; ?>
+                        </tbody>
                     </table>
                 </div>
             </div>
         </div>
-        
-        <!-- 审批表单卡片 -->
+
+        <!-- Approval Form Card -->
         <div class="card">
-            <div class="card-header">
-                <h2 class="card-title">Approval Form</h2>
-            </div>
             <div class="card-body">
-                <form method="POST" action="" class="form-container">
+                <h5 class="card-title mb-4">
+                    <i class="fas fa-edit me-2"></i>Approval Form
+                </h5>
+                
+                <form method="POST" action="">
                     <div class="form-group">
-                        <label for="status" class="form-label">Update Status</label>
+                        <label for="status" class="form-label">
+                            <i class="fas fa-tasks me-2"></i>Update Status
+                        </label>
                         <select name="status" id="status" class="form-control" required onchange="updateStatusDescription()">
                             <option value="">Select Status</option>
                             <option value="Designing">Designing - Approve and proceed to design phase</option>
@@ -336,69 +319,78 @@ function sendApprovalEmail($order, $status, $manager_reply, $additional_notes, $
                     </div>
                     
                     <div class="form-group">
-                        <label for="manager_reply" class="form-label">Manager's Response</label>
+                        <label for="manager_reply" class="form-label">
+                            <i class="fas fa-comment me-2"></i>Manager's Response
+                        </label>
                         <textarea name="manager_reply" id="manager_reply" class="form-control" rows="4" required 
                                   placeholder="Enter your response to the client regarding this order..."></textarea>
                         <small class="text-muted">This response will be sent to the client via email and added to order notes.</small>
                     </div>
                     
                     <div class="form-group">
-                        <label for="additional_notes" class="form-label">Additional Notes (Optional)</label>
+                        <label for="additional_notes" class="form-label">
+                            <i class="fas fa-sticky-note me-2"></i>Additional Notes (Optional)
+                        </label>
                         <textarea name="additional_notes" id="additional_notes" class="form-control" rows="3"
                                   placeholder="Any additional notes or instructions..."></textarea>
                         <small class="text-muted">These notes will be included in the email to the client.</small>
                     </div>
                     
                     <div class="form-group">
-                        <label for="estimated_completion" class="form-label">Estimated Order Completion Date (Optional)</label>
+                        <label for="estimated_completion" class="form-label">
+                            <i class="fas fa-calendar-check me-2"></i>Estimated Order Completion Date (Optional)
+                        </label>
                         <input type="datetime-local" name="estimated_completion" id="estimated_completion" class="form-control"
                                value="<?php echo date('Y-m-d\TH:i', strtotime('+7 days')); ?>">
                         <small class="text-muted">If approved, when do you estimate this order will be completed?</small>
                     </div>
                     
                     <div class="form-group">
-                        <label for="design_finish_date" class="form-label">Estimated Design Completion Date (Optional)</label>
+                        <label for="design_finish_date" class="form-label">
+                            <i class="fas fa-pencil-alt me-2"></i>Estimated Design Completion Date (Optional)
+                        </label>
                         <input type="datetime-local" name="design_finish_date" id="design_finish_date" class="form-control"
                                value="<?php echo date('Y-m-d\TH:i', strtotime('+3 days')); ?>">
                         <small class="text-muted">If approved, when do you estimate the design will be completed?</small>
                     </div>
                     
-                    <div class="alert alert-warning mt-4">
-                        <div>
-                            <strong>Important Notes:</strong>
-                            <ul class="mb-0 mt-2">
-                                <li>Upon submission, the order status will be updated immediately</li>
-                                <li>An email notification will be sent to: <strong><?php echo htmlspecialchars($order['client_email']); ?></strong></li>
-                                <li>Your response will be added to the order requirements as a note</li>
-                                <li>This action cannot be undone</li>
-                            </ul>
-                        </div>
+                    <div class="alert alert-warning mt-4" role="alert">
+                        <h6 class="mb-3">
+                            <i class="fas fa-exclamation-triangle me-2"></i>Important Notes:
+                        </h6>
+                        <ul class="mb-0">
+                            <li>Upon submission, the order status will be updated immediately</li>
+                            <li>An email notification will be sent to: <strong><?php echo htmlspecialchars($order['client_email']); ?></strong></li>
+                            <li>Your response will be added to the order requirements as a note</li>
+                            <li>This action cannot be undone</li>
+                        </ul>
                     </div>
                     
-                    <div class="d-flex justify-between mt-4">
-                        <div class="btn-group">
-                            <button type="submit" name="submit_approval" class="btn btn-success btn-lg">
-                                Submit Approval & Send Email
-                            </button>
-                            <a href="Manager_MyOrder_AwaitingConfirm.php" class="btn btn-secondary">Cancel</a>
-                        </div>
+                    <div class="btn-group mt-4">
+                        <button type="submit" name="submit_approval" class="btn btn-success">
+                            <i class="fas fa-paper-plane me-2"></i>Submit Approval & Send Email
+                        </button>
+                        <a href="Manager_MyOrder_AwaitingConfirm.php" class="btn btn-secondary">
+                            <i class="fas fa-times me-2"></i>Cancel
+                        </a>
                     </div>
                 </form>
             </div>
         </div>
-    </div>
-    
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
     function updateStatusDescription() {
         const statusSelect = document.getElementById('status');
         const description = document.getElementById('status-description');
         
         if(statusSelect.value === 'Designing') {
-            description.innerHTML = 'Order will proceed to design phase. Client will be notified.';
-            description.className = 'text-success';
+            description.innerHTML = '<i class="fas fa-check-circle me-1" style="color: #27ae60;"></i>Order will proceed to design phase. Client will be notified.';
+            description.className = 'text-success mt-2 d-block';
         } else if(statusSelect.value === 'Cancelled') {
-            description.innerHTML = 'Order will be cancelled. Client will be notified.';
-            description.className = 'text-danger';
+            description.innerHTML = '<i class="fas fa-times-circle me-1" style="color: #e74c3c;"></i>Order will be cancelled. Client will be notified.';
+            description.className = 'text-danger mt-2 d-block';
         } else {
             description.innerHTML = '';
             description.className = 'text-muted';
@@ -408,18 +400,7 @@ function sendApprovalEmail($order, $status, $manager_reply, $additional_notes, $
     document.addEventListener('DOMContentLoaded', function() {
         updateStatusDescription();
         
-        // 自动填充回复示例
-        const replyTextarea = document.getElementById('manager_reply');
-        if(replyTextarea) {
-            replyTextarea.addEventListener('focus', function() {
-                if(this.value === '') {
-                    this.value = "Dear " + "<?php echo addslashes($order['client_name']); ?>,\n\n" +
-                                "Thank you for your order. We have reviewed your request and ";
-                }
-            });
-        }
-        
-        // 表单验证
+        // Form validation
         const form = document.querySelector('form');
         form.addEventListener('submit', function(e) {
             const status = document.getElementById('status').value;
@@ -437,7 +418,7 @@ function sendApprovalEmail($order, $status, $manager_reply, $additional_notes, $
                 return;
             }
             
-            // 确认提交
+            // Confirm submission
             if(status === 'Cancelled') {
                 if(!confirm('Are you sure you want to cancel this order? This action cannot be undone.')) {
                     e.preventDefault();
@@ -445,57 +426,24 @@ function sendApprovalEmail($order, $status, $manager_reply, $additional_notes, $
             }
         });
         
-        // 快捷键支持
+        // Keyboard shortcuts
         document.addEventListener('keydown', function(e) {
-            // Ctrl+Enter 提交表单
+            // Ctrl+Enter to submit form
             if(e.ctrlKey && e.key === 'Enter') {
                 e.preventDefault();
                 form.submit();
             }
             
-            // Esc键取消
+            // Esc key to cancel
             if(e.key === 'Escape') {
                 window.location.href = 'Manager_MyOrder_AwaitingConfirm.php';
             }
         });
     });
     </script>
-    
-    <style>
-        .requirements-box {
-            max-height: 200px;
-            overflow-y: auto;
-            padding: 10px;
-            background: #f8f9fa;
-            border-radius: 6px;
-            border: 1px solid #dee2e6;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-        }
-        
-        .form-control:focus {
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-        
-        textarea.form-control {
-            min-height: 100px;
-        }
-        
-        @media (max-width: 768px) {
-            .table th, .table td {
-                padding: 10px;
-            }
-            
-            .btn-group {
-                flex-direction: column;
-            }
-            
-            .btn-group .btn {
-                width: 100%;
-                margin: 5px 0;
-            }
-        }
-    </style>
+
+    <!-- Include chat widget -->
+    <?php include __DIR__ . '/../Public/chat_widget.php'; ?>
 </body>
+
 </html>

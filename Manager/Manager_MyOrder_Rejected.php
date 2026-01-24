@@ -2,7 +2,7 @@
 require_once dirname(__DIR__) . '/config.php';
 session_start();
 
-// 检查用户是否以经理身份登录
+// Check if user is logged in as manager
 if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'manager') {
     header('Location: ../login.php?redirect=' . urlencode($_SERVER['REQUEST_URI']));
     exit;
@@ -12,10 +12,10 @@ $user = $_SESSION['user'];
 $user_id = $user['managerid'];
 $user_name = $user['name'];
 
-// 获取搜索参数
+// Get search parameter
 $search = isset($_GET['search']) ? mysqli_real_escape_string($mysqli, $_GET['search']) : '';
 
-// 构建查询条件 - 添加manager id过滤
+// Build query conditions - only show cancelled orders for current manager
 $where_conditions = array(
     "(o.ostatus = 'Cancelled' OR o.ostatus = 'cancelled')",
     "op.managerid = $user_id"
@@ -33,9 +33,7 @@ if(!empty($search)) {
 
 $where_clause = !empty($where_conditions) ? "WHERE " . implode(" AND ", $where_conditions) : "";
 
-// 获取所有已取消订单 - UPDATED FOR NEW DATE STRUCTURE - 只显示该经理的订单
-// FIXED: Removed o.budget and added c.budget as client_budget from Client table
-// Also fixed d.design and d.price to d.designName and d.expect_price (correct column names)
+// Get all cancelled orders
 $sql = "SELECT DISTINCT o.orderid, o.odate, o.Requirements, o.ostatus,
                c.clientid, c.cname as client_name, c.cemail as client_email, c.ctel as client_phone, c.budget as client_budget,
                d.designid, d.designName as design_image, d.expect_price as design_price, d.tag as design_tag,
@@ -54,8 +52,7 @@ if(!$result) {
     die("Database Error: " . mysqli_error($mysqli));
 }
 
-// 计算统计信息 - 添加manager id过滤
-// FIXED: Changed SUM(o.budget) to SUM(c.budget) and added Client table JOIN
+// Calculate statistics - only for current manager's orders
 $stats_sql = "SELECT 
                 COUNT(DISTINCT o.orderid) as total_cancelled,
                 SUM(c.budget) as total_budget,
@@ -73,258 +70,204 @@ $stats = mysqli_fetch_assoc($stats_result);
 
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HappyDesign - Cancelled Orders</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="../css/Manager_style.css">
-    <title>Cancelled Orders - HappyDesign</title>
-    <style>
-        .status-cancelled {
-            background-color: #dc3545;
-            color: white;
-        }
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-        .stat-card {
-            background: white;
-            border-radius: 8px;
-            padding: 20px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            text-align: center;
-            transition: transform 0.3s ease;
-        }
-        .stat-card:hover {
-            transform: translateY(-5px);
-        }
-        .stat-value {
-            font-size: 28px;
-            font-weight: bold;
-            color: #dc3545;
-            margin-bottom: 5px;
-        }
-        .stat-label {
-            color: #666;
-            font-size: 14px;
-        }
-        .date-range {
-            font-size: 12px;
-            color: #888;
-            margin-top: 5px;
-        }
-        /* 用户信息样式 */
-        .user-info {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            color: white;
-            margin-left: auto;
-        }
-        .btn-logout {
-            background: rgba(255,255,255,0.2);
-            padding: 5px 15px;
-            border-radius: 4px;
-            color: white;
-            text-decoration: none;
-            font-size: 14px;
-            transition: background 0.3s;
-        }
-        .btn-logout:hover {
-            background: rgba(255,255,255,0.3);
-            color: white;
-        }
-        /* 导航栏容器调整 */
-        .nav-container {
-            display: flex;
-            align-items: center;
-            width: 100%;
-        }
-        .nav-links {
-            display: flex;
-            gap: 20px;
-            margin-left: 30px;
-        }
-    </style>
 </head>
+
 <body>
-    <!-- 导航栏 -->
-    <nav class="nav-bar">
-        <div class="nav-container">
-            <a href="#" class="nav-brand">HappyDesign</a>
-            <div class="nav-links">
-                <a href="Manager_introduct.php">Introduct</a>
-                <a href="Manager_MyOrder.php">MyOrder</a>
-                <a href="Manager_Massage.php">Massage</a>
-                <a href="Manager_Schedule.php">Schedule</a>
-            </div>
-            <div class="user-info">
-                <span>Welcome, <?php echo htmlspecialchars($user_name); ?></span>
-                <a href="../logout.php" class="btn-logout">Logout</a>
+    <!-- Header Navigation (matching Manager_MyOrder.php style) -->
+    <header class="bg-white shadow p-3 d-flex justify-content-between align-items-center">
+        <div class="d-flex align-items-center gap-3">
+            <div class="h4 mb-0"><a href="Manager_MyOrder.php" style="text-decoration: none; color: inherit;">HappyDesign</a></div>
+            <nav>
+                <ul class="nav align-items-center gap-2">
+                    <li class="nav-item"><a class="nav-link" href="Manager_introduct.php">Introduct</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="Manager_MyOrder.php">MyOrder</a></li>
+                    <li class="nav-item"><a class="nav-link" href="Manager_Schedule.php">Schedule</a></li>
+                </ul>
+            </nav>
+        </div>
+        <nav>
+            <ul class="nav align-items-center">
+                <li class="nav-item me-2">
+                    <a class="nav-link text-muted" href="#">
+                        <i class="fas fa-user me-1"></i>Hello <?php echo htmlspecialchars($user_name); ?>
+                    </a>
+                </li>
+                <li class="nav-item"><a class="nav-link" href="../logout.php">Logout</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main class="container-lg mt-4">
+        <!-- Page Title -->
+        <div class="page-title">
+            <i class="fas fa-times-circle me-2"></i>Cancelled Orders
+        </div>
+
+        <!-- Search Card -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title mb-3">
+                    <i class="fas fa-search me-2"></i>Search Orders
+                </h5>
+                <form method="GET" action="" class="d-flex gap-2">
+                    <input type="text" name="search" class="form-control" 
+                           placeholder="Search by Order ID, Client Name, Email, Requirements or Tags..." 
+                           value="<?php echo htmlspecialchars($search); ?>">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-search me-2"></i>Search
+                    </button>
+                    <?php if(!empty($search)): ?>
+                        <a href="Manager_MyOrder_Rejected.php" class="btn btn-secondary">
+                            <i class="fas fa-times me-2"></i>Clear
+                        </a>
+                    <?php endif; ?>
+                </form>
             </div>
         </div>
-    </nav>
 
-    <!-- 主要内容 -->
-    <div class="page-container">
-        <h1 class="page-title">Cancelled Orders</h1>
-
-        
-        <!-- 搜索框 -->
-        <div class="search-box">
-            <form method="GET" action="" class="d-flex align-center">
-                <input type="text" name="search" class="search-input" 
-                       placeholder="Search by Order ID, Client Name, Email, Requirements or Tags..." 
-                       value="<?php echo htmlspecialchars($search); ?>">
-                <button type="submit" class="search-button">Search</button>
-                <?php if(!empty($search)): ?>
-                    <a href="Manager_MyOrder_Rejected.php" class="btn btn-outline ml-2">Clear Search</a>
-                <?php endif; ?>
-            </form>
-        </div>
-        
         <?php
         if(mysqli_num_rows($result) == 0){
-            echo '<div class="alert alert-info">
-                <div>
-                    <strong>No cancelled orders found' . (!empty($search) ? ' matching your search criteria.' : ' at the moment.') . '</strong>
-                    <p class="mb-0">Orders that have been cancelled will appear here.</p>
+            echo '<div class="card">
+                <div class="card-body text-center py-5">
+                    <i class="fas fa-inbox" style="font-size: 3rem; color: #bdc3c7; margin-bottom: 1rem; display: block;"></i>
+                    <h5 class="text-muted mb-2">No Cancelled Orders Found</h5>
+                    <p class="text-muted mb-0">Orders that have been cancelled will appear here.</p>
                 </div>
             </div>';
         } else {
             $total_cancelled = $stats['total_cancelled'] ?? 0;
         ?>
-        
-        <!-- 统计卡片 -->
-        <div class="stats-grid">
-            <div class="stat-card">
-                <div class="stat-value"><?php echo $total_cancelled; ?></div>
-                <div class="stat-label">Cancelled Orders</div>
-                <?php if(isset($stats['earliest_cancellation']) && $stats['earliest_cancellation'] != '0000-00-00 00:00:00'): ?>
-                    <div class="date-range">
-                        Since: <?php echo date('M Y', strtotime($stats['earliest_cancellation'])); ?>
+
+        <!-- Statistics Cards -->
+        <div class="row mb-4">
+            <div class="col-md-3 mb-3">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <div style="font-size: 2.5rem; color: #dc3545; font-weight: 700; margin-bottom: 0.5rem;">
+                            <?php echo $total_cancelled; ?>
+                        </div>
+                        <div style="color: #7f8c8d; font-weight: 500;">
+                            <i class="fas fa-times-circle me-2"></i>Cancelled Orders
+                        </div>
                     </div>
-                <?php endif; ?>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value">$<?php echo number_format($stats['total_budget'] ?? 0, 2); ?></div>
-                <div class="stat-label">Total Lost Revenue</div>
-                <div class="date-range">
-                    Potential income from cancelled orders
                 </div>
             </div>
-            <div class="stat-card">
-                <div class="stat-value">$<?php echo number_format($stats['avg_budget'] ?? 0, 2); ?></div>
-                <div class="stat-label">Average Order Value</div>
-                <div class="date-range">
-                    Average value of cancelled orders
+            <div class="col-md-3 mb-3">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <div style="font-size: 2.5rem; color: #dc3545; font-weight: 700; margin-bottom: 0.5rem;">
+                            $<?php echo number_format($stats['total_budget'] ?? 0, 2); ?>
+                        </div>
+                        <div style="color: #7f8c8d; font-weight: 500;">
+                            <i class="fas fa-dollar-sign me-2"></i>Lost Revenue
+                        </div>
+                    </div>
                 </div>
             </div>
-            <div class="stat-card">
-                <div class="stat-value">
-                    <?php 
-                    if(isset($stats['latest_cancellation']) && $stats['latest_cancellation'] != '0000-00-00 00:00:00'){
-                        echo date('M d', strtotime($stats['latest_cancellation']));
-                    } else {
-                        echo 'N/A';
-                    }
-                    ?>
+            <div class="col-md-3 mb-3">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <div style="font-size: 2.5rem; color: #dc3545; font-weight: 700; margin-bottom: 0.5rem;">
+                            $<?php echo number_format($stats['avg_budget'] ?? 0, 2); ?>
+                        </div>
+                        <div style="color: #7f8c8d; font-weight: 500;">
+                            <i class="fas fa-chart-line me-2"></i>Average Value
+                        </div>
+                    </div>
                 </div>
-                <div class="stat-label">Latest Cancellation</div>
-                <div class="date-range">
-                    Most recent cancelled order
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <div style="font-size: 2.5rem; color: #dc3545; font-weight: 700; margin-bottom: 0.5rem;">
+                            <?php 
+                            if(isset($stats['latest_cancellation']) && $stats['latest_cancellation'] != '0000-00-00 00:00:00'){
+                                echo date('M d', strtotime($stats['latest_cancellation']));
+                            } else {
+                                echo 'N/A';
+                            }
+                            ?>
+                        </div>
+                        <div style="color: #7f8c8d; font-weight: 500;">
+                            <i class="fas fa-calendar me-2"></i>Latest
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
-        
-        <!-- 订单表格 -->
+
+        <!-- Orders Table -->
         <div class="table-container">
             <table class="table">
                 <thead>
                     <tr>
-                        <th>Order ID</th>
-                        <th>Order Date</th>
-                        <th>Cancelled Date</th>
-                        <th>Client</th>
-                        <th>Budget</th>
-                        <th>Design</th>
-                        <th>Requirements</th>
-                        <th>Order Finish Date</th>
-                        <th>Design Finish Date</th>
-                        <th>Status</th>
-                        <th>Actions</th>
+                        <th><i class="fas fa-hashtag me-2"></i>Order ID</th>
+                        <th><i class="fas fa-calendar me-2"></i>Order Date</th>
+                        <th><i class="fas fa-user me-2"></i>Client</th>
+                        <th><i class="fas fa-dollar-sign me-2"></i>Budget</th>
+                        <th><i class="fas fa-image me-2"></i>Design</th>
+                        <th><i class="fas fa-file-alt me-2"></i>Requirements</th>
+                        <th><i class="fas fa-info-circle me-2"></i>Status</th>
+                        <th><i class="fas fa-cogs me-2"></i>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php while($row = mysqli_fetch_assoc($result)): ?>
                     <tr>
-                        <td><strong>#<?php echo htmlspecialchars($row["orderid"]); ?></strong></td>
-                        <td><?php echo date('Y-m-d H:i', strtotime($row["odate"])); ?></td>
                         <td>
-                            <?php 
-                            // Use OrderFinishDate as cancellation date if available
-                            if(isset($row["OrderFinishDate"]) && $row["OrderFinishDate"] != '0000-00-00 00:00:00'){
-                                echo date('Y-m-d H:i', strtotime($row["OrderFinishDate"]));
-                            } else {
-                                echo date('Y-m-d H:i', strtotime($row["odate"]));
-                            }
-                            ?>
+                            <strong>#<?php echo htmlspecialchars($row["orderid"]); ?></strong>
                         </td>
                         <td>
-                            <div class="d-flex flex-column">
+                            <?php echo date('Y-m-d', strtotime($row["odate"])); ?>
+                        </td>
+                        <td>
+                            <div>
                                 <strong><?php echo htmlspecialchars($row["client_name"] ?? 'N/A'); ?></strong>
-                                <small class="text-muted">Client ID: <?php echo htmlspecialchars($row["clientid"] ?? 'N/A'); ?></small>
+                                <br>
+                                <small class="text-muted">ID: <?php echo htmlspecialchars($row["clientid"] ?? 'N/A'); ?></small>
                                 <?php if(!empty($row["client_email"])): ?>
-                                    <small class="text-muted">Email: <?php echo htmlspecialchars($row["client_email"]); ?></small>
-                                <?php endif; ?>
-                                <?php if(!empty($row["client_phone"])): ?>
-                                    <small class="text-muted">Phone: <?php echo htmlspecialchars($row["client_phone"]); ?></small>
+                                    <br><small class="text-muted"><?php echo htmlspecialchars($row["client_email"]); ?></small>
                                 <?php endif; ?>
                             </div>
                         </td>
-                        <td><strong class="text-danger">$<?php echo number_format($row["client_budget"], 2); ?></strong></td>
                         <td>
-                            <div class="d-flex flex-column">
-                                <span>Design #<?php echo htmlspecialchars($row["designid"] ?? 'N/A'); ?></span>
-                                <small>Price: $<?php echo number_format($row["design_price"] ?? 0, 2); ?></small>
-                                <small>Tags: <?php echo htmlspecialchars(substr($row["design_tag"] ?? '', 0, 30)); ?></small>
-                                <?php if(!empty($row["design_image"])): ?>
-                                    <small class="text-muted">Image: <?php echo htmlspecialchars(substr($row["design_image"], 0, 20)); ?>...</small>
-                                <?php endif; ?>
+                            <span style="color: #dc3545; font-weight: 600;">$<?php echo number_format($row["client_budget"], 2); ?></span>
+                        </td>
+                        <td>
+                            <div>
+                                <small>Design #<?php echo htmlspecialchars($row["designid"] ?? 'N/A'); ?></small>
+                                <br>
+                                <small class="text-muted">$<?php echo number_format($row["design_price"] ?? 0, 2); ?></small>
                             </div>
                         </td>
-                        <td><?php echo htmlspecialchars(substr($row["Requirements"] ?? '', 0, 100)); ?></td>
                         <td>
-                            <?php 
-                            if(isset($row["OrderFinishDate"]) && $row["OrderFinishDate"] != '0000-00-00 00:00:00'){
-                                echo date('Y-m-d H:i', strtotime($row["OrderFinishDate"]));
-                            } else {
-                                echo '<span class="text-muted">N/A</span>';
-                            }
-                            ?>
+                            <small class="text-muted">
+                                <?php echo htmlspecialchars(substr($row["Requirements"] ?? '', 0, 50)) . (strlen($row["Requirements"] ?? '') > 50 ? '...' : ''); ?>
+                            </small>
                         </td>
                         <td>
-                            <?php 
-                            if(isset($row["DesignFinishDate"]) && $row["DesignFinishDate"] != '0000-00-00 00:00:00'){
-                                echo date('Y-m-d H:i', strtotime($row["DesignFinishDate"]));
-                            } else {
-                                echo '<span class="text-muted">N/A</span>';
-                            }
-                            ?>
-                        </td>
-                        <td>
-                            <span class="status-badge status-cancelled">
-                                <?php echo htmlspecialchars($row["ostatus"] ?? 'Cancelled'); ?>
+                            <span class="status-badge" style="background-color: #dc3545; color: white;">
+                                <i class="fas fa-times-circle me-1"></i>Cancelled
                             </span>
                         </td>
                         <td>
                             <div class="btn-group">
                                 <button onclick="viewOrder(<?php echo $row['orderid']; ?>)" 
-                                        class="btn btn-sm btn-primary">View</button>
+                                        class="btn btn-sm btn-primary">
+                                    <i class="fas fa-eye me-1"></i>View
+                                </button>
                                 <button onclick="deleteOrder(<?php echo $row['orderid']; ?>)" 
-                                        class="btn btn-sm btn-danger">Delete</button>
+                                        class="btn btn-sm btn-danger">
+                                    <i class="fas fa-trash me-1"></i>Delete
+                                </button>
                             </div>
                         </td>
                     </tr>
@@ -332,34 +275,35 @@ $stats = mysqli_fetch_assoc($stats_result);
                 </tbody>
             </table>
         </div>
-        
-        <!-- 分页信息 -->
-        <div class="card mt-3">
-            <div class="card-body d-flex justify-between align-center">
+
+        <!-- Summary Card -->
+        <div class="card mt-4">
+            <div class="card-body d-flex justify-content-between align-items-center">
                 <div>
                     <strong>Showing <?php echo mysqli_num_rows($result); ?> cancelled orders</strong>
                     <p class="text-muted mb-0">Total: <?php echo $total_cancelled; ?> cancelled orders</p>
                 </div>
                 <div class="btn-group">
-                    <button onclick="printPage()" class="btn btn-outline">Print List</button>
-                    <button onclick="deleteAllCancelled()" class="btn btn-danger">Delete All</button>
+                    <button onclick="printPage()" class="btn btn-outline">
+                        <i class="fas fa-print me-2"></i>Print List
+                    </button>
                 </div>
             </div>
         </div>
-        
+
         <?php
         }
         ?>
-        
-        <!-- 返回按钮 -->
-        <div class="d-flex justify-between mt-4">
-            <div class="btn-group">
-                <button onclick="window.location.href='Manager_MyOrder.php'" 
-                        class="btn btn-secondary">Back to Orders Manager</button>
-            </div>
+
+        <!-- Action Buttons -->
+        <div class="d-flex justify-content-between align-items-center mt-4">
+            <a href="Manager_MyOrder.php" class="btn btn-secondary">
+                <i class="fas fa-arrow-left me-2"></i>Back to Orders Manager
+            </a>
         </div>
-    </div>
-    
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
     function viewOrder(orderId) {
         window.location.href = 'Manager_view_order.php?id=' + orderId;
@@ -375,16 +319,10 @@ $stats = mysqli_fetch_assoc($stats_result);
         window.print();
     }
     
-    function deleteAllCancelled() {
-        if(confirm('⚠️ DANGER: Are you sure you want to delete ALL cancelled orders? This action cannot be undone!')) {
-            window.location.href = 'Manager_delete_all_cancelled.php';
-        }
-    }
-    
-    // 快捷键支持
+    // Keyboard shortcuts support
     document.addEventListener('DOMContentLoaded', function() {
-        // Ctrl+F 聚焦搜索框
         document.addEventListener('keydown', function(e) {
+            // Ctrl+F focus search box
             if(e.ctrlKey && e.key === 'f') {
                 e.preventDefault();
                 const searchInput = document.querySelector('input[name="search"]');
@@ -394,19 +332,19 @@ $stats = mysqli_fetch_assoc($stats_result);
                 }
             }
             
-            // Ctrl+P 打印
+            // Ctrl+P print
             if(e.ctrlKey && e.key === 'p') {
                 e.preventDefault();
                 printPage();
             }
             
-            // Esc键返回
+            // Esc key to go back
             if(e.key === 'Escape') {
                 window.location.href = 'Manager_MyOrder.php';
             }
         });
         
-        // 搜索框回车提交
+        // Search box enter to submit
         const searchInput = document.querySelector('input[name="search"]');
         if(searchInput) {
             searchInput.addEventListener('keypress', function(e) {
@@ -416,7 +354,7 @@ $stats = mysqli_fetch_assoc($stats_result);
             });
         }
         
-        // 高亮搜索结果
+        // Highlight search results
         const urlParams = new URLSearchParams(window.location.search);
         const searchTerm = urlParams.get('search');
         if(searchTerm) {
@@ -425,7 +363,7 @@ $stats = mysqli_fetch_assoc($stats_result);
             }, 100);
         }
         
-        // 添加悬停效果
+        // Add hover effects
         const tableRows = document.querySelectorAll('.table tbody tr');
         tableRows.forEach(row => {
             row.addEventListener('mouseenter', function() {
@@ -469,41 +407,12 @@ $stats = mysqli_fetch_assoc($stats_result);
             }
         });
     }
-    
-    // 自动刷新检查（可选）
-    function checkForUpdates() {
-        // 每30秒检查一次是否有新的取消订单
-        setTimeout(() => {
-            fetch('check_order_updates.php?type=cancelled')
-                .then(response => response.json())
-                .then(data => {
-                    if(data.newCancellations > 0) {
-                        showUpdateNotification(data.newCancellations);
-                    }
-                });
-        }, 30000);
-    }
-    
-    function showUpdateNotification(count) {
-        const notification = document.createElement('div');
-        notification.className = 'alert alert-warning notification';
-        notification.innerHTML = `
-            <div>
-                <strong>New Cancellations Available</strong>
-                <p>There are ${count} new cancelled order(s).</p>
-                <button onclick="location.reload()" class="btn btn-sm btn-warning">Refresh Now</button>
-                <button onclick="this.parentElement.parentElement.remove()" class="btn btn-sm btn-outline">Dismiss</button>
-            </div>
-        `;
-        
-        document.querySelector('.page-container').insertBefore(notification, document.querySelector('.page-title').nextSibling);
-    }
-    
-    // 启动更新检查
-    checkForUpdates();
     </script>
-    
+
+    <!-- Include chat widget -->
+    <?php include __DIR__ . '/../Public/chat_widget.php'; ?>
 </body>
+
 </html>
 
 <?php

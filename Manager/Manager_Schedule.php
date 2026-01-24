@@ -1,97 +1,241 @@
 <?php
+// ==============================
+// File: schedule.php
+// Calendar Schedule viewing for Designer, Supplier, and Manager
+// ==============================
+require_once __DIR__ . '/../config.php';
 session_start();
-require_once dirname(__DIR__) . '/config.php';
 
-// 检查用户是否以经理身份登录
-if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'manager') {
-    header('Location: ../login.php?redirect=' . urlencode($_SERVER['REQUEST_URI']));
+// Check if user is logged in
+if (empty($_SESSION['user'])) {
+    header('Location: login.php');
     exit;
 }
 
 $user = $_SESSION['user'];
-$user_id = $user['managerid'];
-$user_name = $user['name'];
+$user_type = $user['role']; // 'designer', 'supplier', or 'manager'
+$user_id = null;
+$user_name = '';
+$schedules = [];
 
-// 获取搜索参数
-$search = isset($_GET['search']) ? mysqli_real_escape_string($mysqli, $_GET['search']) : '';
-$status_filter = isset($_GET['status']) ? $_GET['status'] : '';
-
-// 构建查询条件 - 只显示已批准的订单（Designing 和 Completed）且属于当前经理
-$where_conditions = array(
-    "(o.ostatus = 'Designing' OR o.ostatus = 'Completed' OR o.ostatus = 'designing' OR o.ostatus = 'completed')",
-    "EXISTS (SELECT 1 FROM OrderProduct op WHERE op.orderid = o.orderid AND op.managerid = $user_id)"
-);
-
-if(!empty($search)) {
-    $search_conditions = array();
-    $search_conditions[] = "o.orderid LIKE '%$search%'";
-    $search_conditions[] = "c.cname LIKE '%$search%'";
-    $search_conditions[] = "c.cemail LIKE '%$search%'";
-    $search_conditions[] = "o.Requirements LIKE '%$search%'";
-    $search_conditions[] = "d.tag LIKE '%$search%'";
-    $where_conditions[] = "(" . implode(" OR ", $search_conditions) . ")";
+// Determine user ID based on role and dashboard link
+// Note: schedule.php is in the supplier folder, so use ../ to go up one level
+if ($user_type === 'designer') {
+    $user_id = $user['designerid'];
+    $user_name = $user['name'];
+    $dashboardLink = '../designer/designer_dashboard.php';
+} elseif ($user_type === 'supplier') {
+    $user_id = $user['supplierid'];
+    $user_name = $user['name'];
+    $dashboardLink = 'dashboard.php';
+} elseif ($user_type === 'manager') {
+    $user_id = $user['managerid'];
+    $user_name = $user['name'];
+    $dashboardLink = '../manager/Manager_MyOrder.html';
+} else {
+    header('Location: login.php');
+    exit;
 }
 
-// 修改：使用 OrderFinishDate 而不是 FinishDate
-if(!empty($status_filter)) {
-    if($status_filter == 'designing') {
-        $where_conditions[] = "o.ostatus = 'Designing'";
-    } elseif($status_filter == 'completed') {
-        $where_conditions[] = "o.ostatus = 'Completed'";
-    } elseif($status_filter == 'today') {
-        $where_conditions[] = "DATE(s.OrderFinishDate) = CURDATE()";
-    } elseif($status_filter == 'overdue') {
-        $where_conditions[] = "s.OrderFinishDate < NOW() AND o.ostatus = 'Designing'";
-    } elseif($status_filter == 'upcoming') {
-        $where_conditions[] = "s.OrderFinishDate > NOW() AND o.ostatus = 'Designing'";
+// Get current month and year
+$current_month = isset($_GET['month']) ? (int)$_GET['month'] : date('m');
+$current_year = isset($_GET['year']) ? (int)$_GET['year'] : date('Y');
+
+// Validate month and year
+if ($current_month < 1 || $current_month > 12) {
+    $current_month = date('m');
+}
+if ($current_year < 2000 || $current_year > 2100) {
+    $current_year = date('Y');
+}
+
+// Fetch schedules based on user type
+if ($user_type === 'designer') {
+    // Designer sees schedules with design finish dates from Schedule table
+    $sql = "
+        SELECT 
+            s.scheduleid,
+            s.DesignFinishDate as FinishDate,
+            o.orderid,
+            o.odate as OrderDate,
+            o.ostatus,
+            c.budget,
+            o.Requirements,
+            c.cname as ClientName,
+            d.designid,
+            m.mname as ManagerName
+        FROM `Schedule` s
+        JOIN `Order` o ON s.orderid = o.orderid
+        JOIN `Design` d ON o.designid = d.designid
+        JOIN `Client` c ON o.clientid = c.clientid
+        JOIN `Manager` m ON s.managerid = m.managerid
+        WHERE d.designerid = ?
+        ORDER BY s.DesignFinishDate ASC
+    ";
+    
+    $stmt = $mysqli->prepare($sql);
+    $stmt->bind_param("i", $user_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $schedules = $result->fetch_all(MYSQLI_ASSOC);
+    $stmt->close();
+
+} elseif ($user_type === 'supplier') {
+    // Supplier sees schedules for orders that include their products
+    $sql = "
+        SELECT 
+            op.orderproductid,
+            op.deliverydate as FinishDate,
+            o.orderid,
+            o.odate as OrderDate,
+            op.status as ProductStatus,
+            o.ostatus,
+            c.budget,
+            c.cname as ClientName,
+            m.mname as ManagerName,
+            p.pname as ProductName,
+            op.quantity
+        FROM `OrderProduct` op
+        JOIN `Order` o ON op.orderid = o.orderid
+        JOIN `Product` p ON op.productid = p.productid
+        JOIN `Client` c ON o.clientid = c.clientid
+        JOIN `Manager` m ON op.managerid = m.managerid
+        WHERE p.supplierid = ?
+        ORDER BY op.deliverydate ASC
+    ";
+    
+    $stmt = $mysqli->prepare($sql);
+    $stmt->bind_param("i", $user_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $schedules = $result->fetch_all(MYSQLI_ASSOC);
+    $stmt->close();
+
+} elseif ($user_type === 'manager') {
+    // Manager sees schedules for orders they manage from Schedule table
+    $sql = "
+        SELECT 
+            s.scheduleid,
+            s.OrderFinishDate as FinishDate,
+            s.OrderFinishDate,
+            s.DesignFinishDate,
+            o.orderid,
+            o.odate as OrderDate,
+            o.ostatus,
+            c.budget,
+            o.Requirements,
+            c.cname as ClientName,
+            d.designid,
+            des.dname as DesignerName
+        FROM `Schedule` s
+        JOIN `Order` o ON s.orderid = o.orderid
+        JOIN `Design` d ON o.designid = d.designid
+        JOIN `Designer` des ON d.designerid = des.designerid
+        JOIN `Client` c ON o.clientid = c.clientid
+        WHERE s.managerid = ?
+        ORDER BY s.OrderFinishDate ASC
+    ";
+    
+    $stmt = $mysqli->prepare($sql);
+    $stmt->bind_param("i", $user_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $schedules = $result->fetch_all(MYSQLI_ASSOC);
+    $stmt->close();
+}
+
+// Build schedule array indexed by date
+$schedule_by_date = [];
+foreach ($schedules as $schedule) {
+    if (!empty($schedule['FinishDate'])) {
+        $date = date('Y-m-d', strtotime($schedule['FinishDate']));
+        if (!isset($schedule_by_date[$date])) {
+            $schedule_by_date[$date] = [];
+        }
+        $schedule_by_date[$date][] = $schedule;
     }
 }
 
-$where_clause = !empty($where_conditions) ? "WHERE " . implode(" AND ", $where_conditions) : "";
-
-// 修改：使用 OrderFinishDate 而不是 FinishDate
-$sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus,
-               c.clientid, c.cname as client_name, c.cemail as client_email, c.ctel as client_phone, c.budget,
-               d.designid, d.expect_price as design_price, d.tag as design_tag,
-               s.scheduleid, s.OrderFinishDate, s.DesignFinishDate,
-               DATEDIFF(s.OrderFinishDate, CURDATE()) as days_remaining
-        FROM `Order` o
-        LEFT JOIN `Client` c ON o.clientid = c.clientid
-        LEFT JOIN `Design` d ON o.designid = d.designid
-        LEFT JOIN `Schedule` s ON o.orderid = s.orderid
-        $where_clause
-        ORDER BY s.OrderFinishDate ASC, o.odate DESC";
-
-$result = mysqli_query($mysqli, $sql);
-
-if(!$result) {
-    die("Database Error: " . mysqli_error($mysqli));
+// Function to get status badge color
+function getStatusBadgeClass($status) {
+    switch(strtolower($status)) {
+        case 'delivered':
+        case 'completed':
+            return 'bg-success';
+        case 'shipped':
+        case 'manufacturing':
+            return 'bg-info';
+        case 'processing':
+        case 'designing':
+            return 'bg-primary';
+        case 'pending':
+            return 'bg-warning';
+        case 'cancelled':
+            return 'bg-danger';
+        default:
+            return 'bg-secondary';
+    }
 }
 
-// 修改统计查询：使用 OrderFinishDate 而不是 FinishDate
-$stats_sql = "SELECT 
-                COUNT(*) as total_scheduled,
-                SUM(CASE WHEN o.ostatus = 'Designing' THEN 1 ELSE 0 END) as total_designing,
-                SUM(CASE WHEN o.ostatus = 'Completed' THEN 1 ELSE 0 END) as total_completed,
-                SUM(CASE WHEN s.OrderFinishDate < NOW() AND o.ostatus = 'Designing' THEN 1 ELSE 0 END) as total_overdue,
-                SUM(CASE WHEN DATE(s.OrderFinishDate) = CURDATE() THEN 1 ELSE 0 END) as total_today
-              FROM `Order` o
-              LEFT JOIN `Schedule` s ON o.orderid = s.orderid
-              WHERE (o.ostatus = 'Designing' OR o.ostatus = 'Completed' 
-              OR o.ostatus = 'designing' OR o.ostatus = 'completed')
-              AND EXISTS (SELECT 1 FROM OrderProduct op WHERE op.orderid = o.orderid AND op.managerid = $user_id)";
-$stats_result = mysqli_query($mysqli, $stats_sql);
-$stats = mysqli_fetch_assoc($stats_result);
+// Generate calendar
+function generateCalendar($month, $year, $schedule_by_date) {
+    $first_day = mktime(0, 0, 0, $month, 1, $year);
+    $last_day = date('t', $first_day);
+    $first_day_of_week = date('w', $first_day);
+    
+    $calendar = [];
+    $week = [];
+    
+    // Add empty cells for days before the first day of the month
+    for ($i = 0; $i < $first_day_of_week; $i++) {
+        $week[] = null;
+    }
+    
+    // Add days of the month
+    for ($day = 1; $day <= $last_day; $day++) {
+        $date = sprintf('%04d-%02d-%02d', $year, $month, $day);
+        $week[] = [
+            'day' => $day,
+            'date' => $date,
+            'schedules' => isset($schedule_by_date[$date]) ? $schedule_by_date[$date] : []
+        ];
+        
+        if (count($week) == 7) {
+            $calendar[] = $week;
+            $week = [];
+        }
+    }
+    
+    // Add remaining cells
+    if (!empty($week)) {
+        while (count($week) < 7) {
+            $week[] = null;
+        }
+        $calendar[] = $week;
+    }
+    
+    return $calendar;
+}
 
-// 修改：使用 OrderFinishDate 而不是 FinishDate
-$weekly_completed_sql = "SELECT COUNT(*) as weekly_completed
-                        FROM `Order` o
-                        LEFT JOIN `Schedule` s ON o.orderid = s.orderid
-                        WHERE o.ostatus = 'Completed' 
-                        AND YEARWEEK(s.OrderFinishDate, 1) = YEARWEEK(CURDATE(), 1)
-                        AND EXISTS (SELECT 1 FROM OrderProduct op WHERE op.orderid = o.orderid AND op.managerid = $user_id)";
-$weekly_result = mysqli_query($mysqli, $weekly_completed_sql);
-$weekly_stats = mysqli_fetch_assoc($weekly_result);
+$calendar = generateCalendar($current_month, $current_year, $schedule_by_date);
+
+// Navigation
+$prev_month = $current_month - 1;
+$prev_year = $current_year;
+if ($prev_month < 1) {
+    $prev_month = 12;
+    $prev_year--;
+}
+
+$next_month = $current_month + 1;
+$next_year = $current_year;
+if ($next_month > 12) {
+    $next_month = 1;
+    $next_year++;
+}
+
+$month_name = date('F', mktime(0, 0, 0, $current_month, 1));
+
 ?>
 
 <!DOCTYPE html>
@@ -99,461 +243,606 @@ $weekly_stats = mysqli_fetch_assoc($weekly_result);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Schedule Calendar - <?php echo ucfirst($user_type); ?></title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="../css/Manager_style.css">
-    <title>Schedule Management - HappyDesign</title>
     <style>
-        /* 状态标签 */
-        .status-designing {
-            background-color: #17a2b8;
+        body {
+            background-color: #f0f0f0;
+        }
+
+        .dashboard-header {
+            background: linear-gradient(135deg, #2c3e50, #3498db);
             color: white;
+            padding: 2rem 0;
+            margin-bottom: 2rem;
+            border-radius: 0 0 15px 15px;
         }
-        .status-completed {
-            background-color: #28a745;
+
+        .dashboard-header h2 {
+            margin: 0;
+            font-weight: 600;
+        }
+
+        .dashboard-header p {
+            margin: 0.5rem 0 0 0;
+            opacity: 0.9;
+        }
+
+        .calendar-nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 3rem;
+            margin-bottom: 2rem;
+        }
+
+        .calendar-nav a {
+            background-color: #3498db;
             color: white;
-        }
-        
-        /* 统计卡片 */
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-        
-        .stat-card {
-            background: white;
+            padding: 0.75rem 1.5rem;
             border-radius: 8px;
-            padding: 20px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            text-align: center;
-            transition: transform 0.3s ease;
-            border: 1px solid #e0e0e0;
-        }
-        
-        .stat-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 5px 15px rgba(0,0,0,0.15);
-        }
-        
-        .stat-value {
-            font-size: 28px;
-            font-weight: bold;
-            margin-bottom: 5px;
-        }
-        
-        .stat-label {
-            color: #666;
-            font-size: 14px;
-            font-weight: 500;
-        }
-        
-        .stat-card.designing .stat-value { color: #17a2b8; }
-        .stat-card.completed .stat-value { color: #28a745; }
-        .stat-card.overdue .stat-value { color: #dc3545; }
-        .stat-card.today .stat-value { color: #ffc107; }
-        .stat-card.progress .stat-value { color: #6f42c1; }
-        
-        /* 过滤器 */
-        .filter-tabs {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-        }
-        
-        .filter-tab {
-            padding: 8px 16px;
-            background: #f8f9fa;
-            border: 1px solid #dee2e6;
-            border-radius: 20px;
-            cursor: pointer;
+            text-decoration: none;
             transition: all 0.3s ease;
+            font-weight: 600;
         }
-        
-        .filter-tab:hover {
-            background: #e9ecef;
-        }
-        
-        .filter-tab.active {
-            background: #007bff;
+
+        .calendar-nav a:hover {
+            background-color: #2980b9;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            text-decoration: none;
             color: white;
-            border-color: #007bff;
         }
-        
-        /* 倒计时 */
-        .countdown {
-            font-weight: bold;
-            padding: 3px 8px;
+
+        .month-year {
+            font-size: 1.8rem;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        .calendar-table {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            margin-bottom: 2rem;
+        }
+
+        .calendar-table table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 0;
+        }
+
+        .calendar-table th {
+            background-color: #f8f9fa;
+            color: #2c3e50;
+            padding: 1rem;
+            text-align: center;
+            font-weight: 600;
+            border-bottom: 2px solid #ecf0f1;
+        }
+
+        .calendar-table td {
+            width: 14.28%;
+            height: 140px;
+            padding: 0.75rem;
+            border: 1px solid #ecf0f1;
+            vertical-align: top;
+            background-color: #fff;
+            transition: background-color 0.2s;
+        }
+
+        .calendar-table td:hover {
+            background-color: #f8f9fa;
+        }
+
+        .calendar-table td.other-month {
+            background-color: #f8f9fa;
+            color: #ccc;
+        }
+
+        .day-number {
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 0.5rem;
+            font-size: 1rem;
+        }
+
+        .day-number.other-month {
+            color: #ccc;
+        }
+
+        .day-number.today {
+            background-color: #3498db;
+            color: white;
+            padding: 0.25rem 0.5rem;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .schedule-item {
+            background-color: #e8f4f8;
+            border-left: 3px solid #3498db;
+            padding: 0.4rem 0.6rem;
+            margin: 0.3rem 0;
             border-radius: 4px;
-            font-size: 12px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            overflow: hidden;
+            display: block;
         }
-        
-        .countdown-overdue {
-            background-color: #dc3545;
-            color: white;
+
+        .schedule-item:hover {
+            background-color: #d0e8f2;
+            transform: translateX(2px);
+            text-decoration: none;
+            color: #2c3e50;
         }
-        
-        .countdown-today {
-            background-color: #ffc107;
-            color: #212529;
+
+        .schedule-item.bg-success {
+            border-left-color: #155724;
+            background-color: #d4edda;
         }
-        
-        .countdown-upcoming {
-            background-color: #28a745;
-            color: white;
+
+        .schedule-item.bg-info {
+            border-left-color: #0c5460;
+            background-color: #d1ecf1;
         }
-        
-        /* 时间线指示器 */
-        .timeline-indicator {
-            display: inline-block;
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            margin-right: 5px;
+
+        .schedule-item.bg-primary {
+            border-left-color: #084298;
+            background-color: #cfe2ff;
         }
-        
-        .timeline-today { background-color: #007bff; }
-        .timeline-overdue { background-color: #dc3545; }
-        .timeline-upcoming { background-color: #28a745; }
-        
-        /* 状态指示器 */
-        .status-indicator {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            display: inline-block;
-            margin-right: 5px;
+
+        .schedule-item.bg-warning {
+            border-left-color: #856404;
+            background-color: #fff3cd;
         }
-        
-        .status-indicator.designing { background-color: #17a2b8; }
-        .status-indicator.completed { background-color: #28a745; }
-        
-        /* 添加新的样式用于显示两个日期 */
-        .date-info {
-            display: flex;
-            flex-direction: column;
-            gap: 3px;
+
+        .schedule-item.bg-danger {
+            border-left-color: #721c24;
+            background-color: #f8d7da;
         }
-        .date-label {
-            font-size: 11px;
-            color: #666;
-        }
-        .date-value {
+
+        .schedule-item-text {
             font-weight: 500;
+            color: #2c3e50;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: #7f8c8d;
+        }
+
+        .empty-state i {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+
+        .modal-content {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        }
+
+        .modal-header {
+            border-bottom: 1px solid #ecf0f1;
+            background-color: #f8f9fa;
+            border-radius: 15px 15px 0 0;
+        }
+
+        .modal-title {
+            color: #2c3e50;
+            font-weight: 600;
+        }
+
+        .schedule-detail {
+            margin-bottom: 1rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #ecf0f1;
+        }
+
+        .schedule-detail:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .detail-label {
+            font-weight: 600;
+            color: #3498db;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            margin-bottom: 0.3rem;
+        }
+
+        .detail-value {
+            color: #2c3e50;
+            font-size: 1rem;
+        }
+
+        .badge {
+            padding: 0.5rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .badge.bg-success {
+            background-color: #155724 !important;
+            color: white;
+        }
+
+        .badge.bg-info {
+            background-color: #0c5460 !important;
+            color: white;
+        }
+
+        .badge.bg-primary {
+            background-color: #084298 !important;
+            color: white;
+        }
+
+        .badge.bg-warning {
+            background-color: #856404 !important;
+            color: white;
+        }
+
+        .badge.bg-danger {
+            background-color: #721c24 !important;
+            color: white;
+        }
+
+        @media (max-width: 768px) {
+            .calendar-table td {
+                height: 100px;
+                padding: 0.5rem;
+                font-size: 0.85rem;
+            }
+
+            .calendar-table th {
+                padding: 0.75rem 0.5rem;
+                font-size: 0.9rem;
+            }
+
+            .day-number {
+                font-size: 0.9rem;
+            }
+
+            .schedule-item {
+                font-size: 0.7rem;
+                padding: 0.3rem 0.4rem;
+            }
+
+            .dashboard-header h2 {
+                font-size: 1.5rem;
+            }
+
+            .month-year {
+                font-size: 1.3rem;
+            }
         }
     </style>
 </head>
 <body>
-    <!-- 导航栏 -->
-    <nav class="nav-bar">
-        <div class="nav-container">
-            <a href="#" class="nav-brand">HappyDesign</a>
-            <div class="nav-links">
-                <a href="Manager_introduct.php">Introduct</a>
-                <a href="Manager_MyOrder.php">MyOrder</a>
-                <a href="Manager_Massage.php">Massage</a>
-                <a href="Manager_Schedule.php" class="active">Schedule</a>
-            </div>
-            <div class="user-info">
-                <span>Welcome, <?php echo htmlspecialchars($user_name); ?></span>
-                <a href="../logout.php" class="btn-logout">Logout</a>
-            </div>
+    
+    <!-- Navbar -->
+    <header class="bg-white shadow p-3 d-flex justify-content-between align-items-center">
+        <div class="d-flex align-items-center gap-3">
+            <div class="h4 mb-0"><a href="Manager_MyOrder.php" style="text-decoration: none; color: inherit;">HappyDesign</a></div>
+            <nav>
+                <ul class="nav align-items-center gap-2">
+                    <li class="nav-item"><a class="nav-link" href="Manager_introduct.php">Introduct</a></li>
+                    <li class="nav-item"><a class="nav-link" href="Manager_MyOrder.php">MyOrder</a></li>
+                    <li class="nav-item"><a class="nav-link" href="Manager_Schedule.php">Schedule</a></li>
+                </ul>
+            </nav>
         </div>
-    </nav>
+        <nav>
+            <ul class="nav align-items-center">
+                <li class="nav-item me-2">
+                    <a class="nav-link text-muted" href="#">
+                        <i class="fas fa-user me-1"></i>Hello <?php echo htmlspecialchars($user_name); ?>
+                    </a>
+                </li>
+                <li class="nav-item"><a class="nav-link" href="../logout.php">Logout</a></li>
+            </ul>
+        </nav>
+    </header>
 
-    <!-- 主要内容 -->
-    <div class="page-container">
-        <h1 class="page-title">Schedule Management - <?php echo htmlspecialchars($user_name); ?></h1>
-        
-        <!-- 搜索框 -->
-        <div class="search-box no-print">
-            <form method="GET" action="" class="d-flex align-center">
-                <input type="text" name="search" class="search-input" 
-                       placeholder="Search orders..." 
-                       value="<?php echo htmlspecialchars($search); ?>">
-                <button type="submit" class="search-button">Search</button>
-                <?php if(!empty($search) || !empty($status_filter)): ?>
-                    <a href="Manager_Schedule.php" class="btn btn-outline ml-2">Clear All</a>
-                <?php endif; ?>
-            </form>
-        </div>
-        
-        <!-- 过滤器 -->
-        <div class="filter-tabs no-print">
-            <div class="filter-tab <?php echo empty($status_filter) ? 'active' : ''; ?>" 
-                 onclick="window.location.href='Manager_Schedule.php'">All</div>
-            <div class="filter-tab <?php echo $status_filter == 'designing' ? 'active' : ''; ?>" 
-                 onclick="window.location.href='Manager_Schedule.php?status=designing'">
-                <span class="status-indicator designing"></span>Designing
+    <!-- Dashboard Content -->
+    <div class="container mb-5">
+
+        <?php if (empty($schedules)): ?>
+            <div class="empty-state">
+                <i class="fas fa-inbox"></i>
+                <h3>No Schedules Found</h3>
+                <p>You don't have any schedules assigned yet.</p>
             </div>
-            <div class="filter-tab <?php echo $status_filter == 'completed' ? 'active' : ''; ?>" 
-                 onclick="window.location.href='Manager_Schedule.php?status=completed'">
-                <span class="status-indicator completed"></span>Completed
-            </div>
-            <div class="filter-tab <?php echo $status_filter == 'today' ? 'active' : ''; ?>" 
-                 onclick="window.location.href='Manager_Schedule.php?status=today'">
-                <span class="timeline-indicator timeline-today"></span>Order Due Today
-            </div>
-            <div class="filter-tab <?php echo $status_filter == 'overdue' ? 'active' : ''; ?>" 
-                 onclick="window.location.href='Manager_Schedule.php?status=overdue'">
-                <span class="timeline-indicator timeline-overdue"></span>Order Overdue
-            </div>
-            <div class="filter-tab <?php echo $status_filter == 'upcoming' ? 'active' : ''; ?>" 
-                 onclick="window.location.href='Manager_Schedule.php?status=upcoming'">
-                <span class="timeline-indicator timeline-upcoming"></span>Order Upcoming
-            </div>
-        </div>
-        
-        <?php
-        if(mysqli_num_rows($result) == 0){
-            echo '<div class="alert alert-info">
-                <div>
-                    <strong>No scheduled orders found' . (!empty($search) ? ' matching your search criteria.' : ' at the moment.') . '</strong>
-                    <p class="mb-0">Orders that have been approved will appear here with their schedule.</p>
+        <?php else: ?>
+            <!-- Calendar Navigation -->
+            <div class="calendar-nav">
+                <a href="?month=<?php echo $prev_month; ?>&year=<?php echo $prev_year; ?>">
+                    <i class="fas fa-chevron-left me-2"></i>Previous
+                </a>
+                <div class="month-year">
+                    <?php echo $month_name . ' ' . $current_year; ?>
                 </div>
-            </div>';
-        } else {
-            $total_scheduled = $stats['total_scheduled'] ?? 0;
-        ?>
-        
-        <!-- 统计卡片 -->
-        <div class="stats-grid no-print">
-            <div class="stat-card designing">
-                <div class="stat-value"><?php echo $stats['total_designing'] ?? 0; ?></div>
-                <div class="stat-label">In Progress</div>
-                <div style="font-size: 12px; color: #888; margin-top: 5px;">Active orders being designed</div>
+                <a href="?month=<?php echo $next_month; ?>&year=<?php echo $next_year; ?>">
+                    Next<i class="fas fa-chevron-right ms-2"></i>
+                </a>
             </div>
-            <div class="stat-card completed">
-                <div class="stat-value"><?php echo $stats['total_completed'] ?? 0; ?></div>
-                <div class="stat-label">Completed</div>
-                <div style="font-size: 12px; color: #888; margin-top: 5px;">Successfully delivered orders</div>
+
+            <!-- Calendar Table -->
+            <div class="calendar-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Sunday</th>
+                            <th>Monday</th>
+                            <th>Tuesday</th>
+                            <th>Wednesday</th>
+                            <th>Thursday</th>
+                            <th>Friday</th>
+                            <th>Saturday</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($calendar as $week): ?>
+                            <tr>
+                                <?php foreach ($week as $day): ?>
+                                    <?php if ($day === null): ?>
+                                        <td class="other-month"></td>
+                                    <?php else: ?>
+                                        <td class="<?php echo (date('Y-m-d') === $day['date']) ? 'today' : ''; ?>">
+                                            <div class="day-number <?php echo (date('Y-m-d') === $day['date']) ? 'today' : ''; ?>">
+                                                <?php echo $day['day']; ?>
+                                            </div>
+                                            <?php foreach ($day['schedules'] as $schedule): ?>
+                                                <?php if ($user_type === 'designer'): ?>
+                                                    <a class="schedule-item" 
+                                                       data-bs-toggle="modal" 
+                                                       data-bs-target="#scheduleModal<?php echo $schedule['scheduleid']; ?>"
+                                                       title="Order #<?php echo $schedule['orderid']; ?> - <?php echo htmlspecialchars($schedule['ClientName']); ?>"
+                                                       href="javascript:void(0);">
+                                                        <span class="schedule-item-text">
+                                                            Order #<?php echo $schedule['orderid']; ?> - <?php echo htmlspecialchars($schedule['ClientName']); ?>
+                                                        </span>
+                                                    </a>
+                                                <?php elseif ($user_type === 'manager'): ?>
+                                                    <a class="schedule-item <?php echo getStatusBadgeClass($schedule['ostatus']); ?>" 
+                                                       data-bs-toggle="modal" 
+                                                       data-bs-target="#scheduleModal<?php echo $schedule['scheduleid']; ?>"
+                                                       title="Order #<?php echo $schedule['orderid']; ?> - <?php echo htmlspecialchars($schedule['ClientName']); ?>"
+                                                       href="javascript:void(0);">
+                                                        <span class="schedule-item-text">
+                                                            Order #<?php echo $schedule['orderid']; ?> - <?php echo htmlspecialchars($schedule['ClientName']); ?>
+                                                        </span>
+                                                        <span class="schedule-item-subtext" style="font-size: 0.65rem; color: #666; margin-top: 0.2rem; display: block;">
+                                                            Design: <?php echo date('m-d', strtotime($schedule['DesignFinishDate'])); ?>
+                                                        </span>
+                                                    </a>
+                                                <?php else: ?>
+                                                    <a class="schedule-item <?php echo getStatusBadgeClass($schedule['ProductStatus']); ?>" 
+                                                       data-bs-toggle="modal" 
+                                                       data-bs-target="#scheduleModal<?php echo $schedule['orderproductid']; ?>"
+                                                       title="<?php echo htmlspecialchars($schedule['ProductName']); ?>"
+                                                       href="javascript:void(0);">
+                                                        <span class="schedule-item-text">
+                                                            OP #<?php echo $schedule['orderproductid']; ?> - <?php echo htmlspecialchars($schedule['ProductName']); ?>
+                                                        </span>
+                                                    </a>
+                                                <?php endif; ?>
+                                            <?php endforeach; ?>
+                                        </td>
+                                    <?php endif; ?>
+                                <?php endforeach; ?>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
             </div>
-            <div class="stat-card overdue">
-                <div class="stat-value"><?php echo $stats['total_overdue'] ?? 0; ?></div>
-                <div class="stat-label">Order Overdue</div>
-                <div style="font-size: 12px; color: #888; margin-top: 5px;">Past order due date</div>
-            </div>
-            <div class="stat-card today">
-                <div class="stat-value"><?php echo $stats['total_today'] ?? 0; ?></div>
-                <div class="stat-label">Order Due Today</div>
-                <div style="font-size: 12px; color: #888; margin-top: 5px;">Orders due today</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value"><?php echo $weekly_stats['weekly_completed'] ?? 0; ?></div>
-                <div class="stat-label">This Week</div>
-                <div style="font-size: 12px; color: #888; margin-top: 5px;">Completed this week</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value"><?php echo $total_scheduled; ?></div>
-                <div class="stat-label">Total Scheduled</div>
-                <div style="font-size: 12px; color: #888; margin-top: 5px;">All scheduled orders</div>
-            </div>
-        </div>
-        
-        <!-- 订单表格 -->
-        <div class="table-container">
-            <table class="table">
-                <thead>
-                    <tr>
-                        <th>Order ID</th>
-                        <th>Client</th>
-                        <th>Status</th>
-                        <th>Order Date</th>
-                        <th>Order Finish Date</th>
-                        <th>Design Finish Date</th>
-                        <th>Time Left</th>
-                        <th>Budget</th>
-                        <th>Design</th>
-                        <th class="no-print">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php 
-                    while($row = mysqli_fetch_assoc($result)): 
-                        // 确定倒计时样式 - 基于 OrderFinishDate
-                        $countdown_class = '';
-                        $countdown_text = '';
-                        $order_finish_date = $row['OrderFinishDate'];
-                        $design_finish_date = $row['DesignFinishDate'];
-                        
-                        if($row['ostatus'] == 'Completed') {
-                            $countdown_class = 'countdown-upcoming';
-                            $countdown_text = 'Completed';
-                        } elseif(!empty($order_finish_date) && $order_finish_date != '0000-00-00') {
-                            $days_remaining = $row['days_remaining'];
-                            if($days_remaining < 0) {
-                                $countdown_class = 'countdown-overdue';
-                                $countdown_text = abs($days_remaining) . ' days overdue';
-                            } elseif($days_remaining == 0) {
-                                $countdown_class = 'countdown-today';
-                                $countdown_text = 'Due today';
-                            } elseif($days_remaining > 0) {
-                                $countdown_class = 'countdown-upcoming';
-                                $countdown_text = $days_remaining . ' days left';
-                            }
-                        } else {
-                            $countdown_class = 'countdown-upcoming';
-                            $countdown_text = 'No date set';
-                        }
-                    ?>
-                    <tr>
-                        <td><strong>#<?php echo htmlspecialchars($row["orderid"]); ?></strong></td>
-                        <td>
-                            <div class="d-flex flex-column">
-                                <strong><?php echo htmlspecialchars($row["client_name"] ?? 'N/A'); ?></strong>
-                                <small class="text-muted">Email: <?php echo htmlspecialchars($row["client_email"]); ?></small>
-                            </div>
-                        </td>
-                        <td>
-                            <span class="status-badge <?php echo strtolower($row["ostatus"]) == 'completed' ? 'status-completed' : 'status-designing'; ?>">
-                                <?php echo htmlspecialchars($row["ostatus"]); ?>
-                            </span>
-                        </td>
-                        <td>
-                            <?php 
-                            if(isset($row["odate"]) && $row["odate"] != '0000-00-00 00:00:00'){
-                                echo date('Y-m-d', strtotime($row["odate"]));
-                            } else {
-                                echo '<span class="text-muted">Not set</span>';
-                            }
-                            ?>
-                        </td>
-                        <td>
-                            <?php 
-                            if(isset($row["OrderFinishDate"]) && $row["OrderFinishDate"] != '0000-00-00'){
-                                echo date('Y-m-d', strtotime($row["OrderFinishDate"]));
-                            } else {
-                                echo '<span class="text-muted">Not scheduled</span>';
-                            }
-                            ?>
-                        </td>
-                        <td>
-                            <?php 
-                            if(isset($row["DesignFinishDate"]) && $row["DesignFinishDate"] != '0000-00-00'){
-                                echo date('Y-m-d', strtotime($row["DesignFinishDate"]));
-                            } else {
-                                echo '<span class="text-muted">Not scheduled</span>';
-                            }
-                            ?>
-                        </td>
-                        <td>
-                            <span class="countdown <?php echo $countdown_class; ?>">
-                                <?php echo $countdown_text; ?>
-                            </span>
-                        </td>
-                        <td><strong class="text-success">HK$<?php echo number_format($row["budget"], 2); ?></strong></td>
-                        <td>
-                            <?php if(!empty($row["designid"])): ?>
-                            <small>Design #<?php echo htmlspecialchars($row["designid"]); ?></small><br>
-                            <small class="text-muted"><?php echo htmlspecialchars(substr($row["design_tag"] ?? '', 0, 20)); ?></small>
-                            <?php else: ?>
-                            <span class="text-muted">No design</span>
-                            <?php endif; ?>
-                        </td>
-                        <td class="no-print">
-                            <div class="btn-group">
-                                <button onclick="viewOrder(<?php echo $row['orderid']; ?>)" 
-                                        class="btn btn-sm btn-primary">View Order</button>
-                                <button onclick="viewSchedule(<?php echo $row['orderid']; ?>)" 
-                                        class="btn btn-sm btn-primary">View Schedule</button>
-                                <?php if($row['ostatus'] == 'Designing'): ?>
-                                <button onclick="markComplete(<?php echo $row['orderid']; ?>)" 
-                                        class="btn btn-sm btn-success">Complete</button>
-                                <?php endif; ?>
-                            </div>
-                        </td>
-                    </tr>
-                    <?php endwhile; ?>
-                </tbody>
-            </table>
-        </div>
-        
-        <!-- 分页信息 -->
-        <div class="card mt-3">
-            <div class="card-body d-flex justify-between align-center">
-                <div>
-                    <strong>Showing <?php echo mysqli_num_rows($result); ?> scheduled orders</strong>
-                    <p class="text-muted mb-0">
-                        <?php 
-                        $completed_count = $stats['total_completed'] ?? 0;
-                        $designing_count = $stats['total_designing'] ?? 0;
-                        echo "$completed_count completed, $designing_count in progress";
-                        ?>
-                    </p>
-                </div>
-                <div class="btn-group no-print">
-                    <button onclick="printPage()" class="btn btn-outline">Print Schedule</button>
-                </div>
-            </div>
-        </div>
-        
-        <?php
-        }
-        ?>
-        
-        <!-- 返回按钮 -->
-        <div class="d-flex justify-between mt-4 no-print">
-            <div class="d-flex align-center">
-                <span class="text-muted">Last updated: <?php echo date('Y-m-d H:i'); ?></span>
-            </div>
-        </div>
+        <?php endif; ?>
     </div>
-    
-    <script>
-    function viewOrder(orderId) {
-        window.location.href = 'Manager_view_order.php?id=' + orderId;
-    }
 
-    function viewSchedule(orderId) {
-        window.location.href = 'Manager_Schedule_detail.php?id=' + orderId;
-    }
+    <!-- Schedule Detail Modals -->
+    <?php foreach ($schedules as $schedule): ?>
+        <?php if ($user_type === 'manager'): ?>
+            <!-- Manager Modal: Show Order and Schedule information -->
+            <div class="modal fade" id="scheduleModal<?php echo $schedule['scheduleid']; ?>" tabindex="-1">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">
+                                <i class="fas fa-calendar-check me-2"></i>Order #<?php echo $schedule['orderid']; ?>
+                            </h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
 
-    
-    function markComplete(orderId) {
-        if(confirm('Are you sure you want to mark order #' + orderId + ' as completed?')) {
-            window.location.href = 'Manager_mark_complete.php?id=' + orderId;
-        }
-    }
-    
-    function printPage() {
-        window.print();
-    }
-    
-    // 快捷键支持
-    document.addEventListener('DOMContentLoaded', function() {
-        document.addEventListener('keydown', function(e) {
-            if(e.ctrlKey && e.key === 'f') {
-                e.preventDefault();
-                const searchInput = document.querySelector('input[name="search"]');
-                if(searchInput) {
-                    searchInput.focus();
-                    searchInput.select();
-                }
-            }
-            
-            if(e.ctrlKey && e.key === 'p') {
-                e.preventDefault();
-                printPage();
-            }
-            
-            if(e.key === 'Escape') {
-                window.location.href = 'Manager_MyOrder.php';
-            }
-        });
-    });
-    </script>
+                            <div class="schedule-detail">
+                                <div class="detail-label">Order ID</div>
+                                <div class="detail-value">#<?php echo htmlspecialchars($schedule['orderid']); ?></div>
+                            </div>
+
+                            <div class="schedule-detail">
+                                <div class="detail-label">Client Name</div>
+                                <div class="detail-value"><?php echo htmlspecialchars($schedule['ClientName']); ?></div>
+                            </div>
+
+                            <div class="schedule-detail">
+                                <div class="detail-label">Designer</div>
+                                <div class="detail-value"><?php echo htmlspecialchars($schedule['DesignerName']); ?></div>
+                            </div>
+
+                            <div class="schedule-detail">
+                                <div class="detail-label">Order Status</div>
+                                <div class="detail-value">
+                                    <span class="badge <?php echo getStatusBadgeClass($schedule['ostatus']); ?>">
+                                        <?php echo htmlspecialchars($schedule['ostatus']); ?>
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div class="schedule-detail">
+                                <div class="detail-label">Order Date</div>
+                                <div class="detail-value"><?php echo date('Y-m-d H:i', strtotime($schedule['OrderDate'])); ?></div>
+                            </div>
+
+                            <div class="schedule-detail">
+                                <div class="detail-label">Order Finish Date</div>
+                                <div class="detail-value"><?php echo date('Y-m-d', strtotime($schedule['OrderFinishDate'])); ?></div>
+                            </div>
+
+                            <div class="schedule-detail">
+                                <div class="detail-label">Design Finish Date</div>
+                                <div class="detail-value"><?php echo date('Y-m-d', strtotime($schedule['DesignFinishDate'])); ?></div>
+                            </div>
+
+                            <div class="schedule-detail">
+                                <div class="detail-label">Budget</div>
+                                <div class="detail-value">HK$<?php echo number_format($schedule['budget']); ?></div>
+                            </div>
+
+                            <?php if (!empty($schedule['Requirements'])): ?>
+                                <div class="schedule-detail">
+                                    <div class="detail-label">Requirements</div>
+                                    <div class="detail-value"><?php echo htmlspecialchars($schedule['Requirements']); ?></div>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        <?php elseif ($user_type === 'designer'): ?>
+            <!-- Designer Modal: Show Design and Schedule information -->
+            <div class="modal fade" id="scheduleModal<?php echo $schedule['scheduleid']; ?>" tabindex="-1">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">
+                                <i class="fas fa-calendar-check me-2"></i>Order #<?php echo $schedule['orderid']; ?>
+                            </h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+
+                            <div class="schedule-detail">
+                                <div class="detail-label">Order ID</div>
+                                <div class="detail-value">#<?php echo htmlspecialchars($schedule['orderid']); ?></div>
+                            </div>
+
+                            <div class="schedule-detail">
+                                <div class="detail-label">Client Name</div>
+                                <div class="detail-value"><?php echo htmlspecialchars($schedule['ClientName']); ?></div>
+                            </div>
+
+                            <div class="schedule-detail">
+                                <div class="detail-label">Manager</div>
+                                <div class="detail-value"><?php echo htmlspecialchars($schedule['ManagerName']); ?></div>
+                            </div>
+
+                            <div class="schedule-detail">
+                                <div class="detail-label">Order Date</div>
+                                <div class="detail-value"><?php echo date('Y-m-d H:i', strtotime($schedule['OrderDate'])); ?></div>
+                            </div>
+
+                            <div class="schedule-detail">
+                                <div class="detail-label">Design Finish Date</div>
+                                <div class="detail-value"><?php echo date('Y-m-d', strtotime($schedule['FinishDate'])); ?></div>
+                            </div>
+
+                            <div class="schedule-detail">
+                                <div class="detail-label">Budget</div>
+                                <div class="detail-value">HK$<?php echo number_format($schedule['budget']); ?></div>
+                            </div>
+
+                            <?php if (!empty($schedule['Requirements'])): ?>
+                                <div class="schedule-detail">
+                                    <div class="detail-label">Requirements</div>
+                                    <div class="detail-value"><?php echo htmlspecialchars($schedule['Requirements']); ?></div>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        <?php else: ?>
+            <!-- Designer/Supplier Modal: Show OrderProduct information -->
+            <div class="modal fade" id="scheduleModal<?php echo $schedule['orderproductid']; ?>" tabindex="-1">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">
+                                <i class="fas fa-calendar-check me-2"></i>OrderProduct #<?php echo $schedule['orderproductid']; ?>
+                            </h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="schedule-detail">
+                                <div class="detail-label">OrderProduct ID</div>
+                                <div class="detail-value">#<?php echo htmlspecialchars($schedule['orderproductid']); ?></div>
+                            </div>
+
+                            <div class="schedule-detail">
+                                <div class="detail-label">Product Name</div>
+                                <div class="detail-value"><?php echo htmlspecialchars($schedule['ProductName']); ?></div>
+                            </div>
+
+                            <div class="schedule-detail">
+                                <div class="detail-label">Quantity</div>
+                                <div class="detail-value"><?php echo htmlspecialchars($schedule['quantity']); ?></div>
+                            </div>
+
+                            <div class="schedule-detail">
+                                <div class="detail-label">Product Status</div>
+                                <div class="detail-value">
+                                    <span class="badge <?php echo getStatusBadgeClass($schedule['ProductStatus']); ?>">
+                                        <?php echo htmlspecialchars($schedule['ProductStatus']); ?>
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div class="schedule-detail">
+                                <div class="detail-label">Client Name</div>
+                                <div class="detail-value"><?php echo htmlspecialchars($schedule['ClientName']); ?></div>
+                            </div>
+
+                            <div class="schedule-detail">
+                                <div class="detail-label">Manager</div>
+                                <div class="detail-value"><?php echo htmlspecialchars($schedule['ManagerName']); ?></div>
+                            </div>
+
+                            <div class="schedule-detail">
+                                <div class="detail-label">Order Date</div>
+                                <div class="detail-value"><?php echo date('Y-m-d H:i', strtotime($schedule['OrderDate'])); ?></div>
+                            </div>
+
+                            <div class="schedule-detail">
+                                <div class="detail-label">Delivery Date</div>
+                                <div class="detail-value"><?php echo date('Y-m-d', strtotime($schedule['FinishDate'])); ?></div>
+                            </div>
+
+                            <div class="schedule-detail">
+                                <div class="detail-label">Budget</div>
+                                <div class="detail-value">HK$<?php echo number_format($schedule['budget']); ?></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        <?php endif; ?>
+    <?php endforeach; ?>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
+    <?php include __DIR__ . '/../Public/chat_widget.php'; ?>
+
 </body>
 </html>
-
-<?php
-// 清理资源
-if(isset($stats_result)) {
-    mysqli_free_result($stats_result);
-}
-if(isset($weekly_result)) {
-    mysqli_free_result($weekly_result);
-}
-if(isset($result)) {
-    mysqli_free_result($result);
-}
-?>

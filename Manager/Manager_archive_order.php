@@ -216,3 +216,4 @@ if ($mysqli) {
     mysqli_close($mysqli);
 }
 ?>
+<?php include __DIR__ . '/../Public/chat_widget.php'; ?>

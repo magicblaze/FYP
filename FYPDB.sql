@@ -311,8 +311,8 @@ CREATE TABLE `Schedule` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 INSERT INTO `Schedule` (`scheduleid`,`managerid`,`OrderFinishDate`,`DesignFinishDate`,`orderid`) VALUES
-(1,1,'2026-01-15','2026-01-16',1),
-(2,2,'2026-01-17','2026-01-18',2);
+(1,1,'2026-01-16','2026-01-15',1),
+(2,2,'2026-01-18','2026-01-17',2);
 
 -- ChatRoom Tables
 CREATE TABLE `ChatRoom` (
@@ -512,7 +512,7 @@ INSERT INTO `Order_Contractors` (`order_Contractorid`, `contractorid`, `orderid`
 (3, 1, 3, 1);
 
 INSERT INTO `Schedule` (`scheduleid`,`managerid`,`OrderFinishDate`,`DesignFinishDate`,`orderid`) VALUES
-(3,1,'2026-01-01','2026-01-02',3);
+(3,1,'2026-01-02','2026-01-01',3);
 
 -- Add foreign key from Message.fileid to UploadedFiles.fileid
 ALTER TABLE `Message`

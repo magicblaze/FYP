@@ -2,7 +2,7 @@
 session_start();
 require_once dirname(__DIR__) . '/config.php';
 
-// 检查用户是否以经理身份登录
+// Check if user is logged in as manager
 if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'manager') {
     header('Location: ../login.php?redirect=' . urlencode($_SERVER['REQUEST_URI']));
     exit;
@@ -12,18 +12,15 @@ $user = $_SESSION['user'];
 $user_id = $user['managerid'];
 $user_name = $user['name'];
 
-// 定义一个安全的查询函数，自动检查连接
+// Safe query function with connection check
 function safe_mysqli_query($mysqli, $sql) {
-    // 检查连接是否有效
     if (!isset($mysqli) || !($mysqli instanceof mysqli)) {
-        die("数据库连接无效");
+        die("Database connection invalid");
     }
     
-    // 检查连接是否已关闭
     if (@mysqli_ping($mysqli) === false) {
-        // 尝试重新连接
-        require_once dirname(__DIR__) . '/config.php'; // 重新包含配置文件
-        global $mysqli; // 获取全局的 $mysqli
+        require_once dirname(__DIR__) . '/config.php';
+        global $mysqli;
     }
     
     $result = mysqli_query($mysqli, $sql);
@@ -33,10 +30,10 @@ function safe_mysqli_query($mysqli, $sql) {
     return $result;
 }
 
-// 获取搜索参数
+// Get search parameter
 $search = isset($_GET['search']) ? mysqli_real_escape_string($mysqli, $_GET['search']) : '';
 
-// 构建查询条件 - 只显示当前经理的待处理订单
+// Build query conditions - only show pending orders for current manager
 $where_conditions = array(
     "(o.ostatus = 'Pending' OR o.ostatus = 'pending')",
     "EXISTS (SELECT 1 FROM OrderProduct op WHERE op.orderid = o.orderid AND op.managerid = $user_id)"
@@ -54,7 +51,7 @@ if(!empty($search)) {
 
 $where_clause = !empty($where_conditions) ? "WHERE " . implode(" AND ", $where_conditions) : "";
 
-// 获取所有待处理订单 - UPDATED FOR NEW DATE STRUCTURE
+// Get all pending orders
 $sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus,
                c.clientid, c.cname as client_name, c.cemail as client_email, c.ctel as client_phone, c.budget,
                d.designid, d.expect_price as design_price, d.tag as design_tag,
@@ -66,10 +63,9 @@ $sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus,
         $where_clause
         ORDER BY o.odate DESC";
 
-// 使用安全的查询函数
 $result = safe_mysqli_query($mysqli, $sql);
 
-// 计算统计信息 - 只统计当前经理的订单
+// Calculate statistics - only for current manager's orders
 $stats_sql = "SELECT 
                 COUNT(*) as total_pending,
                 SUM(c.budget) as total_budget,
@@ -84,161 +80,211 @@ $stats = mysqli_fetch_assoc($stats_result);
 
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HappyDesign - Awaiting Confirmation</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="../css/Manager_style.css">
-    <title>Pending Orders - HappyDesign</title>
 </head>
-<body>
-    <!-- 导航栏 -->
-    <nav class="nav-bar">
-        <div class="nav-container">
-            <a href="#" class="nav-brand">HappyDesign</a>
-            <div class="nav-links">
-                <a href="Manager_introduct.php">Introduct</a>
-                <a href="Manager_MyOrder.php">MyOrder</a>
-                <a href="Manager_Massage.php">Massage</a>
-                <a href="Manager_Schedule.php">Schedule</a>
-            </div>
-            <div class="user-info">
-                <span>Welcome, <?php echo htmlspecialchars($user_name); ?></span>
-                <a href="../logout.php" class="btn-logout">Logout</a>
-            </div>
-        </div>
-    </nav>
 
-    <!-- 主要内容 -->
-    <div class="page-container">
-        <h1 class="page-title">Pending Orders - <?php echo htmlspecialchars($user_name); ?></h1>
-        
+<body>
+    <!-- Header Navigation (matching Manager_MyOrder.php style) -->
+    <header class="bg-white shadow p-3 d-flex justify-content-between align-items-center">
+        <div class="d-flex align-items-center gap-3">
+            <div class="h4 mb-0"><a href="Manager_MyOrder.php" style="text-decoration: none; color: inherit;">HappyDesign</a></div>
+            <nav>
+                <ul class="nav align-items-center gap-2">
+                    <li class="nav-item"><a class="nav-link" href="Manager_introduct.php">Introduct</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="Manager_MyOrder.php">MyOrder</a></li>
+                    <li class="nav-item"><a class="nav-link" href="Manager_Schedule.php">Schedule</a></li>
+                </ul>
+            </nav>
+        </div>
+        <nav>
+            <ul class="nav align-items-center">
+                <li class="nav-item me-2">
+                    <a class="nav-link text-muted" href="#">
+                        <i class="fas fa-user me-1"></i>Hello <?php echo htmlspecialchars($user_name); ?>
+                    </a>
+                </li>
+                <li class="nav-item"><a class="nav-link" href="../logout.php">Logout</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main class="container-lg mt-4">
+        <!-- Page Title -->
+        <div class="page-title">
+            <i class="fas fa-hourglass-half me-2"></i>Awaiting Confirmation Orders
+        </div>
+
+        <!-- Success Message -->
         <?php if(isset($_GET['msg']) && $_GET['msg'] == 'approved'): ?>
-            <div class="alert alert-success">
-                <div>
-                    <strong>Order #<?php echo htmlspecialchars($_GET['id'] ?? ''); ?> has been processed successfully!</strong>
-                    <?php if(isset($_GET['email']) && $_GET['email'] == 'sent'): ?>
-                        <p class="mb-0">Email notification has been sent to the client.</p>
-                    <?php elseif(isset($_GET['email']) && $_GET['email'] == 'failed'): ?>
-                        <p class="mb-0 text-danger">Warning: Email notification failed to send.</p>
-                    <?php endif; ?>
-                </div>
+            <div class="alert alert-success mb-4" role="alert">
+                <i class="fas fa-check-circle me-2"></i>
+                <strong>Order #<?php echo htmlspecialchars($_GET['id'] ?? ''); ?> has been processed successfully!</strong>
+                <?php if(isset($_GET['email']) && $_GET['email'] == 'sent'): ?>
+                    <br><small>Email notification has been sent to the client.</small>
+                <?php elseif(isset($_GET['email']) && $_GET['email'] == 'failed'): ?>
+                    <br><small class="text-danger">Warning: Email notification failed to send.</small>
+                <?php endif; ?>
             </div>
         <?php endif; ?>
-        
-        <!-- 搜索框 -->
-        <div class="search-box">
-            <form method="GET" action="" class="d-flex align-center">
-                <input type="text" name="search" class="search-input" 
-                       placeholder="Search by Order ID, Client Name, Email, Requirements or Tags..." 
-                       value="<?php echo htmlspecialchars($search); ?>">
-                <button type="submit" class="search-button">Search</button>
-                <?php if(!empty($search)): ?>
-                    <a href="Manager_MyOrder_AwaitingConfirm.php" class="btn btn-outline ml-2">Clear Search</a>
-                <?php endif; ?>
-            </form>
+
+        <!-- Search Card -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title mb-3">
+                    <i class="fas fa-search me-2"></i>Search Orders
+                </h5>
+                <form method="GET" action="" class="d-flex gap-2">
+                    <input type="text" name="search" class="form-control" 
+                           placeholder="Search by Order ID, Client Name, Email, Requirements or Tags..." 
+                           value="<?php echo htmlspecialchars($search); ?>">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-search me-2"></i>Search
+                    </button>
+                    <?php if(!empty($search)): ?>
+                        <a href="Manager_MyOrder_AwaitingConfirm.php" class="btn btn-secondary">
+                            <i class="fas fa-times me-2"></i>Clear
+                        </a>
+                    <?php endif; ?>
+                </form>
+            </div>
         </div>
-        
+
         <?php
         if(mysqli_num_rows($result) == 0){
-            echo '<div class="alert alert-info">
-                <div>
-                    <strong>No pending orders found' . (!empty($search) ? ' matching your search criteria.' : ' at the moment.') . '</strong>
-                    <p class="mb-0">All new orders will appear here when they are submitted by clients.</p>
+            echo '<div class="card">
+                <div class="card-body text-center py-5">
+                    <i class="fas fa-inbox" style="font-size: 3rem; color: #bdc3c7; margin-bottom: 1rem; display: block;"></i>
+                    <h5 class="text-muted mb-2">No Pending Orders Found</h5>
+                    <p class="text-muted mb-0">All new orders will appear here when they are submitted by clients.</p>
                 </div>
             </div>';
         } else {
             $total_pending = $stats['total_pending'] ?? 0;
         ?>
-        
-        <!-- 统计卡片 -->
-        <div class="stats-grid">
-            <div class="stat-card">
-                <div class="stat-value"><?php echo $total_pending; ?></div>
-                <div class="stat-label">Pending Orders</div>
+
+        <!-- Statistics Cards -->
+        <div class="row mb-4">
+            <div class="col-md-4 mb-3">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <div style="font-size: 2.5rem; color: #f39c12; font-weight: 700; margin-bottom: 0.5rem;">
+                            <?php echo $total_pending; ?>
+                        </div>
+                        <div style="color: #7f8c8d; font-weight: 500;">
+                            <i class="fas fa-hourglass-half me-2"></i>Pending Orders
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="stat-card">
-                <div class="stat-value">$<?php echo number_format($stats['total_budget'] ?? 0, 2); ?></div>
-                <div class="stat-label">Total Budget</div>
+            <div class="col-md-4 mb-3">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <div style="font-size: 2.5rem; color: #27ae60; font-weight: 700; margin-bottom: 0.5rem;">
+                            $<?php echo number_format($stats['total_budget'] ?? 0, 2); ?>
+                        </div>
+                        <div style="color: #7f8c8d; font-weight: 500;">
+                            <i class="fas fa-dollar-sign me-2"></i>Total Budget
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="stat-card">
-                <div class="stat-value">$<?php echo number_format($stats['avg_budget'] ?? 0, 2); ?></div>
-                <div class="stat-label">Average Budget</div>
+            <div class="col-md-4 mb-3">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <div style="font-size: 2.5rem; color: #3498db; font-weight: 700; margin-bottom: 0.5rem;">
+                            $<?php echo number_format($stats['avg_budget'] ?? 0, 2); ?>
+                        </div>
+                        <div style="color: #7f8c8d; font-weight: 500;">
+                            <i class="fas fa-chart-line me-2"></i>Average Budget
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
-        
-        <!-- 订单表格 -->
+
+        <!-- Orders Table -->
         <div class="table-container">
             <table class="table">
                 <thead>
                     <tr>
-                        <th>Order ID</th>
-                        <th>Order Date</th>
-                        <th>Client</th>
-                        <th>Budget</th>
-                        <th>Design</th>
-                        <th>Requirements</th>
-                        <th>Status</th>
-                        <th>Order Finish Date</th>
-                        <th>Design Finish Date</th>
-                        <th>Actions</th>
+                        <th><i class="fas fa-hashtag me-2"></i>Order ID</th>
+                        <th><i class="fas fa-calendar me-2"></i>Order Date</th>
+                        <th><i class="fas fa-user me-2"></i>Client</th>
+                        <th><i class="fas fa-dollar-sign me-2"></i>Budget</th>
+                        <th><i class="fas fa-image me-2"></i>Design</th>
+                        <th><i class="fas fa-file-alt me-2"></i>Requirements</th>
+                        <th><i class="fas fa-info-circle me-2"></i>Status</th>
+                        <th><i class="fas fa-clock me-2"></i>Finish Date</th>
+                        <th><i class="fas fa-cogs me-2"></i>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php while($row = mysqli_fetch_assoc($result)): ?>
                     <tr>
-                        <td><strong>#<?php echo htmlspecialchars($row["orderid"]); ?></strong></td>
-                        <td><?php echo date('Y-m-d H:i', strtotime($row["odate"])); ?></td>
                         <td>
-                            <div class="d-flex flex-column">
+                            <strong>#<?php echo htmlspecialchars($row["orderid"]); ?></strong>
+                        </td>
+                        <td>
+                            <?php echo date('Y-m-d', strtotime($row["odate"])); ?>
+                        </td>
+                        <td>
+                            <div>
                                 <strong><?php echo htmlspecialchars($row["client_name"] ?? 'N/A'); ?></strong>
-                                <small class="text-muted">Client ID: <?php echo htmlspecialchars($row["clientid"] ?? 'N/A'); ?></small>
+                                <br>
+                                <small class="text-muted">ID: <?php echo htmlspecialchars($row["clientid"] ?? 'N/A'); ?></small>
                                 <?php if(!empty($row["client_email"])): ?>
-                                    <small class="text-muted">Email: <?php echo htmlspecialchars($row["client_email"]); ?></small>
-                                <?php endif; ?>
-                                <?php if(!empty($row["client_phone"])): ?>
-                                    <small class="text-muted">Phone: <?php echo htmlspecialchars($row["client_phone"]); ?></small>
+                                    <br><small class="text-muted"><?php echo htmlspecialchars($row["client_email"]); ?></small>
                                 <?php endif; ?>
                             </div>
                         </td>
-                        <td><strong class="text-success">$<?php echo number_format($row["budget"], 2); ?></strong></td>
                         <td>
-                            <div class="d-flex flex-column">
-                                <span>Design #<?php echo htmlspecialchars($row["designid"] ?? 'N/A'); ?></span>
-                                <small>Price: $<?php echo number_format($row["design_price"] ?? 0, 2); ?></small>
-                                <small>Tags: <?php echo htmlspecialchars(substr($row["design_tag"] ?? '', 0, 30)); ?></small>
-
+                            <span style="color: #27ae60; font-weight: 600;">$<?php echo number_format($row["budget"], 2); ?></span>
+                        </td>
+                        <td>
+                            <div>
+                                <small>Design #<?php echo htmlspecialchars($row["designid"] ?? 'N/A'); ?></small>
+                                <br>
+                                <small class="text-muted">$<?php echo number_format($row["design_price"] ?? 0, 2); ?></small>
                             </div>
                         </td>
-                        <td><?php echo htmlspecialchars(substr($row["Requirements"] ?? '', 0, 100)); ?></td>
+                        <td>
+                            <small class="text-muted">
+                                <?php echo htmlspecialchars(substr($row["Requirements"] ?? '', 0, 50)) . (strlen($row["Requirements"] ?? '') > 50 ? '...' : ''); ?>
+                            </small>
+                        </td>
                         <td>
                             <span class="status-badge status-pending">
-                                <?php echo htmlspecialchars($row["ostatus"] ?? 'Pending'); ?>
+                                <i class="fas fa-hourglass-half me-1"></i><?php echo htmlspecialchars($row["ostatus"] ?? 'Pending'); ?>
                             </span>
                         </td>
                         <td>
-                            <?php 
-                            if(isset($row["OrderFinishDate"]) && $row["OrderFinishDate"] != '0000-00-00 00:00:00'){
-                                echo date('Y-m-d H:i', strtotime($row["OrderFinishDate"]));
-                            } else {
-                                echo '<span class="text-muted">Not scheduled</span>';
-                            }
-                            ?>
-                        </td>
-                        <td>
-                            <?php 
-                            if(isset($row["DesignFinishDate"]) && $row["DesignFinishDate"] != '0000-00-00 00:00:00'){
-                                echo date('Y-m-d H:i', strtotime($row["DesignFinishDate"]));
-                            } else {
-                                echo '<span class="text-muted">Not scheduled</span>';
-                            }
-                            ?>
+                            <small>
+                                <?php 
+                                if(isset($row["OrderFinishDate"]) && $row["OrderFinishDate"] != '0000-00-00 00:00:00'){
+                                    echo date('Y-m-d', strtotime($row["OrderFinishDate"]));
+                                } else {
+                                    echo '<span class="text-muted">Not scheduled</span>';
+                                }
+                                ?>
+                            </small>
                         </td>
                         <td>
                             <div class="btn-group">
                                 <button onclick="viewOrder(<?php echo $row['orderid']; ?>)" 
-                                        class="btn btn-sm btn-primary">View</button>
+                                        class="btn btn-sm btn-primary">
+                                    <i class="fas fa-eye me-1"></i>View
+                                </button>
                                 <button onclick="approveOrder(<?php echo $row['orderid']; ?>)" 
-                                        class="btn btn-sm btn-success">Approve</button>
+                                        class="btn btn-sm btn-success">
+                                    <i class="fas fa-check me-1"></i>Approve
+                                </button>
                             </div>
                         </td>
                     </tr>
@@ -246,35 +292,35 @@ $stats = mysqli_fetch_assoc($stats_result);
                 </tbody>
             </table>
         </div>
-        
-        <!-- 分页信息 -->
-        <div class="card mt-3">
-            <div class="card-body d-flex justify-between align-center">
+
+        <!-- Summary Card -->
+        <div class="card mt-4">
+            <div class="card-body d-flex justify-content-between align-items-center">
                 <div>
                     <strong>Showing <?php echo mysqli_num_rows($result); ?> pending orders</strong>
                     <p class="text-muted mb-0">Total: <?php echo $total_pending; ?> orders awaiting confirmation</p>
                 </div>
                 <div class="btn-group">
-                    
-                    <button onclick="printPage()" class="btn btn-outline">Print List</button>
+                    <button onclick="printPage()" class="btn btn-outline">
+                        <i class="fas fa-print me-2"></i>Print List
+                    </button>
                 </div>
             </div>
         </div>
-        
+
         <?php
         }
         ?>
-        
-        <!-- 返回按钮 -->
-        <div class="d-flex justify-between mt-4">
-            <div class="btn-group">
-                <button onclick="window.location.href='Manager_MyOrder.php'" 
-                        class="btn btn-secondary">Back to Orders Manager</button>
 
-            </div>
+        <!-- Action Buttons -->
+        <div class="d-flex justify-content-between align-items-center mt-4">
+            <a href="Manager_MyOrder.php" class="btn btn-secondary">
+                <i class="fas fa-arrow-left me-2"></i>Back to Orders Manager
+            </a>
         </div>
-    </div>
-    
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
     function viewOrder(orderId) {
         window.location.href = 'Manager_view_order.php?id=' + orderId;
@@ -284,15 +330,14 @@ $stats = mysqli_fetch_assoc($stats_result);
         window.location.href = 'Manager_MyOrder_AwaitingConfirm_Approval.php?id=' + orderId;
     }
 
-    
     function printPage() {
         window.print();
     }
     
-    // 快捷键支持
+    // Keyboard shortcuts support
     document.addEventListener('DOMContentLoaded', function() {
-        // Ctrl+F 聚焦搜索框
         document.addEventListener('keydown', function(e) {
+            // Ctrl+F focus search box
             if(e.ctrlKey && e.key === 'f') {
                 e.preventDefault();
                 const searchInput = document.querySelector('input[name="search"]');
@@ -302,19 +347,19 @@ $stats = mysqli_fetch_assoc($stats_result);
                 }
             }
             
-            // Ctrl+P 打印
+            // Ctrl+P print
             if(e.ctrlKey && e.key === 'p') {
                 e.preventDefault();
                 printPage();
             }
             
-            // Esc键返回
+            // Esc key to go back
             if(e.key === 'Escape') {
                 window.location.href = 'Manager_MyOrder.php';
             }
         });
         
-        // 搜索框回车提交
+        // Search box enter to submit
         const searchInput = document.querySelector('input[name="search"]');
         if(searchInput) {
             searchInput.addEventListener('keypress', function(e) {
@@ -324,7 +369,7 @@ $stats = mysqli_fetch_assoc($stats_result);
             });
         }
         
-        // 高亮搜索结果
+        // Highlight search results
         const urlParams = new URLSearchParams(window.location.search);
         const searchTerm = urlParams.get('search');
         if(searchTerm) {
@@ -333,7 +378,7 @@ $stats = mysqli_fetch_assoc($stats_result);
             }, 100);
         }
         
-        // 添加悬停效果
+        // Add hover effects
         const tableRows = document.querySelectorAll('.table tbody tr');
         tableRows.forEach(row => {
             row.addEventListener('mouseenter', function() {
@@ -378,7 +423,7 @@ $stats = mysqli_fetch_assoc($stats_result);
         });
     }
     
-    // 自动检查新订单（每60秒）
+    // Auto-check for new orders every 60 seconds
     function checkForNewOrders() {
         fetch('check_new_orders.php?manager_id=<?php echo $user_id; ?>')
             .then(response => response.json())
@@ -392,19 +437,32 @@ $stats = mysqli_fetch_assoc($stats_result);
     
     function showNewOrderNotification(count) {
         const notification = document.createElement('div');
-        notification.className = 'alert alert-info notification';
+        notification.className = 'alert alert-info mt-3';
         notification.innerHTML = `
-            <div>
-                <strong>New Orders Available</strong>
-                <p>There are ${count} new pending order(s).</p>
-                <button onclick="location.reload()" class="btn btn-sm btn-primary">Refresh Now</button>
-                <button onclick="this.parentElement.parentElement.remove()" class="btn btn-sm btn-outline">Dismiss</button>
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <i class="fas fa-bell me-2"></i>
+                    <strong>New Orders Available</strong>
+                    <p class="mb-0">There are ${count} new pending order(s).</p>
+                </div>
+                <div class="btn-group">
+                    <button onclick="location.reload()" class="btn btn-sm btn-primary">
+                        <i class="fas fa-sync-alt me-1"></i>Refresh Now
+                    </button>
+                    <button onclick="this.parentElement.parentElement.parentElement.remove()" class="btn btn-sm btn-outline">
+                        <i class="fas fa-times me-1"></i>Dismiss
+                    </button>
+                </div>
             </div>
         `;
         
-        document.querySelector('.page-container').insertBefore(notification, document.querySelector('.page-title').nextSibling);
+        const mainElement = document.querySelector('main');
+        const pageTitle = document.querySelector('.page-title');
+        if(mainElement && pageTitle) {
+            mainElement.insertBefore(notification, pageTitle.nextSibling);
+        }
         
-        // 自动消失
+        // Auto-dismiss after 10 seconds
         setTimeout(() => {
             if(notification.parentNode) {
                 notification.remove();
@@ -412,10 +470,10 @@ $stats = mysqli_fetch_assoc($stats_result);
         }, 10000);
     }
     
-    // 每60秒检查一次新订单
+    // Check for new orders every 60 seconds
     setInterval(checkForNewOrders, 60000);
     </script>
-    
+
     <style>
         .highlight {
             background-color: #fff3cd;
@@ -424,33 +482,16 @@ $stats = mysqli_fetch_assoc($stats_result);
             font-weight: bold;
         }
         
-        .notification {
-            animation: slideDown 0.5s ease-out;
-            position: relative;
-            z-index: 1000;
-        }
-        
-        @keyframes slideDown {
-            from {
-                opacity: 0;
-                transform: translateY(-20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-        
         .table tbody tr {
             transition: all 0.3s ease;
         }
         
         @media print {
-            .nav-bar,
-            .search-box,
+            header,
+            .search-section,
             .stats-grid,
             .btn-group,
-            .notification {
+            .alert {
                 display: none !important;
             }
             
@@ -464,5 +505,9 @@ $stats = mysqli_fetch_assoc($stats_result);
             }
         }
     </style>
+
+    <!-- Include chat widget -->
+    <?php include __DIR__ . '/../Public/chat_widget.php'; ?>
 </body>
+
 </html>
