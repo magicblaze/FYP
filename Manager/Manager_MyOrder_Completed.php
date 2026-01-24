@@ -13,9 +13,11 @@ $user_id = $user['managerid'];
 $user_name = $user['name'];
 
 // 查询已完成订单 - UPDATED FOR NEW DATE STRUCTURE - 只显示该经理的订单
-$sql = "SELECT DISTINCT o.orderid, o.odate, o.budget, o.Requirements, o.ostatus,
-               c.clientid, c.cname as client_name,
-               d.designid, d.price as design_price, d.tag as design_tag,
+// FIXED: Removed o.budget from SELECT as it doesn't exist in the Order table
+// Budget is stored in the Client table, not the Order table
+$sql = "SELECT DISTINCT o.orderid, o.odate, o.Requirements, o.ostatus,
+               c.clientid, c.cname as client_name, c.budget as client_budget,
+               d.designid, d.expect_price as design_price, d.tag as design_tag,
                s.OrderFinishDate, s.DesignFinishDate
         FROM `Order` o
         LEFT JOIN `Client` c ON o.clientid = c.clientid
@@ -94,9 +96,10 @@ $result = mysqli_stmt_get_result($stmt);
                 <div class="stat-label">Total Completed Orders</div>
             </div>
             <?php
-            // 更新预算查询以包含manager id过滤
-            $budget_sql = "SELECT SUM(o.budget) as total_budget 
+            // FIXED: Updated budget query to use Client table's budget column
+            $budget_sql = "SELECT SUM(c.budget) as total_budget 
                            FROM `Order` o
+                           LEFT JOIN `Client` c ON o.clientid = c.clientid
                            LEFT JOIN `OrderProduct` op ON o.orderid = op.orderid
                            WHERE (o.ostatus = 'Completed' OR o.ostatus = 'completed')
                            AND op.managerid = ?";
@@ -146,7 +149,7 @@ $result = mysqli_stmt_get_result($stmt);
                                 <small class="text-muted">Client ID: <?php echo htmlspecialchars($row["clientid"] ?? 'N/A'); ?></small>
                             </div>
                         </td>
-                        <td><strong class="text-success">$<?php echo number_format($row["budget"], 2); ?></strong></td>
+                        <td><strong class="text-success">$<?php echo number_format($row["client_budget"], 2); ?></strong></td>
                         <td>
                             <div class="d-flex flex-column">
                                 <span>Design #<?php echo htmlspecialchars($row["designid"] ?? 'N/A'); ?></span>

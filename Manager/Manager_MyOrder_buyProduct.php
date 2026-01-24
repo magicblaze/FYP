@@ -44,9 +44,11 @@ $user_name = $user['name'];
         
         <?php
         // UPDATED SQL FOR NEW DATE STRUCTURE - 只显示该经理的订单
-        $sql = "SELECT DISTINCT o.orderid, o.odate, o.budget, o.Requirements, o.ostatus,
-                       c.clientid, c.cname as client_name,
-                       d.designid, d.price as design_price, d.tag as design_tag,
+        // FIXED: Removed o.budget and added c.budget as client_budget from Client table
+        // Also fixed d.price to d.expect_price (correct column name in Design table)
+        $sql = "SELECT DISTINCT o.orderid, o.odate, o.Requirements, o.ostatus,
+                       c.clientid, c.cname as client_name, c.budget as client_budget,
+                       d.designid, d.expect_price as design_price, d.tag as design_tag,
                        s.OrderFinishDate, s.DesignFinishDate
                 FROM `Order` o
                 LEFT JOIN `Client` c ON o.clientid = c.clientid
@@ -123,7 +125,7 @@ $user_name = $user['name'];
                                 <small class="text-muted">ID: <?php echo htmlspecialchars($row["clientid"] ?? 'N/A'); ?></small>
                             </div>
                         </td>
-                        <td><strong class="text-success">$<?php echo number_format($row["budget"], 2); ?></strong></td>
+                        <td><strong class="text-success">$<?php echo number_format($row["client_budget"], 2); ?></strong></td>
                         <td>
                             <div class="d-flex flex-column">
                                 <span>Design #<?php echo htmlspecialchars($row["designid"] ?? 'N/A'); ?></span>

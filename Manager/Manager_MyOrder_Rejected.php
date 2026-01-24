@@ -34,9 +34,11 @@ if(!empty($search)) {
 $where_clause = !empty($where_conditions) ? "WHERE " . implode(" AND ", $where_conditions) : "";
 
 // 获取所有已取消订单 - UPDATED FOR NEW DATE STRUCTURE - 只显示该经理的订单
-$sql = "SELECT DISTINCT o.orderid, o.odate, o.budget, o.Requirements, o.ostatus,
-               c.clientid, c.cname as client_name, c.cemail as client_email, c.ctel as client_phone,
-               d.designid, d.design as design_image, d.price as design_price, d.tag as design_tag,
+// FIXED: Removed o.budget and added c.budget as client_budget from Client table
+// Also fixed d.design and d.price to d.designName and d.expect_price (correct column names)
+$sql = "SELECT DISTINCT o.orderid, o.odate, o.Requirements, o.ostatus,
+               c.clientid, c.cname as client_name, c.cemail as client_email, c.ctel as client_phone, c.budget as client_budget,
+               d.designid, d.designName as design_image, d.expect_price as design_price, d.tag as design_tag,
                s.OrderFinishDate, s.DesignFinishDate
         FROM `Order` o
         LEFT JOIN `Client` c ON o.clientid = c.clientid
@@ -53,13 +55,15 @@ if(!$result) {
 }
 
 // 计算统计信息 - 添加manager id过滤
+// FIXED: Changed SUM(o.budget) to SUM(c.budget) and added Client table JOIN
 $stats_sql = "SELECT 
                 COUNT(DISTINCT o.orderid) as total_cancelled,
-                SUM(o.budget) as total_budget,
-                AVG(o.budget) as avg_budget,
+                SUM(c.budget) as total_budget,
+                AVG(c.budget) as avg_budget,
                 MIN(o.odate) as earliest_cancellation,
                 MAX(o.odate) as latest_cancellation
               FROM `Order` o
+              LEFT JOIN `Client` c ON o.clientid = c.clientid
               LEFT JOIN `OrderProduct` op ON o.orderid = op.orderid
               WHERE (o.ostatus = 'Cancelled' OR o.ostatus = 'cancelled')
               AND op.managerid = $user_id";
@@ -280,7 +284,7 @@ $stats = mysqli_fetch_assoc($stats_result);
                                 <?php endif; ?>
                             </div>
                         </td>
-                        <td><strong class="text-danger">$<?php echo number_format($row["budget"], 2); ?></strong></td>
+                        <td><strong class="text-danger">$<?php echo number_format($row["client_budget"], 2); ?></strong></td>
                         <td>
                             <div class="d-flex flex-column">
                                 <span>Design #<?php echo htmlspecialchars($row["designid"] ?? 'N/A'); ?></span>
