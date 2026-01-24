@@ -25,6 +25,19 @@ function initApp(config = {}) {
     catalogOffcanvasEl: el('catalogOffcanvas'),
   };
 
+  // Ensure any attach preview columns are hidden by default (remove visibility classes)
+  try {
+    ['chatwidget_attachPreviewColumn','attachPreviewColumn'].forEach(id => {
+      const el1 = document.getElementById(prefix + id);
+      const el2 = document.getElementById(id);
+      const node = el1 || el2;
+      if (node) {
+        try { node.classList.remove('visible','show'); } catch(e) {}
+        try { node.style.display = 'none'; } catch(e) {}
+      }
+    });
+  } catch(e) {}
+
   let currentAgent = null;
   let currentRoomId = null;
   let lastMessageId = 0;
@@ -267,9 +280,18 @@ function initApp(config = {}) {
 
     const bodyCol = document.createElement('div');
     bodyCol.style.maxWidth = '100%';
+    // allow the column to shrink so long names / timestamps don't force the bubble wider
+    bodyCol.style.flex = '1';
+    bodyCol.style.minWidth = '0';
     const nameEl = document.createElement('div');
     nameEl.className = 'small text-muted mb-1';
     nameEl.textContent = senderName;
+    // prevent the name from widening the message column
+    nameEl.style.maxWidth = '100%';
+    nameEl.style.overflow = 'hidden';
+    nameEl.style.textOverflow = 'ellipsis';
+    // capture name color class (e.g., 'text-muted' or 'text-white') to reuse for timestamp
+    const nameColorClass = (nameEl.className && (nameEl.className.match(/\btext-[^\s]+\b/) || [null])[0]) || null;
     // Align sender name according to message side to avoid layout glitches
     if (who === 'me') {
       nameEl.classList.add('text-end');
@@ -280,8 +302,24 @@ function initApp(config = {}) {
       try { bodyCol.style.textAlign = 'left'; } catch (e) {}
     }
 
+    // For the current user (`me`) hide the avatar and do not render the name element
+    if (who === 'me') {
+      try {
+        // Remove the avatar node and collapse the avatar column so the bubble
+        // sits 2px away from the right edge.
+        avatarWrap.innerHTML = '';
+        avatarWrap.style.width = '0px';
+        avatarWrap.style.flex = '0 0 0px';
+        avatarWrap.style.marginRight = '2px';
+      } catch (e) {}
+    }
+
     const bubble = document.createElement('div');
     bubble.className = who === 'me' ? 'bg-primary text-white rounded p-2' : 'bg-light rounded p-2';
+    // Ensure bubble width is constrained and independent from name/time
+    bubble.style.display = 'inline-block';
+    bubble.style.maxWidth = '420px';
+    bubble.style.wordBreak = 'break-word';
     const campaignHtml = msgObj.campaign ? `<div class="small text-muted mt-1">Campaign: ${escapeHtml(msgObj.campaign)}</div>` : '';
     // Special rendering for `design` share messages: single white card merged into bubble
     let designHtml = '';
@@ -298,7 +336,7 @@ function initApp(config = {}) {
             <div style="flex:0 0 72px"><img src="${escapeHtml(imgUrl)}" style="width:72px;height:72px;object-fit:cover;border-radius:6px"/></div>
             <div style="flex:1;min-width:0">
               <div class="fw-semibold" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(title)}</div>
-              <div><a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="small text-muted">Open design page</a></div>
+              <div><a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="small text-muted">Open</a></div>
             </div>
           </div>`;
       }
@@ -321,10 +359,10 @@ function initApp(config = {}) {
         const looksLikeImage = (mime && mime.indexOf('image/') === 0) || /(\.png|\.jpe?g|\.gif|\.webp|\.bmp)$/i.test(lower);
         if (looksLikeImage) {
           isImageMessage = true;
-          attachmentHtml = `<div class="mt-2"><img class="chat-attachment-img" src="${escapeHtml(url)}" style="max-width:420px;max-height:60vh;border-radius:8px;display:block;cursor:pointer"/></div>`;
+          attachmentHtml = `<img class="chat-attachment-img" src="${escapeHtml(url)}"/>`;
         } else {
           const fname = (uploaded && uploaded.filename) ? uploaded.filename : att.split('/').pop();
-          attachmentHtml = `<div class="mt-2"><a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(fname)}</a></div>`;
+          attachmentHtml = `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(fname)}</a>`;
         }
       }
     } catch (e) { attachmentHtml = ''; }
@@ -332,20 +370,38 @@ function initApp(config = {}) {
     if (designHtml) {
       // Override bubble styling so the message bubble is white (not the usual colored bubble)
       bubble.className = 'bg-white text-dark rounded';
-      bubble.innerHTML = `${designHtml}${campaignHtml}<div class="text-muted small mt-1">${formatMessageTimestamp(time)}</div>`;
+      bubble.innerHTML = `${designHtml}${campaignHtml}`;
     } else {
-      // For plain image attachments, prefer a white bubble instead of a blue one for sender 'me'
+      // For plain image attachments, use primary bubble for sender 'me', white for others
       if (isImageMessage) {
-        bubble.className = 'bg-white text-dark rounded p-2';
+        if (who === 'me') {
+          bubble.className = 'bg-primary text-white rounded p-2';
+        } else {
+          bubble.className = 'bg-white text-dark rounded p-2';
+        }
       }
       // Choose time text color: if the bubble uses `text-white` (blue bubble), make the time white for readability
       let timeClass = 'text-muted';
       try { if (bubble.className && bubble.className.indexOf('text-white') !== -1) timeClass = 'text-white'; } catch (e) {}
-      const timeHtml = `<div class="${timeClass} small mt-1">${formatMessageTimestamp(time)}</div>`;
-      bubble.innerHTML = `<div>${contentHtml}</div>${attachmentHtml}${campaignHtml}${timeHtml}`;
+      const timeText = formatMessageTimestamp(time);
+      // If image message, render image first, then text below
+      if (isImageMessage && attachmentHtml) {
+        bubble.innerHTML = `${attachmentHtml}<div>${contentHtml}</div>${campaignHtml}`;
+      } else {
+        bubble.innerHTML = `<div>${contentHtml}</div>${attachmentHtml}${campaignHtml}`;
+      }
+      // create time element as a sibling outside the bubble (keeps date outside message box)
+      var timeEl = document.createElement('div');
+      timeEl.className = timeClass + ' small mt-1 message-time';
+      timeEl.textContent = timeText;
+      // prevent timestamp from forcing bubble width
+      timeEl.style.maxWidth = '100%';
+      timeEl.style.overflow = 'hidden';
+      timeEl.style.textOverflow = 'ellipsis';
     }
 
-    bodyCol.appendChild(nameEl);
+    // Only append the sender name for non-self messages
+    if (who !== 'me') bodyCol.appendChild(nameEl);
     bodyCol.appendChild(bubble);
 
     if (who === 'me') {
@@ -356,8 +412,86 @@ function initApp(config = {}) {
       wrapper.appendChild(bodyCol);
     }
 
+    // store sender, side and timestamp on wrapper for grouping checks
+    try { wrapper.dataset.senderId = msgObj.sender_id || msgObj.senderId || msgObj.sender || ''; } catch(e) {}
+    try { wrapper.dataset.who = who; } catch(e) {}
+    try { wrapper.dataset.timestamp = time; } catch(e) {}
+
+    // Determine whether this message should be visually grouped with the previous message
+    let grouped = false;
+    try {
+      const last = elements.messages && elements.messages.lastElementChild;
+      // Only group when previous message is from same sender AND on same side (who)
+      if (last && last.dataset && last.dataset.senderId && String(last.dataset.senderId) === String(wrapper.dataset.senderId) && String(last.dataset.who) === String(wrapper.dataset.who)) {
+        const prevT = new Date(last.dataset.timestamp || 0);
+        const curT = new Date(time);
+        if (!isNaN(prevT.getTime()) && !isNaN(curT.getTime())) {
+          const diff = Math.abs(curT - prevT);
+          if (diff <= 60000) grouped = true; // within 1 minute
+        }
+      }
+    } catch(e) { grouped = false; }
+
     if (existingId) wrapper.setAttribute('data-mid', existingId);
+    // If grouped, hide avatar and name and omit timestamp when appending
+    if (grouped) {
+      try {
+        // Remove avatar and name nodes from DOM for grouped messages, but keep a spacer
+        try { if (avatar && avatar.parentNode) avatar.parentNode.removeChild(avatar); } catch(e) {}
+        // Ensure avatarWrap keeps the same column width so bubbles don't shift
+        try {
+          if (who !== 'me') {
+            avatarWrap.style.flex = '0 0 48px'; avatarWrap.style.width = '48px';
+          } else {
+            // For self messages keep the avatar column collapsed with 2px margin
+            avatarWrap.style.flex = '0 0 0px'; avatarWrap.style.width = '0px'; avatarWrap.style.marginRight = '2px';
+          }
+        } catch(e) {}
+        // Add a tiny spacer to keep vertical alignment predictable
+        try {
+          if (!avatarWrap.querySelector('.avatar-spacer')) {
+            const sp = document.createElement('div');
+            sp.className = 'avatar-spacer';
+            sp.style.width = '36px'; sp.style.height = '36px'; sp.style.display = 'inline-block';
+            avatarWrap.innerHTML = '';
+            avatarWrap.appendChild(sp);
+          }
+        } catch(e) {}
+        // Remove the name element entirely so it doesn't take up visual space
+        try { if (nameEl && nameEl.parentNode) nameEl.parentNode.removeChild(nameEl); } catch(e) {}
+      } catch(e) {}
+    }
+
     elements.messages.appendChild(wrapper);
+    // Append timestamp to the current message. If this message is grouped with the previous
+    // one, remove the previous message's timestamp so the latest in the group shows the date.
+    try {
+      // determine time class: prefer the name's color class when present, otherwise fall back to bubble text color
+      var timeClassFinal = 'text-muted';
+      try {
+        if (nameColorClass) timeClassFinal = nameColorClass;
+        else if (bubble.className && bubble.className.indexOf('text-white') !== -1) timeClassFinal = 'text-white';
+      } catch (e) {}
+      if (typeof timeEl !== 'undefined' && timeEl) {
+        timeEl.className = timeClassFinal + ' small mt-1 message-time';
+        bodyCol.appendChild(timeEl);
+      } else {
+        var designTimeEl = document.createElement('div');
+        designTimeEl.className = timeClassFinal + ' small mt-1 message-time';
+        designTimeEl.textContent = formatMessageTimestamp(time);
+        bodyCol.appendChild(designTimeEl);
+      }
+      // If grouped, remove previous message's timestamp so only latest shows
+      if (grouped) {
+        try {
+          const prev = wrapper.previousElementSibling;
+          if (prev) {
+            const prevTime = prev.querySelector && prev.querySelector('.message-time');
+            if (prevTime) prevTime.remove();
+          }
+        } catch(e) {}
+      }
+    } catch (e) {}
     // wire up image click-to-enlarge for any rendered attachment images
     try {
       const imgEl = wrapper.querySelector('.chat-attachment-img');
@@ -375,6 +509,58 @@ function initApp(config = {}) {
         });
       }
     } catch (e) {}
+  }
+
+  // Return the browser/device preferred locale (language tag)
+  function getPreferredLocale() {
+    try {
+      if (navigator.languages && navigator.languages.length) return navigator.languages[0];
+      return navigator.language || navigator.userLanguage || 'en-US';
+    } catch (e) { return 'en-US'; }
+  }
+
+  // Detect a preferred speech synthesis voice that best matches the browser/device locale.
+  // Returns a Promise that resolves to a SpeechSynthesisVoice or null if unavailable.
+  function detectPreferredVoice() {
+    const langs = [];
+    try {
+      if (navigator.languages && navigator.languages.length) langs.push(...navigator.languages);
+      if (navigator.language) langs.push(navigator.language);
+    } catch (e) {}
+    // ensure at least one entry
+    if (!langs.length) langs.push('en-US');
+
+    return new Promise(resolve => {
+      if (!('speechSynthesis' in window)) return resolve(null);
+      function choose(voices) {
+        if (!voices || !voices.length) return resolve(null);
+        // exact locale match
+        for (const l of langs) {
+          if (!l) continue;
+          const found = voices.find(v => v.lang && v.lang.toLowerCase() === l.toLowerCase());
+          if (found) return resolve(found);
+        }
+        // primary language match (e.g., 'en' matches 'en-US')
+        for (const l of langs) {
+          const primary = (l || '').split('-')[0];
+          if (!primary) continue;
+          const found = voices.find(v => ((v.lang||'').split('-')[0]) === primary);
+          if (found) return resolve(found);
+        }
+        // fallback to any English voice
+        const en = voices.find(v => (v.lang || '').toLowerCase().startsWith('en'));
+        if (en) return resolve(en);
+        // last resort: first available voice
+        return resolve(voices[0]);
+      }
+
+      const voices = speechSynthesis.getVoices();
+      if (voices && voices.length) return choose(voices);
+      const onVoices = () => { speechSynthesis.removeEventListener('voiceschanged', onVoices); choose(speechSynthesis.getVoices()); };
+      speechSynthesis.addEventListener('voiceschanged', onVoices);
+      // safety timeout in case event doesn't fire
+      setTimeout(() => { choose(speechSynthesis.getVoices()); }, 800);
+    });
   }
 
   function selectAgent(agent) {
@@ -605,30 +791,46 @@ function initApp(config = {}) {
     const attachInput = document.getElementById('attachInput');
     let attachPreview = document.getElementById('attachPreviewColumn');
     if (attachBtn && attachInput) {
-      attachBtn.addEventListener('click', () => attachInput.click());
+      let attachClickGuard = false;
+      const isPreviewVisibleMain = () => {
+        const pv = document.getElementById(prefix + 'attachPreviewColumn') || document.getElementById('attachPreviewColumn') || document.getElementById('chatwidget_attachPreviewColumn') || attachPreview;
+        if (!pv) return false;
+        try {
+          if (pv.classList && pv.classList.contains('visible')) return true;
+          const holder = pv.querySelector && (pv.querySelector('#chatwidget_attachPreview_content') || pv.querySelector('.message-preview-content'));
+          return !!(holder && holder.innerHTML && holder.innerHTML.trim());
+        } catch (e) { return false; }
+      };
+
+      attachBtn.addEventListener('click', (ev) => {
+        if (attachClickGuard) return; attachClickGuard = true; setTimeout(() => attachClickGuard = false, 600);
+        try {
+          const pv = document.getElementById(prefix + 'attachPreviewColumn') || document.getElementById('attachPreviewColumn') || document.getElementById('chatwidget_attachPreviewColumn') || attachPreview;
+          if (pv) {
+            const holder = pv.querySelector && (pv.querySelector('#chatwidget_attachPreview_content') || pv.querySelector('.message-preview-content'));
+            const hasContent = !!(holder && holder.innerHTML && holder.innerHTML.trim());
+            const isVisible = pv.classList && pv.classList.contains('visible');
+            if (isVisible) { try { clearSelectedPreview(pv); } catch (e) {} ; return; }
+            if (!isVisible && hasContent) { try { setPreviewVisibility(pv, true); } catch (e) {} ; return; }
+          }
+        } catch (e) {}
+        attachInput.click();
+      });
       attachInput.addEventListener('change', async (e) => {
         const file = e.target.files && e.target.files[0];
         if (!file) return;
         // send as attachment in current conversation
         // ensure preview container exists
         try {
-          if (!attachPreview) {
+            if (!attachPreview) {
             console.warn('attachPreview missing, creating temporary preview element');
             attachPreview = document.createElement('div');
             attachPreview.id = 'attachPreviewColumn';
-            attachPreview.className = 'message-preview-column';
-            attachPreview.style.minWidth = '0';
-            attachPreview.style.flex = '0 0 120px';
-            attachPreview.style.maxWidth = '160px';
-            attachPreview.style.marginRight = '8px';
+            attachPreview.className = 'd-flex justify-content-around';
             // Insert preview as a full-width row above the composer (if available)
             const composer = elements.input ? elements.input.closest('.composer') : null;
             if (composer && composer.parentNode) {
               // create a separate row before the composer so layout stays stable
-              attachPreview.style.display = 'block';
-              attachPreview.style.width = '100%';
-              attachPreview.style.maxWidth = 'none';
-              attachPreview.style.marginBottom = '8px';
               composer.parentNode.insertBefore(attachPreview, composer);
             } else if (attachBtn && attachBtn.parentNode) {
               attachBtn.parentNode.insertBefore(attachPreview, attachBtn);
@@ -686,27 +888,34 @@ function initApp(config = {}) {
     let widgetPreview = document.getElementById('chatwidget_attachPreviewColumn');
     if (wab && waist) {
       let widgetClickGuard = false;
-      wab.addEventListener('click', () => { if (widgetClickGuard) return; widgetClickGuard = true; setTimeout(() => widgetClickGuard = false, 600); waist.click(); });
+      wab.addEventListener('click', () => {
+        if (widgetClickGuard) return; widgetClickGuard = true; setTimeout(() => widgetClickGuard = false, 600);
+        try {
+          const pv = document.getElementById(prefix + 'chatwidget_attachPreviewColumn') || document.getElementById('chatwidget_attachPreviewColumn') || widgetPreview;
+          let visible = false;
+          if (pv) {
+            if (pv.classList && pv.classList.contains('visible')) visible = true;
+            else {
+              const holder = pv.querySelector && (pv.querySelector('#chatwidget_attachPreview_content') || pv.querySelector('.message-preview-content'));
+              visible = !!(holder && holder.innerHTML && holder.innerHTML.trim());
+            }
+          }
+          if (visible) { try { clearSelectedPreview(pv || document.getElementById('chatwidget_attachPreviewColumn')); } catch (e) {} ; return; }
+        } catch (e) {}
+        waist.click();
+      });
       waist.addEventListener('change', async (e) => {
         const file = e.target.files && e.target.files[0];
         if (!file) return;
         try {
-          if (!widgetPreview) {
+            if (!widgetPreview) {
             console.warn('widgetPreview missing, creating temporary element');
             widgetPreview = document.createElement('div');
             widgetPreview.id = 'chatwidget_attachPreviewColumn';
-            widgetPreview.className = 'message-preview-column';
-            widgetPreview.style.minWidth = '0';
-            widgetPreview.style.flex = '0 0 120px';
-            widgetPreview.style.maxWidth = '160px';
-            widgetPreview.style.marginRight = '8px';
+            widgetPreview.className = 'd-flex justify-content-around';
             // Try to insert preview as a separate full-width row above the composer for the widget
             const composer = elements.input ? elements.input.closest('.composer') : null;
             if (composer && composer.parentNode) {
-              widgetPreview.style.display = 'block';
-              widgetPreview.style.width = '100%';
-              widgetPreview.style.maxWidth = 'none';
-              widgetPreview.style.marginBottom = '8px';
               composer.parentNode.insertBefore(widgetPreview, composer);
             } else if (wab && wab.parentNode) {
               wab.parentNode.insertBefore(widgetPreview, wab);
@@ -748,61 +957,168 @@ function initApp(config = {}) {
   })();
 
   // preview helpers
-  function showSelectedPreview(container, file) {
+  function setPreviewVisibility(container, visible) {
     if (!container) return;
-    // ensure the preview row is visible when populated
-    try { container.style.display = container.style.display === 'none' ? '' : container.style.display; } catch(e) {}
-    container.innerHTML = '';
-    const root = document.createElement('div'); root.className = 'message-preview-row';
-    const wrap = document.createElement('div'); wrap.className = 'd-flex align-items-center';
+    const panelClose = container.querySelector('#chatwidget_attachPreview_close') || document.getElementById('chatwidget_attachPreview_close');
+    const panelEl = document.getElementById(prefix + 'panel') || document.getElementById('chatwidget_panel');
+    if (visible) {
+      try { container.classList.add('attached'); } catch (e) {}
+      setTimeout(() => { try { container.classList.add('visible'); } catch (e) {} }, 24);
+      try { container.style.display = ''; } catch (e) {}
+      if (panelClose) try { panelClose.style.display = 'flex'; } catch (e) {}
+      if (panelEl) {
+        try { panelEl.classList.add('preview-visible'); } catch (e) {}
+        try { panelEl.style.setProperty('--preview-height', Math.round(container.getBoundingClientRect().height) + 'px'); } catch (e) {}
+      }
+    } else {
+      try { container.classList.remove('visible','attached'); } catch (e) {}
+      try { container.style.display = 'none'; } catch (e) {}
+      if (panelClose) try { panelClose.style.display = 'none'; } catch (e) {}
+      if (panelEl) {
+        try { panelEl.classList.remove('preview-visible'); } catch (e) {}
+        try { panelEl.style.setProperty('--preview-height', '0px'); } catch (e) {}
+      }
+    }
+  }
+
+  function showSelectedPreview(container, file) {
+    if (!container || !file) return;
+
+    // Clear any other preview content holders to avoid duplicate thumbnails (widget vs main composer)
+    try {
+      document.querySelectorAll('#chatwidget_attachPreview_content').forEach(ch => {
+        const parent = ch.parentElement;
+        if (parent && parent !== container) {
+          try { clearSelectedPreview(parent); } catch (e) {}
+        }
+      });
+    } catch (e) {}
+
+    // Remove any stray preview nodes already present directly inside this container
+    try {
+      const stray = container.querySelectorAll(':scope > .preview-img, :scope > .file-badge, :scope > .file-meta, :scope > .preview-remove');
+      stray.forEach(n => { try { n.remove(); } catch(e){} });
+    } catch (e) {}
+
+    const canonicalId = 'chatwidget_attachPreview_content';
+    // Prefer a single canonical content holder. Consolidate any stray '*_content' nodes into it.
+    let contentHolder = document.getElementById(canonicalId);
+    // find any nodes that look like legacy per-container content holders (e.g., '*_content')
+    try {
+      const legacy = Array.from(document.querySelectorAll('[id$="_content"]'));
+      // create canonical if missing
+      if (!contentHolder) {
+        contentHolder = document.createElement('div');
+        contentHolder.className = 'message-preview-content d-flex align-items-center justify-content-between p-2';
+        try { contentHolder.id = canonicalId; } catch (e) {}
+        // attach temporarily to document body; we'll move into container below
+        (document.body || document.documentElement).appendChild(contentHolder);
+      }
+      // move children from legacy holders into canonical, then remove legacy nodes
+      legacy.forEach(node => {
+        try {
+          if (!node || node.id === canonicalId) return;
+          while (node.firstChild) contentHolder.appendChild(node.firstChild);
+          node.parentElement && node.parentElement.removeChild(node);
+        } catch (e) {}
+      });
+    } catch (e) {}
+    // ensure canonical is inside the active container
+    try {
+      if (contentHolder.parentElement !== container) container.appendChild(contentHolder);
+    } catch (e) {}
+    // clear previous content
+    contentHolder.innerHTML = '';
+
+    // render thumbnail (image) or badge (other files)
     if (file.type && file.type.startsWith('image/')) {
       const img = document.createElement('img');
       const objUrl = URL.createObjectURL(file);
-      // keep object URL until preview is cleared so modal enlarge works
-      try { container._objUrl = objUrl; } catch(e) {}
+      container._objUrl = objUrl;
       img.src = objUrl;
-      img.style.maxWidth = '140px'; img.style.maxHeight = '120px'; img.style.objectFit = 'cover'; img.style.borderRadius = '6px'; img.style.marginRight = '8px';
-      img.style.cursor = 'pointer';
-      img.addEventListener('click', () => { openPreviewModal(objUrl); });
-      wrap.appendChild(img);
+      img.className = 'preview-img me-2';
+      img.addEventListener('click', () => openPreviewModal(objUrl));
+      contentHolder.appendChild(img);
     } else {
       const ext = (file.name || '').split('.').pop() || '';
-      const badge = document.createElement('div'); badge.className = 'file-badge';
-      badge.textContent = ext.toUpperCase(); badge.style.marginRight = '8px';
-      wrap.appendChild(badge);
+      const badge = document.createElement('div');
+      badge.className = 'file-badge file-badge-inline me-2';
+      badge.textContent = ext.toUpperCase();
+      contentHolder.appendChild(badge);
     }
-    const meta = document.createElement('div'); meta.className = 'file-meta';
-    const name = document.createElement('div'); name.className = 'name'; name.textContent = file.name; meta.appendChild(name);
-    if (file.size) { const size = document.createElement('div'); size.className = 'size'; size.textContent = Math.round(file.size/1024) + ' KB'; meta.appendChild(size); }
-    wrap.appendChild(meta);
-    root.appendChild(wrap);
-    // add a small 'x' remove button aligned to the right of the preview row
-    try {
-      // ensure the preview row lays out horizontally so the button can sit at the right
-      root.style.display = 'flex';
-      root.style.alignItems = 'center';
-      wrap.style.flex = '1';
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'btn btn-sm btn-link';
-      btn.setAttribute('aria-label', 'Remove attachment');
-      btn.style.marginLeft = 'auto';
-      btn.style.padding = '0 6px';
-      btn.style.lineHeight = '1';
-      btn.textContent = '✕';
-      btn.addEventListener('click', function(){
-        try { clearSelectedPreview(container); } catch(e){}
-        // clear pending references if any
-        try { widgetPendingFile = null; pendingFile = null; } catch(e){}
-        // clear native file inputs where possible
-        try { const a = document.getElementById(prefix + 'attachInput') || document.getElementById('attachInput'); if (a) a.value = ''; } catch(e){}
-        try { const b = document.getElementById(prefix + 'chatwidget_attachInput') || document.getElementById('chatwidget_attachInput'); if (b) b.value = ''; } catch(e){}
-      });
-      root.appendChild(btn);
-    } catch(e) {}
-    container.appendChild(root);
+
+    // metadata
+    const meta = document.createElement('div');
+    meta.className = 'file-meta preview-grow d-flex flex-column';
+    const name = document.createElement('div');
+    name.className = 'name';
+    name.textContent = file.name || '';
+    meta.appendChild(name);
+    if (file.size) {
+      const size = document.createElement('div');
+      size.className = 'size';
+      size.textContent = Math.round((file.size || 0) / 1024) + ' KB';
+      meta.appendChild(size);
+    }
+    contentHolder.appendChild(meta);
+
+    // remove button
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'btn btn-sm btn-link preview-remove';
+    removeBtn.setAttribute('aria-label', 'Remove attachment');
+    removeBtn.innerHTML = '<i class="bi bi-x-lg" aria-hidden="true"></i>';
+    removeBtn.addEventListener('click', () => {
+      clearSelectedPreview(container);
+      try { widgetPendingFile = null; pendingFile = null; } catch (e) {}
+      try { const a = document.getElementById(prefix + 'attachInput') || document.getElementById('attachInput'); if (a) a.value = ''; } catch (e) {}
+      try { const b = document.getElementById(prefix + 'chatwidget_attachInput') || document.getElementById('chatwidget_attachInput'); if (b) b.value = ''; } catch (e) {}
+    });
+    contentHolder.appendChild(removeBtn);
+
+    // wire panel close control once
+    const panelClose = container.querySelector('#chatwidget_attachPreview_close') || document.getElementById('chatwidget_attachPreview_close');
+    if (panelClose && !panelClose._wired) {
+      panelClose.addEventListener('click', () => clearSelectedPreview(container));
+      panelClose._wired = true;
+    }
+
+    // show preview and update panel CSS var for animation
+    const hasContent = contentHolder.innerHTML && contentHolder.innerHTML.trim();
+    if (hasContent) {
+      setPreviewVisibility(container, true);
+    } else {
+      setPreviewVisibility(container, false);
+    }
   }
-  function clearSelectedPreview(container){ if (!container) return; try { container.innerHTML = ''; container.style.display = 'none'; if (container._objUrl) { try { URL.revokeObjectURL(container._objUrl); } catch(e){} delete container._objUrl; } } catch(e) {} try { widgetPendingFile = null; pendingFile = null; } catch(e) {} }
+
+  function clearSelectedPreview(container) {
+    if (!container) return;
+    // remove any recognized preview content nodes (new canonical id first)
+    const contentHolder = document.querySelector('#chatwidget_attachPreview_content') || container.querySelector('#chatwidget_attachPreview_content') || container.querySelector('.message-preview-content');
+    if (contentHolder) contentHolder.innerHTML = '';
+    // remove any stray preview elements that may have been appended directly to the container
+    try {
+      const stray = container.querySelectorAll('.preview-img, .file-badge, .file-meta, .preview-remove, .message-preview-content');
+      stray.forEach(n => { if (n && n.parentNode) n.parentNode.removeChild(n); });
+    } catch (e) {}
+    // hide via centralized helper to keep CSS var & classes consistent
+    try { setPreviewVisibility(container, false); } catch (e) {}
+    try {
+      const pc = container.querySelector('#chatwidget_attachPreview_close') || document.getElementById('chatwidget_attachPreview_close');
+      if (pc) pc.style.display = 'none';
+    } catch (e) {}
+    if (container._objUrl) {
+      try { URL.revokeObjectURL(container._objUrl); } catch (e) {}
+      delete container._objUrl;
+    }
+    try { widgetPendingFile = null; pendingFile = null; } catch (e) {}
+    const panelEl = document.getElementById(prefix + 'panel') || document.getElementById('chatwidget_panel');
+    if (panelEl) {
+      panelEl.classList.remove('preview-visible');
+      try { panelEl.style.setProperty('--preview-height', '0px'); } catch (e) {}
+    }
+  }
 
   // create/open a simple modal overlay for previewing images larger
   function openPreviewModal(src) {
@@ -881,37 +1197,6 @@ function initApp(config = {}) {
 
     // create divider
     let div = document.getElementById('columnDivider');
-    if (!div) {
-      div = document.createElement('div');
-      div.id = 'columnDivider';
-      div.title = 'Drag to resize columns';
-      div.style.position = 'absolute';
-      div.style.top = '0';
-      div.style.bottom = '0';
-      // make divider area larger for easy grabbing, with a thin visible center handle
-      div.style.width = '16px';
-      div.style.marginLeft = '-8px';
-      div.style.background = 'transparent';
-      div.style.cursor = 'col-resize';
-      div.style.zIndex = 10002;
-      div.style.boxSizing = 'border-box';
-      div.style.display = 'flex';
-      div.style.alignItems = 'center';
-      div.style.justifyContent = 'center';
-      div.style.touchAction = 'none';
-      // create centered visible handle bar
-      const handle = document.createElement('div');
-      handle.style.width = '5px';
-      handle.style.height = '56px';
-      handle.style.background = '#dcdcdc';
-      handle.style.borderLeft = '1px solid rgba(0,0,0,0.08)';
-      handle.style.borderRight = '1px solid rgba(255,255,255,0.4)';
-      handle.style.borderRadius = '3px';
-      handle.style.boxShadow = '0 0 0 2px rgba(0,0,0,0.00)';
-      handle.style.pointerEvents = 'auto';
-      div.appendChild(handle);
-      container.appendChild(div);
-    }
 
     function updateDividerPos(){
       const crect = container.getBoundingClientRect();
@@ -939,7 +1224,9 @@ function initApp(config = {}) {
   })();
 
   const app = {
-    apiGet, apiPost, renderCards, renderAgents, loadAgents, loadMessages, appendMessageToUI, sendMessage, selectAgent, getSelectedRoomId, openRoom
+    apiGet, apiPost, renderCards, renderAgents, loadAgents, loadMessages, appendMessageToUI, sendMessage, selectAgent, getSelectedRoomId, openRoom,
+    getPreferredLocale, // returns string like 'en-US'
+    getPreferredVoice: detectPreferredVoice // returns Promise<SpeechSynthesisVoice|null>
   };
   // expose app instances globally for pages that embed the widget
   try {

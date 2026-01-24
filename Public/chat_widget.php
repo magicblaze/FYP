@@ -16,89 +16,17 @@ $APP_ROOT = isset($parts[0]) && $parts[0] !== '' ? '/' . $parts[0] : '';
 $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
 ?>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
-<style>
-/* Floating chat button and panel styles */
-#chatwidget_toggle {position:fixed;right:20px;bottom:20px;z-index:9999;border-radius:50%;width:56px;height:56px;background:#8faae3;color:#fff;border:none;box-shadow:0 6px 18px rgba(11,27,43,0.18);display:flex;align-items:center;justify-content:center;font-size:22px}
-#chatwidget_panel {position:fixed;right:20px;z-index:9998;width:520px;max-width:95vw;max-height:95vh;background:#fff;border-radius:12px;box-shadow:0 10px 30px rgba(11,27,43,0.12);overflow:hidden;display:none;flex-direction:column;min-width:377px;min-height:255px;box-sizing:border-box}
-#chatwidget_panel .header{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#f7f9fc;border-bottom:1px solid #eef3fb}
-#chatwidget_panel .body{display:flex;gap:8px;padding:8px;flex:1 1 auto;min-height:0;box-sizing:border-box}
-#chatwidget_panel .body .left{width:160px;min-width:120px;overflow:auto;border-right:1px solid #eef3fb;padding-right:8px}
-#chatwidget_panel .body .left{width:160px;min-width:140px;overflow:auto;border-right:1px solid #eef3fb;padding-right:8px}
-#chatwidget_panel .composer{display:flex;gap:8px;padding:8px;border-top:1px solid #eef3fb}
-#chatwidget_panel .body .right{flex:1;display:flex;flex-direction:column;min-width:220px}
-#chatwidget_panel .body .right{flex:1;display:flex;flex-direction:column;min-width:220px;min-height:200px;position:relative}
-/* Responsive: stack on small screens */
-@media (max-width: 700px) {
-  #chatwidget_panel { right:20px; left:20px; top:auto; bottom:20px; width:calc(100% - 40px); max-width:none; border-radius:10px; min-width:unset; min-height:220px; max-height:80vh; }
-  #chatwidget_panel .body { flex-direction:column; gap:6px; padding:6px; max-height:calc(80vh - 120px); }
-  #chatwidget_panel .body .left { width:100%; min-width:unset; max-width:none; border-right:none; border-bottom:1px solid #eef3fb; padding-bottom:8px; }
-  #chatwidget_panel .body .right { width:100%; min-height:140px; }
-  #chatwidget_panel .messages { min-height:120px; }
-  #chatwidget_toggle { right:20px; bottom:20px; width:48px; height:48px; }
-  #chatwidget_attachPreviewColumn { position: absolute !important; left: 0; right: 0; margin-bottom: 0; width: 100%; z-index: 10005 !important;}
-  #chatwidget_panel.preview-visible .messages { padding-bottom: 220px; }
-  #chatwidget_panel .composer { z-index: 10000; }
-}
-/* Float preview above composer and stick to it by JS-calculated offset */
-@media (min-width: 700px) {
-  #chatwidget_attachPreviewColumn {
-    position: absolute !important;
-    left: 0; right: 0; bottom: 72px; margin-bottom: 0; width: 100%;
-    z-index: 10005 !important;
-  }
-  #chatwidget_panel.preview-visible .messages { padding-bottom: 220px; }
-  #chatwidget_panel .composer { z-index: 10000; }
-}
-
-@media (max-width: 420px) {
-  #chatwidget_panel { padding:0; }
-  #chatwidget_panel .header { padding:8px; }
-  #chatwidget_panel .composer { padding:6px; }
-  #chatwidget_panel .body .left .list-group { max-height:120px; overflow:auto; }
-}
-#chatwidget_panel .messages{flex:1 1 auto;overflow:auto;padding:6px;min-height:0}
-#chatwidget_divider{width:16px;margin-left:-8px;display:flex;align-items:center;justify-content:center;cursor:col-resize}
-#chatwidget_divider .handle{width:5px;height:56px;background:#dcdcdc;border-left:1px solid rgba(0,0,0,0.08);border-right:1px solid rgba(255,255,255,0.4);border-radius:3px}
-#chatwidget_agentsList { overflow:auto; -ms-overflow-style: none; scrollbar-width: none; }
-#chatwidget_agentsList::-webkit-scrollbar { display: none; width: 0; height: 0; }
-#chatwidget_panel .composer{display:flex;gap:8px;padding:8px;border-top:1px solid #eef3fb}
-#chatwidget_panel .composer{position:absolute;left:0;right:0;bottom:0;background:white;padding:8px 8px 12px 8px;z-index:3}
-#chatwidget_panel .messages{padding-bottom:72px}
-#chatwidget_panel .composer input{flex:1}
-#chatwidget_close{background:transparent;border:0;font-size:18px}
-/* Resizer handle */
-#chatwidget_panel .resizer{position:absolute;right:8px;bottom:8px;width:18px;height:18px;cursor:se-resize;background:linear-gradient(135deg, rgba(0,0,0,0.06), rgba(0,0,0,0.02));border-radius:4px;z-index:10001}
-
-/* Bottom-sheet helper class applied on small screens by JS for more predictable behavior */
-.chatwidget-bottomsheet { left:20px !important; right:20px !important; top:auto !important; bottom:20px !important; width:calc(100% - 40px) !important; height:60vh !important; max-height:80vh !important; border-radius:12px 12px 6px 6px !important; }
-.chatwidget-bottomsheet .resizer { display:none !important; }
-.chatwidget-bottomsheet .composer { position:sticky !important; bottom:0; background:linear-gradient(to top, rgba(255,255,255,0.9), rgba(255,255,255,0.6)); }
-</style>
-
-<!-- Preview row styling inserted by assistant -->
-<style>
-.message-preview-column{box-sizing:border-box;padding:8px 12px;border-top:1px solid #eef3fb;border-bottom:0px solid #f8f9fb;background:#ffffff;display:flex;flex-direction:column;gap:8px;align-items:flex-start;}
-.message-preview-column img{max-width:100%;max-height:360px;border-radius:6px;object-fit:cover}
-.message-preview-column .file-badge{width:56px;height:44px;border-radius:6px;background:#6c757d;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:600}
-.message-preview-column .file-meta{display:flex;flex-direction:column;min-width:0}
-.message-preview-column .file-meta .name{font-size:0.95rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.message-preview-column .file-meta .size{font-size:0.8rem;color:#6c757d}
-/* Chat link styling: bold white by default for visibility on colored bubbles */
-#chatwidget_panel a { color: #ffffff !important; font-weight: 700 !important; }
-/* Exception: links inside white message cards should remain dark for readability */
-#chatwidget_panel .bg-white a, #chatwidget_panel .text-dark a { color: #333333 !important; font-weight:700 !important; }
-</style>
 
 <?php
   // If not logged in, show button that redirects to login (preserves current page for redirect)
   $redirect = urlencode($_SERVER['REQUEST_URI'] ?? '');
   if (!$logged) :
 ?>
-  <a id="chatwidget_toggle" class="btn-link" href="../login.php?redirect=<?php echo $redirect ?>" aria-label="Log in to open chat" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;border-radius:50%;background:#8faae3;color:#fff;">
-    <i class="bi bi-chat-dots" aria-hidden="true" style="font-size:22px;color:#fff;line-height:1"></i>
+  <a id="chatwidget_toggle" class="btn-link" href="../login.php?redirect=<?php echo $redirect ?>" aria-label="Log in to open chat" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;border-radius:50%;background:rgba(255,255,255,0.7);color:#fff;">
+    <i class="bi bi-chat-dots" aria-hidden="true" style="font-size:22px;color:#ffffff;line-height:1"></i>
   </a>
 <?php else: ?>
-  <button id="chatwidget_toggle" aria-label="Open chat" style="display:inline-flex;align-items:center;justify-content:center;padding:0;border:0;background:transparent;">
+  <button id="chatwidget_toggle" aria-label="Open chat" style="display:inline-flex;align-items:center;justify-content:center;padding:0;border:0;background:rgba(255,255,255,0.7);">
     <i class="bi bi-chat-dots" aria-hidden="true" style="font-size:22px;color:#8faae3;line-height:1"></i>
   </button>
 <?php endif; ?>
@@ -107,24 +35,39 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
   <div class="header">
     <div>
       <div style="font-weight:600">Message</div>
-            <div id="chatwidget_connectionStatus" class="small text-muted">Select a conversation</div>
       <div id="chatwidget_typingIndicator" class="small text-muted"></div>
     </div>
     <div>
-      <button id="chatwidget_close" aria-label="Close">✕</button>
+      <button id="chatwidget_close" aria-label="Close"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
     </div>
   </div>
   <div id="chatwidget_body" class="body">
     <div class="left">
-      <div class="d-flex justify-content-center"><button id="chatwidget_new" class="btn btn-sm btn-outline-primary m-2" type="button" title="New chat" aria-label="Create chat">+ Start a chat</button></div>
+      <div class="d-flex justify-content-center">
+        <button id="chatwidget_new" class="btn btn-primary rounded-circle d-flex align-items-center justify-content-center m-2" type="button" title="New chat" aria-label="Create chat" style="width:44px;height:44px;padding:0;border:0">
+          <i class="bi bi-plus-lg" aria-hidden="true" style="font-size:18px;color:#fff;line-height:1"></i>
+        </button>
+      </div>
       <div id="chatwidget_agentsList" class="list-group mb-2" style="max-height:100%;overflow:auto;"></div>
     </div>
     <div id="chatwidget_divider" role="separator" aria-orientation="vertical" aria-label="Resize chat list"><div class="handle" aria-hidden="true"></div></div>
     <div class="right">
-      <div id="chatwidget_messages" class="messages"></div>
-      <!-- attachment preview placeholder row (populated by JS) -->
-      <div id="chatwidget_attachPreviewColumn" class="message-preview-column" style="display:none;width:100%;margin-bottom:0px;position:relative;z-index:10005"></div>
-      <div class="composer">
+      <div id="chatwidget_Current_Chat" class="d-flex align-items-center justify-content-between m-2" style="gap:8px;display:none" aria-hidden="true">
+        <div class="d-flex align-items-center" style="gap:8px">
+          <div id="chatwidget_current_avatar" class="rounded-circle" style="width:36px;height:36px;background:#e9edf2;flex:0 0 36px;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;font-weight:600;color:#375a7f">U</div>
+          <div>
+            <div id="chatwidget_connectionStatus" class="fw-semibold">Select a Chat to start conversation</div>
+            <div id="chatwidget_typingIndicator_small" class="small text-muted" style="display:none"></div>
+          </div>
+        </div>
+      </div>
+      <div id="chatwidget_messages" class="messages" style="display:none"></div>
+           <div class="composer" style="display:none;position:relative;">
+        <div id="chatwidget_attachPreviewColumn" class="message-preview-column d-flex justify-content-around">
+          <div id="chatwidget_attachPreview" class="message-preview">
+              <div id="chatwidget_attachPreview_content" class="message-preview-content d-flex align-items-center"></div>
+            </div>
+        </div>
         <input type="file" id="chatwidget_attachInput" class="d-none" />
         <button id="chatwidget_attach" class="btn btn-light btn-sm" type="button" title="Attach" aria-label="Attach file">
           <i class="bi bi-paperclip" aria-hidden="true" style="font-size:16px;line-height:1"></i>
@@ -139,26 +82,21 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
       </div>
     </div>
   </div>
-  <div id="chatwidget_resizer" class="resizer" aria-hidden="true"></div>
+  <div id="chatwidget_resizer" class="resizer" aria-hidden="true">
+    <!-- Four directional transparent edges + corner handles for full-border resizing -->
+    <div class="edge edge-top" aria-hidden="true" style="position:absolute;left:0;right:0;top:0;height:8px;cursor:n-resize;background:transparent"></div>
+    <div class="edge edge-right" aria-hidden="true" style="position:absolute;top:0;bottom:0;right:0;width:8px;cursor:e-resize;background:transparent"></div>
+    <div class="edge edge-bottom" aria-hidden="true" style="position:absolute;left:0;right:0;bottom:0;height:8px;cursor:s-resize;background:transparent"></div>
+    <div class="edge edge-left" aria-hidden="true" style="position:absolute;top:0;bottom:0;left:0;width:8px;cursor:w-resize;background:transparent"></div>
+    <!-- Corner handles (slightly larger hit area) -->
+    <div class="edge edge-top-left" aria-hidden="true" style="position:absolute;left:0;top:0;width:12px;height:12px;cursor:nwse-resize;background:transparent"></div>
+    <div class="edge edge-top-right" aria-hidden="true" style="position:absolute;right:0;top:0;width:12px;height:12px;cursor:nesw-resize;background:transparent"></div>
+    <div class="edge edge-bottom-left" aria-hidden="true" style="position:absolute;left:0;bottom:0;width:12px;height:12px;cursor:nesw-resize;background:transparent"></div>
+    <div class="edge edge-bottom-right" aria-hidden="true" style="position:absolute;right:0;bottom:0;width:12px;height:12px;cursor:nwse-resize;background:transparent"></div>
+  </div>
 </div>
-<!-- Chat widget transitions and lightweight animations -->
-<style>
-  /* Panel open/close animation */
-  #chatwidget_panel { transition: transform 260ms cubic-bezier(.2,.9,.2,1), opacity 220ms ease, box-shadow 260ms ease; transform-origin: right bottom; }
-  #chatwidget_panel.chatwidget-hidden { opacity: 0; transform: translateY(12px) scale(.98); pointer-events: none; }
-  #chatwidget_panel.chatwidget-open { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
 
-  /* Toggle button subtle pop */
-  #chatwidget_toggle { transition: transform 180ms cubic-bezier(.2,.9,.2,1), box-shadow 180ms ease; }
-  #chatwidget_toggle.chatwidget-active { transform: scale(1.04); box-shadow: 0 8px 20px rgba(11,27,43,0.18); }
-
-  /* Message-entry animation (applied via JS) */
-  @keyframes chat-in { from { opacity: 0; transform: translateY(8px) scale(.995); } to { opacity: 1; transform: translateY(0) scale(1); } }
-  .chatmsg-anim { animation: chat-in 260ms cubic-bezier(.2,.9,.2,1) both; }
-
-  /* Composer subtle elevation when panel opens */
-  #chatwidget_panel.chatwidget-open .composer { box-shadow: 0 -10px 18px rgba(11,27,43,0.04); transition: box-shadow 260ms ease; }
-</style>
+<link rel="stylesheet" href="../css/chat.css">
 <script>
 (function(){
   // Toggle panel and add draggable behavior for panel and toggle
@@ -405,33 +343,80 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
   // Add resizer behavior
   const resizer = document.getElementById('chatwidget_resizer');
   if (resizer) {
-    let resizing = false, sx=0, sy=0, sw=0, sh=0;
-    function onResizePointerDown(e){
+    let resizing = false, sx = 0, sy = 0, sw = 0, sh = 0, origLeft = 0, origTop = 0;
+    let resizeDir = { left: false, right: false, top: false, bottom: false };
+
+    function detectEdge(target) {
+      if (!target) return null;
+      const edge = target.closest && target.closest('.edge');
+      return edge || null;
+    }
+
+    function onResizePointerDown(e) {
       if (e.button && e.button !== 0) return;
+      const edge = detectEdge(e.target);
+      if (!edge) return; // only start when dragging an edge
       e.preventDefault();
       resizing = true;
-      if (resizer.setPointerCapture) resizer.setPointerCapture(e.pointerId);
       sx = e.clientX; sy = e.clientY;
-      const rect = panel.getBoundingClientRect(); sw = rect.width; sh = rect.height;
+      const rect = panel.getBoundingClientRect(); sw = rect.width; sh = rect.height; origLeft = rect.left; origTop = rect.top;
+      // determine which directions to resize
+      resizeDir = { left: false, right: false, top: false, bottom: false };
+      if (edge.classList.contains('edge-right')) resizeDir.right = true;
+      if (edge.classList.contains('edge-left')) resizeDir.left = true;
+      if (edge.classList.contains('edge-top')) resizeDir.top = true;
+      if (edge.classList.contains('edge-bottom')) resizeDir.bottom = true;
+      // legacy single-corner class (kept for compatibility)
+      if (edge.classList.contains('edge-corner')) { resizeDir.right = true; resizeDir.bottom = true; }
+      // explicit corners
+      if (edge.classList.contains('edge-top-right')) { resizeDir.top = true; resizeDir.right = true; }
+      if (edge.classList.contains('edge-top-left')) { resizeDir.top = true; resizeDir.left = true; }
+      if (edge.classList.contains('edge-bottom-right')) { resizeDir.bottom = true; resizeDir.right = true; }
+      if (edge.classList.contains('edge-bottom-left')) { resizeDir.bottom = true; resizeDir.left = true; }
+      try { if (edge.setPointerCapture) edge.setPointerCapture(e.pointerId); else if (resizer.setPointerCapture) resizer.setPointerCapture(e.pointerId); } catch (ex) {}
       document.addEventListener('pointermove', onResizePointerMove);
       document.addEventListener('pointerup', onResizePointerUp);
     }
-    function onResizePointerMove(e){
+
+    function onResizePointerMove(e) {
       if (!resizing) return;
       const dx = e.clientX - sx; const dy = e.clientY - sy;
-      const newW = Math.max(377, Math.min(sw + dx, window.innerWidth - 16));
-      const newH = Math.max(255, Math.min(sh + dy, window.innerHeight - 16));
+      const minW = 377, minH = 255;
+      const maxW = Math.max(minW, window.innerWidth - 16);
+      const maxH = Math.max(minH, window.innerHeight - 16);
+
+      let newW = sw, newH = sh, newLeft = origLeft, newTop = origTop;
+      if (resizeDir.right) newW = Math.max(minW, Math.min(sw + dx, maxW));
+      if (resizeDir.bottom) newH = Math.max(minH, Math.min(sh + dy, maxH));
+      if (resizeDir.left) {
+        newW = Math.max(minW, Math.min(sw - dx, maxW));
+        newLeft = origLeft + dx;
+        // constrain left so panel stays within viewport
+        newLeft = Math.max(8, Math.min(newLeft, window.innerWidth - newW - 8));
+      }
+      if (resizeDir.top) {
+        newH = Math.max(minH, Math.min(sh - dy, maxH));
+        newTop = origTop + dy;
+        newTop = Math.max(8, Math.min(newTop, window.innerHeight - newH - 8));
+      }
+
       panel.style.width = newW + 'px';
       panel.style.height = newH + 'px';
+      panel.style.left = newLeft + 'px';
+      panel.style.top = newTop + 'px';
+      panel.style.right = 'auto';
     }
-    function onResizePointerUp(e){
+
+    function onResizePointerUp(e) {
       if (!resizing) return; resizing = false;
       document.removeEventListener('pointermove', onResizePointerMove);
       document.removeEventListener('pointerup', onResizePointerUp);
       const rect = panel.getBoundingClientRect();
       saveSize('chatwidget_panel_size', Math.round(rect.width), Math.round(rect.height), panel);
+      try { const edge = detectEdge(e.target); if (edge && edge.releasePointerCapture) edge.releasePointerCapture(e.pointerId); else if (resizer.releasePointerCapture) resizer.releasePointerCapture(e.pointerId); } catch(ex) {}
     }
-    // enable resizer only on larger screens
+
+    // attach pointerdown on the resizer wrapper and let detectEdge decide
     if (!isSmallScreen()) resizer.addEventListener('pointerdown', onResizePointerDown);
   }
 
@@ -477,24 +462,6 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
 })();
 </script>
 
-<!-- Chat widget transitions and lightweight animations -->
-<style>
-  /* Panel open/close animation */
-  #chatwidget_panel { transition: transform 260ms cubic-bezier(.2,.9,.2,1), opacity 220ms ease, box-shadow 260ms ease; transform-origin: right bottom; }
-  #chatwidget_panel.chatwidget-hidden { opacity: 0; transform: translateY(12px) scale(.98); pointer-events: none; }
-  #chatwidget_panel.chatwidget-open { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
-
-  /* Toggle button subtle pop */
-  #chatwidget_toggle { transition: transform 180ms cubic-bezier(.2,.9,.2,1), box-shadow 180ms ease; }
-  #chatwidget_toggle.chatwidget-active { transform: scale(1.04); box-shadow: 0 8px 20px rgba(11,27,43,0.18); }
-
-  /* Message-entry animation (applied via JS) */
-  @keyframes chat-in { from { opacity: 0; transform: translateY(8px) scale(.995); } to { opacity: 1; transform: translateY(0) scale(1); } }
-  .chatmsg-anim { animation: chat-in 260ms cubic-bezier(.2,.9,.2,1) both; }
-
-  /* Composer subtle elevation when panel opens */
-  #chatwidget_panel.chatwidget-open .composer { box-shadow: 0 -10px 18px rgba(11,27,43,0.04); transition: box-shadow 260ms ease; }
-</style>
 
 <script>
 // Lightweight enhancement to gracefully animate open/close and message entries
@@ -620,13 +587,16 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
         try {
           if (!preview) return;
           const comp = document.querySelector('#chatwidget_panel .composer');
+          const panelEl = document.getElementById('chatwidget_panel');
           // default gap between preview and composer
           const gap = 8;
-          if (comp && window.getComputedStyle(comp).display !== 'none') {
-            const ch = comp.getBoundingClientRect().height || 0;
-            preview.style.bottom = (ch + gap) + 'px';
-          } else {
-            preview.style.bottom = (8) + 'px';
+          if (comp && window.getComputedStyle(comp).display !== 'none' && panelEl) {
+            // Let CSS handle horizontal positioning/width/bottom; compute only height
+            try {
+              panelEl.style.setProperty('--preview-height', Math.round(preview.getBoundingClientRect().height) + 'px');
+            } catch(e) { }
+          } else if (panelEl) {
+            try { panelEl.style.setProperty('--preview-height', '0px'); } catch(e) {}
           }
         } catch(e) { console.warn('applyPreviewOffset failed', e); }
       }
@@ -653,14 +623,94 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
         try {
           const roomId = inst && typeof inst.getSelectedRoomId === 'function' ? inst.getSelectedRoomId() : (document.getElementById('chatwidget_messages') && document.getElementById('chatwidget_messages').dataset && document.getElementById('chatwidget_messages').dataset.roomId);
           const panelEl = document.getElementById('chatwidget_panel');
-                    if (!roomId) {
-            if (composer) composer.style.display = 'none';
-            if (preview) { preview.style.display = preview.innerHTML.trim() ? '' : 'none'; preview.style.zIndex = 10005; }
+          const headerEl = document.getElementById('chatwidget_Current_Chat');
+          // right column / messages area handling
+          const rightCol = panelEl ? (panelEl.querySelector('.right') || document.getElementById('chatwidget_right')) : (document.querySelector('.right') || document.getElementById('chatwidget_right'));
+          const messagesEl = document.getElementById('chatwidget_messages') || document.getElementById('messages');
+          // ensure a persistent placeholder exists to show when no room is selected
+          let selectPlaceholder = document.getElementById('chatwidget_select_placeholder');
+          if (!selectPlaceholder && panelEl) {
+            selectPlaceholder = document.createElement('div');
+            selectPlaceholder.id = 'chatwidget_select_placeholder';
+            selectPlaceholder.style.display = 'none';
+            selectPlaceholder.style.padding = '18px';
+            selectPlaceholder.style.flex = '1';
+            selectPlaceholder.style.alignItems = 'center';
+            selectPlaceholder.style.justifyContent = 'center';
+            selectPlaceholder.style.textAlign = 'center';
+            selectPlaceholder.style.color = '#666';
+            selectPlaceholder.style.fontSize = '14px';
+            selectPlaceholder.style.background = 'transparent';
+            selectPlaceholder.textContent = 'Select a conversation before starting a chat';
+            // try to insert next to right column if available, otherwise append to panel
+            try {
+              if (rightCol && rightCol.parentNode) rightCol.parentNode.insertBefore(selectPlaceholder, rightCol.nextSibling);
+              else panelEl.appendChild(selectPlaceholder);
+            } catch(e) { panelEl.appendChild(selectPlaceholder); }
+          }
+                        if (!roomId) {
+                        if (composer) composer.style.display = 'none';
+                        if (headerEl) { headerEl.classList.remove('chat-visible'); headerEl.style.display = 'none'; }
+                      if (preview) {
+                        const holder = preview.querySelector('#chatwidget_attachPreview_content') || preview.querySelector('.message-preview-content');
+                        const hasContent = holder && holder.innerHTML && holder.innerHTML.trim() ? true : false;
+                        // Use the content-holder to decide visibility so static controls don't trigger the preview
+                        preview.style.display = hasContent ? '' : 'none';
+                        // keep z-index low while hidden; composer overlay will read --preview-height
+                        preview.style.zIndex = hasContent ? 10090 : 10005;
+                        // trigger reflow/height recalc for composer overlay
+                        try { applyPreviewOffset(); } catch(e) {}
+                      }
+                      // hide right column messages and show select-placeholder
+                      try {
+                        if (messagesEl) messagesEl.style.display = 'none';
+                        if (rightCol) rightCol.style.display = 'none';
+                        if (selectPlaceholder) selectPlaceholder.style.display = 'flex';
+                      } catch(e) {}
+            // set avatar to user's initial when no room selected
+            try {
+              const avatarEl = document.getElementById('chatwidget_current_avatar');
+              if (avatarEl) {
+                const userName = <?= json_encode($_SESSION['user']['name'] ?? '') ?>;
+                const initial = (userName && String(userName).trim()) ? String(userName).trim().charAt(0).toUpperCase() : 'U';
+                avatarEl.textContent = initial;
+                avatarEl.style.backgroundImage = '';
+              }
+            } catch(e) { }
           } else {
             if (composer) composer.style.display = '';
-            if (preview) { preview.style.display = preview.innerHTML.trim() ? '' : 'none'; preview.style.zIndex = 10005; }
+            if (headerEl) { headerEl.classList.add('chat-visible'); headerEl.style.display = 'flex'; }
+            if (preview) {
+              const holder = preview.querySelector('#chatwidget_attachPreview_content') || preview.querySelector('.message-preview-content');
+              const hasContent = holder && holder.innerHTML && holder.innerHTML.trim() ? true : false;
+              preview.style.display = hasContent ? '' : 'none';
+              preview.style.zIndex = hasContent ? 10090 : 10005;
+              try { applyPreviewOffset(); } catch(e) {}
+            }
+            // restore right column/messages and hide placeholder
+            try {
+              if (messagesEl) messagesEl.style.display = '';
+              if (rightCol) rightCol.style.display = '';
+              if (selectPlaceholder) selectPlaceholder.style.display = 'none';
+            } catch(e) {}
+            // set avatar to other participant's initial when a room is selected
+            try {
+              const avatarEl = document.getElementById('chatwidget_current_avatar');
+              if (avatarEl) {
+                let otherName = null;
+                try { otherName = localStorage.getItem('chat_other_name_' + roomId) || null; } catch(e) { otherName = null; }
+                if (!otherName && inst && typeof inst.getSelectedRoomName === 'function') {
+                  try { otherName = inst.getSelectedRoomName(); } catch(e) { otherName = null; }
+                }
+                const fallbackUser = <?= json_encode($_SESSION['user']['name'] ?? '') ?>;
+                const displayName = (otherName && String(otherName).trim()) ? String(otherName).trim() : (fallbackUser && String(fallbackUser).trim() ? String(fallbackUser).trim() : 'User');
+                const initial = displayName.charAt(0).toUpperCase();
+                avatarEl.textContent = initial;
+                avatarEl.style.backgroundImage = '';
+              }
+            } catch(e) { }
     }
-          try { if (panelEl && preview) { if (preview.innerHTML.trim()) panelEl.classList.add('preview-visible'); else panelEl.classList.remove('preview-visible'); } } catch(e) {}
+          try { if (panelEl && preview) { const holder = preview.querySelector('#chatwidget_attachPreview_content') || preview.querySelector('.message-preview-content'); const hasContent = holder && holder.innerHTML && holder.innerHTML.trim() ? true : false; if (hasContent) panelEl.classList.add('preview-visible'); else panelEl.classList.remove('preview-visible'); } } catch(e) {}
         } catch(e){}
       }
       update();
@@ -671,18 +721,6 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
   } catch(e){}
 })();
 </script>
-<!-- Chat chooser modal -->
-<style>
-.chat-chooser-backdrop{position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(0,0,0,0.35);display:none;align-items:center;justify-content:center;z-index:100020}
-.chat-chooser{background:#fff;border-radius:8px;padding:12px;width:420px;max-width:94vw;box-shadow:0 8px 30px rgba(11,27,43,0.2)}
-.chat-chooser .list{max-height:300px;overflow:auto;margin-top:8px}
-.chat-chooser .item{display:flex;align-items:center;gap:8px;padding:8px;border-radius:6px;cursor:pointer}
-.chat-chooser .item:hover{background:#f7f9fc}
-.chat-chooser .avatar{width:36px;height:36px;border-radius:50%;background:#ddd;display:inline-block;flex:0 0 36px}
-.chat-chooser .title{font-weight:600}
-.chat-chooser .subtitle{font-size:0.85rem;color:#666}
-.chat-chooser .section-title{font-size:0.9rem;font-weight:600;margin-top:8px}
-</style>
 
 <div id="chatwidget_chooser_backdrop" class="chat-chooser-backdrop" role="dialog" aria-hidden="true">
   <div class="chat-chooser" role="document" aria-label="Add an user to chat with">
@@ -791,16 +829,28 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
       }
 
       // Prefer window.handleChat only for designer targets (handleChat is designer-specific)
+      // Provide a helper to load agents and select the created room so the UI list refreshes
+      async function openAndSelect(roomId, otherName) {
+        hideChooser();
+        try {
+          if (inst && typeof inst.loadAgents === 'function') {
+            const rooms = await inst.loadAgents();
+            let found = null;
+            try { found = rooms && rooms.find(r => String(r.ChatRoomid || r.id || r.roomId) === String(roomId)); } catch(e){}
+            try { if (roomId && otherName) localStorage.setItem('chat_other_name_' + roomId, otherName); } catch(e){}
+            if (found && typeof inst.selectAgent === 'function') return inst.selectAgent(found);
+          }
+          try { if (roomId && otherName) localStorage.setItem('chat_other_name_' + roomId, otherName); } catch(e){}
+          if (inst && typeof inst.selectAgent === 'function') return inst.selectAgent({ ChatRoomid: roomId, roomname: otherName || ('Room ' + roomId) });
+          if (typeof window.chatWidgetOpenPanel === 'function') window.chatWidgetOpenPanel();
+        } catch (e) { console.warn('openAndSelect failed', e); if (typeof window.chatWidgetOpenPanel === 'function') window.chatWidgetOpenPanel(); }
+      }
+
       if (window.handleChat && u && String(u.role || '').toLowerCase() === 'designer') {
         const res = await window.handleChat(u.id, { otherName: u.name });
         const roomId = extractRoomId(res);
         if (roomId) {
-          hideChooser();
-          if (inst) {
-            const fns = ['openRoom','selectRoom','selectAgent','open','showRoom'];
-            for (const fn of fns) if (typeof inst[fn] === 'function') { inst[fn](roomId); break; }
-          }
-          if (typeof window.chatWidgetOpenPanel === 'function') window.chatWidgetOpenPanel();
+          await openAndSelect(roomId, u.name);
           return;
         }
       }
@@ -828,12 +878,7 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
       const jr = await r.json();
       const roomId = extractRoomId(jr);
       if (roomId) {
-        hideChooser();
-        if (inst) {
-          const fns = ['openRoom','selectRoom','selectAgent','open','showRoom'];
-          for (const fn of fns) if (typeof inst[fn] === 'function') { inst[fn](roomId); break; }
-        }
-        if (typeof window.chatWidgetOpenPanel === 'function') window.chatWidgetOpenPanel();
+        await openAndSelect(roomId, u.name);
         return;
       }
       alert('Unable to open chat with that user.');
@@ -857,55 +902,79 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
       function clearPreview(){
         if (!attachInput) return;
         attachInput.value = '';
-        if (preview) preview.innerHTML = '';
+        if (preview) {
+          try { const holder = preview.querySelector('#chatwidget_attachPreview_content') || preview.querySelector('.message-preview-content'); if (holder) holder.innerHTML = ''; } catch(e) {}
+          try { preview.classList.remove('visible','attached'); preview.style.display = 'none'; } catch(e) {}
+          try { const panelEl = document.getElementById('chatwidget_panel'); if (panelEl) { panelEl.classList.remove('preview-visible'); panelEl.style.setProperty('--preview-height','0px'); } } catch(e) {}
+          try { const pc = preview.querySelector('#chatwidget_attachPreview_close') || document.getElementById('chatwidget_attachPreview_close'); if (pc) pc.style.display = 'none'; } catch(e) {}
+        }
       }
 
       if (attachBtn && attachInput) {
-        // Do NOT rebind the click to avoid opening the file dialog twice (Chatfunction.js already wires this).
-        // Only listen for `change` to render the preview and do not stop propagation so the upload handler runs.
-        let attachChangeGuard = false;
-        attachInput.addEventListener('change', function(e){
-          try {
-            if (attachChangeGuard) return; attachChangeGuard = true; setTimeout(()=>attachChangeGuard=false, 600);
-            if (!preview) return;
-            preview.innerHTML = '';
-            const file = this.files && this.files[0];
-            if (!file) return;
-
-            // Thumbnail for images, filename+icon for others
-            if (file.type && file.type.startsWith('image/')){
-              const img = document.createElement('img');
-              img.src = URL.createObjectURL(file);
-              img.style.maxWidth = '100px'; img.style.maxHeight = '60px'; img.style.objectFit = 'cover'; img.alt = file.name;
-              img.addEventListener('load', () => URL.revokeObjectURL(img.src));
-              preview.appendChild(img);
-            } else {
-              const icon = document.createElement('i');
-              icon.className = 'bi bi-file-earmark';
-              icon.style.fontSize = '20px'; icon.style.marginRight = '6px';
-              preview.appendChild(icon);
-              const span = document.createElement('span');
-              span.textContent = file.name;
-              span.style.fontSize = '12px';
-              preview.appendChild(span);
-            }
-
-            // remove button
-            const rm = document.createElement('button');
-            rm.type = 'button'; rm.className = 'btn btn-sm btn-link'; rm.title = 'Remove'; rm.style.marginLeft = '8px';
-            rm.textContent = '✕';
-            rm.addEventListener('click', function(){ clearPreview(); });
-            preview.appendChild(rm);
-
-            // do not prevent other listeners from running; Chatfunction.js will handle the upload
-            console.debug('chatwidget: preview set for', file.name);
-          } catch (ex) { console.error('attach change handler error', ex); }
-        });
+        // Chatfunction.js wires attach/change handling when available. Only bind a fallback
+        // preview renderer if the shared helper is not present to avoid duplicate previews.
+        if (!(window && typeof window.showSelectedPreview === 'function')) {
+          let attachChangeGuard = false;
+          attachInput.addEventListener('change', function(e){
+            try {
+              if (attachChangeGuard) return; attachChangeGuard = true; setTimeout(()=>attachChangeGuard=false, 600);
+              if (!preview) return;
+              preview.innerHTML = '';
+              const file = this.files && this.files[0];
+              if (!file) return;
+              // render into content holder if present
+              const holder = preview.querySelector('#chatwidget_attachPreview_content') || preview.querySelector('.message-preview-content') || preview;
+              try { holder.innerHTML = ''; } catch(e) {}
+              // Thumbnail for images, filename+icon for others
+              if (file.type && file.type.startsWith('image/')){
+                const img = document.createElement('img');
+                const obj = URL.createObjectURL(file);
+                img.src = obj;
+                img.style.maxWidth = '120px'; img.style.maxHeight = '90px'; img.style.objectFit = 'cover'; img.alt = file.name; img.className = 'preview-img';
+                img.addEventListener('load', () => { try { URL.revokeObjectURL(obj); } catch(e){} });
+                holder.appendChild(img);
+              } else {
+                const badge = document.createElement('div'); badge.className = 'file-badge'; badge.textContent = 'FILE'; holder.appendChild(badge);
+                const span = document.createElement('div'); span.textContent = file.name; span.className = 'name small'; holder.appendChild(span);
+              }
+              // actions
+              const rm = document.createElement('button');
+              rm.type = 'button';
+              rm.className = 'btn btn-sm btn-link preview-remove';
+              rm.title = 'Remove';
+              rm.setAttribute('aria-label', 'Remove attachment');
+              rm.innerHTML = '<i class="bi bi-x-lg" aria-hidden="true"></i>';
+              rm.addEventListener('click', function(){ clearPreview(); });
+              holder.appendChild(rm);
+              // reveal preview now that we have content
+              try { preview.classList.add('attached'); preview.style.display = ''; } catch(e) {}
+              try { const pc = preview.querySelector('#chatwidget_attachPreview_close') || document.getElementById('chatwidget_attachPreview_close'); if (pc) pc.style.display = 'flex'; } catch(e) {}
+              try { const panelEl = document.getElementById('chatwidget_panel'); if (panelEl) { panelEl.classList.add('preview-visible'); panelEl.style.setProperty('--preview-height', Math.round(preview.getBoundingClientRect().height) + 'px'); } } catch(e) {}
+              console.debug('chatwidget: preview set for', file.name);
+            } catch (ex) { console.error('attach change handler error', ex); }
+          });
+        }
       }
 
       // After send, clear preview (send handling lives in Chatfunction.js so we do a best-effort clear)
       if (sendBtn) sendBtn.addEventListener('click', function(){ setTimeout(clearPreview, 200); });
     } catch (e) { console.error('chatwidget preview init error', e); }
+
+    // Force-hide the per-room header and set avatar initial immediately on load
+    try {
+      const headerEl = document.getElementById('chatwidget_Current_Chat');
+      if (headerEl) {
+        headerEl.classList.remove('chat-visible');
+        headerEl.style.display = 'none';
+      }
+      const avatarEl = document.getElementById('chatwidget_current_avatar');
+      if (avatarEl) {
+        const uname = <?= json_encode($_SESSION['user']['name'] ?? '') ?>;
+        const initial = (uname && String(uname).trim()) ? String(uname).trim().charAt(0).toUpperCase() : 'U';
+        avatarEl.textContent = initial;
+        avatarEl.style.backgroundImage = '';
+      }
+    } catch(e) { console.warn('chatwidget init header hide failed', e); }
 
 
     // rootId 'chatwidget' maps to IDs like 'chatwidget_messages', 'chatwidget_input' etc.
@@ -976,7 +1045,7 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
             }
             const meta = document.createElement('div'); meta.className = 'file-meta';
             const name = document.createElement('div'); name.className = 'name'; name.textContent = payload.title || 'Design';
-            const link = document.createElement('a'); link.href = payload.url; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = 'Open design page'; link.className = 'small text-muted';
+            const link = document.createElement('a'); link.href = payload.url; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = 'Open'; link.className = 'small text-muted';
             meta.appendChild(name); meta.appendChild(link);
             imgWrap.appendChild(meta);
             preview.appendChild(imgWrap);
@@ -995,10 +1064,42 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
             const cancelBtn = document.createElement('button'); cancelBtn.type = 'button'; cancelBtn.className = 'btn btn-secondary btn-sm'; cancelBtn.textContent = 'Cancel';
             actions.appendChild(cancelBtn);
             preview.appendChild(actions);
+            // mark preview as attached to composer area and animate in
+            try {
+              preview.classList.add('attached');
+              preview.style.zIndex = '10056';
+              // small delay to allow CSS transition
+              setTimeout(() => { try { preview.classList.add('visible'); } catch(e){} }, 24);
+            } catch(e) {}
 
-            const cleanup = () => { try { preview.innerHTML = ''; preview.style.display = 'none'; previewPendingShare = null; } catch(e){} };
+            // Define cleanup to hide/clear the preview and trigger composer collapse
+            const cleanup = () => {
+              try {
+                // animate out then clear
+                try { preview.classList.remove('visible'); } catch(e) {}
+                setTimeout(() => {
+                  try { preview.innerHTML = ''; preview.style.display = 'none'; previewPendingShare = null; preview.classList.remove('attached'); } catch(e) {}
+                }, 300);
+                const panelEl2 = document.getElementById('chatwidget_panel');
+                if (panelEl2) {
+                  panelEl2.classList.remove('preview-visible');
+                  try { panelEl2.style.setProperty('--preview-height', '0px'); } catch(e) {}
+                }
+              } catch(e) {}
+            };
 
             cancelBtn.addEventListener('click', () => { cleanup(); });
+
+            // ensure panel knows preview is visible now and set CSS variable for animation
+            try {
+              const panelEl2 = document.getElementById('chatwidget_panel');
+              const holder2 = preview ? (preview.querySelector('#chatwidget_attachPreview_content') || preview.querySelector('.message-preview-content')) : null;
+              const hasContent2 = holder2 && holder2.innerHTML && holder2.innerHTML.trim() ? true : false;
+              if (panelEl2 && preview && hasContent2) {
+                panelEl2.classList.add('preview-visible');
+                try { panelEl2.style.setProperty('--preview-height', Math.round(preview.getBoundingClientRect().height) + 'px'); } catch(e) {}
+              }
+            } catch(e) {}
 
             // Hook main send button (capture) to send the pending share when user clicks Send
             const mainSendBtn = document.getElementById('chatwidget_send');
@@ -1037,18 +1138,29 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
       // wait briefly for initApp to register instance
       setTimeout(tryWireShare, 200);
     } catch(e) { console.error('share wiring failed', e); }
+    // Defensive: ensure preview is hidden on initial load when no content exists
+    try {
+      const previewColInit = document.getElementById('chatwidget_attachPreviewColumn');
+      if (previewColInit) {
+        const holder = previewColInit.querySelector('#chatwidget_attachPreview_content') || previewColInit.querySelector('.message-preview-content');
+        const hasContent = holder && holder.innerHTML && holder.innerHTML.trim() ? true : false;
+        if (!hasContent) {
+          try { previewColInit.style.display = 'none'; previewColInit.classList.remove('attached','visible'); } catch(e) {}
+          const panelElInit = document.getElementById('chatwidget_panel');
+          if (panelElInit) { try { panelElInit.classList.remove('preview-visible'); panelElInit.style.setProperty('--preview-height', '0px'); } catch(e) {} }
+        }
+      }
+    } catch(e) { console.warn('preview defensive init failed', e); }
   });
 </script>
-<!-- Share chooser modal (liked designs grid) -->
 <style>
-.chat-share-backdrop{position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(0,0,0,0.35);display:none;align-items:center;justify-content:center;z-index:100030}
-.chat-share{background:#fff;border-radius:8px;padding:12px;width:640px;max-width:96vw;box-shadow:0 8px 40px rgba(11,27,43,0.25)}
-.chat-share .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px;max-height:50vh;overflow:auto}
-.chat-share .card{border:1px solid #eef3fb;border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:6px;cursor:pointer}
-.chat-share .thumb{width:100%;height:96px;background:#eee;border-radius:6px;background-size:cover;background-position:center}
-.chat-share .meta{font-size:0.9rem}
-.chat-share .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:8px}
-@media (max-width:640px){ .chat-share .grid{grid-template-columns:repeat(2,1fr)} }
+  /* Chat share backdrop & dialog animation */
+  #chatwidget_share_backdrop { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background: rgba(0,0,0,0); opacity:0; pointer-events:none; transition: background .22s ease, opacity .22s ease; z-index:100050; }
+  #chatwidget_share_backdrop.visible { background: rgba(0,0,0,0.45); opacity:1; pointer-events:auto; }
+  .chat-share { transform: translateY(10px) scale(0.98); opacity:0; transition: transform .28s cubic-bezier(.2,.9,.2,1), opacity .18s ease; max-width:920px; width:calc(100% - 48px); max-height:80vh; overflow:auto; border-radius:8px; box-shadow:0 10px 30px rgba(0,0,0,0.18); }
+  #chatwidget_share_backdrop.visible .chat-share { transform: translateY(0) scale(1); opacity:1; }
+  /* make inner grid scroll nicely on small screens */
+  #chatwidget_share_grid { display:grid; grid-template-columns: repeat(auto-fill,minmax(140px,1fr)); gap:8px; }
 </style>
 
 <div id="chatwidget_share_backdrop" class="chat-share-backdrop" role="dialog" aria-hidden="true">
@@ -1058,7 +1170,7 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
       <div><button id="chatwidget_share_close" class="btn btn-sm btn-light">Close</button></div>
     </div>
     <div id="chatwidget_share_status" class="small text-muted">Your liked designs</div>
-    <div id="chatwidget_share_grid" class="grid" style="margin-top:8px"></div>
+    <div id="chatwidget_share_grid" class="grid mt-8 p-2"></div>
     <button id="chatwidget_share_send" class="btn btn-primary ms-2" disabled>Send Selected</button></div>
   </div>
 </div>
@@ -1075,8 +1187,22 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
   let selectedDesigns = [];
   let currentShareList = [];
 
-  function showShare(){ backdrop.style.display='flex'; backdrop.setAttribute('aria-hidden','false'); loadLikedDesigns(); }
-  function hideShare(){ backdrop.style.display='none'; backdrop.setAttribute('aria-hidden','true'); grid.innerHTML=''; selectedDesign=null; sendBtn.disabled=true; }
+  function showShare(){
+    if (!backdrop) return;
+    // reveal with animation class
+    backdrop.classList.add('visible');
+    backdrop.setAttribute('aria-hidden','false');
+    loadLikedDesigns();
+  }
+  function hideShare(){
+    if (!backdrop) return;
+    // start hide animation, then cleanup after transition
+    backdrop.classList.remove('visible');
+    backdrop.setAttribute('aria-hidden','true');
+    setTimeout(() => {
+      try { grid.innerHTML = ''; selectedDesign = null; if (sendBtn) sendBtn.disabled = true; } catch(e) {}
+    }, 360);
+  }
   shareBtn && shareBtn.addEventListener('click', showShare);
   closeBtn && closeBtn.addEventListener('click', hideShare);
   backdrop && backdrop.addEventListener('click', (e)=>{ if (e.target===backdrop) hideShare(); });
@@ -1116,7 +1242,7 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
       // store current list for bulk actions
       currentShareList = list.slice();
       list.forEach(d => {
-        const c = document.createElement('div'); c.className='card'; c.tabIndex=0; c.dataset.itemId = d.id || '';
+        const c = document.createElement('div'); c.className='card p-2'; c.tabIndex=0; c.dataset.itemId = d.id || '';
         c.dataset.itemType = d.type || 'design';
         const thumb = document.createElement('div'); thumb.className='thumb';
         // try to use image URL if available, else a placeholder
