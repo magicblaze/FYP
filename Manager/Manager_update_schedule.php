@@ -238,8 +238,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             <div class="nav-links">
                 <a href="Manager_introduct.php">Introduct</a>
                 <a href="Manager_MyOrder.php">MyOrder</a>
-                <a href="Manager_Massage.php">Massage</a>
-                <a href="Manager_Schedule.php">Schedule</a>
+                 <a href="Manager_Schedule.php">Schedule</a>
             </div>
             <div class="user-info">
                 <span>Welcome, <?php echo htmlspecialchars($user_name); ?></span>

@@ -3,7 +3,7 @@ session_start();
 if (isset($_GET["orderid"])){
     require_once dirname(__DIR__) . '/config.php';
 
-    // 检查用户是否以经理身份登录
+    // Check if user is logged in as manager
     if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'manager') {
         header('Location: ../login.php?redirect=' . urlencode($_SERVER['REQUEST_URI']));
         exit;
@@ -12,7 +12,7 @@ if (isset($_GET["orderid"])){
     $user = $_SESSION['user'];
     $user_id = $user['managerid'];
     
-    // 验证和清理输入
+    // Validate and sanitize input
     $orderid = isset($_GET["orderid"]) ? intval($_GET["orderid"]) : 0;
     
     if($orderid <= 0) {
@@ -20,7 +20,7 @@ if (isset($_GET["orderid"])){
         exit();
     }
     
-    // 检查订单是否属于当前经理
+    // Check if order belongs to current manager
     $check_manager_sql = "SELECT COUNT(*) as count FROM `OrderProduct` op 
                           JOIN `Manager` m ON op.managerid = m.managerid 
                           WHERE op.orderid = ? AND m.managerid = ?";
@@ -35,7 +35,7 @@ if (isset($_GET["orderid"])){
         exit();
     }
     
-    // 检查订单是否存在
+    // Check if order exists
     $check_order_sql = "SELECT orderid FROM `Order` WHERE orderid = $orderid";
     $check_order_result = mysqli_query($mysqli, $check_order_sql);
     
@@ -44,11 +44,11 @@ if (isset($_GET["orderid"])){
         exit();
     }
     
-    // 使用事务确保数据一致性
+    // Use transaction to ensure data consistency
     mysqli_begin_transaction($mysqli);
     
     try {
-        // 1. 删除OrderProduct记录（原OrderMaterial）
+        // 1. Delete OrderProduct records
         $check_product_sql = "SELECT * FROM `OrderProduct` WHERE orderid = $orderid";
         $check_product_result = mysqli_query($mysqli, $check_product_sql);
         
@@ -59,7 +59,7 @@ if (isset($_GET["orderid"])){
             }
         }
         
-        // 2. 删除Order_Contractors记录
+        // 2. Delete Order_Contractors records
         $check_contractors_sql = "SELECT * FROM `Order_Contractors` WHERE orderid = $orderid";
         $check_contractors_result = mysqli_query($mysqli, $check_contractors_sql);
         
@@ -70,7 +70,7 @@ if (isset($_GET["orderid"])){
             }
         }
         
-        // 3. 删除Schedule记录
+        // 3. Delete Schedule records
         $check_schedule_sql = "SELECT * FROM `Schedule` WHERE orderid = $orderid";
         $check_schedule_result = mysqli_query($mysqli, $check_schedule_sql);
         
@@ -81,16 +81,16 @@ if (isset($_GET["orderid"])){
             }
         }
         
-        // 4. 删除Order记录
+        // 4. Delete Order record
         $delete_order_sql = "DELETE FROM `Order` WHERE orderid = $orderid";
         if(!mysqli_query($mysqli, $delete_order_sql)) {
             throw new Exception("Failed to delete Order record");
         }
         
-        // 提交事务
+        // Commit transaction
         mysqli_commit($mysqli);
         
-        // 检查是否成功删除
+        // Check if deletion was successful
         if(mysqli_affected_rows($mysqli) > 0){
             header("Location: Manager_MyOrder_TotalOrder.php?msg=success");
         } else {
@@ -98,7 +98,7 @@ if (isset($_GET["orderid"])){
         }
         
     } catch (Exception $e) {
-        // 回滚事务
+        // Rollback transaction
         mysqli_rollback($mysqli);
         header("Location: Manager_MyOrder_TotalOrder.php?msg=error&error=" . urlencode($e->getMessage()));
     }

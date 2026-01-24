@@ -2,7 +2,7 @@
 session_start();
 require_once dirname(__DIR__) . '/config.php';
 
-// 检查用户是否以经理身份登录
+// Check if user is logged in as manager
 if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'manager') {
     header('Location: ../login.php?redirect=' . urlencode($_SERVER['REQUEST_URI']));
     exit;
@@ -12,11 +12,11 @@ $user = $_SESSION['user'];
 $user_id = $user['managerid'];
 $user_name = $user['name'];
 
-// 获取状态过滤参数
+// Get status filter parameter
 $status_filter = isset($_GET['status']) ? $_GET['status'] : 'all';
 $search = isset($_GET['search']) ? mysqli_real_escape_string($mysqli, $_GET['search']) : '';
 
-// 构建查询条件 - 只显示当前经理的订单
+// Build query conditions - only show current manager's orders
 $where_conditions = array("EXISTS (SELECT 1 FROM OrderProduct op WHERE op.orderid = o.orderid AND op.managerid = $user_id)");
 
 if($status_filter != 'all') {
@@ -35,7 +35,7 @@ if(!empty($search)) {
 
 $where_clause = !empty($where_conditions) ? "WHERE " . implode(" AND ", $where_conditions) : "";
 
-// 构建SQL查询 - UPDATED FOR NEW DATE STRUCTURE
+// Build SQL query
 $sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus,
                c.clientid, c.cname as client_name, c.budget,
                d.designid, d.expect_price as design_price, d.tag as design_tag,
@@ -49,7 +49,7 @@ $sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus,
 
 $result = mysqli_query($mysqli, $sql);
 
-// 获取总数 - 只统计当前经理的订单
+// Get total count - only current manager's orders
 $count_sql = "SELECT COUNT(*) as total 
               FROM `Order` o 
               WHERE EXISTS (SELECT 1 FROM OrderProduct op WHERE op.orderid = o.orderid AND op.managerid = $user_id)";
@@ -57,7 +57,7 @@ $count_result = mysqli_query($mysqli, $count_sql);
 $count_row = mysqli_fetch_assoc($count_result);
 $total_orders = $count_row['total'];
 
-// 获取统计数据 - 只统计当前经理的订单
+// Get statistics - only current manager's orders
 $stats_sql = "SELECT 
                 COUNT(*) as total_orders,
                 SUM(c.budget) as total_budget,
@@ -72,131 +72,204 @@ $stats_result = mysqli_query($mysqli, $stats_sql);
 $stats = mysqli_fetch_assoc($stats_result);
 ?>
 <!DOCTYPE html>
-<html>
+<html lang="en">
+
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HappyDesign - Total Orders</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="../css/Manager_style.css">
-    <title>Total Orders - HappyDesign</title>
 </head>
-<body>
-    <!-- 导航栏 -->
-    <nav class="nav-bar">
-        <div class="nav-container">
-            <a href="#" class="nav-brand">HappyDesign</a>
-            <div class="nav-links">
-                <a href="Manager_introduct.php">Introduct</a>
-                <a href="Manager_MyOrder.php">MyOrder</a>
-                <a href="Manager_Massage.php">Massage</a>
-                <a href="Manager_Schedule.php">Schedule</a>
-            </div>
-            <div class="user-info">
-                <span>Welcome, <?php echo htmlspecialchars($user_name); ?></span>
-                <a href="../logout.php" class="btn-logout">Logout</a>
-            </div>
-        </div>
-    </nav>
 
-    <!-- 主要内容 -->
-    <div class="page-container">
-        <h1 class="page-title">Total Orders - <?php echo htmlspecialchars($user_name); ?></h1>
-        
-        <!-- 搜索框 -->
-        <div class="search-box">
-            <form method="GET" action="" class="d-flex align-center">
-                <input type="text" name="search" class="search-input" 
-                       placeholder="Search orders by ID, client name, or tags..." 
-                       value="<?php echo htmlspecialchars($search); ?>">
-                <input type="hidden" name="status" value="<?php echo htmlspecialchars($status_filter); ?>">
-                <button type="submit" class="search-button">Search</button>
-                <?php if(!empty($search)): ?>
-                    <a href="?status=<?php echo htmlspecialchars($status_filter); ?>" class="btn btn-outline ml-2">Clear Search</a>
-                <?php endif; ?>
-            </form>
+<body>
+    <!-- Header Navigation (matching Manager_MyOrder.php style) -->
+    <header class="bg-white shadow p-3 d-flex justify-content-between align-items-center">
+        <div class="d-flex align-items-center gap-3">
+            <div class="h4 mb-0"><a href="Manager_MyOrder.php" style="text-decoration: none; color: inherit;">HappyDesign</a></div>
+            <nav>
+                <ul class="nav align-items-center gap-2">
+                    <li class="nav-item"><a class="nav-link" href="Manager_introduct.php">Introduct</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="Manager_MyOrder.php">MyOrder</a></li>
+                    <li class="nav-item"><a class="nav-link" href="Manager_Schedule.php">Schedule</a></li>
+                </ul>
+            </nav>
         </div>
-        
-        <!-- 状态过滤器 -->
+        <nav>
+            <ul class="nav align-items-center">
+                <li class="nav-item me-2">
+                    <a class="nav-link text-muted" href="#">
+                        <i class="fas fa-user me-1"></i>Hello <?php echo htmlspecialchars($user_name); ?>
+                    </a>
+                </li>
+                <li class="nav-item"><a class="nav-link" href="../logout.php">Logout</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main class="container-lg mt-4">
+        <!-- Page Title -->
+        <div class="page-title">
+            <i class="fas fa-list me-2"></i>Total Orders
+        </div>
+
+        <!-- Search Card -->
         <div class="card mb-4">
             <div class="card-body">
-                <div class="d-flex align-center justify-between">
-                    <div class="d-flex align-center gap-2">
-                        <strong>Filter by Status:</strong>
-                        <a href="?status=all" class="btn btn-sm <?php echo $status_filter == 'all' ? 'btn-primary' : 'btn-outline'; ?>">All Orders</a>
-                        <a href="?status=Pending" class="btn btn-sm <?php echo $status_filter == 'Pending' ? 'btn-primary' : 'btn-outline'; ?>">Pending</a>
-                        <a href="?status=Designing" class="btn btn-sm <?php echo $status_filter == 'Designing' ? 'btn-primary' : 'btn-outline'; ?>">Designing</a>
-                        <a href="?status=Completed" class="btn btn-sm <?php echo $status_filter == 'Completed' ? 'btn-primary' : 'btn-outline'; ?>">Completed</a>
+                <h5 class="card-title mb-3">
+                    <i class="fas fa-search me-2"></i>Search Orders
+                </h5>
+                <form method="GET" action="" class="d-flex gap-2">
+                    <input type="text" name="search" class="form-control" 
+                           placeholder="Search orders by ID, client name, or tags..." 
+                           value="<?php echo htmlspecialchars($search); ?>">
+                    <input type="hidden" name="status" value="<?php echo htmlspecialchars($status_filter); ?>">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-search me-2"></i>Search
+                    </button>
+                    <?php if(!empty($search)): ?>
+                        <a href="?status=<?php echo htmlspecialchars($status_filter); ?>" class="btn btn-secondary">
+                            <i class="fas fa-times me-2"></i>Clear
+                        </a>
+                    <?php endif; ?>
+                </form>
+            </div>
+        </div>
+
+        <!-- Status Filter Card -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title mb-3">
+                    <i class="fas fa-filter me-2"></i>Filter by Status
+                </h5>
+                <div class="d-flex flex-wrap gap-2">
+                    <a href="?status=all" class="btn btn-sm <?php echo $status_filter == 'all' ? 'btn-primary' : 'btn-outline-primary'; ?>">
+                        <i class="fas fa-list me-1"></i>All Orders
+                    </a>
+                    <a href="?status=Pending" class="btn btn-sm <?php echo $status_filter == 'Pending' ? 'btn-warning' : 'btn-outline-warning'; ?>">
+                        <i class="fas fa-hourglass-half me-1"></i>Pending
+                    </a>
+                    <a href="?status=Designing" class="btn btn-sm <?php echo $status_filter == 'Designing' ? 'btn-info' : 'btn-outline-info'; ?>">
+                        <i class="fas fa-pencil-alt me-1"></i>Designing
+                    </a>
+                    <a href="?status=Completed" class="btn btn-sm <?php echo $status_filter == 'Completed' ? 'btn-success' : 'btn-outline-success'; ?>">
+                        <i class="fas fa-check-circle me-1"></i>Completed
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Statistics Cards -->
+        <div class="row mb-4">
+            <div class="col-md-2 mb-3">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <div style="font-size: 2rem; color: #3498db; font-weight: 700; margin-bottom: 0.5rem;">
+                            <?php echo $stats['total_orders'] ?? 0; ?>
+                        </div>
+                        <div style="color: #7f8c8d; font-weight: 500; font-size: 0.9rem;">
+                            <i class="fas fa-list me-1"></i>Total Orders
+                        </div>
                     </div>
-                    <div class="text-muted">
-                        Showing <?php echo $total_orders; ?> orders
+                </div>
+            </div>
+            <div class="col-md-2 mb-3">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <div style="font-size: 2rem; color: #27ae60; font-weight: 700; margin-bottom: 0.5rem;">
+                            $<?php echo number_format($stats['total_budget'] ?? 0, 0); ?>
+                        </div>
+                        <div style="color: #7f8c8d; font-weight: 500; font-size: 0.9rem;">
+                            <i class="fas fa-dollar-sign me-1"></i>Total Budget
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2 mb-3">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <div style="font-size: 2rem; color: #f39c12; font-weight: 700; margin-bottom: 0.5rem;">
+                            <?php echo $stats['pending_count'] ?? 0; ?>
+                        </div>
+                        <div style="color: #7f8c8d; font-weight: 500; font-size: 0.9rem;">
+                            <i class="fas fa-hourglass-half me-1"></i>Pending
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2 mb-3">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <div style="font-size: 2rem; color: #3498db; font-weight: 700; margin-bottom: 0.5rem;">
+                            <?php echo $stats['designing_count'] ?? 0; ?>
+                        </div>
+                        <div style="color: #7f8c8d; font-weight: 500; font-size: 0.9rem;">
+                            <i class="fas fa-pencil-alt me-1"></i>Designing
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2 mb-3">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <div style="font-size: 2rem; color: #27ae60; font-weight: 700; margin-bottom: 0.5rem;">
+                            <?php echo $stats['completed_count'] ?? 0; ?>
+                        </div>
+                        <div style="color: #7f8c8d; font-weight: 500; font-size: 0.9rem;">
+                            <i class="fas fa-check-circle me-1"></i>Completed
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2 mb-3">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <div style="font-size: 2rem; color: #9b59b6; font-weight: 700; margin-bottom: 0.5rem;">
+                            $<?php echo number_format($stats['avg_budget'] ?? 0, 0); ?>
+                        </div>
+                        <div style="color: #7f8c8d; font-weight: 500; font-size: 0.9rem;">
+                            <i class="fas fa-chart-line me-1"></i>Average
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
-        
-        <!-- 统计卡片 -->
-        <div class="stats-grid">
-            <div class="stat-card">
-                <div class="stat-value"><?php echo $stats['total_orders'] ?? 0; ?></div>
-                <div class="stat-label">Total Orders</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value">$<?php echo number_format($stats['total_budget'] ?? 0, 2); ?></div>
-                <div class="stat-label">Total Budget</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value"><?php echo $stats['pending_count'] ?? 0; ?></div>
-                <div class="stat-label">Pending</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value"><?php echo $stats['designing_count'] ?? 0; ?></div>
-                <div class="stat-label">Designing</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value"><?php echo $stats['completed_count'] ?? 0; ?></div>
-                <div class="stat-label">Completed</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value">$<?php echo number_format($stats['avg_budget'] ?? 0, 2); ?></div>
-                <div class="stat-label">Average Budget</div>
-            </div>
-        </div>
-        
+
         <?php if(!$result): ?>
-            <div class="alert alert-error">
-                <div>
-                    <strong>Database Error: <?php echo mysqli_error($mysqli); ?></strong>
-                </div>
+            <div class="alert alert-danger mb-4" role="alert">
+                <i class="fas fa-exclamation-circle me-2"></i>
+                <strong>Database Error:</strong> <?php echo htmlspecialchars(mysqli_error($mysqli)); ?>
             </div>
         <?php elseif($total_orders == 0): ?>
-            <div class="alert alert-info">
-                <div>
-                    <strong>No orders found.</strong>
-                    <?php if(!empty($search)): ?>
-                        <p class="mb-0">Try adjusting your search criteria or clear the search.</p>
-                    <?php endif; ?>
+            <div class="card">
+                <div class="card-body text-center py-5">
+                    <i class="fas fa-inbox" style="font-size: 3rem; color: #bdc3c7; margin-bottom: 1rem; display: block;"></i>
+                    <h5 class="text-muted mb-2">No Orders Found</h5>
+                    <p class="text-muted mb-0">Try adjusting your search criteria or clear the search.</p>
                 </div>
             </div>
         <?php else: ?>
-        
-        <!-- 订单表格 -->
+
+        <!-- Orders Table -->
         <div class="table-container">
             <table class="table">
                 <thead>
                     <tr>
-                        <th>Order ID</th>
-                        <th>Order Date</th>
-                        <th>Client</th>
-                        <th>Budget</th>
-                        <th>Design</th>
-                        <th>Requirement</th>
-                        <th>Status</th>
-                        <th>Order Finish Date</th>
-                        <th>Design Finish Date</th>
-                        <th>Actions</th>
+                        <th><i class="fas fa-hashtag me-2"></i>Order ID</th>
+                        <th><i class="fas fa-calendar me-2"></i>Order Date</th>
+                        <th><i class="fas fa-user me-2"></i>Client</th>
+                        <th><i class="fas fa-dollar-sign me-2"></i>Budget</th>
+                        <th><i class="fas fa-image me-2"></i>Design</th>
+                        <th><i class="fas fa-file-alt me-2"></i>Requirement</th>
+                        <th><i class="fas fa-info-circle me-2"></i>Status</th>
+                        <th><i class="fas fa-clock me-2"></i>Finish Date</th>
+                        <th><i class="fas fa-cogs me-2"></i>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php while($row = mysqli_fetch_assoc($result)): 
-                        // 确定状态类名
+                        // Determine status class
                         $status_class = '';
                         switch($row["ostatus"]) {
                             case 'Completed': $status_class = 'status-completed'; break;
@@ -209,10 +282,11 @@ $stats = mysqli_fetch_assoc($stats_result);
                         <td>
                             <strong>#<?php echo htmlspecialchars($row["orderid"]); ?></strong>
                         </td>
-                        <td><?php echo date('Y-m-d H:i', strtotime($row["odate"])); ?></td>
+                        <td><?php echo date('Y-m-d', strtotime($row["odate"])); ?></td>
                         <td>
-                            <div class="d-flex flex-column">
+                            <div>
                                 <strong><?php echo htmlspecialchars($row["client_name"] ?? 'N/A'); ?></strong>
+                                <br>
                                 <small class="text-muted">ID: <?php echo htmlspecialchars($row["clientid"] ?? 'N/A'); ?></small>
                             </div>
                         </td>
@@ -220,19 +294,16 @@ $stats = mysqli_fetch_assoc($stats_result);
                             <strong class="text-success">$<?php echo number_format($row["budget"], 2); ?></strong>
                         </td>
                         <td>
-                            <div class="d-flex flex-column">
-                                <span>Design #<?php echo htmlspecialchars($row["designid"] ?? 'N/A'); ?></span>
-                                <small>Price: $<?php echo number_format($row["design_price"] ?? 0, 2); ?></small>
-                                <small>Tag: <?php echo htmlspecialchars(substr($row["design_tag"] ?? '', 0, 30)); ?>...</small>
+                            <div>
+                                <small>Design #<?php echo htmlspecialchars($row["designid"] ?? 'N/A'); ?></small>
+                                <br>
+                                <small class="text-muted">$<?php echo number_format($row["design_price"] ?? 0, 2); ?></small>
                             </div>
                         </td>
                         <td>
-                            <div class="requirements-preview">
-                                <?php echo htmlspecialchars(substr($row["Requirements"] ?? '', 0, 50)); ?>
-                                <?php if(strlen($row["Requirements"] ?? '') > 50): ?>
-                                    <span class="text-muted">...</span>
-                                <?php endif; ?>
-                            </div>
+                            <small class="text-muted">
+                                <?php echo htmlspecialchars(substr($row["Requirements"] ?? '', 0, 50)) . (strlen($row["Requirements"] ?? '') > 50 ? '...' : ''); ?>
+                            </small>
                         </td>
                         <td>
                             <span class="status-badge <?php echo $status_class; ?>">
@@ -240,29 +311,26 @@ $stats = mysqli_fetch_assoc($stats_result);
                             </span>
                         </td>
                         <td>
-                            <?php 
-                            if(isset($row["OrderFinishDate"]) && $row["OrderFinishDate"] != '0000-00-00 00:00:00'){
-                                echo date('Y-m-d H:i', strtotime($row["OrderFinishDate"]));
-                            } else {
-                                echo '<span class="text-muted">Not scheduled</span>';
-                            }
-                            ?>
-                        </td>
-                        <td>
-                            <?php 
-                            if(isset($row["DesignFinishDate"]) && $row["DesignFinishDate"] != '0000-00-00 00:00:00'){
-                                echo date('Y-m-d H:i', strtotime($row["DesignFinishDate"]));
-                            } else {
-                                echo '<span class="text-muted">Not scheduled</span>';
-                            }
-                            ?>
+                            <small>
+                                <?php 
+                                if(isset($row["OrderFinishDate"]) && $row["OrderFinishDate"] != '0000-00-00 00:00:00'){
+                                    echo date('Y-m-d', strtotime($row["OrderFinishDate"]));
+                                } else {
+                                    echo '<span class="text-muted">Not scheduled</span>';
+                                }
+                                ?>
+                            </small>
                         </td>
                         <td>
                             <div class="btn-group">
                                 <a href="Manager_MyOrder_TotalOrder_Edit.php?id=<?php echo $row["orderid"]; ?>" 
-                                   class="btn btn-sm btn-primary">Edit</a>
+                                   class="btn btn-sm btn-primary">
+                                    <i class="fas fa-edit me-1"></i>Edit
+                                </a>
                                 <button onclick="viewOrder('<?php echo htmlspecialchars($row['orderid']); ?>')" 
-                                        class="btn btn-sm btn-secondary">View</button>
+                                        class="btn btn-sm btn-secondary">
+                                    <i class="fas fa-eye me-1"></i>View
+                                </button>
                             </div>
                         </td>
                     </tr>
@@ -270,10 +338,10 @@ $stats = mysqli_fetch_assoc($stats_result);
                 </tbody>
             </table>
         </div>
-        
-        <!-- 分页和信息 -->
-        <div class="card mt-3">
-            <div class="card-body d-flex justify-between align-center">
+
+        <!-- Summary Card -->
+        <div class="card mt-4">
+            <div class="card-body d-flex justify-content-between align-items-center">
                 <div>
                     <strong>Showing <?php echo min($total_orders, 50); ?> of <?php echo $total_orders; ?> orders</strong>
                     <?php if($status_filter != 'all'): ?>
@@ -281,24 +349,25 @@ $stats = mysqli_fetch_assoc($stats_result);
                     <?php endif; ?>
                 </div>
                 <div class="btn-group">
-                
-                    <button onclick="printPage()" class="btn btn-outline">Print</button>
+                    <button onclick="printPage()" class="btn btn-outline-primary">
+                        <i class="fas fa-print me-2"></i>Print
+                    </button>
                 </div>
             </div>
         </div>
-        
+
         <?php endif; ?>
-        
-        <!-- 返回按钮 -->
-        <div class="d-flex justify-between mt-4">
-            <button onclick="window.location.href='Manager_MyOrder.php'" 
-                    class="btn btn-secondary">Back to Orders Manager</button>
-            <div class="d-flex align-center gap-2">
-                <span class="text-muted">Last updated: <?php echo date('Y-m-d H:i:s'); ?></span>
-            </div>
+
+        <!-- Action Buttons -->
+        <div class="d-flex justify-content-between align-items-center mt-4">
+            <a href="Manager_MyOrder.php" class="btn btn-secondary">
+                <i class="fas fa-arrow-left me-2"></i>Back to Orders Manager
+            </a>
+            <small class="text-muted">Last updated: <?php echo date('Y-m-d H:i:s'); ?></small>
         </div>
-    </div>
-    
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
     function viewOrder(orderId) {
         window.location.href = 'Manager_view_order.php?id=' + encodeURIComponent(orderId);
@@ -315,8 +384,7 @@ $stats = mysqli_fetch_assoc($stats_result);
     }
     
     document.addEventListener('DOMContentLoaded', function() {
-        // 搜索框回车提交
-        const searchInput = document.querySelector('.search-input');
+        const searchInput = document.querySelector('input[name="search"]');
         if(searchInput) {
             searchInput.addEventListener('keypress', function(e) {
                 if(e.key === 'Enter') {
@@ -325,9 +393,9 @@ $stats = mysqli_fetch_assoc($stats_result);
             });
         }
         
-        // 快捷键支持
+        // Keyboard shortcuts
         document.addEventListener('keydown', function(e) {
-            // Ctrl+F 聚焦搜索框
+            // Ctrl+F focus search box
             if(e.ctrlKey && e.key === 'f') {
                 e.preventDefault();
                 if(searchInput) {
@@ -336,38 +404,39 @@ $stats = mysqli_fetch_assoc($stats_result);
                 }
             }
             
-            // Ctrl+E 导出
+            // Ctrl+E export
             if(e.ctrlKey && e.key === 'e') {
                 e.preventDefault();
                 exportToCSV();
             }
             
-            // Ctrl+P 打印
+            // Ctrl+P print
             if(e.ctrlKey && e.key === 'p') {
                 e.preventDefault();
                 printPage();
             }
             
-            // Esc键返回
+            // Esc key to go back
             if(e.key === 'Escape') {
                 window.location.href = 'Manager_MyOrder.php';
             }
         });
         
-        // 表格行点击效果
+        // Table row click effect
         const tableRows = document.querySelectorAll('.table tbody tr');
         tableRows.forEach(row => {
-            row.addEventListener('click', function(e) {
-                if(!e.target.closest('.btn-group')) {
-                    const orderId = this.querySelector('td:first-child strong').textContent.replace('#', '');
-                    viewOrder(orderId);
-                }
+            row.addEventListener('mouseenter', function() {
+                this.style.transform = 'translateY(-2px)';
+                this.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
             });
             
-            row.style.cursor = 'pointer';
+            row.addEventListener('mouseleave', function() {
+                this.style.transform = 'translateY(0)';
+                this.style.boxShadow = 'none';
+            });
         });
         
-        // 高亮搜索结果
+        // Highlight search results
         const urlParams = new URLSearchParams(window.location.search);
         const searchTerm = urlParams.get('search');
         if(searchTerm) {
@@ -405,78 +474,12 @@ $stats = mysqli_fetch_assoc($stats_result);
             }
         });
     }
-    
-    // 自动刷新页面（每2分钟）
-    setInterval(function() {
-        const currentTime = new Date().toLocaleTimeString();
-        console.log('Auto-refresh scheduled for: ' + currentTime);
-    }, 120000);
     </script>
-    
-    <style>
-        .requirements-preview {
-            max-width: 200px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-        
-        .highlight {
-            background-color: #fff3cd;
-            padding: 2px 4px;
-            border-radius: 3px;
-            font-weight: bold;
-        }
-        
-        .table tbody tr {
-            transition: all 0.2s ease;
-        }
-        
-        .table tbody tr:hover {
-            background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
-            transform: translateY(-2px);
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-        
-        .stats-grid {
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-        }
-        
-        @media (max-width: 768px) {
-            .stats-grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
-            
-            .d-flex.justify-between {
-                flex-direction: column;
-                gap: 10px;
-            }
-            
-            .d-flex.justify-between > * {
-                width: 100%;
-            }
-        }
-        
-        @media print {
-            .nav-bar,
-            .search-box,
-            .stats-grid,
-            .btn-group,
-            .card.mt-3 {
-                display: none !important;
-            }
-            
-            .page-title {
-                margin-bottom: 10px !important;
-            }
-            
-            .table-container {
-                box-shadow: none !important;
-                border: 1px solid #ddd !important;
-            }
-        }
-    </style>
+
+    <!-- Include chat widget -->
+    <?php include __DIR__ . '/../Public/chat_widget.php'; ?>
 </body>
+
 </html>
 
 <?php

@@ -2,7 +2,7 @@
 require_once dirname(__DIR__) . '/config.php';
 session_start();
 
-// 检查用户是否以经理身份登录
+// Check if user is logged in as manager
 if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'manager') {
     header('Location: ../login.php?redirect=' . urlencode($_SERVER['REQUEST_URI']));
     exit;
@@ -14,38 +14,50 @@ $user_name = $user['name'];
 
 ?>
 <!DOCTYPE html>
-<html>
+<html lang="en">
+
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HappyDesign - Buy Product</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="../css/Manager_style.css">
-    <title>buyProduct - HappyDesign</title>
 </head>
-<body>
-    <!-- 导航栏 -->
-    <nav class="nav-bar">
-        <div class="nav-container">
-            <a href="#" class="nav-brand">HappyDesign</a>
-            <div class="nav-links">
-                <a href="Manager_introduct.php">Introduct</a>
-                <a href="Manager_MyOrder.php">MyOrder</a>
-                <a href="Manager_Massage.php">Massage</a>
-                <a href="Manager_Schedule.php">Schedule</a>
-            </div>
-            <div class="user-info">
-                <span>Welcome, <?php echo htmlspecialchars($user_name); ?></span>
-                <a href="../logout.php" class="btn-logout">Logout</a>
-            </div>
-        </div>
-    </nav>
 
-    <!-- 主要内容 -->
-    <div class="page-container">
-        <h1 class="page-title">Buy Product - Designing Orders</h1>
-        
+<body>
+    <!-- Header Navigation (matching design_dashboard.php style) -->
+    <header class="bg-white shadow p-3 d-flex justify-content-between align-items-center">
+        <div class="d-flex align-items-center gap-3">
+            <div class="h4 mb-0"><a href="Manager_MyOrder.php" style="text-decoration: none; color: inherit;">HappyDesign</a></div>
+            <nav>
+                <ul class="nav align-items-center gap-2">
+                    <li class="nav-item"><a class="nav-link" href="Manager_introduct.php">Introduct</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="Manager_MyOrder.php">MyOrder</a></li>
+                    <li class="nav-item"><a class="nav-link" href="Manager_Schedule.php">Schedule</a></li>
+                </ul>
+            </nav>
+        </div>
+        <nav>
+            <ul class="nav align-items-center">
+                <li class="nav-item me-2">
+                    <a class="nav-link text-muted" href="#">
+                        <i class="fas fa-user me-1"></i>Hello <?php echo htmlspecialchars($user_name); ?>
+                    </a>
+                </li>
+                <li class="nav-item"><a class="nav-link" href="../logout.php">Logout</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main class="container-lg mt-4">
+        <!-- Page Title -->
+        <div class="page-title">
+            <i class="fas fa-shopping-cart me-2"></i>Help to Designing - Buy Product
+        </div>
+
         <?php
-        // UPDATED SQL FOR NEW DATE STRUCTURE - 只显示该经理的订单
-        // FIXED: Removed o.budget and added c.budget as client_budget from Client table
-        // Also fixed d.price to d.expect_price (correct column name in Design table)
+        // Get designing orders for this manager
         $sql = "SELECT DISTINCT o.orderid, o.odate, o.Requirements, o.ostatus,
                        c.clientid, c.cname as client_name, c.budget as client_budget,
                        d.designid, d.expect_price as design_price, d.tag as design_tag,
@@ -65,101 +77,119 @@ $user_name = $user['name'];
         $result = mysqli_stmt_get_result($stmt);
         
         if(!$result){
-            echo '<div class="alert alert-error">
-                <div>
-                    <strong>Database Error: ' . mysqli_error($mysqli) . '</strong>
-                </div>
+            echo '<div class="alert alert-danger mb-4" role="alert">
+                <i class="fas fa-exclamation-circle me-2"></i>
+                <strong>Database Error:</strong> ' . htmlspecialchars(mysqli_error($mysqli)) . '
             </div>';
         } else {
             $total_orders = mysqli_num_rows($result);
         ?>
         
+        <!-- Information Card -->
         <div class="card mb-4">
             <div class="card-body">
-                <div class="d-flex justify-between align-center">
+                <div class="d-flex justify-content-between align-items-center">
                     <div>
-                        <h3 class="card-title">Designing Orders Available for Purchase</h3>
-                        <p class="text-muted mb-0">Total Orders: <?php echo $total_orders; ?></p>
+                        <h5 class="card-title mb-2">
+                            <i class="fas fa-tasks me-2"></i>Designing Orders Available for Purchase
+                        </h5>
+                        <p class="text-muted mb-0">
+                            <i class="fas fa-info-circle me-1"></i>Total Orders: <strong><?php echo $total_orders; ?></strong>
+                        </p>
                     </div>
                     <div class="btn-group">
-                        <button onclick="refreshPage()" class="btn btn-outline">Refresh</button>
+                        <button onclick="refreshPage()" class="btn btn-outline">
+                            <i class="fas fa-sync-alt me-2"></i>Refresh
+                        </button>
                     </div>
                 </div>
             </div>
         </div>
         
         <?php if($total_orders == 0): ?>
-            <div class="alert alert-info">
-                <div>
-                    <strong>No designing orders found for product purchase.</strong>
-                    <p class="mb-0">All "Designing" orders will appear here when they are ready for product purchase.</p>
+            <!-- Empty State -->
+            <div class="card">
+                <div class="card-body text-center py-5">
+                    <i class="fas fa-inbox" style="font-size: 3rem; color: #bdc3c7; margin-bottom: 1rem; display: block;"></i>
+                    <h5 class="text-muted mb-2">No Designing Orders Found</h5>
+                    <p class="text-muted mb-4">
+                        All "Designing" orders will appear here when they are ready for product purchase.
+                    </p>
+                    <a href="Manager_MyOrder.php" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left me-2"></i>Back to Orders
+                    </a>
                 </div>
             </div>
         <?php else: ?>
         
-        <!-- 订单表格 -->
+        <!-- Orders Table -->
         <div class="table-container">
             <table class="table">
                 <thead>
                     <tr>
-                        <th>Order ID</th>
-                        <th>Order Date</th>
-                        <th>Client</th>
-                        <th>Budget</th>
-                        <th>Design</th>
-                        <th>Requirement</th>
-                        <th>Status</th>
-                        <th>Order Finish Date</th>
-                        <th>Design Finish Date</th>
-                        <th>Actions</th>
+                        <th><i class="fas fa-hashtag me-2"></i>Order ID</th>
+                        <th><i class="fas fa-calendar me-2"></i>Order Date</th>
+                        <th><i class="fas fa-user me-2"></i>Client</th>
+                        <th><i class="fas fa-dollar-sign me-2"></i>Budget</th>
+                        <th><i class="fas fa-image me-2"></i>Design</th>
+                        <th><i class="fas fa-file-alt me-2"></i>Requirements</th>
+                        <th><i class="fas fa-info-circle me-2"></i>Status</th>
+                        <th><i class="fas fa-clock me-2"></i>Finish Date</th>
+                        <th><i class="fas fa-cogs me-2"></i>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php while($row = mysqli_fetch_assoc($result)): ?>
                     <tr>
-                        <td><?php echo htmlspecialchars($row["orderid"]); ?></td>
-                        <td><?php echo date('Y-m-d H:i', strtotime($row["odate"])); ?></td>
                         <td>
-                            <div class="d-flex flex-column">
+                            <strong>#<?php echo htmlspecialchars($row["orderid"]); ?></strong>
+                        </td>
+                        <td>
+                            <?php echo date('Y-m-d', strtotime($row["odate"])); ?>
+                        </td>
+                        <td>
+                            <div>
                                 <strong><?php echo htmlspecialchars($row["client_name"] ?? 'N/A'); ?></strong>
+                                <br>
                                 <small class="text-muted">ID: <?php echo htmlspecialchars($row["clientid"] ?? 'N/A'); ?></small>
                             </div>
                         </td>
-                        <td><strong class="text-success">$<?php echo number_format($row["client_budget"], 2); ?></strong></td>
                         <td>
-                            <div class="d-flex flex-column">
-                                <span>Design #<?php echo htmlspecialchars($row["designid"] ?? 'N/A'); ?></span>
-                                <small>Price: $<?php echo number_format($row["design_price"] ?? 0, 2); ?></small>
-                                <small>Tag: <?php echo htmlspecialchars(substr($row["design_tag"] ?? '', 0, 30)); ?>...</small>
+                            <span style="color: #27ae60; font-weight: 600;">$<?php echo number_format($row["client_budget"], 2); ?></span>
+                        </td>
+                        <td>
+                            <div>
+                                <small>Design #<?php echo htmlspecialchars($row["designid"] ?? 'N/A'); ?></small>
+                                <br>
+                                <small class="text-muted">$<?php echo number_format($row["design_price"] ?? 0, 2); ?></small>
                             </div>
                         </td>
-                        <td><?php echo htmlspecialchars(substr($row["Requirements"] ?? '', 0, 50)) . (strlen($row["Requirements"] ?? '') > 50 ? '...' : ''); ?></td>
+                        <td>
+                            <small class="text-muted">
+                                <?php echo htmlspecialchars(substr($row["Requirements"] ?? '', 0, 40)) . (strlen($row["Requirements"] ?? '') > 40 ? '...' : ''); ?>
+                            </small>
+                        </td>
                         <td>
                             <span class="status-badge status-designing">
-                                Designing
+                                <i class="fas fa-pencil-alt me-1"></i>Designing
                             </span>
                         </td>
                         <td>
-                            <?php 
-                            if(isset($row["OrderFinishDate"]) && $row["OrderFinishDate"] != '0000-00-00 00:00:00'){
-                                echo date('Y-m-d H:i', strtotime($row["OrderFinishDate"]));
-                            } else {
-                                echo '<span class="text-muted">Not scheduled</span>';
-                            }
-                            ?>
-                        </td>
-                        <td>
-                            <?php 
-                            if(isset($row["DesignFinishDate"]) && $row["DesignFinishDate"] != '0000-00-00 00:00:00'){
-                                echo date('Y-m-d H:i', strtotime($row["DesignFinishDate"]));
-                            } else {
-                                echo '<span class="text-muted">Not scheduled</span>';
-                            }
-                            ?>
+                            <small>
+                                <?php 
+                                if(isset($row["OrderFinishDate"]) && $row["OrderFinishDate"] != '0000-00-00 00:00:00'){
+                                    echo date('Y-m-d', strtotime($row["OrderFinishDate"]));
+                                } else {
+                                    echo '<span class="text-muted">Not scheduled</span>';
+                                }
+                                ?>
+                            </small>
                         </td>
                         <td>
                             <button onclick="buyProduct('<?php echo htmlspecialchars($row['orderid']); ?>')" 
-                                    class="btn btn-success btn-sm">Buy Product</button>
+                                    class="btn btn-success btn-sm">
+                                <i class="fas fa-shopping-bag me-1"></i>Buy Product
+                            </button>
                         </td>
                     </tr>
                     <?php endwhile; ?>
@@ -178,16 +208,18 @@ $user_name = $user['name'];
         }
         ?>
         
-        <!-- 返回按钮 -->
-        <div class="d-flex justify-between mt-4">
-            <button onclick="window.location.href='Manager_MyOrder.php'" 
-                    class="btn btn-secondary">Back to MyOrders</button>
-            <div class="d-flex align-center">
-                <span class="text-muted">Showing <?php echo $total_orders; ?> designing orders</span>
+        <!-- Action Buttons -->
+        <div class="d-flex justify-content-between align-items-center mt-4">
+            <a href="Manager_MyOrder.php" class="btn btn-secondary">
+                <i class="fas fa-arrow-left me-2"></i>Back to Orders
+            </a>
+            <div class="text-muted">
+                <small>Showing <strong><?php echo $total_orders ?? 0; ?></strong> designing orders</small>
             </div>
         </div>
-    </div>
-    
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
     function buyProduct(orderId) {
         if(confirm('Are you sure you want to buy product for Order ID: ' + orderId + '?\n\nThis will proceed with the product purchase process.')) {
@@ -199,12 +231,16 @@ $user_name = $user['name'];
         window.location.reload();
     }
     
-
+    // Auto-refresh every 60 seconds
     document.addEventListener('DOMContentLoaded', function() {
         setTimeout(function() {
             refreshPage();
         }, 60000); 
     });
     </script>
+
+    <!-- Include chat widget -->
+    <?php include __DIR__ . '/../Public/chat_widget.php'; ?>
 </body>
+
 </html>
