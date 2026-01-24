@@ -103,14 +103,14 @@ CREATE TABLE `Worker` (
   `email` varchar(255) DEFAULT NULL,
   `phone` varchar(32) DEFAULT NULL,
   `certificate` varchar(255) DEFAULT NULL,
-  `contractorid` int NOT NULL,
+  `supplierid` int NOT NULL,
   PRIMARY KEY (`workerid`),
-  KEY `contractorid_Worker_idx` (`contractorid`),
-  CONSTRAINT `fk_worker_contractorid` FOREIGN KEY (`contractorid`) REFERENCES `Contractors` (`contractorid`) ON DELETE CASCADE
+  KEY `supplierid_Worker_idx` (`supplierid`),
+  CONSTRAINT `fk_worker_supplierid` FOREIGN KEY (`supplierid`) REFERENCES `Supplier` (`supplierid`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Worker sample data
-INSERT INTO `Worker` (`name`, `email`, `phone`, `certificate`, `contractorid`) VALUES
+INSERT INTO `Worker` (`name`, `email`, `phone`, `certificate`, `supplierid`) VALUES
 ('Andy wong', 'abcwork001@gmail.com', '78945699', 'Renovation and Repair Certificate', 1),
 ('King Wong', 'abcwork002@gmail.com', '87879898', 'Renovation and Repair Certificate', 1),
 ('law bee', 'abcwork003@gmail.com', '34346789', 'Certificate Course in Quality Decoration Service Management (Level 1)', 1),
@@ -147,8 +147,8 @@ CREATE TABLE `Supplier` (
 
 -- IMPORTANT: Updated password for ID 1 to '123456' to match your testing
 INSERT INTO `Supplier` (`supplierid`,`sname`,`stel`,`semail`,`spassword`,`remember_token`) VALUES
-(1, 'ABC', 12312312, 'abc1234@gmail.com', '123456', NULL),
-(2, '123', 12301230, '12345123@gmail.com', '12345678', NULL);
+(1, 'ABC Company', 12312312, 'abc1234@gmail.com', '123456', NULL),
+(2, '123 Company', 12301230, '12345123@gmail.com', '12345678', NULL);
 
 -- Design table
 CREATE TABLE `Design` (
