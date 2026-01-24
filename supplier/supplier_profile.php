@@ -1,6 +1,7 @@
 <?php
 // ==============================
 // File: S_profile.php - Supplier profile page
+// FINAL CORRECTED VERSION - Fixed SQL query, undefined variable, and supplier name display
 // ==============================
 require_once __DIR__ . '/../config.php';
 session_start();
@@ -47,6 +48,15 @@ $contractorStmt = $mysqli->prepare("SELECT cname, ctel, cemail, introduction FRO
 $contractorStmt->bind_param("i", $contractorId);
 $contractorStmt->execute();
 $contractorData = $contractorStmt->get_result()->fetch_assoc();
+
+// Fetch supplier details (for supplier name, phone, and email display)
+$supplierStmt = $mysqli->prepare("SELECT sname, stel, semail FROM Supplier WHERE supplierid = ?");
+$supplierStmt->bind_param("i", $contractorId);
+$supplierStmt->execute();
+$supplierData = $supplierStmt->get_result()->fetch_assoc();
+$supplierName = $supplierData['sname'] ?? 'User';
+$supplierPhone = !empty($supplierData['stel']) ? (string)$supplierData['stel'] : '';
+$supplierEmail = $supplierData['semail'] ?? '';
 
 // Format phone number for display
 $phoneDisplay = '';
@@ -139,29 +149,23 @@ if (empty($contractorData['introduction'])) {
     <!-- Top menu copied from design_dashboard.php -->
     <header class="bg-white shadow p-3 d-flex justify-content-between align-items-center">
         <div class="d-flex align-items-center gap-3">
-            <div class="h4 mb-0"><a href="../design_dashboard.php" style="text-decoration: none; color: inherit;">HappyDesign</a></div>
+            <div class="h4 mb-0"><a href="dashboard.php" style="text-decoration: none; color: inherit;">HappyDesign</a></div>
             <nav>
                 <ul class="nav align-items-center gap-2">
-                    <li class="nav-item"><a class="nav-link" href="../design_dashboard.php">Design</a></li>
-                    <li class="nav-item"><a class="nav-link" href="../material_dashboard.php">Material</a></li>
-                    <li class="nav-item"><a class="nav-link" href="../furniture_dashboard.php">Furniture</a></li>
+                    <li class="nav-item"><a class="nav-link" href="dashboard.php">Dashboard</a></li>
+                    <li class="nav-item"><a class="nav-link" href="schedule.php">Schedule</a></li>
                 </ul>
             </nav>
         </div>
         <nav>
             <ul class="nav align-items-center">
-                <?php if (isset($_SESSION['user'])): ?>
-                    <li class="nav-item me-2">
-                        <a class="nav-link text-muted" href="../client/profile.php">
-                            <i class="fas fa-user me-1"></i>Hello <?= htmlspecialchars($_SESSION['user']['name'] ?? 'User') ?>
-                        </a>
-                    </li>
-                    <li class="nav-item"><a class="nav-link" href="../client/my_likes.php">My Likes</a></li>
-                    <li class="nav-item"><a class="nav-link" href="../client/order_history.php">Order History</a></li>
-                    <li class="nav-item"><a class="nav-link" href="../logout.php">Logout</a></li>
-                <?php else: ?>
-                    <li class="nav-item"><a class="nav-link" href="../login.php">Login</a></li>
-                <?php endif; ?>
+                <li class="nav-item me-2">
+                    <a class="nav-link text-muted" href="supplier_profile.php">
+                        <!-- FIXED: Now displays supplier name fetched from Supplier table -->
+                        <i class="fas fa-user me-1"></i>Hello <?= htmlspecialchars($supplierName) ?>
+                    </a>
+                </li>
+                <li class="nav-item"><a class="nav-link" href="../logout.php">Logout</a></li>
             </ul>
         </nav>
     </header>
@@ -184,11 +188,8 @@ if (empty($contractorData['introduction'])) {
             <div id="viewMode">
                 <div class="profile-section d-flex flex-row gap-4" style="margin-top:2.5rem;">
                     <div style="flex:1;min-width:260px;">
-                        <div class="profile-name mb-2" style="color:#2c3e50;background:none;"> <?= htmlspecialchars($contractorData['cname'] ?? '—') ?> </div>
-                        <div class="mb-2" style="color:#7f8c8d;"> <?= htmlspecialchars($contractorData['introduction']) ?> </div>
-                        <div class="d-flex gap-4 mt-2">
-                            <div style="color:#7f8c8d;"><i class="fas fa-map-marker-alt me-1"></i>Location <span style="color:#aaa">City, Country</span></div>
-                        </div>
+                        <!-- FIXED: Display supplier name in profile -->
+                        <div class="profile-name mb-2" style="color:#2c3e50;background:none;"> <?= htmlspecialchars($supplierName) ?> </div>
                         <div class="d-flex gap-4 mt-2">
                             <div style="color:#7f8c8d;"><i class="fas fa-briefcase me-1"></i>0 projects</div>
                             <div style="color:#7f8c8d;">0 clients</div>
@@ -198,12 +199,13 @@ if (empty($contractorData['introduction'])) {
                     <div class="ms-auto" style="min-width:220px;">
                         <div class="profile-info-card mb-3">
                             <div class="fw-bold mb-2">Contact</div>
-                            <div>Email<br><span class="text-muted"> <?= htmlspecialchars($contractorData['cemail'] ?? '—') ?> </span></div>
-                            <div class="mt-2">Phone<br><span class="text-muted"> <?= htmlspecialchars($phoneDisplay ?: '—') ?> </span></div>
+                            <!-- FIXED: Display supplier email and phone -->
+                            <div>Email<br><span class="text-muted"> <?= htmlspecialchars($supplierEmail ?: '—') ?> </span></div>
+                            <div class="mt-2">Phone<br><span class="text-muted"> <?= htmlspecialchars($supplierPhone ?: '—') ?> </span></div>
                         </div>
                         <div class="profile-info-card mb-3">
                             <div class="fw-bold mb-2">Services</div>
-                            <div>Interior design<br>Space planning<br>Project management</div>
+                            <div>Interior design<br>product supply</div>
                         </div>
                         <div class="profile-info-card">
                             <div class="fw-bold mb-2">Links</div>
@@ -214,13 +216,14 @@ if (empty($contractorData['introduction'])) {
                 <div class="mt-4">
                     <h4>Portfolio (Our Team)</h4>
                     <?php
-                    // Fetch workers for this contractor
+                    // Fetch workers for this supplier
+                    // FIXED: Changed from w.contractorid to w.supplierid (Worker table has supplierid, not contractorid)
                     $workers = [];
 
-                    $workerSql = "SELECT w.name, w.email, w.phone, w.certificate, c.cname AS belonging
+                    $workerSql = "SELECT w.name, w.email, w.phone, w.certificate, s.sname AS belonging
                                 FROM `Worker` w
-                                JOIN `Contractors` c ON w.contractorid = c.contractorid
-                                WHERE w.contractorid = ?";
+                                JOIN `Supplier` s ON w.supplierid = s.supplierid
+                                WHERE w.supplierid = ?";
 
                     if ($workerStmt = $mysqli->prepare($workerSql)) {
                         $workerStmt->bind_param("i", $contractorId);
@@ -248,72 +251,25 @@ if (empty($contractorData['introduction'])) {
                                 <div class="worker-info">
                                     <div class="worker-name"><?= htmlspecialchars($worker['name'] ?? '—') ?></div>
                                     <div class="worker-meta">
-                                        <i class="fas fa-envelope me-1"></i><?= htmlspecialchars($worker['email'] ?? '—') ?>
-                                        &nbsp; <i class="fas fa-phone me-1"></i><?= htmlspecialchars($worker['phone'] ?? '—') ?>
+                                        <i class="fas fa-envelope me-1"></i><?= htmlspecialchars($worker['email'] ?? '—') ?><br>
+                                        <i class="fas fa-phone me-1"></i><?= htmlspecialchars($worker['phone'] ?? '—') ?>
                                     </div>
-                                    <div class="worker-cert mt-1"><i class="fas fa-certificate me-1"></i><?= htmlspecialchars($worker['certificate'] ?? '—') ?></div>
-                                    <div class="worker-meta mt-1"><i class="fas fa-users me-1"></i>Belonging: <?= htmlspecialchars($worker['belonging'] ?? '—') ?></div>
+                                    <?php if (!empty($worker['certificate'])): ?>
+                                        <div class="worker-cert">
+                                            <i class="fas fa-certificate me-1"></i><?= htmlspecialchars($worker['certificate']) ?>
+                                        </div>
+                                    <?php endif; ?>
                                 </div>
                             </div>
                         <?php endforeach; ?>
                     <?php else: ?>
-                        <div class="text-muted">No workers found for this contractor.</div>
+                        <div class="alert alert-info">No workers found for this supplier.</div>
                     <?php endif; ?>
-            </div>
-
-            <!-- Edit Mode -->
-            <div id="editMode" style="display: none;">
-                <form method="post" class="edit-form">
-                    <div class="profile-section">
-                        <h3 class="section-title"><i class="fas fa-edit me-2"></i>Edit Profile</h3>
-                        <div class="mb-3">
-                            <label for="name" class="form-label"><i class="fas fa-user me-2"></i>Name *</label>
-                            <input type="text" class="form-control form-control-lg" id="name" name="name" 
-                                   value="<?= htmlspecialchars($contractorData['cname'] ?? '') ?>" required>
-                        </div>
-                        <div class="mb-3">
-                            <label for="email" class="form-label"><i class="fas fa-envelope me-2"></i>Email</label>
-                            <input type="email" class="form-control form-control-lg" id="email" 
-                                   value="<?= htmlspecialchars($contractorData['cemail'] ?? '') ?>" disabled>
-                            <small class="text-muted">Email cannot be changed.</small>
-                        </div>
-                        <div class="mb-3">
-                            <label for="phone" class="form-label"><i class="fas fa-phone me-2"></i>Phone</label>
-                            <input type="tel" class="form-control form-control-lg" id="phone" name="phone" 
-                                   value="<?= htmlspecialchars($phoneDisplay) ?>" placeholder="Enter your phone number">
-                        </div>
-                        <div class="mb-3">
-                            <label for="introduction" class="form-label"><i class="fas fa-info-circle me-2"></i>Introduction</label>
-                            <textarea class="form-control form-control-lg" id="introduction" name="introduction" rows="3" placeholder="Short bio — introduce yourself, your style, and specialties."><?= htmlspecialchars($contractorData['introduction']) ?></textarea>
-                        </div>
-                    </div>
-                    <div class="d-flex gap-3 justify-content-center mt-4">
-                        <button type="button" class="btn btn-cancel btn-lg px-4" onclick="toggleEditMode()">
-                            <i class="fas fa-times me-2"></i>Cancel
-                        </button>
-                        <button type="submit" class="btn btn-success btn-lg px-4">
-                            <i class="fas fa-save me-2"></i>Save Changes
-                        </button>
-                    </div>
-                </form>
+                </div>
             </div>
         </div>
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        function toggleEditMode() {
-            const viewMode = document.getElementById('viewMode');
-            const editMode = document.getElementById('editMode');
-            
-            if (viewMode.style.display === 'none') {
-                viewMode.style.display = 'block';
-                editMode.style.display = 'none';
-            } else {
-                viewMode.style.display = 'none';
-                editMode.style.display = 'block';
-            }
-        }
-    </script>
 </body>
 </html>
