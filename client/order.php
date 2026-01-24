@@ -14,7 +14,7 @@ if (empty($_SESSION['user'])) {
 $designid = isset($_GET['designid']) ? (int)$_GET['designid'] : 0;
 if ($designid <= 0) { http_response_code(404); die('Invalid design.'); }
 
-$ds = $mysqli->prepare("SELECT d.designid, d.expect_price, d.designName, dz.dname, d.tag FROM Design d JOIN Designer dz ON d.designerid = dz.designerid WHERE d.designid=?");
+ $ds = $mysqli->prepare("SELECT d.designid, d.expect_price, d.designName, d.designerid, dz.dname, d.tag FROM Design d JOIN Designer dz ON d.designerid = dz.designerid WHERE d.designid=?");
 $ds->bind_param("i", $designid);
 $ds->execute();
 $design = $ds->get_result()->fetch_assoc();
@@ -79,8 +79,90 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($stmt->execute()) {
             $orderId = $stmt->insert_id;
             $success = 'Order created successfully. Order ID: ' . $orderId;
-            // Redirect to order detail page after 1 second
+            // Send order confirmation message to designer via chat (create/find private room)
+            try {
+                $designerId = isset($design['designerid']) ? (int)$design['designerid'] : 0;
+                if ($designerId > 0) {
+                    // Try to find existing private room between client and designer
+                    $chkSql = "SELECT cr.ChatRoomid FROM ChatRoom cr
+                                JOIN ChatRoomMember m1 ON m1.ChatRoomid=cr.ChatRoomid AND m1.member_type='client' AND m1.memberid=?
+                                JOIN ChatRoomMember m2 ON m2.ChatRoomid=cr.ChatRoomid AND m2.member_type='designer' AND m2.memberid=?
+                                WHERE cr.room_type='private' LIMIT 1";
+                    $chk = $mysqli->prepare($chkSql);
+                    if ($chk) {
+                        $chk->bind_param('ii', $clientId, $designerId);
+                        $chk->execute();
+                        $r = $chk->get_result();
+                        $room = $r ? $r->fetch_assoc() : null;
+                        $chk->close();
+                    } else {
+                        $room = null;
+                    }
+                    if ($room && !empty($room['ChatRoomid'])) {
+                        $roomId = (int)$room['ChatRoomid'];
+                    } else {
+                        // create new private room
+                        $roomname = sprintf('private-client-%d-designer-%d', $clientId, $designerId);
+                        $insRoom = $mysqli->prepare("INSERT INTO ChatRoom (roomname,description,room_type,created_by_type,created_by_id) VALUES (?,?,?,?,?)");
+                        if ($insRoom) {
+                            $desc = 'Private room for order notifications';
+                            $created_by_type = 'client';
+                            $insRoom->bind_param('ssssi', $roomname, $desc, $room_type = 'private', $created_by_type, $clientId);
+                            $insRoom->execute();
+                            $roomId = $insRoom->insert_id;
+                            $insRoom->close();
+                            // insert members
+                            $insM = $mysqli->prepare("INSERT INTO ChatRoomMember (ChatRoomid, member_type, memberid) VALUES (?,?,?)");
+                            if ($insM) {
+                                $mt1 = 'client'; $mid1 = $clientId; $insM->bind_param('isi', $roomId, $mt1, $mid1); $insM->execute();
+                                $mt2 = 'designer'; $mid2 = $designerId; $insM->bind_param('isi', $roomId, $mt2, $mid2); $insM->execute();
+                                $insM->close();
+                            }
+                        }
+                    }
+
+                    // Insert message announcing the order
+                    if (!empty($roomId)) {
+                        // Persist only the order id in `content` and set message_type = 'order'.
+                        $orderContent = (string)$orderId;
+                        $insMsg = $mysqli->prepare("INSERT INTO Message (sender_type, sender_id, content, message_type, ChatRoomid) VALUES (?,?,?,?,?)");
+                        if ($insMsg) {
+                            $stype = 'client'; $sId = $clientId; $mtype = 'order';
+                            // types: sender_type (s), sender_id (i), content (s), message_type (s), ChatRoomid (i)
+                            $insMsg->bind_param('sissi', $stype, $sId, $orderContent, $mtype, $roomId);
+                            $insMsg->execute();
+                            $msgId = $insMsg->insert_id;
+                            $insMsg->close();
+                            if (!empty($msgId)) {
+                                // create MessageRead rows: mark sender as read, others unread
+                                $membersQ = $mysqli->prepare('SELECT ChatRoomMemberid, member_type, memberid FROM ChatRoomMember WHERE ChatRoomid = ?');
+                                if ($membersQ) {
+                                    $membersQ->bind_param('i', $roomId);
+                                    $membersQ->execute();
+                                    $mres = $membersQ->get_result();
+                                    $insRead = $mysqli->prepare('INSERT INTO MessageRead (messageid, ChatRoomMemberid, is_read, read_at) VALUES (?,?,?,?)');
+                                    while ($mr = $mres->fetch_assoc()) {
+                                        $crmId = (int)$mr['ChatRoomMemberid'];
+                                        if ($mr['member_type'] === 'client' && (int)$mr['memberid'] === $clientId) {
+                                            $isr = 1; $rtime = date('Y-m-d H:i:s');
+                                        } else {
+                                            $isr = 0; $rtime = null;
+                                        }
+                                        if ($insRead) { $insRead->bind_param('iiis', $msgId, $crmId, $isr, $rtime); $insRead->execute(); }
+                                    }
+                                    if ($insRead) $insRead->close();
+                                    $membersQ->close();
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (Throwable $e) {
+                // non-fatal: order succeeded but chat notification failed
+                error_log('[order.php] failed to send chat notification: ' . $e->getMessage());
+            }
             header('Refresh: 1; url=order_detail.php?orderid=' . $orderId);
+            exit;
         } else {
             $error = 'Failed to create order: ' . $stmt->error;
         }
@@ -90,6 +172,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $rawTags = (string)($design['tag'] ?? '');
 $tags = array_filter(array_map('trim', explode(',', $rawTags)));
 $designImgSrc = '../design_image.php?id=' . (int)$design['designid'];
+// Try to use the primary DesignImage (if present) and map to uploads path
+try {
+    $imgStmt = $mysqli->prepare("SELECT image_filename FROM DesignImage WHERE designid = ? ORDER BY image_order ASC LIMIT 1");
+    if ($imgStmt) {
+        $imgStmt->bind_param('i', $designid);
+        $imgStmt->execute();
+        $imgRow = $imgStmt->get_result()->fetch_assoc();
+        if ($imgRow && !empty($imgRow['image_filename'])) {
+            $designImgSrc = '../uploads/designs/' . ltrim($imgRow['image_filename'], '/');
+        }
+        $imgStmt->close();
+    }
+} catch (Throwable $e) {
+    // keep fallback to design_image.php if any error occurs
+}
 
 // Format phone number for display
 $phoneDisplay = '—';
@@ -390,7 +487,7 @@ $budgetDisplay = $clientData['budget'] ?? 0;
 
                             <div class="mt-4">
                                 <button type="submit" class="btn btn-success w-100 py-2">
-                                    <i class="fas fa-check-circle me-2"></i>Complete Order
+                                    <i class="fas fa-check-circle me-2"></i>Place Order
                                 </button>
                             </div>
                         </div>

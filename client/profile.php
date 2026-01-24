@@ -517,8 +517,8 @@ $budgetDisplay = $clientData['budget'] ?? 0;
                     <form method="post" enctype="multipart/form-data" class="edit-form">
                         <input type="hidden" name="action" value="update_floor_plan">
                         <div class="profile-section">
-                            <h3 class="section-title"><i class="fas fa-file-upload me-2"></i>Upload Floor Plan</h3>
-                            <p class="text-muted mb-3">Upload your floor plan to help us customize the design for your space</p>
+                            <h3 class="section-title"><i class="fas fa-file-upload me-2"></i>Floor Plan</h3>
+                            <p class="text-muted mb-3">The floor plan has to be correct and accurate, Otherwise designs might not be suitable for your space.</p>
                             
                             <label for="floorplanUpload" class="file-input-label" id="uploadLabel">
                                 <div class="floorplan-upload-area" id="uploadArea">
@@ -572,7 +572,7 @@ $budgetDisplay = $clientData['budget'] ?? 0;
                                 <i class="fas fa-times me-2"></i>Cancel
                             </button>
                             <button type="submit" class="btn btn-success btn-lg px-4">
-                                <i class="fas fa-save me-2"></i>Upload Floor Plan
+                                <i class="fas fa-save me-2"></i>Comfirm
                             </button>
                         </div>
                     </form>
@@ -644,8 +644,6 @@ $budgetDisplay = $clientData['budget'] ?? 0;
         const removePdfBtn = document.getElementById('removePdfBtn');
 
         if (uploadArea && fileInput) {
-            uploadArea.addEventListener('click', () => fileInput.click());
-            
             uploadArea.addEventListener('dragover', (e) => {
                 e.preventDefault();
                 uploadArea.style.borderColor = '#2980b9';

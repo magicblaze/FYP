@@ -728,6 +728,7 @@ $mainImg = $baseUrlEarly . $appRoot . '/design_image.php?id=' . (int)$design['de
         </script>
 
     <!-- Chat widget: include unified PHP widget (handles markup and initialization) -->
-    <?php include __DIR__ . '/../Public/chat_widget.php'; ?>
+    <?php
+    include __DIR__ . '/../Public/chat_widget.php'; ?>
 </body>
 </html>

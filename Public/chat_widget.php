@@ -13,7 +13,7 @@ $CHAT_JS_SRC = '/FYP/Public/Chatfunction.js';
 $scriptPath = $_SERVER['SCRIPT_NAME'] ?? '';
 $parts = explode('/', ltrim($scriptPath, '/'));
 $APP_ROOT = isset($parts[0]) && $parts[0] !== '' ? '/' . $parts[0] : '';
-$SUGGESTIONS_API = $APP_ROOT . '/api/get_chat_suggestions.php';
+$SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
 ?>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
 <style>
@@ -116,7 +116,7 @@ $SUGGESTIONS_API = $APP_ROOT . '/api/get_chat_suggestions.php';
   </div>
   <div id="chatwidget_body" class="body">
     <div class="left">
-      <div class="d-flex justify-content-center"><button id="chatwidget_new" class="btn btn-sm btn-outline-primary m-2" type="button" title="New chat" aria-label="Create chat">+ Open Chat</button></div>
+      <div class="d-flex justify-content-center"><button id="chatwidget_new" class="btn btn-sm btn-outline-primary m-2" type="button" title="New chat" aria-label="Create chat">+ Start a chat</button></div>
       <div id="chatwidget_agentsList" class="list-group mb-2" style="max-height:100%;overflow:auto;"></div>
     </div>
     <div id="chatwidget_divider" role="separator" aria-orientation="vertical" aria-label="Resize chat list"><div class="handle" aria-hidden="true"></div></div>
@@ -141,7 +141,24 @@ $SUGGESTIONS_API = $APP_ROOT . '/api/get_chat_suggestions.php';
   </div>
   <div id="chatwidget_resizer" class="resizer" aria-hidden="true"></div>
 </div>
+<!-- Chat widget transitions and lightweight animations -->
+<style>
+  /* Panel open/close animation */
+  #chatwidget_panel { transition: transform 260ms cubic-bezier(.2,.9,.2,1), opacity 220ms ease, box-shadow 260ms ease; transform-origin: right bottom; }
+  #chatwidget_panel.chatwidget-hidden { opacity: 0; transform: translateY(12px) scale(.98); pointer-events: none; }
+  #chatwidget_panel.chatwidget-open { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
 
+  /* Toggle button subtle pop */
+  #chatwidget_toggle { transition: transform 180ms cubic-bezier(.2,.9,.2,1), box-shadow 180ms ease; }
+  #chatwidget_toggle.chatwidget-active { transform: scale(1.04); box-shadow: 0 8px 20px rgba(11,27,43,0.18); }
+
+  /* Message-entry animation (applied via JS) */
+  @keyframes chat-in { from { opacity: 0; transform: translateY(8px) scale(.995); } to { opacity: 1; transform: translateY(0) scale(1); } }
+  .chatmsg-anim { animation: chat-in 260ms cubic-bezier(.2,.9,.2,1) both; }
+
+  /* Composer subtle elevation when panel opens */
+  #chatwidget_panel.chatwidget-open .composer { box-shadow: 0 -10px 18px rgba(11,27,43,0.04); transition: box-shadow 260ms ease; }
+</style>
 <script>
 (function(){
   // Toggle panel and add draggable behavior for panel and toggle
@@ -252,17 +269,18 @@ $SUGGESTIONS_API = $APP_ROOT . '/api/get_chat_suggestions.php';
       }
       const it = items[idx++];
       openPreviewModal(it, async (text) => {
-        const payload = {
+          const payload = {
           sender_type: 'client',
           sender_id: <?= json_encode($uid) ?>,
-          content: it.url || it.title || '',
+          content: (it.designid || it.id) ? (it.designid || it.id) : (it.url || it.title || ''),
           room: roomId,
           attachment_url: it.image || it.url || '',
           attachment_name: (it.title||it.type||'item') + '.jpg',
-          message_type: 'design',
-          share_title: it.title || '',
-          share_url: it.url || '',
-          share_type: it.type === 'product' ? 'product' : 'design',
+              message_type: 'design',
+              design_id: (it.designid || it.id || null),
+              share_title: it.title || '',
+              share_url: it.url || '',
+              share_type: it.type === 'product' ? 'product' : 'design',
           text: text || ''
         };
         try {
@@ -437,17 +455,6 @@ $SUGGESTIONS_API = $APP_ROOT . '/api/get_chat_suggestions.php';
     const s = loadSize('chatwidget_panel_size'); if (s && !isSmallScreen()) applySizeTo(panel, s);
   });
 
-  // Toggle show/hide behavior
-  toggle.addEventListener('click', () => {
-    // Ensure responsive mode is applied before showing
-    applyResponsiveMode();
-    panel.style.display = 'flex'; panel.setAttribute('aria-hidden','false'); toggle.style.display='none';
-  });
-  closeBtn.addEventListener('click', () => {
-    panel.style.display = 'none'; panel.setAttribute('aria-hidden','true'); toggle.style.display='flex';
-    const st = loadPos('chatwidget_toggle_pos'); if (st) applyPosTo(toggle, st);
-  });
-
   // Enable divider dragging to resize left list in widget
   (function enableWidgetDivider(){
     const bodyEl = document.getElementById('chatwidget_body');
@@ -467,6 +474,137 @@ $SUGGESTIONS_API = $APP_ROOT . '/api/get_chat_suggestions.php';
     function updateDividerVisibility(){ if (window.innerWidth <= 700) divider.style.display = 'none'; else divider.style.display = 'flex'; }
     window.addEventListener('resize', updateDividerVisibility); updateDividerVisibility();
   })();
+})();
+</script>
+
+<!-- Chat widget transitions and lightweight animations -->
+<style>
+  /* Panel open/close animation */
+  #chatwidget_panel { transition: transform 260ms cubic-bezier(.2,.9,.2,1), opacity 220ms ease, box-shadow 260ms ease; transform-origin: right bottom; }
+  #chatwidget_panel.chatwidget-hidden { opacity: 0; transform: translateY(12px) scale(.98); pointer-events: none; }
+  #chatwidget_panel.chatwidget-open { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
+
+  /* Toggle button subtle pop */
+  #chatwidget_toggle { transition: transform 180ms cubic-bezier(.2,.9,.2,1), box-shadow 180ms ease; }
+  #chatwidget_toggle.chatwidget-active { transform: scale(1.04); box-shadow: 0 8px 20px rgba(11,27,43,0.18); }
+
+  /* Message-entry animation (applied via JS) */
+  @keyframes chat-in { from { opacity: 0; transform: translateY(8px) scale(.995); } to { opacity: 1; transform: translateY(0) scale(1); } }
+  .chatmsg-anim { animation: chat-in 260ms cubic-bezier(.2,.9,.2,1) both; }
+
+  /* Composer subtle elevation when panel opens */
+  #chatwidget_panel.chatwidget-open .composer { box-shadow: 0 -10px 18px rgba(11,27,43,0.04); transition: box-shadow 260ms ease; }
+</style>
+
+<script>
+// Lightweight enhancement to gracefully animate open/close and message entries
+(function(){
+  try {
+    const toggle = document.getElementById('chatwidget_toggle');
+    const panel = document.getElementById('chatwidget_panel');
+    const closeBtn = document.getElementById('chatwidget_close');
+    const messagesEl = document.getElementById('chatwidget_messages') || document.getElementById('messages');
+
+    if (!panel || !toggle) return;
+
+    // Initialize hidden state if panel is not visible
+    if (panel.style.display === 'none' || panel.getAttribute('aria-hidden') === 'true') {
+      panel.classList.add('chatwidget-hidden');
+    }
+
+    function computeOrigin() {
+      try {
+        const t = toggle.getBoundingClientRect();
+        const p = panel.getBoundingClientRect();
+        const cx = t.left + t.width / 2;
+        const cy = t.top + t.height / 2;
+        const ox = p.width > 0 ? ((cx - p.left) / p.width) * 100 : 50;
+        const oy = p.height > 0 ? ((cy - p.top) / p.height) * 100 : 100;
+        return { ox: Math.max(0, Math.min(100, ox)), oy: Math.max(0, Math.min(100, oy)) };
+      } catch (e) { return { ox: 50, oy: 100 }; }
+    }
+
+    function openPanel() {
+      // compute origin to make scale appear to come from toggle center
+      const o = computeOrigin();
+      panel.style.transformOrigin = o.ox + '% ' + o.oy + '%';
+      // ensure panel is renderable before animating (override CSS display:none)
+      panel.style.display = 'flex';
+      panel.classList.remove('chatwidget-hidden');
+      // set starting small scale at the origin, then grow to full size
+      panel.style.transition = 'transform 320ms cubic-bezier(.2,.9,.2,1), opacity 220ms ease, box-shadow 260ms ease';
+      panel.style.transform = 'translateY(12px) scale(0.28)';
+      // force layout then animate to final
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          panel.classList.add('chatwidget-open');
+          panel.style.transform = 'translateY(0px) scale(1)';
+        });
+      });
+      toggle.classList.add('chatwidget-active');
+      panel.setAttribute('aria-hidden','false');
+      // clear inline transform after complete to allow CSS class control
+      const onEnd = (e) => {
+        if (e && e.propertyName && e.propertyName !== 'transform') return;
+        panel.style.transform = '';
+        panel.style.transition = '';
+        panel.removeEventListener('transitionend', onEnd);
+      };
+      panel.addEventListener('transitionend', onEnd);
+    }
+
+    function closePanel() {
+      const o = computeOrigin();
+      panel.style.transformOrigin = o.ox + '% ' + o.oy + '%';
+      // animate shrinking back to toggle
+      panel.style.transition = 'transform 260ms cubic-bezier(.2,.9,.2,1), opacity 180ms ease, box-shadow 200ms ease';
+      panel.style.transform = 'translateY(12px) scale(0.28)';
+      panel.classList.remove('chatwidget-open');
+      toggle.classList.remove('chatwidget-active');
+      panel.setAttribute('aria-hidden','true');
+      // after animation hide and reset
+      const onEndClose = (e) => {
+        if (e && e.propertyName && e.propertyName !== 'transform') return;
+        panel.classList.add('chatwidget-hidden');
+        panel.style.transform = '';
+        panel.style.transition = '';
+        // hide from layout so toggle becomes visible again
+        panel.style.display = 'none';
+        try { toggle.style.display = 'flex'; } catch(e) {}
+        panel.removeEventListener('transitionend', onEndClose);
+      };
+      panel.addEventListener('transitionend', onEndClose);
+    }
+
+    // Expose programmatic open/close hooks so external scripts (e.g., handleChat)
+    // can trigger the same animated behavior without manipulating styles directly.
+    try {
+      window.chatWidgetOpenPanel = openPanel;
+      window.chatWidgetClosePanel = closePanel;
+    } catch (e) { /* ignore in restricted contexts */ }
+
+    // Hook into existing controls without replacing their handlers
+    toggle.addEventListener('click', (e) => {
+      // if other code controls visibility, mirror it
+      if (panel.classList.contains('chatwidget-open')) closePanel(); else openPanel();
+    });
+    if (closeBtn) closeBtn.addEventListener('click', closePanel);
+
+    // Animate new messages using MutationObserver
+    if (messagesEl && window.MutationObserver) {
+      const mo = new MutationObserver(muts => {
+        muts.forEach(m => {
+          m.addedNodes && m.addedNodes.forEach(n => {
+            if (!(n instanceof Element)) return;
+            // apply animation class; remove after animation end
+            n.classList.add('chatmsg-anim');
+            n.addEventListener('animationend', () => { n.classList.remove('chatmsg-anim'); }, { once: true });
+          });
+        });
+      });
+      mo.observe(messagesEl, { childList: true, subtree: false });
+    }
+  } catch (e) { console.error('chat widget animation init failed', e); }
 })();
 </script>
 <script>
@@ -547,7 +685,7 @@ $SUGGESTIONS_API = $APP_ROOT . '/api/get_chat_suggestions.php';
 </style>
 
 <div id="chatwidget_chooser_backdrop" class="chat-chooser-backdrop" role="dialog" aria-hidden="true">
-  <div class="chat-chooser" role="document" aria-label="Choose a user to chat with">
+  <div class="chat-chooser" role="document" aria-label="Add an user to chat with">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
       <div style="font-weight:700">Start a chat</div>
       <div><button id="chatwidget_chooser_close" class="btn btn-sm btn-light">Close</button></div>
@@ -602,41 +740,100 @@ $SUGGESTIONS_API = $APP_ROOT . '/api/get_chat_suggestions.php';
     const el = document.createElement('div'); el.className='item'; el.tabIndex=0;
     const av = document.createElement('div'); av.className='avatar'; if (u.avatar) av.style.backgroundImage = 'url('+u.avatar+')', av.style.backgroundSize='cover';
     const meta = document.createElement('div'); meta.style.flex='1';
-    const name = document.createElement('div'); name.className='title'; name.textContent = u.name || ('User '+u.id);
-    const role = document.createElement('div'); role.className='subtitle'; role.textContent = u.role || '';
+
+    // Prefer common name fields returned by different APIs/tables
+    const displayName = u.name || u.display_name || u.fullname || u.username || u.dname || u.sname || u.cname || u.mname || (u.title ? u.title : null) || ('User ' + (u.id || ''));
+
+    // Normalize and detect ID fields from different tables (clientid, supplierid, managerid, designerid, etc.)
+    const uid = u.id || u.clientid || u.designerid || u.supplierid || u.managerid || u.contractorid || u.userid || u.user_id || u.memberid || u.member_id || null;
+
+    // Normalize role label for nicer display and detect role from id fields when missing
+    const roleMap = { designer: 'designer', supplier: 'supplier', manager: 'manager', client: 'client', Contractors: 'contractor', supplier_company: 'supplier' };
+    let rawRole = u.role || u.type || u.member_type || '';
+    if (!rawRole) {
+      if (u.supplierid) rawRole = 'supplier';
+      else if (u.managerid) rawRole = 'manager';
+      else if (u.designerid) rawRole = 'designer';
+      else if (u.clientid) rawRole = 'client';
+      else if (u.contractorid) rawRole = 'Contractors';
+    }
+    const roleLabel = roleMap[rawRole] ? roleMap[rawRole] : (rawRole ? rawRole : '');
+
+    const name = document.createElement('div'); name.className='title'; name.textContent = displayName;
+    const role = document.createElement('div'); role.className='subtitle'; role.textContent = roleLabel;
     meta.appendChild(name); meta.appendChild(role);
-    const action = document.createElement('div'); action.innerHTML = '<button class="btn btn-sm btn-primary">Chat</button>';
+    const action = document.createElement('div'); action.innerHTML = '<button class="btn btn-sm btn-primary">Add</button>';
     el.appendChild(av); el.appendChild(meta); el.appendChild(action);
-    el.addEventListener('click', ()=> openChatWith(u));
+    // pass normalized id/name/role to openChatWith so it can create the room with correct display name
+    el.addEventListener('click', ()=> openChatWith({ id: uid, role: rawRole, name: displayName }));
     return el;
   }
 
   async function openChatWith(u){
     try {
-      // Prefer window.handleChat if available (Chatfunction.js or app provides it)
-      if (window.handleChat) {
+      const inst = window.chatApps && window.chatApps['chatwidget'];
+      function extractRoomId(obj){
+        if (!obj) return null;
+        if (typeof obj === 'number') return obj;
+        if (typeof obj === 'string' && /^\d+$/.test(obj)) return parseInt(obj,10);
+        if (obj.roomId) return obj.roomId;
+        if (obj.RoomId) return obj.RoomId;
+        if (obj.id) return obj.id;
+        if (obj.room) {
+          const r = obj.room;
+          return r.ChatRoomid || r.ChatRoomId || r.id || null;
+        }
+        if (obj.chatroom) {
+          const c = obj.chatroom;
+          return c.ChatRoomid || c.id || null;
+        }
+        return null;
+      }
+
+      // Prefer window.handleChat only for designer targets (handleChat is designer-specific)
+      if (window.handleChat && u && String(u.role || '').toLowerCase() === 'designer') {
         const res = await window.handleChat(u.id, { otherName: u.name });
-        if (res && (res.ok || res.roomId)) {
+        const roomId = extractRoomId(res);
+        if (roomId) {
           hideChooser();
-          // open widget and focus room if chat app instance exists
-          const inst = window.chatApps && window.chatApps['chatwidget'];
-          if (inst && inst.openRoom) inst.openRoom(res.roomId || res.roomId);
-          // ensure widget visible
-          document.getElementById('chatwidget_panel').style.display='flex'; document.getElementById('chatwidget_toggle').style.display='none';
+          if (inst) {
+            const fns = ['openRoom','selectRoom','selectAgent','open','showRoom'];
+            for (const fn of fns) if (typeof inst[fn] === 'function') { inst[fn](roomId); break; }
+          }
+          if (typeof window.chatWidgetOpenPanel === 'function') window.chatWidgetOpenPanel();
           return;
         }
       }
+
+      // Normalize other_type to match server member_type values
+      const roleToMember = function(r) {
+        if (!r) return 'client';
+        const rr = String(r).toLowerCase();
+        if (rr === 'designer') return 'designer';
+        if (rr === 'supplier' || rr === 'supplier_company') return 'supplier';
+        if (rr === 'manager') return 'manager';
+        if (rr === 'contractor' || rr === 'contractors') return 'Contractors';
+        if (rr === 'client') return 'client';
+        return rr; // fallback
+      };
+
       // fallback: try to call ChatApi createRoom if available
       const apiPath = <?= json_encode($CHAT_API_PATH) ?>;
       const createUrl = apiPath + 'createRoom';
-      const payload = { other_id: u.id };
+      const otherTypeNorm = roleToMember(u.role || 'client');
+      const otherId = parseInt(u.id, 10) || 0;
+      if (!otherId) { alert('Unable to determine user id to start chat'); return; }
+      const payload = { creator_type: <?= json_encode($role) ?>, creator_id: <?= json_encode($uid) ?>, other_type: otherTypeNorm, other_id: otherId };
       const r = await fetch(createUrl, { method:'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
       const jr = await r.json();
-      if (jr && (jr.ok || jr.roomId)){
+      const roomId = extractRoomId(jr);
+      if (roomId) {
         hideChooser();
-        const inst = window.chatApps && window.chatApps['chatwidget'];
-        if (inst && inst.openRoom) inst.openRoom(jr.roomId || jr.roomId);
-        document.getElementById('chatwidget_panel').style.display='flex'; document.getElementById('chatwidget_toggle').style.display='none';
+        if (inst) {
+          const fns = ['openRoom','selectRoom','selectAgent','open','showRoom'];
+          for (const fn of fns) if (typeof inst[fn] === 'function') { inst[fn](roomId); break; }
+        }
+        if (typeof window.chatWidgetOpenPanel === 'function') window.chatWidgetOpenPanel();
         return;
       }
       alert('Unable to open chat with that user.');
@@ -762,7 +959,7 @@ $SUGGESTIONS_API = $APP_ROOT . '/api/get_chat_suggestions.php';
               // fallback to immediate send if preview area missing
               const attachmentUrl = payload.image || payload.url || null;
               const attachmentName = payload.title ? (payload.title + '.jpg') : (attachmentUrl ? (attachmentUrl.split('/').pop() || 'design') : 'design');
-              const resp = await inst.apiPost('sendMessage', { sender_type: 'client', sender_id: <?= json_encode($uid) ?>, content: payload.url || payload.title || '', room: roomId, attachment_url: attachmentUrl, attachment_name: attachmentName, message_type: 'design', share_title: payload.title || '', share_url: payload.url || '' });
+              const resp = await inst.apiPost('sendMessage', { sender_type: 'client', sender_id: <?= json_encode($uid) ?>, content: (payload.design_id || payload.id) ? (payload.design_id || payload.id) : (payload.url || payload.title || ''), room: roomId, attachment_url: attachmentUrl, attachment_name: attachmentName, message_type: 'design', design_id: (payload.design_id || payload.id) || null, share_title: payload.title || '', share_url: payload.url || '', share_type: 'design' });
               try { if (resp && (resp.ok || resp.message)) inst.appendMessageToUI(resp.message || resp, 'me'); } catch(e){}
               return;
             }
@@ -789,6 +986,7 @@ $SUGGESTIONS_API = $APP_ROOT . '/api/get_chat_suggestions.php';
               roomId: roomId,
               attachmentUrl: payload.image || payload.url || null,
               attachmentName: payload.title ? (payload.title + '.jpg') : (payload.image || payload.url || '').split('/').pop() || 'design',
+              design_id: payload.design_id || payload.id || null,
               share_title: payload.title || '',
               share_url: payload.url || ''
             };
@@ -812,7 +1010,7 @@ $SUGGESTIONS_API = $APP_ROOT . '/api/get_chat_suggestions.php';
                   e.preventDefault(); e.stopImmediatePropagation();
                   try {
                     const p = previewPendingShare;
-                    const payload = { sender_type: 'client', sender_id: <?= json_encode($uid) ?>, content: p.share_url || p.attachmentName || '', room: p.roomId, attachment_url: p.attachmentUrl, attachment_name: p.attachmentName, message_type: 'design', share_title: p.share_title, share_url: p.share_url, share_type: 'design', text: (document.getElementById('chatwidget_share_preview_text') ? document.getElementById('chatwidget_share_preview_text').value : '') };
+                    const payload = { sender_type: 'client', sender_id: <?= json_encode($uid) ?>, content: (p.design_id || p.designid) ? (p.design_id || p.designid) : (p.share_url || p.attachmentName || ''), room: p.roomId, attachment_url: p.attachmentUrl, attachment_name: p.attachmentName, message_type: 'design', design_id: p.design_id || null, share_title: p.share_title, share_url: p.share_url, share_type: 'design', text: (document.getElementById('chatwidget_share_preview_text') ? document.getElementById('chatwidget_share_preview_text').value : '') };
                     const resp = (inst && typeof inst.apiPost === 'function') ? await inst.apiPost('sendMessage', payload) : await (fetch(<?= json_encode($CHAT_API_PATH) ?> + 'sendMessage', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) }).then(r=>r.json()));
                     if (resp && (resp.ok || resp.message || resp.id)) {
                       try { if (inst && inst.appendMessageToUI) inst.appendMessageToUI(resp.message || resp, 'me'); } catch(e){}
