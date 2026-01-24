@@ -82,6 +82,7 @@ $logoPath = ($supplierId == 1) ? "../uploads/company/companylogo.jpg" : "../uplo
     <meta charset="UTF-8">
     <title>HappyDesign - Supplier Profile</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="../css/supplier_style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         body { background: #f6f6f7; color: #333; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
@@ -107,10 +108,27 @@ $logoPath = ($supplierId == 1) ? "../uploads/company/companylogo.jpg" : "../uplo
 </head>
 <body>
 
-<header class="bg-white border-bottom p-3 px-4 d-flex justify-content-between align-items-center">
-    <div class="h4 mb-0 text-dark">HappyDesign</div>
-    <div class="text-muted small"><i class="fas fa-user-circle me-1"></i>Hello <?= htmlspecialchars($supplierName) ?></div>
-</header>
+    <header class="bg-white shadow p-3 d-flex justify-content-between align-items-center">
+        <div class="d-flex align-items-center gap-3">
+            <div class="h4 mb-0"><a href="dashboard.php" style="text-decoration: none; color: inherit;">HappyDesign</a></div>
+            <nav>
+                <ul class="nav align-items-center gap-2">
+                    <li class="nav-item"><a class="nav-link" href="dashboard.php">Dashboard</a></li>
+                    <li class="nav-item"><a class="nav-link" href="schedule.php">Schedule</a></li>
+                </ul>
+            </nav>
+        </div>
+        <nav>
+            <ul class="nav align-items-center">
+                <li class="nav-item me-2">
+                    <a class="nav-link text-muted" href="supplier_profile.php">
+                        <i class="fas fa-user me-1"></i>Hello <?= htmlspecialchars($supplierName) ?>
+                    </a>
+                </li>
+                <li class="nav-item"><a class="nav-link" href="../logout.php">Logout</a></li>
+            </ul>
+        </nav>
+    </header>
 
 <div class="banner"></div>
 
