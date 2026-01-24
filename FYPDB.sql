@@ -103,6 +103,7 @@ CREATE TABLE `Worker` (
   `email` varchar(255) DEFAULT NULL,
   `phone` varchar(32) DEFAULT NULL,
   `certificate` varchar(255) DEFAULT NULL,
+  `image` varchar(255) DEFAULT NULL, 
   `supplierid` int NOT NULL,
   PRIMARY KEY (`workerid`),
   KEY `supplierid_Worker_idx` (`supplierid`),
@@ -110,11 +111,11 @@ CREATE TABLE `Worker` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Worker sample data
-INSERT INTO `Worker` (`name`, `email`, `phone`, `certificate`, `supplierid`) VALUES
-('Andy wong', 'abcwork001@gmail.com', '78945699', 'Renovation and Repair Certificate', 1),
-('King Wong', 'abcwork002@gmail.com', '87879898', 'Renovation and Repair Certificate', 1),
-('law bee', 'abcwork003@gmail.com', '34346789', 'Certificate Course in Quality Decoration Service Management (Level 1)', 1),
-('Call bee', '123work009@gmail.com', '65494569', 'Renovation and Repair Certificate', 2);
+INSERT INTO `Worker` (`name`, `email`, `phone`, `certificate`, `image`, `supplierid`) VALUES
+('Andy wong', 'abcwork001@gmail.com', '78945699', 'Renovation and Repair Certificate', 'worker1.jpg', 1),
+('King Wong', 'abcwork002@gmail.com', '87879898', 'Renovation and Repair Certificate', 'worker2.jpg', 1),
+('law bee', 'abcwork003@gmail.com', '34346789', 'Certificate Course in Quality Decoration Service Management (Level 1)', 'worker3.jpg', 1),
+('Call bee', '123work009@gmail.com', '65494569', 'Renovation and Repair Certificate', 'worker4.jpg', 2);
 
 -- Designer table
 CREATE TABLE `Designer` (

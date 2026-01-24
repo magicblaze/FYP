@@ -17,7 +17,7 @@ if ($supplierId <= 0) die('Invalid session.');
 $success = '';
 $error = '';
 
-// 2. 处理员工的 增加/编辑/删除
+// 2. 处理员工的 增加/编辑 (包含数据库 image 字段更新)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     $action = $_POST['action'];
     $name = trim($_POST['w_name'] ?? '');
@@ -26,11 +26,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     $cert = trim($_POST['w_cert'] ?? '');
 
     if ($action === 'add') {
-        $stmt = $mysqli->prepare("INSERT INTO Worker (name, email, phone, certificate, supplierid) VALUES (?, ?, ?, ?, ?)");
+        // 插入新员工，默认图片设为 default_worker.jpg 或先留空
+        $stmt = $mysqli->prepare("INSERT INTO Worker (name, email, phone, certificate, supplierid, image) VALUES (?, ?, ?, ?, ?, 'default_worker.jpg')");
         $stmt->bind_param("ssssi", $name, $email, $phone, $cert, $supplierId);
         if ($stmt->execute()) {
             $newId = $mysqli->insert_id;
-            handleImageUpload($newId); // 处理新图片上传
+            // 处理图片上传并更新数据库硬编码文件名
+            $uploadedFile = handleImageUpload($newId);
+            if ($uploadedFile) {
+                $mysqli->query("UPDATE Worker SET image = '$uploadedFile' WHERE workerid = $newId");
+            }
             $success = "New worker added successfully!";
         } else {
             $error = "Add failed: " . $mysqli->error;
@@ -41,7 +46,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $stmt = $mysqli->prepare("UPDATE Worker SET name=?, email=?, phone=?, certificate=? WHERE workerid=? AND supplierid=?");
         $stmt->bind_param("ssssii", $name, $email, $phone, $cert, $workerId, $supplierId);
         if ($stmt->execute()) {
-            handleImageUpload($workerId); // 处理修改图片上传
+            // 如果有新图片上传，更新文件并更新数据库字段
+            $uploadedFile = handleImageUpload($workerId);
+            if ($uploadedFile) {
+                $mysqli->query("UPDATE Worker SET image = '$uploadedFile' WHERE workerid = $workerId");
+            }
             $success = "Worker updated successfully!";
         } else {
             $error = "Update failed.";
@@ -54,9 +63,13 @@ function handleImageUpload($id) {
     if (isset($_FILES['w_image']) && $_FILES['w_image']['error'] === UPLOAD_ERR_OK) {
         $targetDir = "../uploads/worker/";
         if (!is_dir($targetDir)) mkdir($targetDir, 0777, true);
+        
         $fileName = "worker" . $id . ".jpg";
-        move_uploaded_file($_FILES['w_image']['tmp_name'], $targetDir . $fileName);
+        if (move_uploaded_file($_FILES['w_image']['tmp_name'], $targetDir . $fileName)) {
+            return $fileName; // 返回存入数据库的文件名
+        }
     }
+    return false;
 }
 
 // 3. 获取供应商基础信息
@@ -66,13 +79,14 @@ $supplierStmt->execute();
 $supplierData = $supplierStmt->get_result()->fetch_assoc();
 $supplierName = $supplierData['sname'] ?? 'Company';
 
-// 获取介绍信息
+// 获取介绍信息 (从 Contractors 表获取)
 $contractorStmt = $mysqli->prepare("SELECT introduction FROM Contractors WHERE contractorid = ?");
 $contractorStmt->bind_param("i", $supplierId);
 $contractorStmt->execute();
 $cData = $contractorStmt->get_result()->fetch_assoc();
-$introduction = $cData['introduction'] ?? 'Welcome to ' . $supplierName;
+$introduction = $cData['introduction'] ?? 'Welcome to ' . $supplierName . '!!';
 
+// 公司 Logo 逻辑
 $logoPath = ($supplierId == 1) ? "../uploads/company/companylogo.jpg" : "../uploads/company/companylogo1.jpg";
 ?>
 
@@ -82,14 +96,13 @@ $logoPath = ($supplierId == 1) ? "../uploads/company/companylogo.jpg" : "../uplo
     <meta charset="UTF-8">
     <title>HappyDesign - Supplier Profile</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="../css/supplier_style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         body { background: #f6f6f7; color: #333; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         /* Banner & Header Card */
         .banner { height: 280px; background: url('https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1600&q=80') center/cover; }
         .profile-header-card { background: #fff; border-radius: 8px; padding: 25px; margin-top: -60px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); display: flex; align-items: center; position: relative; z-index: 10; }
-        .logo-box { width: 90px; height: 90px; border: 1px solid #eee; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-right: 25px; padding: 5px; }
+        .logo-box { width: 90px; height: 90px; border: 1px solid #eee; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-right: 25px; padding: 5px; background: #fff; }
         .logo-box img { max-width: 100%; max-height: 100%; border-radius: 4px; }
         
         /* Sidebar Styles */
@@ -108,13 +121,13 @@ $logoPath = ($supplierId == 1) ? "../uploads/company/companylogo.jpg" : "../uplo
 </head>
 <body>
 
-    <header class="bg-white shadow p-3 d-flex justify-content-between align-items-center">
+    <header class="bg-white shadow p-3 d-flex justify-content-between align-items-center px-4">
         <div class="d-flex align-items-center gap-3">
             <div class="h4 mb-0"><a href="dashboard.php" style="text-decoration: none; color: inherit;">HappyDesign</a></div>
             <nav>
                 <ul class="nav align-items-center gap-2">
-                    <li class="nav-item"><a class="nav-link" href="dashboard.php">Dashboard</a></li>
-                    <li class="nav-item"><a class="nav-link" href="schedule.php">Schedule</a></li>
+                    <li class="nav-item"><a class="nav-link text-muted" href="dashboard.php">Dashboard</a></li>
+                    <li class="nav-item"><a class="nav-link text-muted" href="schedule.php">Schedule</a></li>
                 </ul>
             </nav>
         </div>
@@ -122,10 +135,10 @@ $logoPath = ($supplierId == 1) ? "../uploads/company/companylogo.jpg" : "../uplo
             <ul class="nav align-items-center">
                 <li class="nav-item me-2">
                     <a class="nav-link text-muted" href="supplier_profile.php">
-                        <i class="fas fa-user me-1"></i>Hello <?= htmlspecialchars($supplierName) ?>
+                        <i class="fas fa-user-circle me-1"></i>Hello <?= htmlspecialchars($supplierName) ?>
                     </a>
                 </li>
-                <li class="nav-item"><a class="nav-link" href="../logout.php">Logout</a></li>
+                <li class="nav-item"><a class="nav-link text-muted" href="../logout.php">Logout</a></li>
             </ul>
         </nav>
     </header>
@@ -159,6 +172,7 @@ $logoPath = ($supplierId == 1) ? "../uploads/company/companylogo.jpg" : "../uplo
             </div>
 
             <?php if($success): ?> <div class="alert alert-success py-2"><?= $success ?></div> <?php endif; ?>
+            <?php if($error): ?> <div class="alert alert-danger py-2"><?= $error ?></div> <?php endif; ?>
 
             <!-- 员工列表 -->
             <?php
@@ -167,10 +181,11 @@ $logoPath = ($supplierId == 1) ? "../uploads/company/companylogo.jpg" : "../uplo
             $stmt->execute();
             $res = $stmt->get_result();
             while ($w = $res->fetch_assoc()):
-                $wImg = "../uploads/worker/worker" . $w['workerid'] . ".jpg?t=" . time(); // 添加时间戳防止浏览器缓存
+                $imgPath = !empty($w['image']) ? "../uploads/worker/" . $w['image'] : "../uploads/worker/default_worker.jpg";
+                $displayImg = $imgPath . "?t=" . time();
             ?>
                 <div class="worker-card">
-                    <img src="<?= $wImg ?>" class="worker-img" onerror="this.src='https://via.placeholder.com/75?text=User'">
+                    <img src="<?= $displayImg ?>" class="worker-img" onerror="this.src='https://via.placeholder.com/75?text=User'">
                     <div class="flex-grow-1">
                         <div class="fw-bold"><?= htmlspecialchars($w['name']) ?></div>
                         <div class="text-muted small">
@@ -182,20 +197,21 @@ $logoPath = ($supplierId == 1) ? "../uploads/company/companylogo.jpg" : "../uplo
                         <?php endif; ?>
                         <div class="text-muted mt-1" style="font-size: 0.75rem;">Belonging: <?= htmlspecialchars($supplierName) ?></div>
                     </div>
+                    <!-- 编辑图标 -->
                     <div class="edit-icon" onclick='openEditModal(<?= json_encode($w) ?>)'><i class="fas fa-edit"></i></div>
                 </div>
             <?php endwhile; ?>
         </div>
 
-        <!-- Sidebar -->
+        <!-- Sidebar (侧边栏) -->
         <div class="col-lg-4" style="margin-top: 20px;">
             <div class="sidebar-box">
                 <div class="sidebar-title">Contact</div>
                 <div class="sidebar-content">
                     <span class="sidebar-label">Email</span>
-                    <strong><?= htmlspecialchars($supplierData['semail']) ?></strong>
+                    <strong><?= htmlspecialchars($supplierData['semail'] ?? '—') ?></strong>
                     <span class="sidebar-label">Phone</span>
-                    <strong><?= htmlspecialchars($supplierData['stel']) ?></strong>
+                    <strong><?= htmlspecialchars($supplierData['stel'] ?? '—') ?></strong>
                 </div>
             </div>
 
@@ -218,7 +234,7 @@ $logoPath = ($supplierId == 1) ? "../uploads/company/companylogo.jpg" : "../uplo
     </div>
 </div>
 
-<!-- Modal -->
+<!-- Modal (弹窗表单) -->
 <div class="modal fade" id="workerModal" tabindex="-1">
     <div class="modal-dialog">
         <form action="" method="POST" enctype="multipart/form-data" class="modal-content">
@@ -247,8 +263,9 @@ $logoPath = ($supplierId == 1) ? "../uploads/company/companylogo.jpg" : "../uplo
                     <input type="text" name="w_cert" id="w_cert" class="form-control form-control-sm">
                 </div>
                 <div class="mb-3">
-                    <label class="form-label small fw-bold text-primary">Change Photo</label>
-                    <input type="file" name="w_image" class="form-control form-control-sm" accept="image/jpeg">
+                    <label class="form-label small fw-bold text-primary">Worker Photo (Change)</label>
+                    <input type="file" name="w_image" class="form-control form-control-sm" accept="image/jpeg, image/png">
+                    <div class="form-text text-muted" style="font-size: 0.7rem;">Upload will update the database image record.</div>
                 </div>
             </div>
             <div class="modal-footer">
