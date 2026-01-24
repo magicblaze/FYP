@@ -141,7 +141,24 @@ $SUGGESTIONS_API = $APP_ROOT . '/api/get_chat_suggestions.php';
   </div>
   <div id="chatwidget_resizer" class="resizer" aria-hidden="true"></div>
 </div>
+<!-- Chat widget transitions and lightweight animations -->
+<style>
+  /* Panel open/close animation */
+  #chatwidget_panel { transition: transform 260ms cubic-bezier(.2,.9,.2,1), opacity 220ms ease, box-shadow 260ms ease; transform-origin: right bottom; }
+  #chatwidget_panel.chatwidget-hidden { opacity: 0; transform: translateY(12px) scale(.98); pointer-events: none; }
+  #chatwidget_panel.chatwidget-open { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
 
+  /* Toggle button subtle pop */
+  #chatwidget_toggle { transition: transform 180ms cubic-bezier(.2,.9,.2,1), box-shadow 180ms ease; }
+  #chatwidget_toggle.chatwidget-active { transform: scale(1.04); box-shadow: 0 8px 20px rgba(11,27,43,0.18); }
+
+  /* Message-entry animation (applied via JS) */
+  @keyframes chat-in { from { opacity: 0; transform: translateY(8px) scale(.995); } to { opacity: 1; transform: translateY(0) scale(1); } }
+  .chatmsg-anim { animation: chat-in 260ms cubic-bezier(.2,.9,.2,1) both; }
+
+  /* Composer subtle elevation when panel opens */
+  #chatwidget_panel.chatwidget-open .composer { box-shadow: 0 -10px 18px rgba(11,27,43,0.04); transition: box-shadow 260ms ease; }
+</style>
 <script>
 (function(){
   // Toggle panel and add draggable behavior for panel and toggle
@@ -467,6 +484,125 @@ $SUGGESTIONS_API = $APP_ROOT . '/api/get_chat_suggestions.php';
     function updateDividerVisibility(){ if (window.innerWidth <= 700) divider.style.display = 'none'; else divider.style.display = 'flex'; }
     window.addEventListener('resize', updateDividerVisibility); updateDividerVisibility();
   })();
+})();
+</script>
+
+<!-- Chat widget transitions and lightweight animations -->
+<style>
+  /* Panel open/close animation */
+  #chatwidget_panel { transition: transform 260ms cubic-bezier(.2,.9,.2,1), opacity 220ms ease, box-shadow 260ms ease; transform-origin: right bottom; }
+  #chatwidget_panel.chatwidget-hidden { opacity: 0; transform: translateY(12px) scale(.98); pointer-events: none; }
+  #chatwidget_panel.chatwidget-open { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
+
+  /* Toggle button subtle pop */
+  #chatwidget_toggle { transition: transform 180ms cubic-bezier(.2,.9,.2,1), box-shadow 180ms ease; }
+  #chatwidget_toggle.chatwidget-active { transform: scale(1.04); box-shadow: 0 8px 20px rgba(11,27,43,0.18); }
+
+  /* Message-entry animation (applied via JS) */
+  @keyframes chat-in { from { opacity: 0; transform: translateY(8px) scale(.995); } to { opacity: 1; transform: translateY(0) scale(1); } }
+  .chatmsg-anim { animation: chat-in 260ms cubic-bezier(.2,.9,.2,1) both; }
+
+  /* Composer subtle elevation when panel opens */
+  #chatwidget_panel.chatwidget-open .composer { box-shadow: 0 -10px 18px rgba(11,27,43,0.04); transition: box-shadow 260ms ease; }
+</style>
+
+<script>
+// Lightweight enhancement to gracefully animate open/close and message entries
+(function(){
+  try {
+    const toggle = document.getElementById('chatwidget_toggle');
+    const panel = document.getElementById('chatwidget_panel');
+    const closeBtn = document.getElementById('chatwidget_close');
+    const messagesEl = document.getElementById('chatwidget_messages') || document.getElementById('messages');
+
+    if (!panel || !toggle) return;
+
+    // Initialize hidden state if panel is not visible
+    if (panel.style.display === 'none' || panel.getAttribute('aria-hidden') === 'true') {
+      panel.classList.add('chatwidget-hidden');
+    }
+
+    function computeOrigin() {
+      try {
+        const t = toggle.getBoundingClientRect();
+        const p = panel.getBoundingClientRect();
+        const cx = t.left + t.width / 2;
+        const cy = t.top + t.height / 2;
+        const ox = p.width > 0 ? ((cx - p.left) / p.width) * 100 : 50;
+        const oy = p.height > 0 ? ((cy - p.top) / p.height) * 100 : 100;
+        return { ox: Math.max(0, Math.min(100, ox)), oy: Math.max(0, Math.min(100, oy)) };
+      } catch (e) { return { ox: 50, oy: 100 }; }
+    }
+
+    function openPanel() {
+      // compute origin to make scale appear to come from toggle center
+      const o = computeOrigin();
+      panel.style.transformOrigin = o.ox + '% ' + o.oy + '%';
+      panel.classList.remove('chatwidget-hidden');
+      // set starting small scale at the origin, then grow to full size
+      panel.style.transition = 'transform 320ms cubic-bezier(.2,.9,.2,1), opacity 220ms ease, box-shadow 260ms ease';
+      panel.style.transform = 'translateY(12px) scale(0.28)';
+      // force layout then animate to final
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          panel.classList.add('chatwidget-open');
+          panel.style.transform = 'translateY(0px) scale(1)';
+        });
+      });
+      toggle.classList.add('chatwidget-active');
+      panel.setAttribute('aria-hidden','false');
+      // clear inline transform after complete to allow CSS class control
+      const onEnd = (e) => {
+        if (e && e.propertyName && e.propertyName !== 'transform') return;
+        panel.style.transform = '';
+        panel.style.transition = '';
+        panel.removeEventListener('transitionend', onEnd);
+      };
+      panel.addEventListener('transitionend', onEnd);
+    }
+
+    function closePanel() {
+      const o = computeOrigin();
+      panel.style.transformOrigin = o.ox + '% ' + o.oy + '%';
+      // animate shrinking back to toggle
+      panel.style.transition = 'transform 260ms cubic-bezier(.2,.9,.2,1), opacity 180ms ease, box-shadow 200ms ease';
+      panel.style.transform = 'translateY(12px) scale(0.28)';
+      panel.classList.remove('chatwidget-open');
+      toggle.classList.remove('chatwidget-active');
+      panel.setAttribute('aria-hidden','true');
+      // after animation hide and reset
+      const onEndClose = (e) => {
+        if (e && e.propertyName && e.propertyName !== 'transform') return;
+        panel.classList.add('chatwidget-hidden');
+        panel.style.transform = '';
+        panel.style.transition = '';
+        panel.removeEventListener('transitionend', onEndClose);
+      };
+      panel.addEventListener('transitionend', onEndClose);
+    }
+
+    // Hook into existing controls without replacing their handlers
+    toggle.addEventListener('click', (e) => {
+      // if other code controls visibility, mirror it
+      if (panel.classList.contains('chatwidget-open')) closePanel(); else openPanel();
+    });
+    if (closeBtn) closeBtn.addEventListener('click', closePanel);
+
+    // Animate new messages using MutationObserver
+    if (messagesEl && window.MutationObserver) {
+      const mo = new MutationObserver(muts => {
+        muts.forEach(m => {
+          m.addedNodes && m.addedNodes.forEach(n => {
+            if (!(n instanceof Element)) return;
+            // apply animation class; remove after animation end
+            n.classList.add('chatmsg-anim');
+            n.addEventListener('animationend', () => { n.classList.remove('chatmsg-anim'); }, { once: true });
+          });
+        });
+      });
+      mo.observe(messagesEl, { childList: true, subtree: false });
+    }
+  } catch (e) { console.error('chat widget animation init failed', e); }
 })();
 </script>
 <script>
