@@ -166,7 +166,9 @@ CREATE TABLE `Design` (
 
 INSERT INTO `Design` (`designid`,`designName`,`expect_price`,`description`,`tag`,`likes`,`designerid`) VALUES
 (1, 'Modern Full House Design', 500 , 'A modern full house design','full house,modern','200',1),
-(2, 'Minimalist Kitchen Remodel Design', 1000, 'A minimalist kitchen remodel design','kitchen remodel,minimalist','20',1);
+(2, 'Minimalist Kitchen Remodel Design', 1000, 'A minimalist kitchen remodel design','kitchen remodel,minimalist','20',1),
+(3, 'Cozy Living Room Design', 800, 'A cozy living room design','living room,cozy','50',2),
+(4, 'Elegant Bedroom Design', 1200, 'An elegant bedroom design','bedroom,elegant','75',2);
 
 -- Comment_design table
 CREATE TABLE `Comment_design` (
@@ -197,7 +199,6 @@ CREATE TABLE `Product` (
   `long` varchar(50) DEFAULT NULL,
   `wide` varchar(50) DEFAULT NULL,
   `tall` varchar(50) DEFAULT NULL,
-  `color` varchar(255) DEFAULT NULL,
   `material` varchar(255) DEFAULT NULL,
   `supplierid` int NOT NULL,
   PRIMARY KEY (`productid`),
@@ -206,11 +207,13 @@ CREATE TABLE `Product` (
   CONSTRAINT `fk_product_supplier` FOREIGN KEY (`supplierid`) REFERENCES `Supplier` (`supplierid`)
  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-INSERT INTO `Product` (`productid`,`pname`, `price`, `likes`, `category`, `description`, `long`, `wide`, `tall`, `color`, `material`, `supplierid`) VALUES
-(1, 'Modern Sofa', 2000, 100, 'Furniture', 'A comfortable modern sofa.', '200cm', '80cm', '300cm', 'Grey, Blue', 'Fabric, Wood', 1),
-(2, 'Oak Chair', 800, 50, 'Furniture', 'Solid wood chair.', '50cm', '50cm', '100cm', 'Brown,white', 'Oak', 1),
-(3, 'Brick', 200, 25, 'Material', 'A brick.', null, null, null, 'Blue', null, 1),
-(4, 'Wood', 800, 75, 'Material', 'A wood.', null, null, null, 'Blue', null, 2);
+INSERT INTO `Product` (`productid`,`pname`, `price`, `likes`, `category`, `description`, `long`, `wide`, `tall`, `material`, `supplierid`) VALUES
+(1, 'Modern Sofa', 2000, 100, 'Furniture', 'A comfortable modern sofa.', '200cm', '80cm', '300cm', 'Fabric, Wood', 1),
+(2, 'Oak Chair', 800, 50, 'Furniture', 'Solid wood chair.', '50cm', '50cm', '100cm', 'Oak', 1),
+(3, 'Brick', 200, 25, 'Material', 'A brick.', null, null, null, null, 1),
+(4, 'Wood Plank', 800, 75, 'Material', 'A wood.', null, null, null, null, 2),
+(5, 'Glass', 800, 75, 'Material', 'A glass.', null, null, null, null, 1),
+(6, 'Modern Table', 800, 75, 'Furniture', 'A modern table.', '20cm', '100cm', '80cm', 'wood', 1);
 
 -- Order table
 CREATE TABLE `Order` (
@@ -250,7 +253,10 @@ INSERT INTO `ProductColorImage` (`id`, `productid`, `color`, `image`) VALUES
 (3, 2, 'Brown', 'chair_brown.jpg'),
 (4, 2, 'White', 'chair_white.jpg'),
 (5, 4, 'Black', 'wood.jpg'),
-(6, 3, 'White', 'brick.jpg');
+(6, 3, 'White', 'brick.jpg'),
+(7, 5, 'Transparent', 'glass.jpg'),
+(8, 6, 'Brown', 'table.jpg'),
+(9, 6, 'White', 'table_white.jpg');
 
 -- OrderMaterial table
 CREATE TABLE `OrderProduct` (
@@ -452,7 +458,9 @@ CREATE TABLE `DesignImage` (
 INSERT INTO `DesignImage` (`imageid`, `designid`, `image_filename`, `image_order`) VALUES
 (1, 1, 'design.jpg', 1),
 (2, 1, 'design2.jpg', 2),
-(3, 2, 'design.jpg', 1);
+(3, 2, 'design5.jpg', 1),
+(4, 3, 'design3.jpg', 1),
+(5, 4, 'design4.jpg', 1);
 
 -- DesignedPicture table to store designed pictures uploaded by designers for orders
 CREATE TABLE `DesignedPicture` (
