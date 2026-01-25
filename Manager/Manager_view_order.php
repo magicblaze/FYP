@@ -29,7 +29,12 @@ if(isset($_GET['id'])) {
         die("You don't have permission to view this order.");
     }
     
-    $sql = "SELECT o.*, c.*, d.*, s.*
+    // 修改后的SQL查询：使用别名将expect_price重命名为price
+    $sql = "SELECT 
+                o.*, 
+                c.*,
+                d.designid, d.designName, d.expect_price as price, d.description, d.tag, d.likes,
+                s.*
             FROM `Order` o
             LEFT JOIN `Client` c ON o.clientid = c.clientid
             LEFT JOIN `Design` d ON o.designid = d.designid
@@ -190,7 +195,11 @@ if(isset($_GET['id'])) {
                     </div>
                     <div class="col-md-4 mb-3">
                         <label class="fw-bold text-muted">Design Price</label>
-                        <p class="mb-0"><strong class="text-success">$<?php echo number_format($order['price'], 2); ?></strong></p>
+                        <p class="mb-0">
+                            <strong class="text-success">
+                                $<?php echo isset($order['price']) ? number_format($order['price'], 2) : '0.00'; ?>
+                            </strong>
+                        </p>
                     </div>
                     <div class="col-md-4 mb-3">
                         <label class="fw-bold text-muted">Design Tag</label>

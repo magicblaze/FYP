@@ -34,10 +34,10 @@ if ($manager_check['count'] == 0) {
     die("You don't have permission to approve this order.");
 }
 
-// Get order details
-$sql = "SELECT o.orderid, o.odate, o.budget, o.Requirements, o.Floor_Plan, o.ostatus,
-               c.clientid, c.cname as client_name, c.cemail as client_email, c.ctel as client_phone,
-               d.designid, d.design as design_image, d.price as design_price, d.tag as design_tag,
+// Get order details - 修改SQL查询，从Client表获取Floor_Plan字段
+$sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus,
+               c.clientid, c.cname as client_name, c.cemail as client_email, c.ctel as client_phone, c.budget, c.Floor_Plan,
+               d.designid, d.expect_price as design_price, d.tag as design_tag,
                s.OrderFinishDate, s.DesignFinishDate,
                m.mname as manager_name, m.memail as manager_email
         FROM `Order` o
@@ -276,6 +276,16 @@ function sendApprovalEmail($order, $status, $manager_reply, $additional_notes, $
                                 <td style="font-weight: 600;">Design Price</td>
                                 <td>$<?php echo number_format($order['design_price'], 2); ?></td>
                             </tr>
+                            <?php if(!empty($order['Floor_Plan'])): ?>
+                            <tr>
+                                <td style="font-weight: 600;">Floor Plan</td>
+                                <td colspan="3">
+                                    <a href="<?php echo htmlspecialchars($order['Floor_Plan']); ?>" target="_blank" class="btn btn-sm btn-outline-primary">
+                                        <i class="fas fa-eye me-1"></i>View Floor Plan
+                                    </a>
+                                </td>
+                            </tr>
+                            <?php endif; ?>
                             <tr>
                                 <td style="font-weight: 600; vertical-align: top;">Requirements</td>
                                 <td colspan="3">

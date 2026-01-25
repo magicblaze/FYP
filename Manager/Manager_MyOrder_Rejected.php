@@ -264,10 +264,6 @@ $stats = mysqli_fetch_assoc($stats_result);
                                         class="btn btn-sm btn-primary">
                                     <i class="fas fa-eye me-1"></i>View
                                 </button>
-                                <button onclick="deleteOrder(<?php echo $row['orderid']; ?>)" 
-                                        class="btn btn-sm btn-danger">
-                                    <i class="fas fa-trash me-1"></i>Delete
-                                </button>
                             </div>
                         </td>
                     </tr>

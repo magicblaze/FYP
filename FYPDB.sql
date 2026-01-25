@@ -527,6 +527,36 @@ INSERT INTO `Schedule` (`scheduleid`,`managerid`,`OrderFinishDate`,`DesignFinish
 ALTER TABLE `Message`
   ADD CONSTRAINT `fk_message_fileid` FOREIGN KEY (`fileid`) REFERENCES `UploadedFiles` (`fileid`) ON DELETE SET NULL;
 
+ALTER TABLE `worker` 
+ADD COLUMN IF NOT EXISTS `work_hours_per_week` DECIMAL(5,1) DEFAULT 40.0,
+ADD COLUMN IF NOT EXISTS `available_hours_this_week` DECIMAL(5,1) DEFAULT 40.0;
+
+-- create workerallocation table
+CREATE TABLE IF NOT EXISTS `workerallocation` (
+    `allocation_id` INT PRIMARY KEY AUTO_INCREMENT,
+    `orderid` INT NOT NULL,
+    `workerid` INT NOT NULL,
+    `managerid` INT NOT NULL,
+    `allocation_date` DATETIME NOT NULL,
+    `estimated_completion` DATE NOT NULL,
+    `estimated_hours` DECIMAL(5,1) NOT NULL,
+    `actual_hours` DECIMAL(5,1),
+    `actual_completion` DATE,
+    `notes` TEXT,
+    `status` ENUM('Assigned', 'In Progress', 'Completed', 'Cancelled') DEFAULT 'Assigned',
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (`orderid`) REFERENCES `Order`(`orderid`) ON DELETE CASCADE,
+    FOREIGN KEY (`workerid`) REFERENCES `worker`(`workerid`) ON DELETE CASCADE,
+    FOREIGN KEY (`managerid`) REFERENCES `Manager`(`managerid`) ON DELETE CASCADE
+);
+
+DELIMITER $$
+CREATE PROCEDURE IF NOT EXISTS `ResetWeeklyHours`()
+BEGIN
+    UPDATE `worker` SET `available_hours_this_week` = `work_hours_per_week`;
+END$$
+DELIMITER ;
+
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
 /*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;

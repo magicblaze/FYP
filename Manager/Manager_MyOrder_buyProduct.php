@@ -190,6 +190,10 @@ $user_name = $user['name'];
                                     class="btn btn-success btn-sm">
                                 <i class="fas fa-shopping-bag me-1"></i>Buy Product
                             </button>
+                            <button onclick="WorkerAllocation('<?php echo htmlspecialchars($row['orderid']); ?>')" 
+                                    class="btn btn-success btn-sm">
+                                <i class="fas fa-shopping-bag me-1"></i>Worker allocation
+                            </button>
                         </td>
                     </tr>
                     <?php endwhile; ?>
@@ -226,6 +230,11 @@ $user_name = $user['name'];
             window.location.href = '../material_dashboard.php?orderid=' + encodeURIComponent(orderId);
         }
     }
+        function WorkerAllocation(orderId) {
+        if(confirm('Are you sure you want to allocate worker for Order ID: ' + orderId + '?\n\nThis will proceed with the worker allocation process.')) {
+            window.location.href = 'WorkerAllocation.php?orderid=' + encodeURIComponent(orderId);
+        }
+    }
     
     function refreshPage() {
         window.location.reload();
@@ -238,9 +247,9 @@ $user_name = $user['name'];
         }, 60000); 
     });
     </script>
-
     <!-- Include chat widget -->
     <?php include __DIR__ . '/../Public/chat_widget.php'; ?>
+
 </body>
 
 </html>
