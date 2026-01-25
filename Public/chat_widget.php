@@ -96,7 +96,7 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
   </div>
 </div>
 
-<link rel="stylesheet" href="../css/chat.css">
+<link rel="stylesheet" href="/FYP/css/chat.css">
 <script>
 (function(){
   // Toggle panel and add draggable behavior for panel and toggle
