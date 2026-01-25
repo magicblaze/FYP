@@ -20,7 +20,7 @@ if ($orderId > 0) {
 }
 
 // otherwise show list (existing behavior)
-$sql = "SELECT o.orderid, o.odate, o.ostatus, o.clientid, o.designid, d.designName, c.cname AS clientName
+$sql = "SELECT o.orderid, o.odate, o.ostatus, o.clientid, o.designid, o.gross_floor_area, d.designName, c.cname AS clientName
         FROM `Order` o
         LEFT JOIN Design d ON o.designid = d.designid
         LEFT JOIN Client c ON o.clientid = c.clientid
@@ -38,13 +38,12 @@ $res = $stmt->get_result();
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Order Manager</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="../css/styles.css">
 </head>
 <body>
-  <div class="container py-4">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-      <h3>Order Manager</h3>
-      <div>Hello, <?= htmlspecialchars($designerName) ?></div>
-    </div>
+  <main class="container-lg mt-4">
+    <?php include_once __DIR__ . '/../includes/header.php'; ?>
 
     <div class="card">
       <div class="card-body p-0">
@@ -56,6 +55,7 @@ $res = $stmt->get_result();
                 <th>Design</th>
                 <th>Client</th>
                 <th>Date</th>
+                <th>GFA (m²)</th>
                 <th>Status</th>
                 <th class="text-end">Actions</th>
               </tr>
@@ -67,6 +67,7 @@ $res = $stmt->get_result();
                   <td><?= htmlspecialchars($row['designName'] ?? '—') ?></td>
                   <td><?= htmlspecialchars($row['clientName'] ?? ('#' . (int)$row['clientid'])) ?></td>
                   <td><?= htmlspecialchars($row['odate'] ?? '') ?></td>
+                  <td><?= isset($row['gross_floor_area']) && $row['gross_floor_area'] > 0 ? htmlspecialchars(number_format((float)$row['gross_floor_area'],2)) : '&mdash;' ?></td>
                   <td id="status_<?= (int)$row['orderid'] ?>"><?= htmlspecialchars($row['ostatus'] ?? '') ?></td>
                   <td class="text-end" id="actions_<?= (int)$row['orderid'] ?>">
                     <a href="design_orders.php?orderid=<?= (int)$row['orderid'] ?>" class="btn btn-sm btn-primary">View</a>
@@ -84,7 +85,7 @@ $res = $stmt->get_result();
         </div>
       </div>
     </div>
-  </div>
+  </main>
 
   <?php include __DIR__ . '/../Public/chat_widget.php'; ?>
   <script>

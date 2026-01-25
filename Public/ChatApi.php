@@ -80,7 +80,7 @@ $action = $_GET['action'] ?? '';
 
 try {
   // Block unauthenticated users from using chat endpoints
-  $protected = ['listRooms','getMessages','sendMessage','typing','createRoom','markRead','getTotalUnread'];
+  $protected = ['listRooms','getMessages','sendMessage','typing','createRoom','markRead','getTotalUnread','addReference','listReferences'];
   if (in_array($action, $protected, true) && !$sessionUser) {
     send_json(['error' => 'unauthorized', 'message' => 'Authentication required'], 401);
   }
@@ -248,16 +248,17 @@ try {
           $cid = null;
           if (!empty($r['content']) && is_string($r['content']) && preg_match('/^\d+$/', trim($r['content']))) $cid = (int)trim($r['content']);
           if ($cid) {
-            $ost = $pdo->prepare("SELECT o.orderid, o.odate, o.clientid, o.designid, o.ostatus, d.designName FROM `Order` o LEFT JOIN Design d ON o.designid = d.designid WHERE o.orderid = ? LIMIT 1");
+            $ost = $pdo->prepare("SELECT o.orderid, o.odate, o.clientid, o.designid, o.ostatus, o.gross_floor_area, d.designName FROM `Order` o LEFT JOIN Design d ON o.designid = d.designid WHERE o.orderid = ? LIMIT 1");
             $ost->execute([$cid]);
             $orow = $ost->fetch();
-            if ($orow) {
+              if ($orow) {
               $r['order'] = [
                 'id' => (int)$orow['orderid'],
                 'url' => $appRoot . '/client/order_detail.php?orderid=' . (int)$orow['orderid'],
                 'designid' => isset($orow['designid']) ? (int)$orow['designid'] : null,
                 'title' => $orow['designName'] ?? '' ,
-                'status' => $orow['ostatus'] ?? null
+                'status' => $orow['ostatus'] ?? null,
+                'gross_floor_area' => isset($orow['gross_floor_area']) ? (float)$orow['gross_floor_area'] : null
               ];
               // attempt to fetch primary design image when available
               try {
@@ -759,6 +760,117 @@ try {
       send_json(['ok'=>true,'total'=> $total]);
     } catch (Throwable $e) {
       send_json(['ok'=>false,'error'=>'server_error','message'=>$e->getMessage()], 500);
+    }
+    break;
+
+  case 'addReference':
+    // Designer can add a design/message as a reference to the order associated with this room
+    $data = json_decode(file_get_contents('php://input'), true) ?: $_POST;
+    $room = isset($data['room']) ? (int)$data['room'] : 0;
+    $messageid = isset($data['messageid']) ? (int)$data['messageid'] : null;
+    $designid = isset($data['designid']) ? (int)$data['designid'] : null;
+    $note = isset($data['note']) ? (string)$data['note'] : null;
+    if ($room <= 0) send_json(['ok'=>false,'error'=>'missing_room'],400);
+    // require designer role
+    $role = $sessionUser['role'] ?? null;
+    if (!$role || strtolower($role) !== 'designer') send_json(['ok'=>false,'error'=>'forbidden','message'=>'Designer role required'],403);
+    // verify room exists
+    $rstmt = $pdo->prepare('SELECT * FROM ChatRoom WHERE ChatRoomid = ? LIMIT 1'); $rstmt->execute([$room]); $rrow = $rstmt->fetch(PDO::FETCH_ASSOC);
+    if (!$rrow) send_json(['ok'=>false,'error'=>'invalid_room'],400);
+    $roomname = $rrow['roomname'] ?? '';
+    $orderId = null;
+    if (preg_match('/^order-(\d+)$/i', $roomname, $m)) $orderId = (int)$m[1];
+    if (!$orderId && !empty($data['orderid'])) $orderId = (int)$data['orderid'];
+    if (!$orderId) send_json(['ok'=>false,'error'=>'no_order_associated','message'=>'Room is not an order room'],400);
+    // If designid not provided, try to resolve from message
+    if (!$designid && $messageid) {
+      try {
+        $mstmt = $pdo->prepare('SELECT * FROM Message WHERE messageid = ? LIMIT 1'); $mstmt->execute([$messageid]); $mrow = $mstmt->fetch(PDO::FETCH_ASSOC);
+        if ($mrow) {
+          // check content for numeric design id
+          if (!empty($mrow['content']) && preg_match('/^\d+$/', trim($mrow['content']))) $designid = (int)trim($mrow['content']);
+          else {
+            $maybe = @json_decode($mrow['content'], true);
+            if (is_array($maybe)) {
+              if (!empty($maybe['share']['designid'])) $designid = (int)$maybe['share']['designid'];
+              elseif (!empty($maybe['designid'])) $designid = (int)$maybe['designid'];
+            }
+          }
+        }
+      } catch (Throwable $__e) {}
+    }
+    // create storage table if missing (also add useful unique keys to prevent duplicates)
+    try {
+      $pdo->exec("CREATE TABLE IF NOT EXISTS `OrderReference` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `orderid` INT NOT NULL,
+        `messageid` INT DEFAULT NULL,
+        `designid` INT DEFAULT NULL,
+        `added_by_type` VARCHAR(50) DEFAULT NULL,
+        `added_by_id` INT DEFAULT NULL,
+        `note` TEXT DEFAULT NULL,
+        `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY ux_order_design (orderid, designid),
+        UNIQUE KEY ux_order_message (orderid, messageid)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    } catch (Throwable $__e) { /* ignore create failures */ }
+    // Determine added_by_id from session (prefers role-specific id fields)
+    $addedByType = $sessionUser['role'] ?? null;
+    $addedById = null;
+    if (!empty($sessionUser) && is_array($sessionUser)) {
+      if (isset($sessionUser[strtolower($addedByType) . 'id'])) $addedById = (int)$sessionUser[strtolower($addedByType) . 'id'];
+      elseif (isset($sessionUser[$addedByType . 'id'])) $addedById = (int)$sessionUser[$addedByType . 'id'];
+      elseif (isset($sessionUser['id'])) $addedById = (int)$sessionUser['id'];
+    }
+    // check for existing reference for same order+design or order+message
+    try {
+      $existsQ = $pdo->prepare('SELECT id FROM OrderReference WHERE orderid = ? AND ((designid IS NOT NULL AND designid = ?) OR (messageid IS NOT NULL AND messageid = ?)) LIMIT 1');
+      $existsQ->execute([(int)$orderId, $designid ?: 0, $messageid ?: 0]);
+      $ex = $existsQ->fetch(PDO::FETCH_ASSOC);
+      if ($ex && !empty($ex['id'])) {
+        send_json(['ok'=>true,'already'=>true,'id'=>$ex['id'],'orderid'=>$orderId,'messageid'=>$messageid,'designid'=>$designid]);
+      }
+    } catch (Throwable $__e) { /* ignore existence check errors and continue to insert */ }
+
+    try {
+      $ins = $pdo->prepare('INSERT INTO OrderReference (orderid, messageid, designid, added_by_type, added_by_id, note) VALUES (?,?,?,?,?,?)');
+      $ins->execute([(int)$orderId, $messageid ?: null, $designid ?: null, $addedByType ?: null, $addedById ?: null, $note ?: null]);
+      $refId = $pdo->lastInsertId();
+      send_json(['ok'=>true,'id'=>$refId,'orderid'=>$orderId,'messageid'=>$messageid,'designid'=>$designid]);
+    } catch (Throwable $e) {
+      // if insert failed due to unique constraint, return existing id (best-effort)
+      if (strpos($e->getMessage(), 'Duplicate entry') !== false) {
+        try {
+          $existsQ2 = $pdo->prepare('SELECT id FROM OrderReference WHERE orderid = ? AND ((designid IS NOT NULL AND designid = ?) OR (messageid IS NOT NULL AND messageid = ?)) LIMIT 1');
+          $existsQ2->execute([(int)$orderId, $designid ?: 0, $messageid ?: 0]);
+          $ex2 = $existsQ2->fetch(PDO::FETCH_ASSOC);
+          if ($ex2 && !empty($ex2['id'])) send_json(['ok'=>true,'already'=>true,'id'=>$ex2['id'],'orderid'=>$orderId]);
+        } catch (Throwable $_e) {}
+      }
+      send_json(['ok'=>false,'error'=>'db_error','message'=>$e->getMessage()],500);
+    }
+    break;
+
+  case 'listReferences':
+    // Return references for an order (by orderid or room)
+    $data = json_decode(file_get_contents('php://input'), true) ?: $_GET ?: $_POST;
+    $room = isset($data['room']) ? (int)$data['room'] : 0;
+    $orderId = isset($data['orderid']) ? (int)$data['orderid'] : null;
+    if (!$orderId && $room) {
+      try {
+        $rstmt = $pdo->prepare('SELECT roomname FROM ChatRoom WHERE ChatRoomid = ? LIMIT 1'); $rstmt->execute([$room]); $rr = $rstmt->fetch(PDO::FETCH_ASSOC);
+        if ($rr && !empty($rr['roomname']) && preg_match('/^order-(\d+)$/i', $rr['roomname'], $m)) $orderId = (int)$m[1];
+      } catch (Throwable $__e) { }
+    }
+    if (!$orderId) send_json(['ok'=>true,'references'=>[]]);
+    try {
+      $q = $pdo->prepare('SELECT id, orderid, messageid, designid, added_by_type, added_by_id, note, created_at FROM OrderReference WHERE orderid = ? ORDER BY created_at ASC');
+      $q->execute([(int)$orderId]);
+      $rows = $q->fetchAll(PDO::FETCH_ASSOC);
+      send_json(['ok'=>true,'references'=>$rows]);
+    } catch (Throwable $e) {
+      // If table missing, return empty list rather than error
+      send_json(['ok'=>true,'references'=>[]]);
     }
     break;
 

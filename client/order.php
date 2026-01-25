@@ -6,22 +6,31 @@ require_once __DIR__ . '/../config.php';
 session_start();
 
 if (empty($_SESSION['user'])) {
-    $redirect = 'order.php' . (isset($_GET['designid']) ? ('?designid=' . urlencode((string)$_GET['designid'])) : '');
+    $redirect = 'order.php' . (isset($_GET['designid']) ? ('?designid=' . urlencode((string) $_GET['designid'])) : '');
     header('Location: login.php?redirect=' . urlencode($redirect));
     exit;
 }
 
-$designid = isset($_GET['designid']) ? (int)$_GET['designid'] : 0;
-if ($designid <= 0) { http_response_code(404); die('Invalid design.'); }
+$designid = isset($_GET['designid']) ? (int) $_GET['designid'] : 0;
+if ($designid <= 0) {
+    http_response_code(404);
+    die('Invalid design.');
+}
 
- $ds = $mysqli->prepare("SELECT d.designid, d.expect_price, d.designName, d.designerid, dz.dname, d.tag FROM Design d JOIN Designer dz ON d.designerid = dz.designerid WHERE d.designid=?");
+$ds = $mysqli->prepare("SELECT d.designid, d.expect_price, d.designName, d.designerid, dz.dname, d.tag FROM Design d JOIN Designer dz ON d.designerid = dz.designerid WHERE d.designid=?");
 $ds->bind_param("i", $designid);
 $ds->execute();
 $design = $ds->get_result()->fetch_assoc();
-if (!$design) { http_response_code(404); die('Design not found.'); }
+if (!$design) {
+    http_response_code(404);
+    die('Design not found.');
+}
 
-$clientId = (int)($_SESSION['user']['clientid'] ?? 0);
-if ($clientId <= 0) { http_response_code(403); die('Invalid session.'); }
+$clientId = (int) ($_SESSION['user']['clientid'] ?? 0);
+if ($clientId <= 0) {
+    http_response_code(403);
+    die('Invalid session.');
+}
 
 // Fetch client details (phone, address, floor plan, budget, and payment method) from the Client table
 $clientStmt = $mysqli->prepare("SELECT cname, ctel, cemail, address, floor_plan, budget, payment_method FROM Client WHERE clientid = ?");
@@ -31,15 +40,124 @@ $clientData = $clientStmt->get_result()->fetch_assoc();
 
 $success = '';
 $error = '';
+$references_total = 0.0;
+$total_amount = (float) $design['expect_price'];
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Use budget from profile, not from form input
-    $budget = (int)($clientData['budget'] ?? $design['expect_price']);
+    // Support AJAX floor plan uploads: return JSON and exit
+    if (!empty($_POST['ajax']) && $_POST['ajax'] === 'floor_upload') {
+        $resp = ['success' => false, 'message' => 'No file uploaded.'];
+        if (isset($_FILES['floor_plan_file'])) {
+            $fp = $_FILES['floor_plan_file'];
+            if ($fp['error'] === UPLOAD_ERR_OK && is_uploaded_file($fp['tmp_name'])) {
+                $ext = strtolower(pathinfo($fp['name'], PATHINFO_EXTENSION));
+                $allowed = ['pdf', 'png', 'jpg', 'jpeg'];
+                if (!in_array($ext, $allowed)) {
+                    $resp['message'] = 'Invalid file type.';
+                } else {
+                    $destDir = __DIR__ . '/../uploads/floor_plan/';
+                    if (!is_dir($destDir) && !@mkdir($destDir, 0755, true)) {
+                        $resp['message'] = 'Unable to create upload directory.';
+                    } else {
+                        $fname = 'floor_' . $clientId . '_' . time() . '.' . $ext;
+                        $dst = $destDir . $fname;
+                        if (move_uploaded_file($fp['tmp_name'], $dst)) {
+                            $pathRel = 'uploads/floor_plan/' . $fname;
+                            $upd = $mysqli->prepare('UPDATE Client SET floor_plan = ? WHERE clientid = ?');
+                            if ($upd) { $upd->bind_param('si', $pathRel, $clientId); $upd->execute(); $upd->close(); }
+                            $resp['success'] = true; $resp['message'] = 'Uploaded'; $resp['path'] = $pathRel; $clientData['floor_plan'] = $pathRel;
+                        } else {
+                            $resp['message'] = 'Failed to move uploaded file.';
+                        }
+                    }
+                }
+            } else {
+                $resp['message'] = 'Upload error code: ' . ($fp['error'] ?? 'unknown');
+            }
+        }
+        header('Content-Type: application/json');
+        echo json_encode($resp);
+        exit;
+    }
+    // Allow client to edit budget at order placement; fall back to profile or design expected price
+    $budget = isset($_POST['budget']) ? (float) $_POST['budget'] : (float) ($clientData['budget'] ?? $design['expect_price']);
+    // Gross Floor Area (GFA) for this order (m2) — optional
+    $gfa = isset($_POST['gross_floor_area']) ? (float) $_POST['gross_floor_area'] : 0.0;
     $requirements = trim($_POST['requirements'] ?? '');
-    
+
     // Parse payment method data from profile
     $paymentMethodData = [];
     if (!empty($clientData['payment_method'])) {
         $paymentMethodData = json_decode($clientData['payment_method'], true) ?? [];
+    }
+
+    // Handle updates to floor plan upload and payment method submitted on this order page.
+    // If provided, save to Client profile so subsequent validation uses updated values.
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        // -- Floor plan upload --
+        if (isset($_FILES['floor_plan_file'])) {
+            $fp = $_FILES['floor_plan_file'];
+            if ($fp['error'] === UPLOAD_ERR_NO_FILE) {
+                // no file uploaded — ignore
+            } elseif ($fp['error'] !== UPLOAD_ERR_OK) {
+                // surface a helpful upload error
+                $phpErr = $fp['error'];
+                $msg = 'Floor plan upload failed.';
+                if ($phpErr === UPLOAD_ERR_INI_SIZE || $phpErr === UPLOAD_ERR_FORM_SIZE) $msg = 'Uploaded file is too large.';
+                elseif ($phpErr === UPLOAD_ERR_PARTIAL) $msg = 'File upload was interrupted.';
+                elseif ($phpErr === UPLOAD_ERR_NO_TMP_DIR) $msg = 'Server misconfiguration: missing temp folder.';
+                elseif ($phpErr === UPLOAD_ERR_CANT_WRITE) $msg = 'Server error writing uploaded file.';
+                $error = $msg;
+            } elseif (empty($error) && is_uploaded_file($fp['tmp_name'])) {
+                $ext = strtolower(pathinfo($fp['name'], PATHINFO_EXTENSION));
+                $allowed = ['pdf', 'png', 'jpg', 'jpeg'];
+                if (!in_array($ext, $allowed)) {
+                    $error = 'Invalid file type for floor plan. Allowed: PDF, PNG, JPG.';
+                } else {
+                    $destDir = __DIR__ . '/../uploads/floor_plan/';
+                    if (!is_dir($destDir) && !@mkdir($destDir, 0755, true)) {
+                        $error = 'Unable to create upload directory on server.';
+                    } else {
+                        $fname = 'floor_' . $clientId . '_' . time() . '.' . $ext;
+                        $dst = $destDir . $fname;
+                        if (move_uploaded_file($fp['tmp_name'], $dst)) {
+                            $pathRel = 'uploads/floor_plan/' . $fname;
+                            $upd = $mysqli->prepare('UPDATE Client SET floor_plan = ? WHERE clientid = ?');
+                            if ($upd) {
+                                $upd->bind_param('si', $pathRel, $clientId);
+                                $upd->execute();
+                                $upd->close();
+                            }
+                            $clientData['floor_plan'] = $pathRel;
+                        } else {
+                            $error = 'Failed to move uploaded floor plan.';
+                        }
+                    }
+                }
+            }
+        }
+
+        // -- Payment method update --
+        if (!empty($_POST['payment_method'])) {
+            $pm = trim((string) $_POST['payment_method']);
+            $pmData = ['method' => $pm];
+            if ($pm === 'alipay_hk') {
+                $pmData['alipay_hk_email'] = trim((string) ($_POST['alipay_hk_email'] ?? ''));
+                $pmData['alipay_hk_phone'] = trim((string) ($_POST['alipay_hk_phone'] ?? ''));
+            } elseif ($pm === 'paypal') {
+                $pmData['paypal_email'] = trim((string) ($_POST['paypal_email'] ?? ''));
+            } elseif ($pm === 'fps') {
+                $pmData['fps_id'] = trim((string) ($_POST['fps_id'] ?? ''));
+                $pmData['fps_name'] = trim((string) ($_POST['fps_name'] ?? ''));
+            }
+            $pmJson = json_encode($pmData);
+            $upd2 = $mysqli->prepare('UPDATE Client SET payment_method = ? WHERE clientid = ?');
+            if ($upd2) {
+                $upd2->bind_param('si', $pmJson, $clientId);
+                $upd2->execute();
+                $upd2->close();
+            }
+            $paymentMethodData = $pmData; // use updated data for validation below
+        }
     }
 
     // 驗證必填字段
@@ -51,15 +169,126 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Please set a payment method in your profile before placing an order.';
     }
 
+    // Require Gross Floor Area
+    if (empty($error) && ($gfa <= 0)) {
+        $error = 'Please provide Gross Floor Area (m²) for this order.';
+    }
+
+    // Validate budget cannot be lower than design cost
+    if (!$error && $budget < (float) $design['expect_price']) {
+        $error = 'Budget cannot be lower than the design cost (HK$' . number_format((float) $design['expect_price'], 2) . ').';
+    }
+
+    // Parse references (comma-separated design ids) and compute references total
+    $references = [];
+    if (empty($error) && !empty($_POST['references'])) {
+        $raw = trim((string) $_POST['references']);
+        $parts = array_filter(array_map('trim', explode(',', $raw)));
+        foreach ($parts as $p) {
+            if (ctype_digit($p))
+                $references[] = (int) $p;
+        }
+        if (!empty($references)) {
+            // Build placeholders and query sum
+            $placeholders = implode(',', array_fill(0, count($references), '?'));
+            $types = str_repeat('i', count($references));
+            $sql = "SELECT SUM(expect_price) AS refs_sum FROM Design WHERE designid IN ($placeholders)";
+            $stmtRefs = $mysqli->prepare($sql);
+            if ($stmtRefs) {
+                $stmtRefs->bind_param($types, ...$references);
+                $stmtRefs->execute();
+                $rrow = $stmtRefs->get_result()->fetch_assoc();
+                $references_total = (float) ($rrow['refs_sum'] ?? 0.0);
+                $stmtRefs->close();
+            }
+        }
+    }
+
+    // Parse product references (id[:qty] comma-separated) and compute total
+    $product_refs = []; // map id => qty
+    $products_total = 0.0;
+    if (empty($error) && !empty($_POST['product_references'])) {
+        $rawp = trim((string) $_POST['product_references']);
+        $parts = array_filter(array_map('trim', explode(',', $rawp)));
+        foreach ($parts as $entry) {
+            if ($entry === '')
+                continue;
+            $bits = explode(':', $entry);
+            if (!ctype_digit($bits[0]))
+                continue;
+            $id = (int) $bits[0];
+            $qty = isset($bits[1]) && ctype_digit($bits[1]) ? (int) $bits[1] : 1;
+            $product_refs[$id] = ($product_refs[$id] ?? 0) + $qty;
+        }
+        if (!empty($product_refs)) {
+            $pids = array_keys($product_refs);
+            $placeholders = implode(',', array_fill(0, count($pids), '?'));
+            $types = str_repeat('i', count($pids));
+            $sql = "SELECT productid, IFNULL(price,0) AS price FROM Product WHERE productid IN ($placeholders)";
+            $stmtP = $mysqli->prepare($sql);
+            if ($stmtP) {
+                $stmtP->bind_param($types, ...$pids);
+                $stmtP->execute();
+                $res = $stmtP->get_result();
+                while ($r = $res->fetch_assoc()) {
+                    $pid = (int) $r['productid'];
+                    $price = (float) ($r['price'] ?? 0);
+                    $qty = $product_refs[$pid] ?? 0;
+                    $products_total += $price * $qty;
+                }
+                $stmtP->close();
+            }
+        }
+    }
+
+    // Calculate total (design + references + products)
+    $total_amount = (float) $design['expect_price'] + $references_total + $products_total;
+
     if (!$error) {
-        $stmt = $mysqli->prepare("INSERT INTO `Order` (odate, clientid, Requirements, designid, ostatus) VALUES (NOW(), ?, ?, ?, 'Waiting Confirm')");
-        $stmt->bind_param("isi", $clientId, $requirements, $designid);
-        if ($stmt->execute()) {
+        // Persist per-order budget; cost and gross_floor_area left NULL until later updates
+        $stmt = $mysqli->prepare("INSERT INTO `Order` (odate, clientid, budget, cost, gross_floor_area, Requirements, designid, ostatus) VALUES (NOW(), ?, ?, NULL, ?, ?, ?, 'Waiting Confirm')");
+        $stmt->bind_param("iddsi", $clientId, $budget, $gfa, $requirements, $designid);
+        if ($stmt && $stmt->execute()) {
             $orderId = $stmt->insert_id;
+            // If design references exist, insert them into OrderReference table so they persist with the order
+            if (!empty($references) && $orderId) {
+                $insRef = $mysqli->prepare('INSERT INTO OrderReference (orderid, designid, added_by_type, added_by_id) VALUES (?,?,?,?)');
+                if ($insRef) {
+                    $addedByType = 'client';
+                    $addedById = $clientId;
+                    foreach ($references as $did) {
+                        $insRef->bind_param('iisi', $orderId, $did, $addedByType, $addedById);
+                        $insRef->execute();
+                    }
+                    $insRef->close();
+                }
+            }
+            // If product references exist, insert them into OrderProduct (quantity=1)
+            if (!empty($product_refs) && $orderId) {
+                // determine a manager to assign (fallback to first Manager)
+                $mgrId = 0;
+                $mgrQ = $mysqli->prepare('SELECT managerid FROM Manager ORDER BY managerid ASC LIMIT 1');
+                if ($mgrQ) {
+                    $mgrQ->execute();
+                    $r = $mgrQ->get_result()->fetch_assoc();
+                    $mgrQ->close();
+                    if ($r && !empty($r['managerid']))
+                        $mgrId = (int) $r['managerid'];
+                }
+                $insP = $mysqli->prepare('INSERT INTO OrderProduct (productid, quantity, orderid, status, managerid) VALUES (?,?,?,?,?)');
+                if ($insP) {
+                    $status = 'Pending';
+                    foreach ($product_refs as $pid => $qty) {
+                        $insP->bind_param('iiisi', $pid, $qty, $orderId, $status, $mgrId);
+                        $insP->execute();
+                    }
+                    $insP->close();
+                }
+            }
             $success = 'Order created successfully. Order ID: ' . $orderId;
             // Send order confirmation message to designer via chat (create/find private room)
             try {
-                $designerId = isset($design['designerid']) ? (int)$design['designerid'] : 0;
+                $designerId = isset($design['designerid']) ? (int) $design['designerid'] : 0;
                 if ($designerId > 0) {
                     // For each order, create or reuse an order-specific group room (client + designer + manager)
                     $roomId = 0;
@@ -72,7 +301,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $existing = $rr ? $rr->fetch_assoc() : null;
                         $chkRoom->close();
                         if ($existing && !empty($existing['ChatRoomid'])) {
-                            $roomId = (int)$existing['ChatRoomid'];
+                            $roomId = (int) $existing['ChatRoomid'];
                         }
                     }
                     if (!$roomId) {
@@ -89,8 +318,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             // insert client and designer members
                             $insM = $mysqli->prepare("INSERT INTO ChatRoomMember (ChatRoomid, member_type, memberid) VALUES (?,?,?)");
                             if ($insM) {
-                                $mt1 = 'client'; $mid1 = $clientId; $insM->bind_param('isi', $roomId, $mt1, $mid1); $insM->execute();
-                                $mt2 = 'designer'; $mid2 = $designerId; $insM->bind_param('isi', $roomId, $mt2, $mid2); $insM->execute();
+                                $mt1 = 'client';
+                                $mid1 = $clientId;
+                                $insM->bind_param('isi', $roomId, $mt1, $mid1);
+                                $insM->execute();
+                                $mt2 = 'designer';
+                                $mid2 = $designerId;
+                                $insM->bind_param('isi', $roomId, $mt2, $mid2);
+                                $insM->execute();
                                 $insM->close();
                             }
                             // attempt to add the designer's manager as a member. If designer has no manager, fallback to first Manager.
@@ -102,7 +337,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 $mgrRow = $mgrStmt->get_result()->fetch_assoc();
                                 $mgrStmt->close();
                                 if ($mgrRow && !empty($mgrRow['managerid'])) {
-                                    $mgrId = (int)$mgrRow['managerid'];
+                                    $mgrId = (int) $mgrRow['managerid'];
                                 }
                             }
                             if (empty($mgrId)) {
@@ -113,14 +348,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     $mgr = $mgrR ? $mgrR->fetch_assoc() : null;
                                     $mgrQ->close();
                                     if ($mgr && !empty($mgr['managerid'])) {
-                                        $mgrId = (int)$mgr['managerid'];
+                                        $mgrId = (int) $mgr['managerid'];
                                     }
                                 }
                             }
                             if (!empty($mgrId)) {
                                 $insMgr = $mysqli->prepare("INSERT INTO ChatRoomMember (ChatRoomid, member_type, memberid) VALUES (?,?,?)");
                                 if ($insMgr) {
-                                    $mtm = 'manager'; $insMgr->bind_param('isi', $roomId, $mtm, $mgrId); $insMgr->execute(); $insMgr->close();
+                                    $mtm = 'manager';
+                                    $insMgr->bind_param('isi', $roomId, $mtm, $mgrId);
+                                    $insMgr->execute();
+                                    $insMgr->close();
                                 }
                             }
                         }
@@ -129,10 +367,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     // Insert message announcing the order
                     if (!empty($roomId)) {
                         // Persist only the order id in `content` and set message_type = 'order'.
-                        $orderContent = (string)$orderId;
+                        $orderContent = (string) $orderId;
                         $insMsg = $mysqli->prepare("INSERT INTO Message (sender_type, sender_id, content, message_type, ChatRoomid) VALUES (?,?,?,?,?)");
                         if ($insMsg) {
-                            $stype = 'client'; $sId = $clientId; $mtype = 'order';
+                            $stype = 'client';
+                            $sId = $clientId;
+                            $mtype = 'order';
                             // types: sender_type (s), sender_id (i), content (s), message_type (s), ChatRoomid (i)
                             $insMsg->bind_param('sissi', $stype, $sId, $orderContent, $mtype, $roomId);
                             $insMsg->execute();
@@ -147,15 +387,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     $mres = $membersQ->get_result();
                                     $insRead = $mysqli->prepare('INSERT INTO MessageRead (messageid, ChatRoomMemberid, is_read, read_at) VALUES (?,?,?,?)');
                                     while ($mr = $mres->fetch_assoc()) {
-                                        $crmId = (int)$mr['ChatRoomMemberid'];
-                                        if ($mr['member_type'] === 'client' && (int)$mr['memberid'] === $clientId) {
-                                            $isr = 1; $rtime = date('Y-m-d H:i:s');
+                                        $crmId = (int) $mr['ChatRoomMemberid'];
+                                        if ($mr['member_type'] === 'client' && (int) $mr['memberid'] === $clientId) {
+                                            $isr = 1;
+                                            $rtime = date('Y-m-d H:i:s');
                                         } else {
-                                            $isr = 0; $rtime = null;
+                                            $isr = 0;
+                                            $rtime = null;
                                         }
-                                        if ($insRead) { $insRead->bind_param('iiis', $msgId, $crmId, $isr, $rtime); $insRead->execute(); }
+                                        if ($insRead) {
+                                            $insRead->bind_param('iiis', $msgId, $crmId, $isr, $rtime);
+                                            $insRead->execute();
+                                        }
                                     }
-                                    if ($insRead) $insRead->close();
+                                    if ($insRead)
+                                        $insRead->close();
                                     $membersQ->close();
                                 }
                             }
@@ -175,9 +421,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$rawTags = (string)($design['tag'] ?? '');
+$rawTags = (string) ($design['tag'] ?? '');
 $tags = array_filter(array_map('trim', explode(',', $rawTags)));
-$designImgSrc = '../design_image.php?id=' . (int)$design['designid'];
+$designImgSrc = '../design_image.php?id=' . (int) $design['designid'];
 // Try to use the primary DesignImage (if present) and map to uploads path
 try {
     $imgStmt = $mysqli->prepare("SELECT image_filename FROM DesignImage WHERE designid = ? ORDER BY image_order ASC LIMIT 1");
@@ -197,7 +443,7 @@ try {
 // Format phone number for display
 $phoneDisplay = '—';
 if (!empty($clientData['ctel'])) {
-    $phoneDisplay = (string)$clientData['ctel'];
+    $phoneDisplay = (string) $clientData['ctel'];
 }
 
 // Format budget display
@@ -212,6 +458,7 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
 ?>
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -225,16 +472,19 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
             margin-top: 1rem;
             display: none;
         }
+
         .floorplan-preview-container.show {
             display: block;
         }
+
         .floorplan-preview {
             max-width: 100%;
             max-height: 300px;
             border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
             object-fit: contain;
         }
+
         .floorplan-file-info {
             display: flex;
             align-items: center;
@@ -243,23 +493,28 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
             border-radius: 8px;
             margin-top: 1rem;
         }
+
         .floorplan-file-info .file-icon {
             font-size: 2rem;
             color: #e74c3c;
             margin-right: 1rem;
         }
+
         .floorplan-file-info .file-details {
             flex: 1;
         }
+
         .floorplan-file-info .file-name {
             font-weight: 600;
             color: #2c3e50;
             margin-bottom: 0.25rem;
         }
+
         .floorplan-file-info .file-size {
             font-size: 0.85rem;
             color: #7f8c8d;
         }
+
         .remove-file-btn {
             background: none;
             border: none;
@@ -268,18 +523,22 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
             font-size: 1.25rem;
             padding: 0.5rem;
         }
+
         .remove-file-btn:hover {
             color: #c0392b;
         }
+
         .floorplan-upload-area.has-file {
             border-color: #27ae60;
             background-color: #e8f8f0;
         }
+
         .file-input {
             position: absolute;
             left: -9999px;
             opacity: 0;
         }
+
         /* Payment method display styles */
         .payment-method-display {
             background: #e8f5e9;
@@ -288,58 +547,37 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
             padding: 1rem;
             margin-bottom: 1rem;
         }
+
         .payment-method-display .payment-method-label {
             font-weight: 600;
             color: #2c3e50;
             margin-bottom: 0.5rem;
         }
+
         .payment-method-display .payment-method-value {
             color: #666;
             font-size: 0.95rem;
         }
+
         .payment-method-display .edit-link {
             display: inline-block;
             margin-top: 0.5rem;
         }
+
         .payment-method-display .edit-link a {
             color: #3498db;
             text-decoration: none;
             font-size: 0.9rem;
         }
+
         .payment-method-display .edit-link a:hover {
             text-decoration: underline;
         }
     </style>
 </head>
+
 <body>
-    <header class="bg-white shadow p-3 d-flex justify-content-between align-items-center">
-        <div class="d-flex align-items-center gap-3">
-            <div class="h4 mb-0"><a href="../design_dashboard.php" style="text-decoration: none; color: inherit;">HappyDesign</a></div>
-            <nav>
-                <ul class="nav align-items-center gap-2">
-                    <li class="nav-item"><a class="nav-link active" href="../design_dashboard.php">Design</a></li>
-                    <li class="nav-item"><a class="nav-link" href="../material_dashboard.php">Material</a></li>
-                    <li class="nav-item"><a class="nav-link" href="furniture_dashboard.php">Furniture</a></li>
-                </ul>
-            </nav>
-        </div>
-        <nav>
-            <ul class="nav align-items-center">
-                <?php if (isset($_SESSION['user'])): ?>
-                    <li class="nav-item me-2">
-                        <a class="nav-link text-muted " href="../client/profile.php">
-                            <i class="fas fa-user me-1"></i>Hello <?= htmlspecialchars($clientData['cname'] ?? $_SESSION['user']['name'] ?? 'User') ?>
-                        </a>
-                    </li>
-                    <li class="nav-item"><a class="nav-link" href="../client/my_likes.php">My Likes</a></li>
-                    <li class="nav-item"><a class="nav-link" href="../client/order_history.php">Order History</a></li>
-                    <li class="nav-item"><a class="nav-link" href="../logout.php">Logout</a></li>
-                <?php else: ?>
-                    <li class="nav-item"><a class="nav-link" href="../login.php">Login</a></li>
-                <?php endif; ?>
-            </ul>
-        </nav>
-    </header>
+    <?php include_once __DIR__ . '/../includes/header.php'; ?>
 
     <main class="container mt-4">
         <div class="order-container">
@@ -348,7 +586,6 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                     <i class="fas fa-arrow-left me-1"></i> Back
                 </button>
             </div>
-            <h1 class="text-center mb-4">Complete Your Order</h1>
 
             <?php if ($success): ?>
                 <div class="alert alert-success"><?= htmlspecialchars($success) ?></div>
@@ -359,26 +596,6 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
             <form id="orderForm" method="post" enctype="multipart/form-data">
                 <div class="row">
                     <div class="col-md-8">
-                        <!-- Design Information Section -->
-                        <div class="order-section">
-                            <h3 class="section-title">Design Information</h3>
-                            <div class="d-flex mb-4">
-                                <div class="design-preview me-3" style="max-width: 200px;">
-                                    <img src="<?= htmlspecialchars($designImgSrc) ?>" class="img-fluid" alt="Selected Design">
-                                </div>
-                                <div>
-                                    <p class="text-muted mb-1">Designer: <?= htmlspecialchars($design['dname']) ?></p>
-                                    <div class="tags mb-2">
-                                        <?php if (!empty($tags)): ?>
-                                            <?php foreach ($tags as $tg): ?>
-                                                <span class="badge bg-secondary me-1"><?= htmlspecialchars($tg) ?></span>
-                                            <?php endforeach; ?>
-                                        <?php endif; ?>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
                         <!-- Customer Information Section -->
                         <div class="order-section">
                             <h3 class="section-title">Customer Information</h3>
@@ -400,112 +617,286 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                                     <div class="info-value"><?= htmlspecialchars($clientData['address'] ?? '—') ?></div>
                                 </div>
                             </div>
-                            <p class="text-muted small"><i class="fas fa-info-circle me-1"></i> To update your information, please visit your account settings.</p>
-                        </div>
-
-                        <!-- Floor Plan Section (Display Only) -->
-                        <div class="order-section">
-                            <h3 class="section-title">Floor Plan</h3>
-                            <?php if (!empty($clientData['floor_plan'])): ?>
-                                <div style="background: #e8f8f0; border: 1px solid #27ae60; border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
-                                    <div class="d-flex align-items-center justify-content-between">
-                                        <div class="d-flex align-items-center">
-                                            <i class="fas fa-file-pdf" style="font-size: 1.5rem; color: #27ae60; margin-right: 0.5rem;"></i>
-                                            <div>
-                                                <strong><?= htmlspecialchars(basename($clientData['floor_plan'])) ?></strong>
-                                                <br>
-                                                <small class="text-muted">Floor plan on file</small>
-                                            </div>
-                                        </div>
-                                        <a href="../<?= htmlspecialchars($clientData['floor_plan']) ?>" target="_blank" class="btn btn-sm btn-outline-success">
-                                            <i class="fas fa-download me-1"></i>View
-                                        </a>
-                                    </div>
-                                </div>
-                                <p class="text-muted small"><i class="fas fa-info-circle me-1"></i> To update your floor plan, please visit your profile.</p>
-                            <?php else: ?>
-                                <div class="alert alert-warning" role="alert">
-                                    <i class="fas fa-exclamation-triangle me-2"></i>
-                                    <strong>No floor plan uploaded!</strong> Please upload a floor plan in your <a href="profile.php">profile</a> before placing an order.
-                                </div>
-                            <?php endif; ?>
+                            <p class="text-muted small"><i class="fas fa-info-circle me-1"></i> To update your
+                                information, please visit your account settings.</p>
                         </div>
 
                         <!-- Design Requirements Section -->
                         <div class="order-section">
-                            <h3 class="section-title">Design Requirements</h3>
-                            <div class="mb-3">
-                                <label for="requirements" class="form-label">Special Requirements (Optional)</label>
-                                <textarea class="form-control" id="requirements" name="requirements" rows="4" placeholder="Any specific requirements, preferences, or notes for the designer..." maxlength="255"></textarea>
+                            <h3 class="section-title">Design Details</h3>
+                            <!-- Design Information Section -->
+                            <label class="form-label fw-bold mb-3">Reference Design:</label>
+                            <div class="d-flex mb-4">
+                                <div class="design-preview me-3" style="max-width: 200px;">
+                                    <img src="<?= htmlspecialchars($designImgSrc) ?>" class="img-fluid"
+                                        alt="Selected Design">
+                                </div>
+                                <i></i>
+                                <div>
+                                    <p class="text-muted mb-1">Designer:
+                                        <?= htmlspecialchars($design['dname']) ?>
+                                    </p>
+                                    <div class="tags mb-2">
+                                        <?php if (!empty($tags)): ?>
+                                            <?php foreach ($tags as $tg): ?>
+                                                <span class="badge bg-secondary me-1">
+                                                    <?= htmlspecialchars($tg) ?>
+                                                </span>
+                                            <?php endforeach; ?>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-
-                        <!-- Payment Method Section (Display Only) -->
-                        <div class="order-section">
-                            <h3 class="section-title">Payment Method</h3>
-                            <?php if (!empty($selectedPaymentMethod)): ?>
-                                <div class="payment-method-display">
-                                    <div class="payment-method-label">
-                                        <i class="fas fa-credit-card me-2"></i>
-                                        <?php 
-                                            $methodLabels = [
-                                                'alipay_hk' => 'AlipayHK',
-                                                'paypal' => 'PayPal',
-                                                'fps' => 'FPS (Faster Payment System)'
-                                            ];
-                                            echo htmlspecialchars($methodLabels[$selectedPaymentMethod] ?? 'Unknown');
-                                        ?>
-                                    </div>
-                                    <div class="payment-method-value">
-                                        <?php 
-                                            if ($selectedPaymentMethod === 'alipay_hk') {
-                                                echo 'Email: ' . htmlspecialchars($paymentMethodData['alipay_hk_email'] ?? '');
-                                            } elseif ($selectedPaymentMethod === 'paypal') {
-                                                echo 'Email: ' . htmlspecialchars($paymentMethodData['paypal_email'] ?? '');
-                                            } elseif ($selectedPaymentMethod === 'fps') {
-                                                echo 'ID: ' . htmlspecialchars($paymentMethodData['fps_id'] ?? '');
-                                            }
-                                        ?>
-                                    </div>
-                                    <div class="payment-method-display edit-link">
-                                        <a href="profile.php">
-                                            <i class="fas fa-edit me-1"></i>Update Payment Method
-                                        </a>
+                            <!-- Floor Plan Section-->
+                            <label class="form-label fw-bold mb-3">Floor Plan</label>
+                            <?php if (!empty($clientData['floor_plan'])): ?>
+                                <div id="floorPlanView"
+                                    style="background: #e8f8f0; border: 1px solid #27ae60; border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
+                                    <div class="d-flex align-items-center justify-content-between">
+                                        <div class="d-flex align-items-center">
+                                            <i class="fas fa-file-pdf"
+                                                style="font-size: 1.5rem; color: #27ae60; margin-right: 0.5rem;"></i>
+                                            <div>
+                                                <strong
+                                                    id="floorPlanFileName"><?= htmlspecialchars(basename($clientData['floor_plan'])) ?></strong>
+                                                <br>
+                                                <small class="text-muted">Floor plan on file</small>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <a href="../<?= htmlspecialchars($clientData['floor_plan']) ?>" target="_blank"
+                                                class="btn btn-sm btn-outline-success me-2">
+                                                <i class="fas fa-download me-1"></i>View
+                                            </a>
+                                            <button type="button" id="floorPlanEditBtn"
+                                                class="btn btn-sm btn-outline-secondary"><i class="fas fa-pencil-alt"></i>
+                                                Change</button>
+                                        </div>
                                     </div>
                                 </div>
                             <?php else: ?>
-                                <div class="alert alert-warning" role="alert">
-                                    <i class="fas fa-exclamation-triangle me-2"></i>
-                                    <strong>No payment method set!</strong> Please set a payment method in your <a href="profile.php">profile</a> before placing an order.
+                                <div id="floorPlanView" class="alert alert-warning d-flex justify-content-between align-items-center" role="alert">
+                                    <div class="d-flex align-items-center">
+                                        <i class="fas fa-exclamation-triangle me-2"></i>
+                                        <strong>No floor plan uploaded!</strong>
+                                    </div>
+                                    <div>
+                                        <button type="button" id="floorPlanEditBtn" class="btn btn-sm btn-outline-secondary"><i class="fas fa-pencil-alt"></i></button>
+                                    </div>
                                 </div>
                             <?php endif; ?>
+                            <div class="mb-3" id="floorPlanEdit" style="display:none;">
+                                <label for="floor_plan_file" class="form-label">Upload / Replace Floor Plan</label>
+                                <input class="form-control" type="file" id="floor_plan_file" name="floor_plan_file"
+                                    accept="application/pdf,image/*">
+                                <div class="form-text">Accepted: PDF, PNG, JPG. Upload will update your profile floor
+                                    plan.</div>
+                                <div class="mt-2 d-flex gap-2">
+                                    <button type="button" id="floorPlanUploadBtn" class="btn btn-sm btn-primary">Upload</button>
+                                    <button type="button" id="floorPlanCancelBtn" class="btn btn-sm btn-secondary">Cancel</button>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Gross Floor Area (m²)</label>
+                                <?php $initialGfa = isset($clientData['gross_floor_area']) ? (float) $clientData['gross_floor_area'] : 0.0; ?>
+                                <div id="gfaView" class="d-flex align-items-center">
+                                    <div id="gfaDisplayText" class="me-2">
+                                        <?= $initialGfa > 0 ? htmlspecialchars(number_format($initialGfa, 2)) . ' m²' : '<span class="text-muted">Not provided</span>' ?>
+                                    </div>
+                                    <button type="button" id="gfaEditBtn" class="btn btn-sm btn-outline-secondary"
+                                        title="Edit GFA"><i class="fas fa-pencil-alt"></i></button>
+                                </div>
+                                <div id="gfaEdit" style="display:none; margin-top:.5rem;">
+                                    <input type="number" step="0.01" min="0" id="gfaInput" class="form-control"
+                                        value="<?= htmlspecialchars($initialGfa) ?>">
+                                    <div class="mt-2">
+                                        <button type="button" id="gfaSaveBtn"
+                                            class="btn btn-sm btn-primary">Save</button>
+                                        <button type="button" id="gfaCancelBtn"
+                                            class="btn btn-sm btn-secondary">Cancel</button>
+                                    </div>
+                                </div>
+                                <input type="hidden" id="gross_floor_area" name="gross_floor_area"
+                                    value="<?= htmlspecialchars($initialGfa) ?>">
+                                <small class="form-text text-muted mt-2">Required: provide the gross floor area (m²) for the project.</small>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="requirements" class="form-label">Request</label>
+                            <textarea class="form-control" id="requirements" name="requirements" rows="4"
+                                placeholder="Any specific requirements, preferences, or notes for the designer..."
+                                maxlength="255"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label for="references" class="form-label">References</label>
+                            <div class="d-flex justify-content-between align-items-start mt-2">
+                                <div id="selectedProducts" class="d-flex flex-wrap gap-2"></div>
+                                <div class="ms-2">
+                                    <button type="button" id="openLikedProducts"
+                                        class="btn btn-sm btn-outline-secondary">+ reference</button>
+                                </div>
+                            </div>
+                            <small class="text-muted d-block mt-2">Reference(s) would help to calculate the total
+                                cost for your order.</small>
+                            <input type="hidden" id="product_references" name="product_references" value="">
+                            <input type="hidden" id="references" name="references" value="">
                         </div>
                     </div>
-
                     <!-- Right Column - Order Summary -->
                     <div class="col-md-4">
                         <div class="order-summary">
                             <h3 class="section-title">Order Summary</h3>
                             <div class="summary-item">
-                                <span>Design Service:</span>
-                                <span>$<?= number_format((float)$design['expect_price'], 2) ?></span>
-                            </div>
-                            <div class="summary-item summary-total">
-                                <span>Total:</span>
-                                <span>$<?= number_format((float)$design['expect_price'], 2) ?></span>
+                                <span>Estimated Design cost:</span>
+                                <span>$<?= number_format((float) $design['expect_price'], 2) ?></span>
                             </div>
 
                             <div class="mt-3 mb-3">
-                                <label for="budget" class="form-label fw-bold">Budget</label>
-                                <div class="form-control" style="background-color: #f8f9fa; border-color: #dee2e6; color: #495057; padding: 0.375rem 0.75rem; height: auto;">
-                                    <strong>HK$<?= number_format($budgetDisplay > 0 ? $budgetDisplay : (int)$design['expect_price']) ?></strong>
+                                <label class="form-label fw-bold">Order budget</label>
+                                <?php $initialBudget = $budgetDisplay > 0 ? $budgetDisplay : (float) $design['expect_price']; ?>
+                                <div id="budgetView" class="d-flex align-items-center">
+                                    <div id="budgetDisplayText" class="me-2">
+                                        $<?= number_format((float) $initialBudget, 2) ?></div>
+                                    <button type="button" id="budgetEditBtn" class="btn btn-sm btn-outline-secondary"
+                                        title="Edit budget"><i class="fas fa-pencil-alt"></i></button>
                                 </div>
-                                <small class="text-muted d-block mt-2"><i class="fas fa-info-circle me-1"></i>Budget is set in your profile and cannot be changed during order placement.</small>
-                                <!-- Hidden input to preserve budget value for form submission -->
-                                <input type="hidden" name="budget" value="<?= $budgetDisplay > 0 ? $budgetDisplay : (int)$design['expect_price'] ?>">
-                            </div>
 
+                                <div id="budgetEdit" style="display:none; margin-top:.5rem;">
+                                    <input type="number" step="0.01" min="0" id="budgetInput" class="form-control"
+                                        value="<?= htmlspecialchars($initialBudget) ?>">
+                                    <div class="mt-2">
+                                        <button type="button" id="budgetSaveBtn"
+                                            class="btn btn-sm btn-primary">Save</button>
+                                        <button type="button" id="budgetCancelBtn"
+                                            class="btn btn-sm btn-secondary">Cancel</button>
+                                    </div>
+                                </div>
+
+                                <!-- Hidden field that will be submitted as the budget value -->
+                                <input type="hidden" id="budget" name="budget"
+                                    value="<?= htmlspecialchars($initialBudget) ?>">
+
+                                <small class="form-text text-muted mt-2"><i class="fas fa-info-circle me-1"></i>You may
+                                    edit your budget for this order; this value will be saved to the order
+                                    record.</small>
+                            </div>
                             <div class="mt-4">
+                                <div class="summary-item summary-total">
+                                    <span>Total:</span>
+                                    <span id="orderTotal">$
+                                        <?= number_format($total_amount, 2) ?>
+                                    </span>
+                                </div>
+                                <!-- Payment Method Section-->
+                                <div class="order-section">
+                                    <label class="form-label">Payment Method</label>
+                                    <?php
+                                    $pmCurrent = $paymentMethodData['method'] ?? ($selectedPaymentMethod ?? null);
+                                    $paymentSummary = 'Not set';
+                                    if ($pmCurrent === 'alipay_hk') {
+                                        $paymentSummary = 'AlipayHK - ' . htmlspecialchars($paymentMethodData['alipay_hk_email'] ?? '');
+                                    } elseif ($pmCurrent === 'paypal') {
+                                        $paymentSummary = 'PayPal - ' . htmlspecialchars($paymentMethodData['paypal_email'] ?? '');
+                                    } elseif ($pmCurrent === 'fps') {
+                                        $paymentSummary = 'FPS - ' . htmlspecialchars($paymentMethodData['fps_id'] ?? '');
+                                    }
+                                    ?>
+
+                                    <div id="paymentDisplay"
+                                        class="payment-method-display d-flex justify-content-between align-items-start">
+                                        <div>
+                                            <div class="payment-method-label">Current: <?= $paymentSummary ?></div>
+                                            <div class="payment-method-value small text-muted">Stored payment details
+                                                will be used unless you edit.</div>
+                                        </div>
+                                        <div>
+                                            <button type="button" id="paymentEditBtn"
+                                                class="btn btn-sm btn-outline-secondary"><i
+                                                    class="fas fa-pencil-alt"></i> Edit</button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Hidden fields to submit existing payment values when not editing -->
+                                    <input type="hidden" name="payment_method" id="payment_method_hidden"
+                                        value="<?= htmlspecialchars($pmCurrent ?? '') ?>">
+                                    <input type="hidden" name="alipay_hk_email" id="alipay_hk_email_hidden"
+                                        value="<?= htmlspecialchars($paymentMethodData['alipay_hk_email'] ?? '') ?>">
+                                    <input type="hidden" name="alipay_hk_phone" id="alipay_hk_phone_hidden"
+                                        value="<?= htmlspecialchars($paymentMethodData['alipay_hk_phone'] ?? '') ?>">
+                                    <input type="hidden" name="paypal_email" id="paypal_email_hidden"
+                                        value="<?= htmlspecialchars($paymentMethodData['paypal_email'] ?? '') ?>">
+                                    <input type="hidden" name="fps_id" id="fps_id_hidden"
+                                        value="<?= htmlspecialchars($paymentMethodData['fps_id'] ?? '') ?>">
+                                    <input type="hidden" name="fps_name" id="fps_name_hidden"
+                                        value="<?= htmlspecialchars($paymentMethodData['fps_name'] ?? '') ?>">
+
+                                    <div id="paymentEdit" style="display:none;">
+                                        <div class="mb-2">
+                                            <div class="form-check form-check-inline">
+                                                <input class="form-check-input" type="radio" name="payment_method_edit"
+                                                    id="pm_alipay" value="alipay_hk" <?= ($pmCurrent === 'alipay_hk') ? 'checked' : '' ?>>
+                                                <label class="form-check-label" for="pm_alipay">AlipayHK</label>
+                                            </div>
+                                            <div class="form-check form-check-inline">
+                                                <input class="form-check-input" type="radio" name="payment_method_edit"
+                                                    id="pm_paypal" value="paypal" <?= ($pmCurrent === 'paypal') ? 'checked' : '' ?>>
+                                                <label class="form-check-label" for="pm_paypal">PayPal</label>
+                                            </div>
+                                            <div class="form-check form-check-inline">
+                                                <input class="form-check-input" type="radio" name="payment_method_edit"
+                                                    id="pm_fps" value="fps" <?= ($pmCurrent === 'fps') ? 'checked' : '' ?>>
+                                                <label class="form-check-label" for="pm_fps">FPS</label>
+                                            </div>
+                                        </div>
+
+                                        <div id="alipayHKForm_edit"
+                                            style="display: <?= ($pmCurrent === 'alipay_hk') ? 'block' : 'none' ?>;">
+                                            <div class="mb-2">
+                                                <label class="form-label">AlipayHK Email</label>
+                                                <input id="alipayHKEmail" class="form-control"
+                                                    value="<?= htmlspecialchars($paymentMethodData['alipay_hk_email'] ?? '') ?>">
+                                            </div>
+                                            <div class="mb-2">
+                                                <label class="form-label">Phone</label>
+                                                <input id="alipayHKPhone" class="form-control"
+                                                    value="<?= htmlspecialchars($paymentMethodData['alipay_hk_phone'] ?? '') ?>">
+                                            </div>
+                                        </div>
+
+                                        <div id="paypalForm_edit"
+                                            style="display: <?= ($pmCurrent === 'paypal') ? 'block' : 'none' ?>;">
+                                            <div class="mb-2">
+                                                <label class="form-label">PayPal Email</label>
+                                                <input id="paypalEmail" class="form-control"
+                                                    value="<?= htmlspecialchars($paymentMethodData['paypal_email'] ?? '') ?>">
+                                            </div>
+                                        </div>
+
+                                        <div id="fpsForm_edit"
+                                            style="display: <?= ($pmCurrent === 'fps') ? 'block' : 'none' ?>;">
+                                            <div class="mb-2">
+                                                <label class="form-label">FPS ID</label>
+                                                <input id="fpsId" class="form-control"
+                                                    value="<?= htmlspecialchars($paymentMethodData['fps_id'] ?? '') ?>">
+                                            </div>
+                                            <div class="mb-2">
+                                                <label class="form-label">FPS Name</label>
+                                                <input id="fpsName" class="form-control"
+                                                    value="<?= htmlspecialchars($paymentMethodData['fps_name'] ?? '') ?>">
+                                            </div>
+                                        </div>
+
+                                        <div class="mt-2">
+                                            <button type="button" id="paymentSaveBtn"
+                                                class="btn btn-sm btn-primary">Save</button>
+                                            <button type="button" id="paymentCancelBtn"
+                                                class="btn btn-sm btn-secondary">Cancel</button>
+                                        </div>
+                                    </div>
+
+                                    <div class="form-text mt-2">You can edit payment details here; they will be saved to
+                                        your profile.</div>
+                                </div>
                                 <button type="submit" class="btn btn-success w-100 py-2">
                                     <i class="fas fa-check-circle me-2"></i>Place Order
                                 </button>
@@ -519,107 +910,474 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Payment method form switching
-        document.addEventListener('DOMContentLoaded', function() {
-            const paymentRadios = document.querySelectorAll('input[name="payment_method"]');
-            const alipayHKForm = document.getElementById('alipayHKForm');
-            const paypalForm = document.getElementById('paypalForm');
-            const fpsForm = document.getElementById('fpsForm');
+        // Edit toggles for budget, floor plan and payment method
+        document.addEventListener('DOMContentLoaded', function () {
+            // Budget toggle
+            const budgetView = document.getElementById('budgetView');
+            const budgetEdit = document.getElementById('budgetEdit');
+            const budgetEditBtn = document.getElementById('budgetEditBtn');
+            const budgetSaveBtn = document.getElementById('budgetSaveBtn');
+            const budgetCancelBtn = document.getElementById('budgetCancelBtn');
+            const budgetInput = document.getElementById('budgetInput');
+            const budgetHidden = document.getElementById('budget');
+            const budgetDisplayText = document.getElementById('budgetDisplayText');
 
-            function updatePaymentForm() {
-                const selectedMethod = document.querySelector('input[name="payment_method"]:checked').value;
-                
-                // Remove required from all payment fields
-                document.getElementById('alipayHKEmail').removeAttribute('required');
-                document.getElementById('alipayHKPhone').removeAttribute('required');
-                document.getElementById('paypalEmail').removeAttribute('required');
-                document.getElementById('fpsId').removeAttribute('required');
-                document.getElementById('fpsName').removeAttribute('required');
-                
-                // Hide all payment forms
-                alipayHKForm.style.display = 'none';
-                paypalForm.style.display = 'none';
-                fpsForm.style.display = 'none';
-                
-                // Show selected form and add required
-                if (selectedMethod === 'alipay_hk') {
-                    alipayHKForm.style.display = 'block';
-                    document.getElementById('alipayHKEmail').setAttribute('required', 'required');
-                    document.getElementById('alipayHKPhone').setAttribute('required', 'required');
-                } else if (selectedMethod === 'paypal') {
-                    paypalForm.style.display = 'block';
-                    document.getElementById('paypalEmail').setAttribute('required', 'required');
-                } else if (selectedMethod === 'fps') {
-                    fpsForm.style.display = 'block';
-                    document.getElementById('fpsId').setAttribute('required', 'required');
-                    document.getElementById('fpsName').setAttribute('required', 'required');
+            if (budgetEditBtn) {
+                budgetEditBtn.addEventListener('click', function () {
+                    budgetView.style.display = 'none';
+                    budgetEdit.style.display = 'block';
+                    budgetInput.focus();
+                });
+            }
+            if (budgetSaveBtn) {
+                budgetSaveBtn.addEventListener('click', function () {
+                    const val = parseFloat(budgetInput.value) || 0;
+                    budgetHidden.value = val;
+                    budgetDisplayText.textContent = '$' + val.toFixed(2);
+                    budgetEdit.style.display = 'none';
+                    budgetView.style.display = 'flex';
+                });
+            }
+            if (budgetCancelBtn) {
+                budgetCancelBtn.addEventListener('click', function () {
+                    budgetInput.value = budgetHidden.value;
+                    budgetEdit.style.display = 'none';
+                    budgetView.style.display = 'flex';
+                });
+            }
+
+            // Floor plan toggle
+            const floorPlanEditBtn = document.getElementById('floorPlanEditBtn');
+            const floorPlanEdit = document.getElementById('floorPlanEdit');
+            const floorPlanView = document.getElementById('floorPlanView');
+            const floorPlanCancelBtn = document.getElementById('floorPlanCancelBtn');
+            if (floorPlanEditBtn) {
+                floorPlanEditBtn.addEventListener('click', function () {
+                    if (floorPlanEdit) floorPlanEdit.style.display = 'block';
+                    if (floorPlanView) floorPlanView.style.display = 'none';
+                });
+            }
+            if (floorPlanCancelBtn) {
+                floorPlanCancelBtn.addEventListener('click', function () {
+                    if (floorPlanEdit) floorPlanEdit.style.display = 'none';
+                    if (floorPlanView) floorPlanView.style.display = '';
+                });
+            }
+
+                // reflect chosen file name in UI when user selects a file
+                const floorFileInput = document.getElementById('floor_plan_file');
+                const floorFileNameEl = document.getElementById('floorPlanFileName');
+                if (floorFileInput && floorFileNameEl) {
+                    floorFileInput.addEventListener('change', function () {
+                        const f = (this.files && this.files[0]) ? this.files[0] : null;
+                        if (f) floorFileNameEl.textContent = f.name;
+                    });
+                }
+                // AJAX upload button
+                const floorPlanUploadBtn = document.getElementById('floorPlanUploadBtn');
+                if (floorPlanUploadBtn && floorFileInput) {
+                    floorPlanUploadBtn.addEventListener('click', async function () {
+                        const f = (floorFileInput.files && floorFileInput.files[0]) ? floorFileInput.files[0] : null;
+                        if (!f) return alert('Please select a file to upload.');
+                        const fd = new FormData();
+                        fd.append('ajax', 'floor_upload');
+                        fd.append('floor_plan_file', f);
+                        try {
+                            const res = await fetch(location.pathname, { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+                            const j = await res.json();
+                            if (j.success) {
+                                alert('Floor plan uploaded successfully.');
+                                // update view to show new filename and view link
+                                if (floorFileNameEl) floorFileNameEl.textContent = j.path.split('/').pop();
+                                if (floorPlanView) floorPlanView.style.display = '';
+                                if (floorPlanEdit) floorPlanEdit.style.display = 'none';
+                            } else {
+                                alert('Upload failed: ' + (j.message || 'Unknown'));
+                            }
+                        } catch (err) { alert('Upload failed (network error).'); }
+                    });
+                }
+
+            // GFA (Gross Floor Area) toggle
+            const gfaView = document.getElementById('gfaView');
+            const gfaEdit = document.getElementById('gfaEdit');
+            const gfaEditBtn = document.getElementById('gfaEditBtn');
+            const gfaSaveBtn = document.getElementById('gfaSaveBtn');
+            const gfaCancelBtn = document.getElementById('gfaCancelBtn');
+            const gfaInput = document.getElementById('gfaInput');
+            const gfaHidden = document.getElementById('gross_floor_area');
+            const gfaDisplayText = document.getElementById('gfaDisplayText');
+            if (gfaEditBtn) {
+                gfaEditBtn.addEventListener('click', function () {
+                    gfaView.style.display = 'none';
+                    gfaEdit.style.display = 'block';
+                    gfaInput.focus();
+                });
+            }
+            if (gfaSaveBtn) {
+                gfaSaveBtn.addEventListener('click', function () {
+                    const val = parseFloat(gfaInput.value) || 0;
+                    gfaHidden.value = val;
+                    gfaDisplayText.innerHTML = val > 0 ? val.toFixed(2) + ' m²' : '<span class="text-muted">Not provided</span>';
+                    gfaEdit.style.display = 'none';
+                    gfaView.style.display = 'flex';
+                });
+            }
+            if (gfaCancelBtn) {
+                gfaCancelBtn.addEventListener('click', function () {
+                    gfaInput.value = gfaHidden.value;
+                    gfaEdit.style.display = 'none';
+                    gfaView.style.display = 'flex';
+                });
+            }
+
+            // Payment method edit/display
+            const paymentEditBtn = document.getElementById('paymentEditBtn');
+            const paymentEdit = document.getElementById('paymentEdit');
+            const paymentDisplay = document.getElementById('paymentDisplay');
+            const paymentSaveBtn = document.getElementById('paymentSaveBtn');
+            const paymentCancelBtn = document.getElementById('paymentCancelBtn');
+            const paymentMethodHidden = document.getElementById('payment_method_hidden');
+
+            function showPaymentEdit(show) {
+                if (show) {
+                    paymentDisplay.style.display = 'none';
+                    paymentEdit.style.display = 'block';
+                } else {
+                    paymentEdit.style.display = 'none';
+                    paymentDisplay.style.display = 'flex';
                 }
             }
 
-            paymentRadios.forEach(radio => {
-                radio.addEventListener('change', updatePaymentForm);
-            });
+            if (paymentEditBtn) paymentEditBtn.addEventListener('click', function () { showPaymentEdit(true); });
+            if (paymentCancelBtn) paymentCancelBtn.addEventListener('click', function () { showPaymentEdit(false); });
+
+            // inside edit: handle radio switching
+            const paymentEditRadios = document.querySelectorAll('input[name="payment_method_edit"]');
+            function updatePaymentEditForms() {
+                const sel = Array.from(paymentEditRadios).find(r => r.checked);
+                const method = sel ? sel.value : '';
+                const alipay = document.getElementById('alipayHKForm_edit');
+                const paypal = document.getElementById('paypalForm_edit');
+                const fps = document.getElementById('fpsForm_edit');
+                if (alipay) alipay.style.display = method === 'alipay_hk' ? 'block' : 'none';
+                if (paypal) paypal.style.display = method === 'paypal' ? 'block' : 'none';
+                if (fps) fps.style.display = method === 'fps' ? 'block' : 'none';
+            }
+            paymentEditRadios.forEach(r => r.addEventListener('change', updatePaymentEditForms));
+
+            if (paymentSaveBtn) {
+                paymentSaveBtn.addEventListener('click', function () {
+                    const sel = Array.from(paymentEditRadios).find(r => r.checked);
+                    const method = sel ? sel.value : '';
+                    paymentMethodHidden.value = method;
+                    // copy detail fields into hidden inputs
+                    const alipayEmail = document.getElementById('alipayHKEmail') ? document.getElementById('alipayHKEmail').value : '';
+                    const alipayPhone = document.getElementById('alipayHKPhone') ? document.getElementById('alipayHKPhone').value : '';
+                    const paypalEmail = document.getElementById('paypalEmail') ? document.getElementById('paypalEmail').value : '';
+                    const fpsId = document.getElementById('fpsId') ? document.getElementById('fpsId').value : '';
+                    const fpsName = document.getElementById('fpsName') ? document.getElementById('fpsName').value : '';
+                    document.getElementById('alipay_hk_email_hidden').value = alipayEmail;
+                    document.getElementById('alipay_hk_phone_hidden').value = alipayPhone;
+                    document.getElementById('paypal_email_hidden').value = paypalEmail;
+                    document.getElementById('fps_id_hidden').value = fpsId;
+                    document.getElementById('fps_name_hidden').value = fpsName;
+                    // update display summary
+                    const summaryEl = paymentDisplay.querySelector('.payment-method-label');
+                    if (summaryEl) {
+                        let text = 'Current: Not set';
+                        if (method === 'alipay_hk') text = 'Current: AlipayHK - ' + (alipayEmail || '');
+                        else if (method === 'paypal') text = 'Current: PayPal - ' + (paypalEmail || '');
+                        else if (method === 'fps') text = 'Current: FPS - ' + (fpsId || '');
+                        summaryEl.innerHTML = text;
+                    }
+                    showPaymentEdit(false);
+                });
+            }
+
+            // Ensure hidden fields are updated before any submit (capture phase)
+            const orderForm = document.getElementById('orderForm');
+            if (orderForm) {
+                orderForm.addEventListener('submit', function (e) {
+                    // budget
+                    if (budgetEdit.style.display !== 'none') {
+                        budgetHidden.value = parseFloat(budgetInput.value) || 0;
+                    }
+                    // gfa
+                    if (typeof gfaEdit !== 'undefined' && gfaEdit && gfaEdit.style.display !== 'none') {
+                        gfaHidden.value = parseFloat(gfaInput.value) || 0;
+                    }
+                    // payment: if the edit form is visible, copy values
+                    if (paymentEdit && paymentEdit.style.display !== 'none') {
+                        const sel = Array.from(paymentEditRadios).find(r => r.checked);
+                        const method = sel ? sel.value : '';
+                        paymentMethodHidden.value = method;
+                        if (document.getElementById('alipayHKEmail')) document.getElementById('alipay_hk_email_hidden').value = document.getElementById('alipayHKEmail').value || '';
+                        if (document.getElementById('alipayHKPhone')) document.getElementById('alipay_hk_phone_hidden').value = document.getElementById('alipayHKPhone').value || '';
+                        if (document.getElementById('paypalEmail')) document.getElementById('paypal_email_hidden').value = document.getElementById('paypalEmail').value || '';
+                        if (document.getElementById('fpsId')) document.getElementById('fps_id_hidden').value = document.getElementById('fpsId').value || '';
+                        if (document.getElementById('fpsName')) document.getElementById('fps_name_hidden').value = document.getElementById('fpsName').value || '';
+                    }
+
+                    // Validate Gross Floor Area is provided
+                    try {
+                        const gfaVal = (gfaHidden && gfaHidden.value) ? parseFloat(gfaHidden.value) : 0;
+                        if (!gfaVal || gfaVal <= 0) {
+                            e.preventDefault();
+                            alert('Please provide Gross Floor Area (m²) before placing the order.');
+                            if (typeof gfaEdit !== 'undefined' && gfaEdit) {
+                                if (gfaView) gfaView.style.display = 'none';
+                                gfaEdit.style.display = 'block';
+                                if (gfaInput) gfaInput.focus();
+                            }
+                            return false;
+                        }
+                    } catch (ex) {
+                        // fall through — allow server to validate
+                    }
+                }, true);
+            }
         });
-
-
-        </script>
-        <!-- Terms of Use Modal -->
-        <div class="modal fade" id="termsModal" tabindex="-1" aria-labelledby="termsModalLabel" aria-hidden="true">
-            <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title" id="termsModalLabel">Terms of Use</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body p-0">
-                        <iframe src="../terms.php" title="Terms of Use" style="border:0;width:100%;height:60vh;display:block;" loading="lazy"></iframe>
-                        <div class="p-3">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" value="" id="termsAgree">
-                                <label class="form-check-label" for="termsAgree">
-                                    I have read and agree to the Terms of Use
-                                </label>
-                            </div>
-                            <p class="small text-muted mt-2">You can also open the full terms in a new tab: <a href="../terms.php" target="_blank">Terms of Use</a>.</p>
+    </script>
+    <!-- Terms of Use Modal -->
+    <div class="modal fade" id="termsModal" tabindex="-1" aria-labelledby="termsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="termsModalLabel">Terms of Use</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <iframe src="../terms.php" title="Terms of Use"
+                        style="border:0;width:100%;height:60vh;display:block;" loading="lazy"></iframe>
+                    <div class="p-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" value="" id="termsAgree">
+                            <label class="form-check-label" for="termsAgree">
+                                I have read and agree to the Terms of Use
+                            </label>
                         </div>
+                        <p class="small text-muted mt-2">You can also open the full terms in a new tab: <a
+                                href="../terms.php" target="_blank">Terms of Use</a>.</p>
                     </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="button" class="btn btn-primary" id="termsAcceptBtn" disabled>Agree & Place Order</button>
-                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="termsAcceptBtn" disabled>Agree & Place
+                        Order</button>
                 </div>
             </div>
         </div>
+    </div>
 
-        <script>
-        document.addEventListener('DOMContentLoaded', function() {
-                const orderForm = document.getElementById('orderForm');
-                if (!orderForm) return;
-                const termsModalEl = document.getElementById('termsModal');
-                const termsModal = termsModalEl ? new bootstrap.Modal(termsModalEl) : null;
-                const agreeCheckbox = document.getElementById('termsAgree');
-                const agreeBtn = document.getElementById('termsAcceptBtn');
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const orderForm = document.getElementById('orderForm');
+            if (!orderForm) return;
+            const termsModalEl = document.getElementById('termsModal');
+            const termsModal = termsModalEl ? new bootstrap.Modal(termsModalEl) : null;
+            const agreeCheckbox = document.getElementById('termsAgree');
+            const agreeBtn = document.getElementById('termsAcceptBtn');
 
-                orderForm.addEventListener('submit', function(e) {
-                        if (!window.__termsAccepted) {
-                                e.preventDefault();
-                                if (termsModal) termsModal.show();
-                        }
-                });
-
-                if (agreeCheckbox && agreeBtn) {
-                        agreeCheckbox.addEventListener('change', function() {
-                                agreeBtn.disabled = !this.checked;
-                        });
-                        agreeBtn.addEventListener('click', function() {
-                                window.__termsAccepted = true;
-                                if (termsModal) termsModal.hide();
-                                orderForm.submit();
-                        });
+            orderForm.addEventListener('submit', function (e) {
+                if (!window.__termsAccepted) {
+                    e.preventDefault();
+                    if (termsModal) termsModal.show();
                 }
+            });
+
+            if (agreeCheckbox && agreeBtn) {
+                agreeCheckbox.addEventListener('change', function () {
+                    agreeBtn.disabled = !this.checked;
+                });
+                agreeBtn.addEventListener('click', function () {
+                    window.__termsAccepted = true;
+                    if (termsModal) termsModal.hide();
+                    orderForm.submit();
+                });
+            }
         });
-        </script>
+    </script>
+    <!-- Liked Products Modal -->
+    <div class="modal fade" id="likedProductsModal" tabindex="-1" aria-labelledby="likedProductsModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="likedProductsModalLabel">Select Liked Products</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="likedProductsGrid" class="row gy-3"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" id="likedProductsConfirm" class="btn btn-primary">Add Selected</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (function () {
+            const openBtn = document.getElementById('openLikedProducts');
+            const modalEl = document.getElementById('likedProductsModal');
+            const likedGrid = document.getElementById('likedProductsGrid');
+            const confirmBtn = document.getElementById('likedProductsConfirm');
+            const prodHidden = document.getElementById('product_references');
+            const selectedContainer = document.getElementById('selectedProducts');
+            let likedProducts = [];
+            const bsModal = modalEl ? new bootstrap.Modal(modalEl) : null;
+
+            async function loadLiked() {
+                try {
+                    const res = await fetch('../Public/get_chat_suggestions.php');
+                    const j = await res.json();
+                    likedProducts = (j && j.liked_products) ? j.liked_products : [];
+                    likedGrid.innerHTML = '';
+                    likedProducts.forEach(p => {
+                        const col = document.createElement('div'); col.className = 'col-6 col-md-4';
+                        col.innerHTML = `
+                            <div class="card h-100">
+                                <div class="card-body p-2 d-flex align-items-center">
+                                    <input type="checkbox" class="form-check-input me-2 liked-product-cb" data-id="${p.productid}">
+                                    <div>
+                                        <div class="fw-semibold">${p.title}</div>
+                                        <div class="text-muted small">HK$${Number(p.price || 0).toFixed(2)}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                        likedGrid.appendChild(col);
+                    });
+                } catch (e) { likedGrid.innerHTML = '<div class="text-muted">Failed to load liked products.</div>'; }
+            }
+
+            function parseProductHidden() {
+                const raw = (prodHidden.value || '').trim();
+                const map = {};
+                if (!raw) return map;
+                raw.split(',').map(s => s.trim()).filter(s => s).forEach(entry => {
+                    const bits = entry.split(':');
+                    const id = bits[0];
+                    const q = (bits[1] && Number(bits[1]) > 0) ? Number(bits[1]) : 1;
+                    map[String(id)] = q;
+                });
+                return map;
+            }
+
+            function updateSelectedUI() {
+                const map = parseProductHidden();
+                const ids = Object.keys(map);
+                if (!ids.length) { selectedContainer.innerHTML = '<div class="text-muted">No products selected.</div>'; return; }
+                const items = likedProducts.filter(p => ids.includes(String(p.productid)));
+                if (!items.length) { selectedContainer.innerHTML = '<div class="text-muted">No products selected.</div>'; return; }
+                selectedContainer.innerHTML = items.map(i => {
+                    const qty = map[String(i.productid)] || 1;
+                    return `<div class="badge bg-secondary text-white p-2 d-flex align-items-center" data-id="${i.productid}">
+                                <div class="me-2">${i.title} <small class="ms-1">x${qty}</small></div>
+                                <div class="ms-2 small">HK$${(Number(i.price || 0) * qty).toFixed(2)}</div>
+                                <button type="button" class="btn btn-sm btn-light ms-2 prod-edit" data-id="${i.productid}" aria-label="Edit">✎</button>
+                                <button type="button" class="btn btn-sm btn-danger ms-1 prod-remove" data-id="${i.productid}" aria-label="Remove">×</button>
+                            </div>`;
+                }).join('');
+            }
+
+            if (openBtn) {
+                openBtn.addEventListener('click', async function () {
+                    if (!likedProducts.length) await loadLiked();
+                    // set checkboxes based on hidden input (ids only)
+                    const map = parseProductHidden();
+                    const ids = Object.keys(map);
+                    document.querySelectorAll('.liked-product-cb').forEach(cb => { cb.checked = ids.includes(cb.dataset.id); });
+                    if (bsModal) bsModal.show();
+                });
+            }
+
+            if (confirmBtn) {
+                confirmBtn.addEventListener('click', function () {
+                    const existing = parseProductHidden();
+                    const selected = Array.from(document.querySelectorAll('.liked-product-cb')).filter(cb => cb.checked).map(cb => cb.dataset.id);
+                    const out = [];
+                    selected.forEach(id => { const q = existing[id] || 1; out.push(id + ':' + q); });
+                    prodHidden.value = out.join(',');
+                    updateSelectedUI();
+                    // trigger total update by dispatching input event on references field (used by total updater)
+                    const evt = new Event('input', { bubbles: true }); document.getElementById('references').dispatchEvent(evt);
+                    if (bsModal) bsModal.hide();
+                });
+            }
+
+            // allow edit/remove via event delegation
+            selectedContainer.addEventListener('click', function (e) {
+                const target = e.target;
+                if (target.matches('.prod-remove')) {
+                    const id = target.dataset.id;
+                    const map = parseProductHidden();
+                    delete map[id];
+                    prodHidden.value = Object.keys(map).map(k => k + ':' + map[k]).join(',');
+                    updateSelectedUI();
+                    document.getElementById('references').dispatchEvent(new Event('input', { bubbles: true }));
+                } else if (target.matches('.prod-edit')) {
+                    const id = target.dataset.id;
+                    const map = parseProductHidden();
+                    const current = map[id] || 1;
+                    const entry = prompt('Enter quantity for product ID ' + id + ':', String(current));
+                    if (entry === null) return;
+                    const nq = parseInt(entry, 10);
+                    if (isNaN(nq) || nq <= 0) return alert('Invalid quantity');
+                    map[id] = nq;
+                    prodHidden.value = Object.keys(map).map(k => k + ':' + map[k]).join(',');
+                    updateSelectedUI();
+                    document.getElementById('references').dispatchEvent(new Event('input', { bubbles: true }));
+                }
+            });
+
+            // initialize UI from any existing hidden value
+            updateSelectedUI();
+        })();
+    </script>
+    <script>
+        (function () {
+            const designPrice = <?= json_encode((float) $design['expect_price']) ?>;
+            const refsInput = document.getElementById('references');
+            const totalEl = document.getElementById('orderTotal');
+            let debounceTimer = null;
+
+            function setTotal(refsSum) {
+                const total = designPrice + (Number(refsSum) || 0);
+                if (totalEl) totalEl.textContent = '$' + total.toFixed(2);
+            }
+
+            async function fetchRefsSum(designIds, productQtys) {
+                try {
+                    const qs = [];
+                    if (designIds) qs.push('designs=' + encodeURIComponent(designIds));
+                    if (productQtys) qs.push('products_qty=' + encodeURIComponent(productQtys));
+                    const resp = await fetch('get_design_prices.php?' + qs.join('&'));
+                    if (!resp.ok) return 0;
+                    const j = await resp.json();
+                    return Number(j.refs_sum || 0);
+                } catch (e) { return 0; }
+            }
+
+            if (refsInput) {
+                refsInput.addEventListener('input', function () {
+                    clearTimeout(debounceTimer);
+                    debounceTimer = setTimeout(async () => {
+                        const dids = refsInput.value.trim();
+                        const pqty = (document.getElementById('product_references') || { value: '' }).value.trim();
+                        const sum = await fetchRefsSum(dids, pqty);
+                        setTotal(sum);
+                    }, 300);
+                });
+            }
+            // initialize
+            setTotal(<?= json_encode($references_total) ?>);
+        })();
+    </script>
 </body>
+
 </html>
 
 <?php include __DIR__ . '/../Public/chat_widget.php'; ?>

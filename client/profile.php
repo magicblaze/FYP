@@ -592,7 +592,7 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? 'alipay_hk';
                     <div class="profile-info-card">
                         <div class="info-row">
                             <div class="info-icon"><i class="fas fa-dollar-sign"></i></div>
-                            <div class="info-label">Budget:</div>
+                            <div class="info-label">Default budget:</div>
                             <div class="info-value">
                                 <?= $budgetDisplay > 0 ? 'HK$' . number_format($budgetDisplay) : 'Not set' ?>
                             </div>

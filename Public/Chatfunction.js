@@ -40,6 +40,8 @@ function initApp(config = {}) {
 
   let currentAgent = null;
   let currentRoomId = null;
+  // cache of references for current order room
+  let currentOrderReferences = { messageIds: new Set(), designIds: new Set() };
   let lastMessageId = 0;
   let widgetPendingFile = null;
   let pendingFile = null;
@@ -97,6 +99,49 @@ function initApp(config = {}) {
       try { return JSON.parse(txt); } catch (e) { return txt; }
     } catch (e) {
       console.error('apiPost error', e, API + path, obj);
+      throw e;
+    }
+  }
+
+  // Add a reference for an order (designer action)
+  async function addReference(roomId, messageId, designId, btn) {
+    if (!confirm('Add this item to the order references?')) return;
+    try {
+      if (btn) { btn.disabled = true; btn.textContent = 'Adding...'; }
+      const payload = { room: roomId };
+      if (messageId) payload.messageid = messageId;
+      if (designId) payload.designid = designId;
+      const res = await apiPost('addReference', payload);
+      if (res && res.ok) {
+        if (res.already) {
+          if (btn) { btn.disabled = true; btn.textContent = 'Added'; btn.classList.remove('btn-outline-secondary'); btn.classList.add('btn-secondary'); }
+          return res;
+        }
+        // mark caches so subsequent messages/buttons show added state
+        try {
+          if (designId && currentOrderReferences && currentOrderReferences.designIds) currentOrderReferences.designIds.add(String(designId));
+          if (messageId && currentOrderReferences && currentOrderReferences.messageIds) currentOrderReferences.messageIds.add(String(messageId));
+        } catch (e) {}
+        if (btn) { btn.textContent = 'Added'; btn.classList.remove('btn-outline-secondary'); btn.classList.add('btn-success'); }
+        // update any other matching buttons in the DOM
+        try {
+          if (designId) {
+            document.querySelectorAll('.add-ref-btn[data-did="' + String(designId) + '"]').forEach(b => { b.disabled = true; b.textContent = 'Added'; b.classList.remove('btn-outline-secondary'); b.classList.add('btn-secondary'); });
+          }
+          if (messageId) {
+            document.querySelectorAll('.add-ref-btn[data-mid="' + String(messageId) + '"]').forEach(b => { b.disabled = true; b.textContent = 'Added'; b.classList.remove('btn-outline-secondary'); b.classList.add('btn-secondary'); });
+          }
+        } catch (e) {}
+        return res;
+      } else {
+        if (btn) { btn.disabled = false; btn.textContent = 'Add to Reference'; }
+        alert('Failed to add reference: ' + (res && res.message ? res.message : JSON.stringify(res)));
+        return res;
+      }
+    } catch (e) {
+      console.error('addReference error', e);
+      if (btn) { btn.disabled = false; btn.textContent = 'Add to Reference'; }
+      alert('Request failed: ' + e.message);
       throw e;
     }
   }
@@ -309,8 +354,32 @@ function initApp(config = {}) {
 
   function loadMessages(roomId) {
     if (elements.messages) elements.messages.innerHTML = '';
-    return apiGet('getMessages&room=' + encodeURIComponent(roomId)).then(data => {
+    return apiGet('getMessages&room=' + encodeURIComponent(roomId)).then(async data => {
       const messages = Array.isArray(data) ? data : (data.messages || []);
+      // preload references when this is an order room
+      currentOrderReferences = { messageIds: new Set(), designIds: new Set() };
+      try {
+        const roomName = currentAgent && (currentAgent.roomname || currentAgent.roomName || '');
+        let orderId = null;
+        if (roomName && /^order-\d+/i.test(roomName)) {
+          const m = (roomName || '').match(/^order-(\d+)/i);
+          if (m) orderId = m[1];
+        }
+        if (!orderId && messages && messages.length) {
+          // fallback: inspect first message for order.id
+          const mm = messages.find(x => x.order && (x.order.id || x.order.orderid));
+          if (mm) orderId = mm.order.id || mm.order.orderid;
+        }
+        if (orderId) {
+          const refs = await apiGet('listReferences&orderid=' + encodeURIComponent(orderId));
+          const list = (refs && refs.references) ? refs.references : (refs || []);
+          list.forEach(r => {
+            if (r.messageid) currentOrderReferences.messageIds.add(String(r.messageid));
+            if (r.designid) currentOrderReferences.designIds.add(String(r.designid));
+          });
+        }
+      } catch (e) { /* ignore ref load errors */ }
+
       messages.forEach(m => {
         const who = (m.sender_type === userType && String(m.sender_id) == String(userId)) ? 'me' : 'them';
         appendMessageToUI(m, who);
@@ -480,11 +549,40 @@ function initApp(config = {}) {
         if (imgUrl && !/^https?:\/\//.test(imgUrl)) imgUrl = (location.origin + '/' + imgUrl.replace(/^\/+/, ''));
         const title = share.title || (uploaded && uploaded.filename) || msgObj.content || '';
         const url = share.url || msgObj.content || imgUrl || '';
+        // Determine whether to show "Add to Reference" button: only for designers viewing an order room
+        let refButtonHtml = '';
+        try {
+          const isDesigner = (typeof userType !== 'undefined' && String(userType).toLowerCase() === 'designer');
+          const roomName = (currentAgent && (currentAgent.roomname || currentAgent.roomName || '')) || '';
+          const isOrderRoom = String(roomName).toLowerCase().startsWith('order-');
+          const mid = existingId || msgObj.messageid || msgObj.id || '';
+          const did = (msgObj.share && msgObj.share.designid) ? msgObj.share.designid : (msgObj.content && /^\d+$/.test(String(msgObj.content).trim()) ? String(msgObj.content).trim() : '');
+          if (isOrderRoom) {
+            // determine initial button state using preloaded references
+            const midStr = String(mid || '');
+            const didStr = String(did || '');
+            const already = (midStr && currentOrderReferences && currentOrderReferences.messageIds && currentOrderReferences.messageIds.has(midStr)) || (didStr && currentOrderReferences && currentOrderReferences.designIds && currentOrderReferences.designIds.has(didStr));
+            if (already) {
+              // show added to all roles
+              refButtonHtml = `<div style="margin-top:6px"><button class="btn btn-sm btn-secondary" disabled>Added</button></div>`;
+            } else {
+              if (isDesigner) {
+                // designers can add
+                refButtonHtml = `<div style="margin-top:6px"><button class="btn btn-sm btn-outline-secondary add-ref-btn" data-mid="${escapeHtml(midStr)}" data-did="${escapeHtml(didStr)}">Add to Reference</button></div>`;
+              } else {
+                // clients/managers see the status but cannot add
+                refButtonHtml = `<div style="margin-top:6px"><span class="small text-muted">Not added</span></div>`;
+              }
+            }
+          }
+        } catch (e) { refButtonHtml = ''; }
+
         designHtml = `<div class=" p-2 border rounded bg-white" style="display:flex;gap:12px;align-items:center">
             <div style="flex:0 0 72px"><img src="${escapeHtml(imgUrl)}" style="width:72px;height:72px;object-fit:cover;border-radius:6px"/></div>
             <div style="flex:1;min-width:0">
               <div class="fw-semibold" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(title)}</div>
               <div><a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="small text-muted">Open</a></div>
+              ${refButtonHtml}
             </div>
           </div>`;
       }
@@ -693,6 +791,20 @@ function initApp(config = {}) {
     }
 
     elements.messages.appendChild(wrapper);
+    // wire up Add to Reference button if present
+    try {
+      const refBtn = wrapper.querySelector('.add-ref-btn');
+      if (refBtn) {
+        refBtn.addEventListener('click', function (e) {
+          const mid = refBtn.getAttribute('data-mid') || (existingId || msgObj.messageid || msgObj.id || '');
+          const did = refBtn.getAttribute('data-did') || (msgObj.share && msgObj.share.designid ? msgObj.share.designid : null);
+          const roomId = currentAgent && (currentAgent.ChatRoomid || currentAgent.id || currentAgent.roomId) ? (currentAgent.ChatRoomid || currentAgent.id || currentAgent.roomId) : (elements.messages && elements.messages.dataset.roomId ? elements.messages.dataset.roomId : null);
+          try {
+            addReference(roomId, mid || null, did || null, refBtn).catch(() => {});
+          } catch (e) { console.error('add-ref click handler failed', e); }
+        });
+      }
+    } catch (e) {}
     // Append timestamp to the current message. If this message is grouped with the previous
     // one, remove the previous message's timestamp so the latest in the group shows the date.
     try {

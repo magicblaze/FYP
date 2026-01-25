@@ -25,6 +25,7 @@ if ($orderId > 0) {
         o.orderid,
         o.odate,
         c.budget,
+        o.gross_floor_area,
         o.ostatus,
         o.designid,
         o.Requirements,
@@ -57,6 +58,7 @@ if ($orderId > 0) {
         o.orderid,
         o.odate,
         c.budget,
+        o.gross_floor_area,
         o.ostatus,
         o.designid,
         o.Requirements,
@@ -113,6 +115,22 @@ while ($row = $result->fetch_assoc()) {
     $picStmt->close();
 
     $row['pictures'] = $pictures;
+    // Get order references (if table exists)
+    $row['references'] = [];
+    $refSql = "SELECT id, designid, messageid, note, added_by_type, added_by_id, created_at FROM OrderReference WHERE orderid = ? ORDER BY created_at ASC";
+    $refStmt = $mysqli->prepare($refSql);
+    if ($refStmt) {
+        $refStmt->bind_param('i', $row['orderid']);
+        if ($refStmt->execute()) {
+            $refRes = $refStmt->get_result();
+            $refs = [];
+            while ($rr = $refRes->fetch_assoc()) {
+                $refs[] = $rr;
+            }
+            $row['references'] = $refs;
+        }
+        $refStmt->close();
+    }
     $orders[] = $row;
 }
 
@@ -128,6 +146,7 @@ $stmt->close();
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="../css/supplier_style.css">
+    <link rel="stylesheet" href="../css/styles.css">
     <style>
         .dashboard-header {
             background: linear-gradient(135deg, #2c3e50, #3498db);
@@ -381,32 +400,10 @@ $stmt->close();
 </head>
 
 <body>
-    <!-- Navbar -->
-    <header class="bg-white shadow p-3 d-flex justify-content-between align-items-center">
-        <div class="d-flex align-items-center gap-3">
-            <div class="h4 mb-0"><a href="designer_dashboard.php"
-                    style="text-decoration: none; color: inherit;">HappyDesign</a></div>
-            <nav>
-                <ul class="nav align-items-center gap-2">
-                    <li class="nav-item"><a class="nav-link" href="designer_dashboard.php">Dashboard</a></li>
-                    <li class="nav-item"><a class="nav-link" href="../supplier/schedule.php">Schedule</a></li>
-                </ul>
-            </nav>
-        </div>
-        <nav>
-            <ul class="nav align-items-center">
-                <li class="nav-item me-2">
-                    <a class="nav-link text-muted" href="#">
-                        <i class="fas fa-user me-1"></i>Hello <?= htmlspecialchars($designerName) ?>
-                    </a>
-                </li>
-                <li class="nav-item"><a class="nav-link" href="../logout.php">Logout</a></li>
-            </ul>
-        </nav>
-    </header>
+    <?php include_once __DIR__ . '/../includes/header.php'; ?>
 
     <!-- Dashboard Content -->
-    <div class="container mb-5">
+    <main class="container-lg mt-4">
         <div class="mt-5 mb-4 text-center">
             <h2>Order detail</h2>
             <p class="mb-0"></p>
@@ -434,7 +431,10 @@ $stmt->close();
                         <div class="order-main-info">
                             <div class="order-title">Order #<?= $order['orderid'] ?></div>
                             <div class="order-price">HK$<?= number_format($order['budget']) ?> Budget</div>
-                            <div class="order-id">Design: <a href="../client/design_detail.php?designid=<?= (int)$order['designid'] ?>" target="_blank" rel="noopener"><?= htmlspecialchars($order['designName'] ?? ('Design #' . $order['designid'])) ?></a></div>
+                            <div class="order-id">Design: <a
+                                    href="../client/design_detail.php?designid=<?= (int) $order['designid'] ?>" target="_blank"
+                                    rel="noopener"><?= htmlspecialchars($order['designName'] ?? ('Design #' . $order['designid'])) ?></a>
+                            </div>
                             <div id="status_<?= $order['orderid'] ?>" style="margin-top:6px"><strong>Status:</strong>
                                 <?= htmlspecialchars($order['ostatus']) ?></div>
                         </div>
@@ -455,6 +455,10 @@ $stmt->close();
                             <div class="detail-value">HK$<?= number_format($order['expect_price']) ?></div>
                         </div>
                         <div class="detail-item">
+                            <div class="detail-label">Gross Floor Area</div>
+                            <div class="detail-value"><?= isset($order['gross_floor_area']) && $order['gross_floor_area'] > 0 ? htmlspecialchars(number_format((float)$order['gross_floor_area'],2)) . ' m²' : '&mdash;' ?></div>
+                        </div>
+                        <div class="detail-item">
                             <div class="detail-label">Tags</div>
                             <div class="detail-value">
                                 <small><?= htmlspecialchars(substr($order['tag'], 0, 50)) ?></small>
@@ -466,11 +470,11 @@ $stmt->close();
                     <?php if (!empty($order['Floor_Plan'])): ?>
                         <div class="order-info" style="background-color: #e3f2fd; border-left: 4px solid #3498db;">
                             <div class="order-info-item">
-                                <a href="../<?= htmlspecialchars($order['Floor_Plan']) ?>"
-                                    style="color: #3498db; text-decoration: none; font-size: 0.85rem;" target="_blank"
-                                    onclick="event.stopPropagation();">
-                                    <i class="fas fa-file-image me-1"></i>View Floor Plan
-                                </a>
+                                <div class="detail-label">Floor Plan</div>
+                                <img src="../<?= htmlspecialchars($order['Floor_Plan']) ?>" alt="Floor Plan"
+                                    title="Preview floor plan" class="ms-2"
+                                    style="width:72px;height:72px;object-fit:cover;border-radius:6px;cursor:pointer;border:2px solid #e3f2fd;"
+                                    onclick="event.stopPropagation(); openFloorPlanPreview('../<?= htmlspecialchars($order['Floor_Plan']) ?>')" />
                             </div>
                         </div>
                     <?php endif; ?>
@@ -499,7 +503,8 @@ $stmt->close();
                                             <?= ucfirst($pic['status']) ?>
                                         </span>
                                         <div class="picture-actions">
-                                            <button onclick="viewPicture(<?= (int)$pic['pictureid'] ?>, <?= json_encode($pic['filename']) ?>)">
+                                            <button
+                                                onclick="viewPicture(<?= (int) $pic['pictureid'] ?>, <?= json_encode($pic['filename']) ?>)">
                                                 <i class="fas fa-eye"></i> View
                                             </button>
                                         </div>
@@ -564,7 +569,8 @@ $stmt->close();
                                     <div id="previewSection_<?= $order['orderid'] ?>" style="display: none;">
                                         <div class="preview-section">
                                             <p style="margin-bottom: 0.5rem; color: #6c757d; font-size: 0.9rem;">
-                                                <strong>Preview:</strong></p>
+                                                <strong>Preview:</strong>
+                                            </p>
                                             <img id="previewImg_<?= $order['orderid'] ?>" class="preview-image">
                                             <div style="display: flex; gap: 0.5rem;">
                                                 <button type="button" class="btn btn-success btn-sm"
@@ -582,6 +588,128 @@ $stmt->close();
                             <?php endif; ?>
                         </div>
                     </div>
+
+                    <?php if (!empty($order['references'])): ?>
+                        <div class="order-info" style="background:#fff7e6;border-left:4px solid #ffc107;margin-top:1rem">
+                            <div class="order-info-item"><strong>References</strong></div>
+                            <div style="margin-top:0.5rem">
+                                <?php foreach ($order['references'] as $ref):
+                                    $refName = null; $refImg = null; $refLink = null;
+                                    if (!empty($ref['designid'])) {
+                                        $did = (int)$ref['designid'];
+                                        // fetch design name
+                                        $dstmt = $mysqli->prepare('SELECT designName FROM Design WHERE designid = ? LIMIT 1');
+                                        if ($dstmt) {
+                                            $dstmt->bind_param('i', $did);
+                                            $dstmt->execute();
+                                            $dres = $dstmt->get_result();
+                                            if ($drow = $dres->fetch_assoc()) $refName = $drow['designName'];
+                                            $dstmt->close();
+                                        }
+                                        // fetch primary image
+                                        $imst = $mysqli->prepare('SELECT image_filename FROM DesignImage WHERE designid = ? ORDER BY image_order ASC LIMIT 1');
+                                        if ($imst) {
+                                            $imst->bind_param('i', $did);
+                                            $imst->execute();
+                                            $imr = $imst->get_result();
+                                            if ($ir = $imr->fetch_assoc()) $refImg = $ir['image_filename'];
+                                            $imst->close();
+                                        }
+                                        $refLink = '../client/design_detail.php?designid=' . $did;
+                                    } elseif (!empty($ref['messageid'])) {
+                                        $mid = (int)$ref['messageid'];
+                                        $mstmt = $mysqli->prepare('SELECT content, message_type, fileid FROM Message WHERE messageid = ? LIMIT 1');
+                                        if ($mstmt) {
+                                            $mstmt->bind_param('i', $mid);
+                                            $mstmt->execute();
+                                            $mres = $mstmt->get_result();
+                                            if ($mrow = $mres->fetch_assoc()) {
+                                                $ct = $mrow['content'] ?? '';
+                                                $mt = $mrow['message_type'] ?? '';
+                                                // try to parse JSON content for a share/design id
+                                                $maybe = null;
+                                                $js = @json_decode($ct, true);
+                                                if (is_array($js)) $maybe = $js;
+                                                if ($mt === 'design' && !empty($maybe['designid'])) {
+                                                    $did = (int)$maybe['designid'];
+                                                } elseif (preg_match('/^\d+$/', trim($ct))) {
+                                                    $did = (int)trim($ct);
+                                                } elseif (!empty($maybe['share']['designid'])) {
+                                                    $did = (int)$maybe['share']['designid'];
+                                                } else {
+                                                    $did = null;
+                                                }
+                                                if (!empty($did)) {
+                                                    // fetch design info
+                                                    $dstmt = $mysqli->prepare('SELECT designName FROM Design WHERE designid = ? LIMIT 1');
+                                                    if ($dstmt) {
+                                                        $dstmt->bind_param('i', $did);
+                                                        $dstmt->execute();
+                                                        $dres = $dstmt->get_result();
+                                                        if ($drow = $dres->fetch_assoc()) $refName = $drow['designName'];
+                                                        $dstmt->close();
+                                                    }
+                                                    $imst = $mysqli->prepare('SELECT image_filename FROM DesignImage WHERE designid = ? ORDER BY image_order ASC LIMIT 1');
+                                                    if ($imst) {
+                                                        $imst->bind_param('i', $did);
+                                                        $imst->execute();
+                                                        $imr = $imst->get_result();
+                                                        if ($ir = $imr->fetch_assoc()) $refImg = $ir['image_filename'];
+                                                        $imst->close();
+                                                    }
+                                                    $refLink = '../client/design_detail.php?designid=' . $did;
+                                                }
+                                                // if message had uploaded file, try to show that as thumbnail
+                                                if (empty($refImg) && !empty($mrow['fileid'])) {
+                                                    $fid = (int)$mrow['fileid'];
+                                                    $fstmt = $mysqli->prepare('SELECT filepath, filename FROM UploadedFiles WHERE fileid = ? LIMIT 1');
+                                                    if ($fstmt) {
+                                                        $fstmt->bind_param('i', $fid);
+                                                        $fstmt->execute();
+                                                        $fres = $fstmt->get_result();
+                                                        if ($fr = $fres->fetch_assoc()) {
+                                                            // use filepath if points to uploads/designs or uploads/chat
+                                                            $path = $fr['filepath'] ?? '';
+                                                            if ($path) $refImg = $path;
+                                                            if (empty($refName)) $refName = $fr['filename'] ?? null;
+                                                        }
+                                                        $fstmt->close();
+                                                    }
+                                                }
+                                            }
+                                            $mstmt->close();
+                                        }
+                                    }
+                                ?>
+                                    <div
+                                        style="padding:0.5rem;border:1px solid #ffe8a6;border-radius:6px;margin-bottom:0.5rem;display:flex;align-items:center;gap:8px">
+                                        <div style="flex:0 0 72px;">
+                                            <?php if (!empty($refImg)): 
+                                                $imgSrc = strpos($refImg, '/') === 0 ? ('..' . $refImg) : ('../uploads/designs/' . ltrim($refImg, '/'));
+                                            ?>
+                                                <img src="<?= htmlspecialchars($imgSrc) ?>" alt="ref" style="width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid #ddd" />
+                                            <?php else: ?>
+                                                <div style="width:64px;height:64px;border-radius:6px;background:#f1f3f5;display:flex;align-items:center;justify-content:center;color:#666;border:1px solid #eee">REF</div>
+                                            <?php endif; ?>
+                                        </div>
+                                        <div style="flex:1">
+                                            <?php if (!empty($refLink) && !empty($refName)): ?>
+                                                <a href="<?= htmlspecialchars($refLink) ?>" target="_blank" rel="noopener" style="text-decoration:none;color:#333;font-weight:600"><?= htmlspecialchars($refName) ?></a>
+                                            <?php elseif (!empty($ref['designid'])): ?>
+                                                <a href="../client/design_detail.php?designid=<?= (int)$ref['designid'] ?>" target="_blank" rel="noopener" style="text-decoration:none;color:#333;font-weight:600">Design #<?= (int)$ref['designid'] ?></a>
+                                            <?php elseif (!empty($ref['messageid'])): ?>
+                                                <span style="font-weight:600">Message #<?= (int)$ref['messageid'] ?></span>
+                                            <?php else: ?>
+                                                <span style="font-weight:600">Reference #<?= (int)$ref['id'] ?></span>
+                                            <?php endif; ?>
+                                            <div class="small text-muted">Added: <?= htmlspecialchars($ref['created_at'] ?? '') ?></div>
+                                            <?php if (!empty($ref['note'])): ?><div class="small text-muted mt-1">Note: <?= htmlspecialchars(substr($ref['note'],0,120)) ?></div><?php endif; ?>
+                                        </div>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                    <?php endif; ?>
 
                     <!-- Client Information -->
                     <div class="order-info">
@@ -617,7 +745,7 @@ $stmt->close();
                 <p>You don't have any design orders yet. Check back later!</p>
             </div>
         <?php endif; ?>
-    </div>
+    </main>
 
     <!-- Picture Viewer Modal -->
     <div class="modal fade" id="pictureModal" tabindex="-1">
@@ -629,6 +757,22 @@ $stmt->close();
                 </div>
                 <div class="modal-body text-center">
                     <img id="pictureImg" src="" alt="Designed Picture" style="max-width: 100%; max-height: 600px;">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Floor Plan Preview Modal -->
+    <div class="modal fade" id="floorPlanModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Floor Plan</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body text-center">
+                    <img id="floorPlanImg" src="" alt="Floor Plan"
+                        style="max-width:100%;max-height:75vh;border-radius:6px;" />
                 </div>
             </div>
         </div>
@@ -749,6 +893,13 @@ $stmt->close();
         function viewPicture(pictureId, filename) {
             document.getElementById('pictureImg').src = '../uploads/designed_Picture/' + filename;
             new bootstrap.Modal(document.getElementById('pictureModal')).show();
+        }
+        function openFloorPlanPreview(src) {
+            try {
+                const img = document.getElementById('floorPlanImg');
+                img.src = src;
+                new bootstrap.Modal(document.getElementById('floorPlanModal')).show();
+            } catch (e) { console.error(e); window.open(src, '_blank'); }
         }
     </script>
     <script>

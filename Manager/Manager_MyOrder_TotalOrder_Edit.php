@@ -62,20 +62,22 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
         
         if($update_success) {
             // Update or create Schedule record
-            if($order['scheduleid']) {
-                $update_schedule_sql = "UPDATE `Schedule` SET 
-                                        OrderFinishDate = " . (!empty($order_finish_date) ? "'$order_finish_date'" : "NULL") . ",
-                                        DesignFinishDate = " . (!empty($design_finish_date) ? "'$design_finish_date'" : "NULL") . ",
-                                        managerid = $user_id
-                                        WHERE scheduleid = '{$order['scheduleid']}'";
+            // Use prepared statements to update or insert Schedule
+            $of = !empty($order_finish_date) ? $order_finish_date : null;
+            $df = !empty($design_finish_date) ? $design_finish_date : null;
+            if (!empty($order['scheduleid'])) {
+                $u_sql = "UPDATE `Schedule` SET OrderFinishDate = ?, DesignFinishDate = ?, managerid = ? WHERE scheduleid = ?";
+                $u_stmt = mysqli_prepare($mysqli, $u_sql);
+                mysqli_stmt_bind_param($u_stmt, "ssii", $of, $df, $user_id, $order['scheduleid']);
+                mysqli_stmt_execute($u_stmt);
+                mysqli_stmt_close($u_stmt);
             } else {
-                $update_schedule_sql = "INSERT INTO `Schedule` (managerid, OrderFinishDate, DesignFinishDate, orderid) 
-                                       VALUES ($user_id, " . 
-                                       (!empty($order_finish_date) ? "'$order_finish_date'" : "NULL") . ", " .
-                                       (!empty($design_finish_date) ? "'$design_finish_date'" : "NULL") . ", 
-                                       '$orderid')";
+                $i_sql = "INSERT INTO `Schedule` (managerid, OrderFinishDate, DesignFinishDate, orderid) VALUES (?, ?, ?, ?)";
+                $i_stmt = mysqli_prepare($mysqli, $i_sql);
+                mysqli_stmt_bind_param($i_stmt, "issi", $user_id, $of, $df, $orderid);
+                mysqli_stmt_execute($i_stmt);
+                mysqli_stmt_close($i_stmt);
             }
-            mysqli_query($mysqli, $update_schedule_sql);
             
             header("Location: Manager_MyOrder_TotalOrder.php");
             exit();
@@ -325,8 +327,9 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
                                     <select name="clientid" class="form-select" required>
                                         <option value="">Select Client</option>
                                         <?php
-                                        $client_sql = "SELECT clientid, cname, cemail FROM Client ORDER BY cname";
-                                        $client_result = mysqli_query($mysqli, $client_sql);
+                                        $client_stmt = mysqli_prepare($mysqli, "SELECT clientid, cname, cemail FROM Client ORDER BY cname");
+                                        mysqli_stmt_execute($client_stmt);
+                                        $client_result = mysqli_stmt_get_result($client_stmt);
                                         while($client = mysqli_fetch_assoc($client_result)){
                                             $selected = ($client['clientid'] == $order['clientid']) ? 'selected' : '';
                                             echo '<option value="' . $client['clientid'] . '" ' . $selected . '>' . 
@@ -334,6 +337,7 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
                                                  ' - ' . htmlspecialchars($client['cemail']) . ')</option>';
                                         }
                                         mysqli_free_result($client_result);
+                                        mysqli_stmt_close($client_stmt);
                                         ?>
                                     </select>
                                 </div>
@@ -342,8 +346,9 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
                                     <select name="designid" class="form-select" required>
                                         <option value="">Select Design</option>
                                         <?php
-                                        $design_sql = "SELECT designid, price, tag FROM Design ORDER BY designid";
-                                        $design_result = mysqli_query($mysqli, $design_sql);
+                                        $design_stmt = mysqli_prepare($mysqli, "SELECT designid, price, tag FROM Design ORDER BY designid");
+                                        mysqli_stmt_execute($design_stmt);
+                                        $design_result = mysqli_stmt_get_result($design_stmt);
                                         while($design = mysqli_fetch_assoc($design_result)){
                                             $selected = ($design['designid'] == $order['designid']) ? 'selected' : '';
                                             echo '<option value="' . $design['designid'] . '" ' . $selected . '>' . 
@@ -351,6 +356,7 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
                                                  ' (' . htmlspecialchars(substr($design['tag'], 0, 30)) . '...)' . '</option>';
                                         }
                                         mysqli_free_result($design_result);
+                                        mysqli_stmt_close($design_stmt);
                                         ?>
                                     </select>
                                 </div>

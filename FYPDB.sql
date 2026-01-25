@@ -222,6 +222,9 @@ CREATE TABLE `Order` (
   `orderid` int NOT NULL AUTO_INCREMENT,
   `odate` datetime NOT NULL,
   `clientid` int NOT NULL,
+  `budget` decimal(10,2) DEFAULT NULL,
+  `cost` decimal(10,2) DEFAULT NULL,
+  `gross_floor_area` decimal(10,2) DEFAULT NULL,
   `Requirements` varchar(255) DEFAULT NULL,
   `designid` int NOT NULL,
   `ostatus` varchar(255) DEFAULT NULL,
@@ -234,9 +237,9 @@ CREATE TABLE `Order` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 INSERT INTO `Order`
-(`orderid`, `odate`, `clientid`, `Requirements`,`designid`,`ostatus`,`designedPicture`) VALUES
-(1, '2025-04-12 17:50:00', 1, 'abc',2,'Designing',NULL),
-(2, '2025-05-10 12:00:00', 2, 'abc',1,'Completed',NULL);
+(`orderid`, `odate`, `clientid`, `budget`, `cost`, `gross_floor_area`, `Requirements`,`designid`,`ostatus`,`designedPicture`) VALUES
+(1, '2025-04-12 17:50:00', 1, NULL, NULL, NULL, 'abc',2,'Designing',NULL),
+(2, '2025-05-10 12:00:00', 2, NULL, NULL, NULL, 'abc',1,'Completed',NULL);
 
 -- Table to store color-image mapping for each product
 CREATE TABLE `ProductColorImage` (
