@@ -1,6 +1,6 @@
 <?php
 // ==============================
-// File: profile.php - User profile page with floor plan and budget upload
+// File: profile.php - User profile page with floor plan, budget, and payment method
 // ==============================
 require_once __DIR__ . '/../config.php';
 session_start();
@@ -106,11 +106,64 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $error = 'Failed to update budget. Please try again.';
             }
         }
+    } elseif ($action === 'update_payment_method') {
+        $paymentMethod = trim($_POST['payment_method'] ?? '');
+        
+        // Validate payment method
+        if (empty($paymentMethod)) {
+            $error = 'Payment method is required.';
+        } else {
+            // Validate payment method specific fields
+            if ($paymentMethod === 'alipay_hk') {
+                $alipayEmail = trim($_POST['alipay_hk_email'] ?? '');
+                $alipayPhone = trim($_POST['alipay_hk_phone'] ?? '');
+                if (empty($alipayEmail)) {
+                    $error = 'AlipayHK Account Email is required.';
+                } elseif (empty($alipayPhone)) {
+                    $error = 'AlipayHK Phone Number is required.';
+                }
+            } elseif ($paymentMethod === 'paypal') {
+                $paypalEmail = trim($_POST['paypal_email'] ?? '');
+                if (empty($paypalEmail)) {
+                    $error = 'PayPal Email is required.';
+                }
+            } elseif ($paymentMethod === 'fps') {
+                $fpsId = trim($_POST['fps_id'] ?? '');
+                $fpsName = trim($_POST['fps_name'] ?? '');
+                if (empty($fpsId)) {
+                    $error = 'FPS ID is required.';
+                } elseif (empty($fpsName)) {
+                    $error = 'Account Holder Name is required.';
+                }
+            } else {
+                $error = 'Invalid payment method selected.';
+            }
+            
+            // If no validation error, save payment method
+            if (!$error) {
+                $paymentData = json_encode([
+                    'method' => $paymentMethod,
+                    'alipay_hk_email' => trim($_POST['alipay_hk_email'] ?? ''),
+                    'alipay_hk_phone' => trim($_POST['alipay_hk_phone'] ?? ''),
+                    'paypal_email' => trim($_POST['paypal_email'] ?? ''),
+                    'fps_id' => trim($_POST['fps_id'] ?? ''),
+                    'fps_name' => trim($_POST['fps_name'] ?? '')
+                ]);
+                
+                $updateStmt = $mysqli->prepare("UPDATE Client SET payment_method = ? WHERE clientid = ?");
+                $updateStmt->bind_param("si", $paymentData, $clientId);
+                if ($updateStmt->execute()) {
+                    $success = 'Payment method saved successfully!';
+                } else {
+                    $error = 'Failed to save payment method. Please try again.';
+                }
+            }
+        }
     }
 }
 
 // Fetch client details
-$clientStmt = $mysqli->prepare("SELECT cname, ctel, cemail, address, floor_plan, budget FROM Client WHERE clientid = ?");
+$clientStmt = $mysqli->prepare("SELECT cname, ctel, cemail, address, floor_plan, budget, payment_method FROM Client WHERE clientid = ?");
 $clientStmt->bind_param("i", $clientId);
 $clientStmt->execute();
 $clientData = $clientStmt->get_result()->fetch_assoc();
@@ -130,6 +183,13 @@ if ($floorPlanDisplay) {
 
 // Format budget display
 $budgetDisplay = $clientData['budget'] ?? 0;
+
+// Parse payment method data
+$paymentMethodData = [];
+if (!empty($clientData['payment_method'])) {
+    $paymentMethodData = json_decode($clientData['payment_method'], true) ?? [];
+}
+$selectedPaymentMethod = $paymentMethodData['method'] ?? 'alipay_hk';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -341,6 +401,86 @@ $budgetDisplay = $clientData['budget'] ?? 0;
         .current-floorplan a:hover {
             text-decoration: underline;
         }
+        /* Payment method styles */
+        .payment-methods {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+        }
+        .payment-option {
+            flex: 1;
+            min-width: 150px;
+        }
+        .payment-option input[type="radio"] {
+            display: none;
+        }
+        .payment-label {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            padding: 1rem;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background-color: #f8f9fa;
+            font-weight: 500;
+            color: #2c3e50;
+            margin-bottom: 0;
+        }
+        .payment-option input[type="radio"]:checked + .payment-label {
+            border-color: #3498db;
+            background-color: #e3f2fd;
+            color: #3498db;
+        }
+        .payment-label i {
+            font-size: 1.5rem;
+        }
+        .payment-form {
+            background: #f0f7ff;
+            border-left: 4px solid #3498db;
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
+        }
+        .payment-form-title {
+            color: #2c3e50;
+            font-weight: 600;
+            margin-bottom: 1rem;
+        }
+        .payment-form .form-label {
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        .payment-form .form-control {
+            border-radius: 6px;
+        }
+        .current-payment-method {
+            background: #e8f5e9;
+            border: 1px solid #4caf50;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+        .current-payment-method .payment-method-info {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .current-payment-method .payment-method-details {
+            flex: 1;
+        }
+        .current-payment-method .payment-method-label {
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 0.25rem;
+        }
+        .current-payment-method .payment-method-value {
+            color: #666;
+            font-size: 0.9rem;
+        }
     </style>
 </head>
 <body>
@@ -464,6 +604,47 @@ $budgetDisplay = $clientData['budget'] ?? 0;
                         </button>
                     </div>
                 </div>
+
+                <!-- Payment Method Section -->
+                <div class="profile-section">
+                    <h3 class="section-title"><i class="fas fa-credit-card me-2"></i>Payment Method</h3>
+                    <div class="profile-info-card">
+                        <?php if (!empty($paymentMethodData) && !empty($paymentMethodData['method'])): ?>
+                            <div class="current-payment-method">
+                                <div class="payment-method-info">
+                                    <div class="payment-method-details">
+                                        <div class="payment-method-label">
+                                            <?php 
+                                                $methodLabels = [
+                                                    'alipay_hk' => 'AlipayHK',
+                                                    'paypal' => 'PayPal',
+                                                    'fps' => 'FPS (Faster Payment System)'
+                                                ];
+                                                echo htmlspecialchars($methodLabels[$paymentMethodData['method']] ?? 'Unknown');
+                                            ?>
+                                        </div>
+                                        <div class="payment-method-value">
+                                            <?php 
+                                                if ($paymentMethodData['method'] === 'alipay_hk') {
+                                                    echo 'Email: ' . htmlspecialchars($paymentMethodData['alipay_hk_email'] ?? '');
+                                                } elseif ($paymentMethodData['method'] === 'paypal') {
+                                                    echo 'Email: ' . htmlspecialchars($paymentMethodData['paypal_email'] ?? '');
+                                                } elseif ($paymentMethodData['method'] === 'fps') {
+                                                    echo 'ID: ' . htmlspecialchars($paymentMethodData['fps_id'] ?? '');
+                                                }
+                                            ?>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        <?php else: ?>
+                            <p class="text-muted mb-3"><i class="fas fa-info-circle me-2"></i>No payment method set yet.</p>
+                        <?php endif; ?>
+                        <button type="button" class="btn btn-edit" onclick="toggleEditMode('payment')">
+                            <i class="fas fa-edit me-2"></i><?= !empty($paymentMethodData) ? 'Update' : 'Add' ?> Payment Method
+                        </button>
+                    </div>
+                </div>
             </div>
 
             <!-- Edit Mode -->
@@ -572,7 +753,7 @@ $budgetDisplay = $clientData['budget'] ?? 0;
                                 <i class="fas fa-times me-2"></i>Cancel
                             </button>
                             <button type="submit" class="btn btn-success btn-lg px-4">
-                                <i class="fas fa-save me-2"></i>Comfirm
+                                <i class="fas fa-save me-2"></i>Confirm
                             </button>
                         </div>
                     </form>
@@ -603,6 +784,97 @@ $budgetDisplay = $clientData['budget'] ?? 0;
                         </div>
                     </form>
                 </div>
+
+                <!-- Edit Payment Method Form -->
+                <div id="editPaymentMethodForm" style="display: none;">
+                    <form method="post" class="edit-form">
+                        <input type="hidden" name="action" value="update_payment_method">
+                        <div class="profile-section">
+                            <h3 class="section-title"><i class="fas fa-credit-card me-2"></i>Payment Method</h3>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Select Payment Method <span style="color: #e74c3c;">*</span></label>
+                                <div class="payment-methods">
+                                    <div class="payment-option">
+                                        <input type="radio" id="alipayHK" name="payment_method" value="alipay_hk" <?= $selectedPaymentMethod === 'alipay_hk' ? 'checked' : '' ?>>
+                                        <label for="alipayHK" class="payment-label">
+                                            <i class="fab fa-alipay"></i>
+                                            <span>AlipayHK</span>
+                                        </label>
+                                    </div>
+                                    <div class="payment-option">
+                                        <input type="radio" id="paypal" name="payment_method" value="paypal" <?= $selectedPaymentMethod === 'paypal' ? 'checked' : '' ?>>
+                                        <label for="paypal" class="payment-label">
+                                            <i class="fab fa-paypal"></i>
+                                            <span>PayPal</span>
+                                        </label>
+                                    </div>
+                                    <div class="payment-option">
+                                        <input type="radio" id="fps" name="payment_method" value="fps" <?= $selectedPaymentMethod === 'fps' ? 'checked' : '' ?>>
+                                        <label for="fps" class="payment-label">
+                                            <i class="fas fa-mobile-alt"></i>
+                                            <span>FPS</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- AlipayHK Form -->
+                            <div class="payment-form" id="alipayHKForm">
+                                <h4 class="payment-form-title">AlipayHK Information</h4>
+                                <div class="mb-3">
+                                    <label for="alipayHKEmail" class="form-label">AlipayHK Account Email <span style="color: #e74c3c;">*</span></label>
+                                    <input type="email" class="form-control" id="alipayHKEmail" name="alipay_hk_email" 
+                                           value="<?= htmlspecialchars($paymentMethodData['alipay_hk_email'] ?? '') ?>" 
+                                           placeholder="your.email@example.com">
+                                </div>
+                                <div class="mb-3">
+                                    <label for="alipayHKPhone" class="form-label">AlipayHK Phone Number <span style="color: #e74c3c;">*</span></label>
+                                    <input type="tel" class="form-control" id="alipayHKPhone" name="alipay_hk_phone" 
+                                           value="<?= htmlspecialchars($paymentMethodData['alipay_hk_phone'] ?? '') ?>" 
+                                           placeholder="+852 XXXX XXXX">
+                                </div>
+                            </div>
+
+                            <!-- PayPal Form -->
+                            <div class="payment-form" id="paypalForm" style="display: none;">
+                                <h4 class="payment-form-title">PayPal Information</h4>
+                                <div class="mb-3">
+                                    <label for="paypalEmail" class="form-label">PayPal Email <span style="color: #e74c3c;">*</span></label>
+                                    <input type="email" class="form-control" id="paypalEmail" name="paypal_email" 
+                                           value="<?= htmlspecialchars($paymentMethodData['paypal_email'] ?? '') ?>" 
+                                           placeholder="your.email@example.com">
+                                </div>
+                            </div>
+
+                            <!-- FPS Form -->
+                            <div class="payment-form" id="fpsForm" style="display: none;">
+                                <h4 class="payment-form-title">FPS Information</h4>
+                                <div class="mb-3">
+                                    <label for="fpsId" class="form-label">FPS ID <span style="color: #e74c3c;">*</span></label>
+                                    <input type="text" class="form-control" id="fpsId" name="fps_id" 
+                                           value="<?= htmlspecialchars($paymentMethodData['fps_id'] ?? '') ?>" 
+                                           placeholder="Your FPS ID (Phone/Email/ID Number)">
+                                </div>
+                                <div class="mb-3">
+                                    <label for="fpsName" class="form-label">Account Holder Name <span style="color: #e74c3c;">*</span></label>
+                                    <input type="text" class="form-control" id="fpsName" name="fps_name" 
+                                           value="<?= htmlspecialchars($paymentMethodData['fps_name'] ?? '') ?>" 
+                                           placeholder="John Doe">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="d-flex gap-3 justify-content-center mt-4">
+                            <button type="button" class="btn btn-cancel btn-lg px-4" onclick="toggleEditMode('payment')">
+                                <i class="fas fa-times me-2"></i>Cancel
+                            </button>
+                            <button type="submit" class="btn btn-success btn-lg px-4">
+                                <i class="fas fa-save me-2"></i>Save Payment Method
+                            </button>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
     </main>
@@ -615,6 +887,7 @@ $budgetDisplay = $clientData['budget'] ?? 0;
             const editProfileForm = document.getElementById('editProfileForm');
             const editFloorPlanForm = document.getElementById('editFloorPlanForm');
             const editBudgetForm = document.getElementById('editBudgetForm');
+            const editPaymentMethodForm = document.getElementById('editPaymentMethodForm');
             
             if (viewMode.style.display === 'none') {
                 // Close edit mode
@@ -623,6 +896,7 @@ $budgetDisplay = $clientData['budget'] ?? 0;
                 editProfileForm.style.display = 'none';
                 editFloorPlanForm.style.display = 'none';
                 editBudgetForm.style.display = 'none';
+                editPaymentMethodForm.style.display = 'none';
             } else {
                 // Open edit mode for specific section
                 viewMode.style.display = 'none';
@@ -630,6 +904,7 @@ $budgetDisplay = $clientData['budget'] ?? 0;
                 editProfileForm.style.display = mode === 'profile' ? 'block' : 'none';
                 editFloorPlanForm.style.display = mode === 'floorplan' ? 'block' : 'none';
                 editBudgetForm.style.display = mode === 'budget' ? 'block' : 'none';
+                editPaymentMethodForm.style.display = mode === 'payment' ? 'block' : 'none';
             }
         }
 
@@ -707,6 +982,51 @@ $budgetDisplay = $clientData['budget'] ?? 0;
                 pdfPreviewContainer.classList.remove('show');
             });
         }
+
+        // Payment method form switching
+        document.addEventListener('DOMContentLoaded', function() {
+            const paymentRadios = document.querySelectorAll('input[name="payment_method"]');
+            const alipayHKForm = document.getElementById('alipayHKForm');
+            const paypalForm = document.getElementById('paypalForm');
+            const fpsForm = document.getElementById('fpsForm');
+
+            function updatePaymentForm() {
+                const selectedMethod = document.querySelector('input[name="payment_method"]:checked').value;
+                
+                // Remove required from all payment fields
+                document.getElementById('alipayHKEmail').removeAttribute('required');
+                document.getElementById('alipayHKPhone').removeAttribute('required');
+                document.getElementById('paypalEmail').removeAttribute('required');
+                document.getElementById('fpsId').removeAttribute('required');
+                document.getElementById('fpsName').removeAttribute('required');
+                
+                // Hide all payment forms
+                alipayHKForm.style.display = 'none';
+                paypalForm.style.display = 'none';
+                fpsForm.style.display = 'none';
+                
+                // Show selected form and add required
+                if (selectedMethod === 'alipay_hk') {
+                    alipayHKForm.style.display = 'block';
+                    document.getElementById('alipayHKEmail').setAttribute('required', 'required');
+                    document.getElementById('alipayHKPhone').setAttribute('required', 'required');
+                } else if (selectedMethod === 'paypal') {
+                    paypalForm.style.display = 'block';
+                    document.getElementById('paypalEmail').setAttribute('required', 'required');
+                } else if (selectedMethod === 'fps') {
+                    fpsForm.style.display = 'block';
+                    document.getElementById('fpsId').setAttribute('required', 'required');
+                    document.getElementById('fpsName').setAttribute('required', 'required');
+                }
+            }
+
+            paymentRadios.forEach(radio => {
+                radio.addEventListener('change', updatePaymentForm);
+            });
+
+            // Initialize on page load
+            updatePaymentForm();
+        });
     </script>
 </body>
 </html>

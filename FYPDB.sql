@@ -52,13 +52,14 @@ CREATE TABLE `Client` (
   `address` varchar(255) DEFAULT NULL,
   `budget` int NOT NULL,
   `Floor_Plan` VARCHAR(500) DEFAULT NULL,
+  `payment_method` JSON DEFAULT NULL,
   `remember_token` VARCHAR(64) DEFAULT NULL,
   PRIMARY KEY (`clientid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-INSERT INTO `Client` (`clientid`,`cname`,`ctel`,`cemail`,`cpassword`,`address`,`budget`,`Floor_Plan`,`remember_token`) VALUES
-(1, 'Alex Wong', 21232123, 'u3952310@gmail.com', 'User12345', 'ABC Building', 50000, null, NULL),
-(2, 'Tina Chan', 12345678, 'abc321@gmail.com', '123456', '123 Building', 70000, null, NULL);
+INSERT INTO `Client` (`clientid`,`cname`,`ctel`,`cemail`,`cpassword`,`address`,`budget`,`Floor_Plan`,`payment_method`,`remember_token`) VALUES
+(1, 'Alex Wong', 21232123, 'u3952310@gmail.com', 'User12345', 'ABC Building', 50000, null, null, NULL),
+(2, 'Tina Chan', 12345678, 'abc321@gmail.com', '123456', '123 Building', 70000, null, null, NULL);
 
 -- Manager table
 CREATE TABLE `Manager` (
