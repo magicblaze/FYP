@@ -42,15 +42,8 @@ $result = $stmt->get_result();
     <title>Designer Dashboard - HappyDesign</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="../css/supplier_style.css">
+    <link rel="stylesheet" href="../css/styles.css">
     <style>
-        .dashboard-header {
-            background: linear-gradient(135deg, #2c3e50, #3498db);
-            color: white;
-            padding: 2rem 0;
-            margin-bottom: 2rem;
-            border-radius: 0 0 15px 15px;
-        }
         .stat-card {
             background: white;
             border-radius: 10px;
@@ -192,11 +185,9 @@ $result = $stmt->get_result();
 
     <!-- Dashboard Content -->
     <div class="container mb-5">
-        <div class="dashboard-header text-center">
-            <h2>Design Management Console</h2>
-            <p class="mb-0">Manage your design portfolio and listings</p>
+        <div class="dashboard-header text-left my-4">
+            <h2>hello! <?= htmlspecialchars($designerName) ?></h2>
         </div>
-
         <div class="row g-4 mb-4">
             <div class="col-md-4">
                 <div class="stat-card">
@@ -206,15 +197,15 @@ $result = $stmt->get_result();
             </div>
             <div class="col-md-4">
                 <div class="stat-card d-flex align-items-center justify-content-center flex-column">
-                    <a href="design_orders.php" class="btn btn-primary btn-lg w-100">
-                        View Design Orders
+                    <a href="OrderManager.php" class="btn btn-primary btn-lg w-100">
+                        Order Manager
                     </a>
                 </div>
             </div>
             <div class="col-md-4">
                 <div class="stat-card d-flex align-items-center justify-content-center flex-column">
-                    <a href="add_design.php" class="btn btn-success btn-lg w-100">
-                        <i class="fas fa-plus me-2"></i>Add New Design
+                    <a href="DesignManager.php" class="btn btn-success btn-lg w-100">
+                        <i class="fas fa-plus me-2"></i>Design Manager
                     </a>
                 </div>
             </div>
