@@ -80,7 +80,7 @@ $action = $_GET['action'] ?? '';
 
 try {
   // Block unauthenticated users from using chat endpoints
-  $protected = ['listRooms','getMessages','sendMessage','typing','createRoom'];
+  $protected = ['listRooms','getMessages','sendMessage','typing','createRoom','markRead','getTotalUnread'];
   if (in_array($action, $protected, true) && !$sessionUser) {
     send_json(['error' => 'unauthorized', 'message' => 'Authentication required'], 401);
   }
@@ -120,6 +120,29 @@ try {
         } catch (Throwable $e) {
           // ignore enrichment failures
         }
+        // attach unread count for this requesting user if provided (use last_opened when available)
+        try {
+          if ($user_type && $user_id) {
+            $mstmt2 = $pdo->prepare('SELECT ChatRoomMemberid, last_opened FROM ChatRoomMember WHERE ChatRoomid=? AND member_type=? AND memberid=? LIMIT 1');
+            $mstmt2->execute([(int)$roomId, $user_type, $user_id]);
+            $memberRow = $mstmt2->fetch(PDO::FETCH_ASSOC);
+            $myMemberId = $memberRow['ChatRoomMemberid'] ?? null;
+            $lastOpened = $memberRow['last_opened'] ?? null;
+            if ($myMemberId) {
+              if ($lastOpened) {
+                $cnt = $pdo->prepare('SELECT COUNT(*) FROM Message WHERE ChatRoomid = ? AND timestamp > ? AND NOT (sender_type = ? AND sender_id = ?)');
+                $cnt->execute([(int)$roomId, $lastOpened, $user_type, $user_id]);
+              } else {
+                // no last_opened: count all messages not sent by this member
+                $cnt = $pdo->prepare('SELECT COUNT(*) FROM Message WHERE ChatRoomid = ? AND NOT (sender_type = ? AND sender_id = ?)');
+                $cnt->execute([(int)$roomId, $user_type, $user_id]);
+              }
+              $r['unread'] = (int)$cnt->fetchColumn();
+            } else {
+              $r['unread'] = 0;
+            }
+          }
+        } catch (Throwable $_e) { $r['unread'] = 0; }
       }
       send_json($rooms);
     } else {
@@ -670,6 +693,73 @@ try {
     // Consider typing active for 6 seconds
     $active = (time() - (int)($data['ts'] ?? 0)) < 6;
     send_json(['typing'=>$active, 'sender'=>$data['sender_type'] ?? null, 'sender_id'=>$data['sender_id'] ?? null]);
+    break;
+
+  case 'markRead':
+    // Mark messages in a room as read for a particular member (create missing MessageRead rows)
+    $data = json_decode(file_get_contents('php://input'), true) ?: $_POST;
+    $room = isset($data['room']) ? (int)$data['room'] : 0;
+    $member_type = $data['user_type'] ?? ($data['member_type'] ?? null);
+    $member_id = isset($data['user_id']) ? (int)$data['user_id'] : (isset($data['member_id']) ? (int)$data['member_id'] : 0);
+    if ($room <= 0 || !$member_type || $member_id <= 0) {
+      send_json(['ok' => false, 'error' => 'missing_fields'], 400);
+      break;
+    }
+    // find ChatRoomMemberid for this user in the room
+    $mm = $pdo->prepare('SELECT ChatRoomMemberid FROM ChatRoomMember WHERE ChatRoomid = ? AND member_type = ? AND memberid = ? LIMIT 1');
+    $mm->execute([$room, $member_type, $member_id]);
+    $memberRow = $mm->fetchColumn();
+    if (!$memberRow) { send_json(['ok' => false, 'error' => 'not_member'], 400); break; }
+    $memberChatId = (int)$memberRow;
+    // First, update any existing MessageRead rows to mark read
+    try {
+      $u = $pdo->prepare('UPDATE MessageRead mr JOIN Message m ON mr.messageid = m.messageid SET mr.is_read = 1, mr.read_at = NOW() WHERE mr.ChatRoomMemberid = ? AND m.ChatRoomid = ? AND (mr.is_read = 0 OR mr.read_at IS NULL)');
+      $u->execute([$memberChatId, $room]);
+      $updated = $u->rowCount();
+    } catch (Throwable $e) { $updated = 0; }
+    // Next, insert MessageRead rows for messages that don't have an entry for this member (mark them read)
+    try {
+      $ins = $pdo->prepare('INSERT INTO MessageRead (messageid, ChatRoomMemberid, is_read, read_at)
+        SELECT m.messageid, ?, 1, NOW() FROM Message m
+        LEFT JOIN MessageRead mr ON mr.messageid = m.messageid AND mr.ChatRoomMemberid = ?
+        WHERE m.ChatRoomid = ? AND mr.messagereadid IS NULL');
+      $ins->execute([$memberChatId, $memberChatId, $room]);
+      $inserted = $ins->rowCount();
+    } catch (Throwable $e) { $inserted = 0; }
+    // Also update ChatRoomMember.last_opened so future unread counts can use it
+    try {
+      // ensure column exists — create safely if missing
+      $colCheck = $pdo->prepare("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'ChatRoomMember' AND COLUMN_NAME = 'last_opened'");
+      $colCheck->execute([$db]);
+      $hasCol = (int)$colCheck->fetchColumn();
+      if (!$hasCol) {
+        try { $pdo->exec("ALTER TABLE ChatRoomMember ADD COLUMN last_opened TIMESTAMP NULL DEFAULT NULL"); } catch (Throwable $__e) { /* ignore alter failures */ }
+      }
+      $u2 = $pdo->prepare('UPDATE ChatRoomMember SET last_opened = NOW() WHERE ChatRoomMemberid = ?');
+      $u2->execute([$memberChatId]);
+    } catch (Throwable $__e) { /* ignore */ }
+    send_json(['ok' => true, 'updated' => (int)$updated, 'inserted' => (int)$inserted]);
+    break;
+
+  case 'getTotalUnread':
+    // Return sum of unread messages across all rooms for a given user (uses last_opened when available)
+    $user_type = $_GET['user_type'] ?? null;
+    $user_id = isset($_GET['user_id']) ? (int)$_GET['user_id'] : 0;
+    if (!$user_type || $user_id <= 0) {
+      send_json(['ok'=>false,'error'=>'missing_fields'], 400);
+      break;
+    }
+    try {
+      // Join ChatRoomMember to Message and count messages newer than last_opened (or all not sent by member if last_opened NULL)
+      $sql = "SELECT COUNT(*) as cnt FROM Message m JOIN ChatRoomMember crm ON crm.ChatRoomid = m.ChatRoomid AND crm.member_type = ? AND crm.memberid = ? WHERE ( (crm.last_opened IS NOT NULL AND m.timestamp > crm.last_opened) OR (crm.last_opened IS NULL AND NOT (m.sender_type = ? AND m.sender_id = ?)) ) AND NOT (m.sender_type = ? AND m.sender_id = ?)";
+      $q = $pdo->prepare($sql);
+      $q->execute([$user_type, $user_id, $user_type, $user_id, $user_type, $user_id]);
+      $row = $q->fetch();
+      $total = $row ? (int)$row['cnt'] : 0;
+      send_json(['ok'=>true,'total'=> $total]);
+    } catch (Throwable $e) {
+      send_json(['ok'=>false,'error'=>'server_error','message'=>$e->getMessage()], 500);
+    }
     break;
 
   default:

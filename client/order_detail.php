@@ -20,8 +20,10 @@ if ($clientId <= 0) {
 // Get order ID from URL
 $orderId = (int)($_GET['orderid'] ?? 0);
 if ($orderId <= 0) {
-    http_response_code(400);
-    die('Invalid order ID.');
+    // Gracefully handle requests without a valid order id (for example URLs like ?designerid=null)
+    // Redirect users to the order history page instead of returning a 400 error.
+    error_log('[order_detail] missing or invalid orderid. Request URI: ' . ($_SERVER['REQUEST_URI'] ?? ''));
+    exit;
 }
 
 // Fetch order details with verification that it belongs to the client
@@ -50,6 +52,34 @@ $clientStmt = $mysqli->prepare("SELECT cname, ctel, cemail, address FROM Client 
 $clientStmt->bind_param("i", $clientId);
 $clientStmt->execute();
 $clientData = $clientStmt->get_result()->fetch_assoc();
+
+// Expose designer id for this order (used when opening chat by designer)
+$designerIdForOrder = isset($order['designerid']) ? (int)$order['designerid'] : 0;
+
+// Determine whether to show the order chat popup (only once per session per order)
+$showOrderChat = false;
+$showOrderChatRoomId = 0;
+if (!isset($_SESSION['shown_order_chat']) || !is_array($_SESSION['shown_order_chat'])) {
+    $_SESSION['shown_order_chat'] = [];
+}
+if (empty($_SESSION['shown_order_chat'][$orderId])) {
+    // Look for the order-type message inserted when the order was created
+    $msgQ = $mysqli->prepare("SELECT ChatRoomid, Messageid FROM Message WHERE message_type='order' AND content = ? AND sender_type='client' ORDER BY Messageid DESC LIMIT 1");
+    if ($msgQ) {
+        $orderStr = (string)$orderId;
+        $msgQ->bind_param('s', $orderStr);
+        $msgQ->execute();
+        $mres = $msgQ->get_result();
+        if ($mres && $mres->num_rows > 0) {
+            $row = $mres->fetch_assoc();
+            $showOrderChat = true;
+            $showOrderChatRoomId = (int)$row['ChatRoomid'];
+            // mark as shown so this popup appears only once per session per order
+            $_SESSION['shown_order_chat'][$orderId] = time();
+        }
+        $msgQ->close();
+    }
+}
 
 // Fetch products/materials for this order
 $productsSql = "SELECT op.orderproductid, op.productid, op.quantity, op.managerid, op.status,
@@ -803,3 +833,44 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—
 </html>
 
 <?php include __DIR__ . '/../Public/chat_widget.php'; ?>
+<?php if (!empty($showOrderChat) && !empty($showOrderChatRoomId)): ?>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // attempt to open chat widget and select room for the order
+    var roomId = <?= json_encode($showOrderChatRoomId) ?>;
+    var designerId = <?= json_encode($designerIdForOrder) ?>;
+    function openOrderRoom() {
+        try {
+            // If we have a roomId, try to open it. Otherwise call the chat API with the designer id.
+            var apps = window.chatApps || {};
+            var keys = Object.keys(apps || {});
+            if (roomId) {
+                if (keys.length > 0) {
+                    var app = apps[keys[0]];
+                    if (app && typeof app.openRoom === 'function') {
+                        try { app.openRoom(roomId).catch(function(){/* ignore */}); } catch (e) { /* ignore */ }
+                    } else if (app && typeof app.selectAgent === 'function') {
+                        try { app.selectAgent({ ChatRoomid: roomId, id: roomId }); } catch (e) { /* ignore */ }
+                    }
+                } else if (typeof window.handleChat === 'function') {
+                    try { window.handleChat(null, { room: roomId }); } catch (e) { /* ignore */ }
+                }
+            } else if (designerId) {
+                // fallback: open/create room using designer id
+                if (typeof window.handleChat === 'function') {
+                    try { window.handleChat(designerId); } catch (e) { /* ignore */ }
+                }
+            }
+            // ensure widget panel is opened if available
+            if (typeof window.chatWidgetOpenPanel === 'function') {
+                try { window.chatWidgetOpenPanel(); } catch (e) { /* ignore */ }
+            }
+        } catch (err) {
+            console.error('openOrderRoom error', err);
+        }
+    }
+    // Wait briefly to allow the widget to initialize
+    setTimeout(openOrderRoom, 700);
+});
+</script>
+<?php endif; ?>

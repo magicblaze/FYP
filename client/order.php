@@ -74,7 +74,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (!$error) {
-        $stmt = $mysqli->prepare("INSERT INTO `Order` (odate, clientid, Requirements, designid, ostatus) VALUES (NOW(), ?, ?, ?, 'Designing')");
+        $stmt = $mysqli->prepare("INSERT INTO `Order` (odate, clientid, Requirements, designid, ostatus) VALUES (NOW(), ?, ?, ?, 'Waiting Confirm')");
         $stmt->bind_param("isi", $clientId, $requirements, $designid);
         if ($stmt->execute()) {
             $orderId = $stmt->insert_id;
@@ -83,40 +83,67 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             try {
                 $designerId = isset($design['designerid']) ? (int)$design['designerid'] : 0;
                 if ($designerId > 0) {
-                    // Try to find existing private room between client and designer
-                    $chkSql = "SELECT cr.ChatRoomid FROM ChatRoom cr
-                                JOIN ChatRoomMember m1 ON m1.ChatRoomid=cr.ChatRoomid AND m1.member_type='client' AND m1.memberid=?
-                                JOIN ChatRoomMember m2 ON m2.ChatRoomid=cr.ChatRoomid AND m2.member_type='designer' AND m2.memberid=?
-                                WHERE cr.room_type='private' LIMIT 1";
-                    $chk = $mysqli->prepare($chkSql);
-                    if ($chk) {
-                        $chk->bind_param('ii', $clientId, $designerId);
-                        $chk->execute();
-                        $r = $chk->get_result();
-                        $room = $r ? $r->fetch_assoc() : null;
-                        $chk->close();
-                    } else {
-                        $room = null;
+                    // For each order, create or reuse an order-specific group room (client + designer + manager)
+                    $roomId = 0;
+                    $roomname = sprintf('order-%d', $orderId);
+                    $chkRoom = $mysqli->prepare("SELECT ChatRoomid FROM ChatRoom WHERE roomname = ? LIMIT 1");
+                    if ($chkRoom) {
+                        $chkRoom->bind_param('s', $roomname);
+                        $chkRoom->execute();
+                        $rr = $chkRoom->get_result();
+                        $existing = $rr ? $rr->fetch_assoc() : null;
+                        $chkRoom->close();
+                        if ($existing && !empty($existing['ChatRoomid'])) {
+                            $roomId = (int)$existing['ChatRoomid'];
+                        }
                     }
-                    if ($room && !empty($room['ChatRoomid'])) {
-                        $roomId = (int)$room['ChatRoomid'];
-                    } else {
-                        // create new private room
-                        $roomname = sprintf('private-client-%d-designer-%d', $clientId, $designerId);
+                    if (!$roomId) {
                         $insRoom = $mysqli->prepare("INSERT INTO ChatRoom (roomname,description,room_type,created_by_type,created_by_id) VALUES (?,?,?,?,?)");
                         if ($insRoom) {
-                            $desc = 'Private room for order notifications';
+                            $desc = 'Order room for order #' . $orderId;
+                            // room_type must match DB enum (private|group). Use 'group' for order rooms.
+                            $room_type = 'group';
                             $created_by_type = 'client';
-                            $insRoom->bind_param('ssssi', $roomname, $desc, $room_type = 'private', $created_by_type, $clientId);
+                            $insRoom->bind_param('ssssi', $roomname, $desc, $room_type, $created_by_type, $clientId);
                             $insRoom->execute();
                             $roomId = $insRoom->insert_id;
                             $insRoom->close();
-                            // insert members
+                            // insert client and designer members
                             $insM = $mysqli->prepare("INSERT INTO ChatRoomMember (ChatRoomid, member_type, memberid) VALUES (?,?,?)");
                             if ($insM) {
                                 $mt1 = 'client'; $mid1 = $clientId; $insM->bind_param('isi', $roomId, $mt1, $mid1); $insM->execute();
                                 $mt2 = 'designer'; $mid2 = $designerId; $insM->bind_param('isi', $roomId, $mt2, $mid2); $insM->execute();
                                 $insM->close();
+                            }
+                            // attempt to add the designer's manager as a member. If designer has no manager, fallback to first Manager.
+                            $mgrId = 0;
+                            $mgrStmt = $mysqli->prepare('SELECT managerid FROM Designer WHERE designerid = ? LIMIT 1');
+                            if ($mgrStmt) {
+                                $mgrStmt->bind_param('i', $designerId);
+                                $mgrStmt->execute();
+                                $mgrRow = $mgrStmt->get_result()->fetch_assoc();
+                                $mgrStmt->close();
+                                if ($mgrRow && !empty($mgrRow['managerid'])) {
+                                    $mgrId = (int)$mgrRow['managerid'];
+                                }
+                            }
+                            if (empty($mgrId)) {
+                                $mgrQ = $mysqli->prepare('SELECT managerid FROM Manager ORDER BY managerid ASC LIMIT 1');
+                                if ($mgrQ) {
+                                    $mgrQ->execute();
+                                    $mgrR = $mgrQ->get_result();
+                                    $mgr = $mgrR ? $mgrR->fetch_assoc() : null;
+                                    $mgrQ->close();
+                                    if ($mgr && !empty($mgr['managerid'])) {
+                                        $mgrId = (int)$mgr['managerid'];
+                                    }
+                                }
+                            }
+                            if (!empty($mgrId)) {
+                                $insMgr = $mysqli->prepare("INSERT INTO ChatRoomMember (ChatRoomid, member_type, memberid) VALUES (?,?,?)");
+                                if ($insMgr) {
+                                    $mtm = 'manager'; $insMgr->bind_param('isi', $roomId, $mtm, $mgrId); $insMgr->execute(); $insMgr->close();
+                                }
                             }
                         }
                     }
@@ -161,7 +188,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // non-fatal: order succeeded but chat notification failed
                 error_log('[order.php] failed to send chat notification: ' . $e->getMessage());
             }
-            header('Refresh: 1; url=order_detail.php?orderid=' . $orderId);
+            // Redirect immediately to the order detail page to avoid timing issues
+            header('Location: order_detail.php?orderid=' . $orderId);
             exit;
         } else {
             $error = 'Failed to create order: ' . $stmt->error;

@@ -44,6 +44,7 @@ function initApp(config = {}) {
   let widgetPendingFile = null;
   let pendingFile = null;
   let pollTimer = null;
+  let agentsPollTimer = null;
   let typingThrottle = null;
   const bsOff = (elements.catalogOffcanvasEl) ? new bootstrap.Offcanvas(elements.catalogOffcanvasEl) : null;
   if (elements.openCatalogBtn && bsOff) {
@@ -119,6 +120,94 @@ function initApp(config = {}) {
     } catch (e) { return ''; }
   }
 
+  // --- Unread helpers: store simple per-room unread counts in localStorage and update UI badges
+  function getUnreadKey(roomId) {
+    return 'chat_unread_' + roomId;
+  }
+  function getUnreadCountFromStorage(roomId) {
+    try { const v = localStorage.getItem(getUnreadKey(roomId)); return v ? parseInt(v,10) || 0 : 0; } catch (e) { return 0; }
+  }
+  function setUnreadCount(roomId, count) {
+    try { localStorage.setItem(getUnreadKey(roomId), String(Math.max(0, parseInt(count||0,10)||0))); } catch(e){}
+    try { updateAgentBadge(roomId, Math.max(0, parseInt(count||0,10)||0)); } catch(e){}
+    try { updateTotalUnreadBadge(); } catch(e){}
+  }
+  function incrementUnread(roomId, by) {
+    try { const cur = getUnreadCountFromStorage(roomId); setUnreadCount(roomId, cur + (parseInt(by||1,10) || 1)); } catch(e){}
+  }
+  function clearUnread(roomId) { setUnreadCount(roomId, 0); }
+  function getAllLocalUnreadTotal() {
+    try {
+      let total = 0;
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key) continue;
+        if (key.indexOf('chat_unread_') === 0) {
+          const v = parseInt(localStorage.getItem(key) || '0', 10) || 0;
+          total += v;
+        }
+      }
+      return total;
+    } catch (e) { return 0; }
+  }
+
+  function updateTotalUnreadBadge(total) {
+    try {
+      const t = (typeof total === 'undefined' || total === null) ? getAllLocalUnreadTotal() : (parseInt(total||0,10) || 0);
+      try { localStorage.setItem('chat_total_unread', String(t)); } catch(e){}
+      console.debug('chatwidget: updateTotalUnreadBadge called, total=', t);
+      // find toggle element (support optional prefix)
+      const toggle = document.getElementById((prefix || '') + 'toggle') || document.getElementById('chatwidget_toggle') || document.querySelector('[data-chat-toggle]');
+      if (!toggle) { console.debug('chatwidget: toggle element not found when updating total badge'); }
+      if (!toggle) return;
+      let badge = toggle.querySelector('.chatwidget_total_unread');
+      if (!badge && t > 0) {
+        // ensure toggle is positioned so absolute badge can be placed
+        try { if (toggle && window.getComputedStyle(toggle).position === 'static') toggle.style.position = 'relative'; } catch(e){}
+        badge = document.createElement('span');
+        badge.className = 'chatwidget_total_unread';
+        // inline styles so badge shows even when Bootstrap CSS is not present
+        badge.style.position = 'absolute';
+        badge.style.top = '-6px';
+        badge.style.left = '-6px';
+        badge.style.minWidth = '20px';
+        badge.style.display = 'inline-block';
+        badge.style.textAlign = 'center';
+        badge.style.padding = '2px 6px';
+        badge.style.borderRadius = '999px';
+        badge.style.backgroundColor = '#dc3545';
+        badge.style.color = '#fff';
+        badge.style.fontSize = '12px';
+        badge.style.lineHeight = '1';
+        badge.style.fontWeight = '600';
+        badge.style.boxShadow = '0 1px 2px rgba(0,0,0,0.2)';
+        badge.style.zIndex = '9999';
+        toggle.appendChild(badge);
+      }
+      if (badge) {
+        if (t > 0) badge.textContent = (t > 99 ? '99+' : String(t)); else badge.remove();
+      }
+    } catch (e) { console.error('updateTotalUnreadBadge error', e); }
+  }
+  function updateAgentBadge(roomId, count) {
+    try {
+      const sel = document.querySelectorAll('[data-room-id="' + roomId + '"]');
+      sel.forEach(btn => {
+        // find existing badge
+        let badge = btn.querySelector('.chat-unread-badge');
+        if (!badge && count > 0) {
+          badge = document.createElement('span');
+          badge.className = 'badge bg-danger ms-2 chat-unread-badge';
+          btn.querySelector('.fw-semibold') && btn.querySelector('.fw-semibold').appendChild(badge);
+        }
+        if (badge) {
+          if (count > 0) badge.textContent = String(count);
+          else badge.remove();
+        }
+      });
+    } catch (e) { console.error('updateAgentBadge error', e); }
+  }
+
   function renderCards(list) {
     [elements.cardsGrid, elements.cardsGridOff].forEach(root => {
       if (!root) return;
@@ -153,8 +242,6 @@ function initApp(config = {}) {
       btn.dataset.roomId = a.ChatRoomid || a.ChatRoomId || a.id;
       const roomKey = a.ChatRoomid || a.ChatRoomId || a.id;
       const storedOther = (roomKey ? localStorage.getItem('chat_other_name_' + roomKey) : null);
-      const name = a.other_name || a.otherName || storedOther || a.roomname || a.name || `Room ${btn.dataset.roomId}`;
-      const title = a.description || a.title || '';
       // Determine role label (human friendly)
       const roleRaw = a.other_type || a.otherType || a.member_type || a.role || a.type || '';
       let roleLabel = '';
@@ -168,13 +255,27 @@ function initApp(config = {}) {
           default: roleLabel = ''; break;
         }
       } catch(e) { roleLabel = ''; }
+      const isGroup = ((a.room_type || a.roomType || a.type || '') + '').toString().toLowerCase() === 'group';
+      let name = '';
+      let subtitle = '';
+      if (isGroup) {
+        name = a.roomname || storedOther || a.name || `Room ${btn.dataset.roomId}`;
+        subtitle = a.description || a.title || '';
+      } else {
+        name = a.other_name || a.otherName || storedOther || a.roomname || a.name || `Room ${btn.dataset.roomId}`;
+        subtitle = roleLabel || (a.description || a.title || '');
+      }
+      const unreadCount = (a.unread || a.unread_count || getUnreadCountFromStorage(roomKey) || 0);
+      const unreadHtml = unreadCount ? ('<span class="badge bg-danger ms-2 chat-unread-badge">' + escapeHtml(String(unreadCount)) + '</span>') : '';
       btn.innerHTML = `<div class="me-2"><div class="rounded-circle bg-secondary text-white d-inline-flex align-items-center justify-content-center" style="width:36px;height:36px">${escapeHtml((name||'')[0]||'R')}</div></div>
-        <div class="flex-grow-1 text-start"><div class="fw-semibold">${escapeHtml(name)}</div><div class="small text-muted">${escapeHtml(roleLabel || title)}</div></div>`;
+        <div class="flex-grow-1 text-start"><div class="fw-semibold">${escapeHtml(name)}${unreadHtml}</div><div class="small text-muted">${escapeHtml(subtitle)}</div></div>`;
       btn.addEventListener('click', () => {
         selectAgent(a);
         if (isOff && bsOff) bsOff.hide();
       });
       container.appendChild(btn);
+      // ensure badge exists in DOM after render (in case storage sync happened earlier)
+      try { if (roomKey) updateAgentBadge(roomKey, unreadCount); } catch(e) { console.debug('updateAgentBadge post-render failed', e); }
     });
   }
 
@@ -183,8 +284,23 @@ function initApp(config = {}) {
     const qs = `listRooms${userType?('&user_type=' + encodeURIComponent(userType)):''}${userId?('&user_id=' + encodeURIComponent(userId)):''}`;
     return apiGet(qs).then(data => {
       const rooms = Array.isArray(data) ? data : (data.rooms || []);
+      console.debug('chatwidget: loadAgents fetched', rooms.length, 'rooms');
+      // sync server-provided unread counts into local cache so UI can display consistently
+      try {
+        rooms.forEach(r => {
+          const rid = r.ChatRoomid || r.ChatRoomId || r.id || r.roomId;
+          const serverCnt = (r.unread || r.unread_count || 0) || 0;
+          if (rid != null) setUnreadCount(rid, serverCnt);
+        });
+      } catch(e){}
       renderAgents(rooms, elements.agentsList, false);
       renderAgents(rooms, elements.agentsListOff, true);
+      // update total unread badge on widget toggle (log computed total)
+      try {
+        const total = rooms.reduce((s,r) => s + (parseInt(r.unread || r.unread_count || getUnreadCountFromStorage(r.ChatRoomid || r.id || r.roomId) || 0,10) || 0), 0);
+        console.debug('chatwidget: total unread computed', total);
+        updateTotalUnreadBadge(total);
+      } catch(e){ console.debug('chatwidget: update total unread failed', e); }
       return rooms;
     }).catch(err => { console.error('Failed to load rooms', err); return []; });
   }
@@ -203,6 +319,14 @@ function initApp(config = {}) {
       });
       if (elements.messages) elements.messages.dataset.roomId = roomId;
       if (elements.messages) elements.messages.scrollTop = elements.messages.scrollHeight;
+      // Mark this room as read on the server (best-effort) and clear local unread counter
+      try {
+        const room = roomId;
+        if (room) {
+          apiPost('markRead', { room: room, user_type: userType, user_id: userId }).catch(() => {});
+          try { clearUnread(room); } catch(e){}
+        }
+      } catch(e){}
       return messages;
     }).catch(err => { console.error(err); return []; });
   }
@@ -219,7 +343,16 @@ function initApp(config = {}) {
               const mid = m.id || m.messageid || m.messageId || 0;
               if (mid) lastMessageId = Math.max(lastMessageId, parseInt(mid, 10));
             });
-            if (elements.messages && messages.length) elements.messages.scrollTop = elements.messages.scrollHeight;
+            if (elements.messages && messages.length) {
+              try { elements.messages.scrollTop = elements.messages.scrollHeight; } catch(e){}
+            }
+            // Mark messages read for currently opened room and clear local unread counter
+            try {
+              if (messages && messages.length) {
+                apiPost('markRead', { room: roomId, user_type: userType, user_id: userId }).catch(() => {});
+                try { clearUnread(roomId); } catch(e){}
+              }
+            } catch(e) {}
           }).catch(() => {});
 
       // typing status
@@ -252,6 +385,18 @@ function initApp(config = {}) {
       } catch (e) {}
     }
     const senderName = msgObj.sender_name || msgObj.sender || (msgObj.sender_type ? (msgObj.sender_type + ' ' + (msgObj.sender_id||'')) : '');
+    // Determine a room name candidate (used as fallback). Prefer showing the actual
+    // sender's name for message lines in group rooms; use roomname for lists/headers.
+    let roomNameCandidate = '';
+    let isGroup = false;
+    try {
+      roomNameCandidate = msgObj.roomname || msgObj.room_name || (msgObj.room && (msgObj.room.roomname || msgObj.room.name)) || (currentAgent && (currentAgent.roomname || currentAgent.roomName)) || '';
+      const msgRoomType = msgObj.room_type || (msgObj.room && msgObj.room.room_type) || null;
+      const curRoomType = (currentAgent && (currentAgent.room_type || currentAgent.roomType || currentAgent.type)) || null;
+      isGroup = (msgRoomType && String(msgRoomType).toLowerCase() === 'group') || (curRoomType && String(curRoomType).toLowerCase() === 'group');
+    } catch (e) { roomNameCandidate = ''; isGroup = false; }
+    const finalSenderName = senderName || '';
+    const displayNameForList = (isGroup && roomNameCandidate) ? roomNameCandidate : (senderName || roomNameCandidate || '');
     const content = msgObj.content || msgObj.body || '';
     // render URL content as clickable link
     let contentHtml = '';
@@ -275,7 +420,7 @@ function initApp(config = {}) {
     avatarWrap.style.width = '48px'; avatarWrap.style.flex = '0 0 48px'; avatarWrap.style.display = 'flex'; avatarWrap.style.alignItems = 'flex-start'; avatarWrap.style.justifyContent = 'center';
     const avatar = document.createElement('div');
     avatar.className = 'rounded-circle bg-secondary text-white d-inline-flex align-items-center justify-content-center';
-    avatar.style.width = '36px'; avatar.style.height = '36px'; avatar.style.fontSize = '14px'; avatar.textContent = (senderName||' ')[0] || '?';
+    avatar.style.width = '36px'; avatar.style.height = '36px'; avatar.style.fontSize = '14px'; avatar.textContent = (finalSenderName || ' ')[0] || '?';
     avatarWrap.appendChild(avatar);
 
     const bodyCol = document.createElement('div');
@@ -285,7 +430,8 @@ function initApp(config = {}) {
     bodyCol.style.minWidth = '0';
     const nameEl = document.createElement('div');
     nameEl.className = 'small text-muted mb-1';
-    nameEl.textContent = senderName;
+    // For message entries always show the actual sender's name (no roomname fallback).
+    nameEl.textContent = finalSenderName || '';
     // prevent the name from widening the message column
     nameEl.style.maxWidth = '100%';
     nameEl.style.overflow = 'hidden';
@@ -354,13 +500,70 @@ function initApp(config = {}) {
         const title = o.title || o.designName || o.name || ('Order #' + (o.id || o.orderid || ''));
         const status = o.ostatus || o.status || '';
         const date = o.odate || o.date || '';
-        const url = o.url || o.link || '';
-        orderHtml = `<div class=" p-2 border rounded bg-white" style="display:flex;gap:12px;align-items:center">
+        let url = o.url || o.link || '';
+        // prepare a role-aware view URL (used for top-right button on group rooms)
+        let viewUrl = url || '';
+        try {
+          if (!viewUrl && o.id) viewUrl = '/client/order_detail.php?orderid=' + encodeURIComponent(o.id);
+          if (o.id && typeof userType !== 'undefined') {
+            if (String(userType).toLowerCase() === 'designer') {
+              if (viewUrl && viewUrl.indexOf('/client/order_detail.php') !== -1) {
+                viewUrl = viewUrl.replace('/client/order_detail.php', '/designer/design_orders.php');
+                if (viewUrl.indexOf('?') === -1) viewUrl += '?orderid=' + encodeURIComponent(o.id);
+              } else {
+                viewUrl = '/designer/design_orders.php?orderid=' + encodeURIComponent(o.id);
+              }
+            } else if (String(userType).toLowerCase() === 'manager') {
+              if (viewUrl && viewUrl.indexOf('/client/order_detail.php?orderid=') !== -1) {
+                viewUrl = viewUrl.replace('/client/order_detail.php?orderid=', '/Manager/Manager_view_order.php?id=');
+              } else if (viewUrl && viewUrl.indexOf('/client/order_detail.php') !== -1) {
+                viewUrl = viewUrl.replace('/client/order_detail.php', '/Manager/Manager_view_order.php') + '?id=' + encodeURIComponent(o.id);
+              } else {
+                viewUrl = '/Manager/Manager_view_order.php?id=' + encodeURIComponent(o.id);
+              }
+            }
+          }
+        } catch (e) {}
+        const orderIdLabel = (o.id || o.orderid) ? ('Order placed: #' + (o.id || o.orderid)) : '';
+        orderHtml = `
+          <div class="p-2 border rounded bg-white" style="display:flex;gap:12px;align-items:center;position:relative">
             <div style="flex:0 0 72px">${imgUrl ? ('<img src="' + escapeHtml(imgUrl) + '" style="width:72px;height:72px;object-fit:cover;border-radius:6px"/>') : ('<div style="width:72px;height:72px;border-radius:6px;background:#f1f3f5;display:flex;align-items:center;justify-content:center;color:#666">ORD</div>') }</div>
             <div style="flex:1;min-width:0">
-              <div class="fw-semibold" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(title)}</div>
+              <div style="display:flex;align-items:start;justify-content:space-between;gap:8px">
+                <div class="fw-semibold" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(title)}</div>
+                <div style="display:flex;align-items:center;gap:8px;flex:0 0 auto">
+                  ${ orderIdLabel ? ('<div class="small text-primary ms-2" style="white-space:nowrap">' + escapeHtml(orderIdLabel) + '</div>') : '' }
+                  ${ (isGroup && viewUrl) ? ('<a href="' + escapeHtml(viewUrl) + '" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-primary">View</a>') : '' }
+                </div>
+              </div>
               <div class="small text-muted">${escapeHtml((status || '') + (date ? (' · ' + date) : ''))}</div>
-              ${ url ? ('<div style="margin-top:8px"><a href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-primary">View order</a></div>') : '' }
+              ${ (function(){
+                  // For group rooms we display the view button in the title area already.
+                  if (isGroup) return '';
+                  if (!url && o.id) url = '/client/order_detail.php?orderid=' + encodeURIComponent(o.id);
+                  // Adjust the link for non-group viewers per role
+                  try {
+                    if (o.id && typeof userType !== 'undefined') {
+                      if (String(userType).toLowerCase() === 'designer') {
+                        if (url && url.indexOf('/client/order_detail.php') !== -1) {
+                          url = url.replace('/client/order_detail.php', '/designer/design_orders.php');
+                          if (url.indexOf('?') === -1) url += '?orderid=' + encodeURIComponent(o.id);
+                        } else {
+                          url = '/designer/design_orders.php?orderid=' + encodeURIComponent(o.id);
+                        }
+                      } else if (String(userType).toLowerCase() === 'manager') {
+                        if (url && url.indexOf('/client/order_detail.php?orderid=') !== -1) {
+                          url = url.replace('/client/order_detail.php?orderid=', '/Manager/Manager_view_order.php?id=');
+                        } else if (url && url.indexOf('/client/order_detail.php') !== -1) {
+                          url = url.replace('/client/order_detail.php', '/Manager/Manager_view_order.php') + '?id=' + encodeURIComponent(o.id);
+                        } else {
+                          url = '/Manager/Manager_view_order.php?id=' + encodeURIComponent(o.id);
+                        }
+                      }
+                    }
+                  } catch(e) {}
+                  return url ? ('<div style="margin-top:8px"><a href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-primary">View order</a></div>') : '';
+                })() }
             </div>
           </div>`;
       }
@@ -594,8 +797,16 @@ function initApp(config = {}) {
     currentAgent = agent;
     const rid = agent.ChatRoomid || agent.id || agent.roomId;
     const stored = (rid ? localStorage.getItem('chat_other_name_' + rid) : null);
-    const displayName = agent.other_name || agent.otherName || stored || agent.roomname || agent.name || '';
-    if (elements.connectionStatus) elements.connectionStatus.textContent = `${displayName}`;
+    // For group rooms prefer the room's name (roomname) in the header; for private rooms show the other participant's name.
+    let isGroupAgent = false;
+    try { isGroupAgent = ((agent.room_type || agent.roomType || agent.type) + '').toString().toLowerCase() === 'group'; } catch(e) { isGroupAgent = false; }
+    let displayName = '';
+    if (isGroupAgent) {
+      displayName = agent.roomname || agent.roomName || agent.name || agent.other_name || agent.otherName || stored || '';
+    } else {
+      displayName = agent.other_name || agent.otherName || stored || agent.roomname || agent.name || '';
+    }
+    if (elements.connectionStatus) elements.connectionStatus.textContent = displayName;
     document.querySelectorAll('#agentsList .list-group-item, #agentsListOffcanvas .list-group-item').forEach(el => {
       el.classList.toggle('active', el.dataset.roomId == (agent.ChatRoomid || agent.id));
     });
@@ -605,10 +816,58 @@ function initApp(config = {}) {
     if (elements.messages) elements.messages.dataset.roomId = roomId;
     // Load messages and ensure the view scrolls to the newest message after load.
     const p = loadMessages(roomId);
-    p.then(() => {
+    p.then((messages) => {
       try { if (elements.messages) elements.messages.scrollTop = elements.messages.scrollHeight; } catch (e) {}
       // second delayed scroll to handle images or layout shifts
       setTimeout(() => { try { if (elements.messages) elements.messages.scrollTop = elements.messages.scrollHeight; } catch (e) {} }, 250);
+      // Clear unread counter for this room since user viewed its messages
+      try { if (roomId) { clearUnread(roomId); updateAgentBadge(roomId, 0); } } catch(e){}
+      // After loading messages, if this room has an 'order' message, expose header View button
+      try {
+        const prefixLocal = prefix; // closure
+        const headerViewBtn = document.getElementById(prefixLocal + 'view_btn');
+        if (headerViewBtn) headerViewBtn.style.display = 'none';
+        if (Array.isArray(messages)) {
+          let foundOrder = null;
+          for (const m of messages) {
+            try {
+              if ((m.message_type && m.message_type === 'order') || m.order) {
+                if (m.order && (m.order.id || m.order.orderid)) { foundOrder = m.order; break; }
+                if (m.content && String(m.content).match(/^\d+$/)) { foundOrder = { id: parseInt(m.content,10) }; break; }
+              }
+            } catch(e){}
+          }
+          if (foundOrder && headerViewBtn) {
+            // compute role-aware URL (same logic used to render order card)
+            let viewUrl = foundOrder.url || '';
+            try { if (!viewUrl && foundOrder.id) viewUrl = '/client/order_detail.php?orderid=' + encodeURIComponent(foundOrder.id); } catch(e){}
+            try {
+              if (foundOrder.id && typeof userType !== 'undefined') {
+                if (String(userType).toLowerCase() === 'designer') {
+                  if (viewUrl && viewUrl.indexOf('/client/order_detail.php') !== -1) {
+                    viewUrl = viewUrl.replace('/client/order_detail.php', '/designer/design_orders.php');
+                    if (viewUrl.indexOf('?') === -1) viewUrl += '?orderid=' + encodeURIComponent(foundOrder.id);
+                  } else {
+                    viewUrl = '/designer/design_orders.php?orderid=' + encodeURIComponent(foundOrder.id);
+                  }
+                } else if (String(userType).toLowerCase() === 'manager') {
+                  if (viewUrl && viewUrl.indexOf('/client/order_detail.php?orderid=') !== -1) {
+                    viewUrl = viewUrl.replace('/client/order_detail.php?orderid=', '/Manager/Manager_view_order.php?id=');
+                  } else if (viewUrl && viewUrl.indexOf('/client/order_detail.php') !== -1) {
+                    viewUrl = viewUrl.replace('/client/order_detail.php', '/Manager/Manager_view_order.php') + '?id=' + encodeURIComponent(foundOrder.id);
+                  } else {
+                    viewUrl = '/Manager/Manager_view_order.php?id=' + encodeURIComponent(foundOrder.id);
+                  }
+                }
+              }
+            } catch(e){}
+            if (viewUrl) {
+              headerViewBtn.href = viewUrl;
+              headerViewBtn.style.display = '';
+            }
+          }
+        }
+      } catch(e){}
     }).catch(() => {});
     return p;
   }
@@ -734,6 +993,8 @@ function initApp(config = {}) {
           const mid = created.id || created.messageid || created.messageId || resp.id || 0;
           if (mid) lastMessageId = Math.max(lastMessageId, parseInt(mid, 10));
           if (elements.messages) elements.messages.scrollTop = elements.messages.scrollHeight;
+          try { apiPost('markRead', { room: roomId, user_type: userType, user_id: userId }).catch(()=>{}); } catch(e){}
+          try { clearUnread(roomId); } catch(e){}
         } else {
           alert('Failed to upload file');
         }
@@ -771,6 +1032,8 @@ function initApp(config = {}) {
         const mid = created.id || created.messageid || created.messageId || res.id || 0;
         if (mid) lastMessageId = Math.max(lastMessageId, parseInt(mid, 10));
         if (elements.messages) elements.messages.scrollTop = elements.messages.scrollHeight;
+        try { apiPost('markRead', { room: roomId, user_type: userType, user_id: userId }).catch(()=>{}); } catch(e){}
+        try { clearUnread(roomId); } catch(e){}
       } else {
         console.warn('sendMessage failed response', res);
         alert('Failed to send message');
@@ -1192,6 +1455,34 @@ function initApp(config = {}) {
 
   renderCards(items);
   loadAgents();
+  // Periodically refresh the agents/rooms list so newly created group rooms
+  // show up for other members without requiring a manual reload.
+  try {
+    if (agentsPollTimer) clearInterval(agentsPollTimer);
+    agentsPollTimer = setInterval(() => { try { loadAgents(); } catch(e){} }, 10000);
+  } catch(e) {}
+
+  // Restore persisted total unread badge immediately (in case widget was closed or toggle not present earlier)
+  try { const persisted = parseInt(localStorage.getItem('chat_total_unread') || '0', 10) || 0; if (persisted) updateTotalUnreadBadge(persisted); } catch(e){}
+
+  // Short-poll for total unread to reduce latency (lightweight endpoint)
+  let totalPollTimer = null;
+  try {
+    if (totalPollTimer) clearInterval(totalPollTimer);
+    totalPollTimer = setInterval(() => {
+      try {
+        // Use ChatApi.getTotalUnread which is optimized to return a single count
+        apiGet('getTotalUnread&user_type=' + encodeURIComponent(userType) + '&user_id=' + encodeURIComponent(userId)).then(resp => {
+          try {
+            if (resp && resp.ok) {
+              const tot = parseInt(resp.total || 0, 10) || 0;
+              updateTotalUnreadBadge(tot);
+            }
+          } catch (e) { console.debug('fast unread parse failed', e); }
+        }).catch(() => {});
+      } catch(e){}
+    }, 3000);
+  } catch(e) {}
 
   // Make the agents column resizable via the right-edge resizer
   (function enableAgentsResizer(){
@@ -1275,6 +1566,51 @@ window.handleChat = function(designerid, options = {}) {
     const redirectTarget = location.pathname + (location.pathname.indexOf('?') === -1 ? '?' : '&') + 'designerid=' + encodeURIComponent(designerid);
     window.location.href = '../login.php?redirect=' + encodeURIComponent(redirectTarget);
     return Promise.resolve({ ok: false, reason: 'not_authenticated' });
+  }
+
+  // If caller provided an orderId, prefer to open or create an order-specific room named `order-<id>`
+  const orderId = options.orderId || null;
+  if (orderId) {
+    // try to find existing room by name via listRooms
+    try {
+      return fetch('../Public/ChatApi.php?action=listRooms')
+        .then(r => r.json())
+        .then(list => {
+          const rooms = Array.isArray(list) ? list : (list.rooms || []);
+          const targetName = 'Chatroom order#' + String(orderId);
+          const found = rooms && rooms.find(r => (r.roomname || r.roomName || '').toString() === targetName);
+          if (found) {
+            const roomId = found.ChatRoomid || found.ChatRoomId || found.id || found.roomId;
+            // open widget if present
+            try { if (window.chatWidgetOpenPanel) window.chatWidgetOpenPanel(); } catch(e){}
+            try { if (window.handleChatOpenRoom) window.handleChatOpenRoom(roomId); } catch(e){}
+            // fallback to reload with room query so included widget picks it up
+            const newSearch = (location.pathname || '') + (location.pathname.indexOf('?') === -1 ? '?' : '&') + 'room=' + encodeURIComponent(roomId);
+            window.location.href = newSearch;
+            return { ok: true, roomId };
+          }
+          // not found, fall through to create with roomname set
+          const bodyObj = Object.assign({ creator_type: creatorType, creator_id: creatorId, other_type: otherType, other_id: otherId }, (options.otherName ? { other_name: options.otherName } : {}), { roomname: 'order-' + String(orderId), room_type: 'group' });
+          return fetch('../Public/ChatApi.php?action=createRoom', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(bodyObj)
+          })
+          .then(r => r.json())
+          .then(data => data)
+          .catch(err => { throw err; });
+        }).catch(err => {
+          console.error('listRooms error', err);
+          // fallback to createRoom without roomname
+          return fetch('../Public/ChatApi.php?action=createRoom', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(Object.assign({ creator_type: creatorType, creator_id: creatorId, other_type: otherType, other_id: otherId }, (options.otherName ? { other_name: options.otherName } : {})))
+          }).then(r => r.json()).then(data => data).catch(e=>({ok:false,error:e}));
+        });
+    } catch (ex) {
+      console.error('handleChat order lookup failed', ex);
+    }
   }
 
   return fetch('../Public/ChatApi.php?action=createRoom', {

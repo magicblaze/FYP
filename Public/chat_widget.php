@@ -60,6 +60,9 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
             <div id="chatwidget_typingIndicator_small" class="small text-muted" style="display:none"></div>
           </div>
         </div>
+        <div style="flex:0 0 auto">
+          <a id="chatwidget_view_btn" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-primary" style="display:none">View</a>
+        </div>
       </div>
       <div id="chatwidget_messages" class="messages" style="display:none"></div>
            <div class="composer" style="display:none;position:relative;">
