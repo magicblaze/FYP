@@ -589,7 +589,7 @@ $mainImg = $baseUrlEarly . $appRoot . '/design_image.php?id=' . (int)$design['de
                         <i class="fas fa-shopping-cart me-2"></i>Order
                     </button>
                     <!-- share button moved into chat widget panel -->
-                    <button type="button" class="btn btn-info btn-chat" onclick="(window.handleChat ? window.handleChat(<?= (int)$design['designerid'] ?>, { creatorId: <?= (int)$clientid ?>, otherName: '<?= htmlspecialchars(addslashes($design['dname']), ENT_QUOTES) ?>' }) : (window.location.href = (location.pathname || '') + '?designerid=<?= (int)$design['designerid'] ?>'))" >
+                    <button type="button" class="btn btn-info btn-chat" onclick="(window.handleChat ? window.handleChat(<?= (int)$design['designerid'] ?>, { creatorId: <?= (int)$clientid ?>, otherName: '<?= htmlspecialchars(addslashes($design['dname']), ENT_QUOTES) ?>' }) : (window.location.href = '<?= htmlspecialchars($baseUrlEarly . $appRoot . '/Public/chat_widget.php?designerid=' . (int)$design['designerid']) ?>'))" >
                         <i class="fas fa-comments me-2"></i>Chat
                     </button>
                 </div>

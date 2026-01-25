@@ -33,6 +33,9 @@ if (!file_exists($configPath)) {
 }
 require_once $configPath;
 
+// Compute application root (useful when app is hosted in a subfolder)
+$appRoot = rtrim(dirname(dirname($_SERVER['SCRIPT_NAME'])), '/\\');
+
 // Basic sanity: ensure DB variables exist
 if (!isset($hostname, $user, $pwd, $db)) {
   send_json(['error' => 'missing_config', 'message' => 'Database configuration not found'], 500);
@@ -228,11 +231,22 @@ try {
             if ($orow) {
               $r['order'] = [
                 'id' => (int)$orow['orderid'],
-                'url' => '/client/order_detail.php?orderid=' . (int)$orow['orderid'],
+                'url' => $appRoot . '/client/order_detail.php?orderid=' . (int)$orow['orderid'],
                 'designid' => isset($orow['designid']) ? (int)$orow['designid'] : null,
                 'title' => $orow['designName'] ?? '' ,
                 'status' => $orow['ostatus'] ?? null
               ];
+              // attempt to fetch primary design image when available
+              try {
+                if (!empty($r['order']['designid'])) {
+                  $im = $pdo->prepare('SELECT image_filename FROM DesignImage WHERE designid = ? ORDER BY image_order ASC LIMIT 1');
+                  $im->execute([(int)$r['order']['designid']]);
+                  $ir = $im->fetch();
+                  if ($ir && !empty($ir['image_filename'])) {
+                    $r['order']['image'] = $appRoot . '/uploads/designs/' . ltrim($ir['image_filename'], '/');
+                  }
+                }
+              } catch (Throwable $__e) { /* ignore image failures */ }
             }
           }
         }
@@ -282,7 +296,7 @@ try {
               } catch (Throwable $__e) {}
               $r['share'] = [
                 'title' => $drow['designName'] ?? '',
-                'url' => '/client/design_detail.php?designid=' . (int)$drow['designid'],
+                'url' => $appRoot . '/client/design_detail.php?designid=' . (int)$drow['designid'],
                 'image' => $img,
                 'type' => 'design',
                 'price' => isset($drow['expect_price']) ? $drow['expect_price'] : null,

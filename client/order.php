@@ -314,7 +314,7 @@ $budgetDisplay = $clientData['budget'] ?? 0;
                 <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
             <?php endif; ?>
 
-            <form method="post" enctype="multipart/form-data">
+            <form id="orderForm" method="post" enctype="multipart/form-data">
                 <div class="row">
                     <div class="col-md-8">
                         <!-- Design Information Section -->
@@ -542,7 +542,63 @@ $budgetDisplay = $clientData['budget'] ?? 0;
         });
 
 
-    </script>
+        </script>
+        <!-- Terms of Use Modal -->
+        <div class="modal fade" id="termsModal" tabindex="-1" aria-labelledby="termsModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="termsModalLabel">Terms of Use</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body p-0">
+                        <iframe src="../terms.php" title="Terms of Use" style="border:0;width:100%;height:60vh;display:block;" loading="lazy"></iframe>
+                        <div class="p-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" value="" id="termsAgree">
+                                <label class="form-check-label" for="termsAgree">
+                                    I have read and agree to the Terms of Use
+                                </label>
+                            </div>
+                            <p class="small text-muted mt-2">You can also open the full terms in a new tab: <a href="../terms.php" target="_blank">Terms of Use</a>.</p>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-primary" id="termsAcceptBtn" disabled>Agree & Place Order</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script>
+        document.addEventListener('DOMContentLoaded', function() {
+                const orderForm = document.getElementById('orderForm');
+                if (!orderForm) return;
+                const termsModalEl = document.getElementById('termsModal');
+                const termsModal = termsModalEl ? new bootstrap.Modal(termsModalEl) : null;
+                const agreeCheckbox = document.getElementById('termsAgree');
+                const agreeBtn = document.getElementById('termsAcceptBtn');
+
+                orderForm.addEventListener('submit', function(e) {
+                        if (!window.__termsAccepted) {
+                                e.preventDefault();
+                                if (termsModal) termsModal.show();
+                        }
+                });
+
+                if (agreeCheckbox && agreeBtn) {
+                        agreeCheckbox.addEventListener('change', function() {
+                                agreeBtn.disabled = !this.checked;
+                        });
+                        agreeBtn.addEventListener('click', function() {
+                                window.__termsAccepted = true;
+                                if (termsModal) termsModal.hide();
+                                orderForm.submit();
+                        });
+                }
+        });
+        </script>
 </body>
 </html>
 

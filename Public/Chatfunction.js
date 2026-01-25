@@ -323,6 +323,8 @@ function initApp(config = {}) {
     const campaignHtml = msgObj.campaign ? `<div class="small text-muted mt-1">Campaign: ${escapeHtml(msgObj.campaign)}</div>` : '';
     // Special rendering for `design` share messages: single white card merged into bubble
     let designHtml = '';
+    // Special rendering for `order` messages: show order card with link/status instead of raw id
+    let orderHtml = '';
     try {
       if ((msgObj.message_type && msgObj.message_type === 'design') || msgObj.share) {
         const share = msgObj.share || {};
@@ -341,6 +343,28 @@ function initApp(config = {}) {
           </div>`;
       }
     } catch (e) { designHtml = ''; }
+
+    try {
+      if ((msgObj.message_type && msgObj.message_type === 'order') || msgObj.order) {
+        const o = msgObj.order || {};
+        const uploaded = msgObj.uploaded_file || null;
+        const imgSrc = (uploaded && uploaded.filepath) || o.image || msgObj.attachment || '';
+        let imgUrl = imgSrc || '';
+        if (imgUrl && !/^https?:\/\//.test(imgUrl)) imgUrl = imgUrl; // keep relative paths as-is
+        const title = o.title || o.designName || o.name || ('Order #' + (o.id || o.orderid || ''));
+        const status = o.ostatus || o.status || '';
+        const date = o.odate || o.date || '';
+        const url = o.url || o.link || '';
+        orderHtml = `<div class=" p-2 border rounded bg-white" style="display:flex;gap:12px;align-items:center">
+            <div style="flex:0 0 72px">${imgUrl ? ('<img src="' + escapeHtml(imgUrl) + '" style="width:72px;height:72px;object-fit:cover;border-radius:6px"/>') : ('<div style="width:72px;height:72px;border-radius:6px;background:#f1f3f5;display:flex;align-items:center;justify-content:center;color:#666">ORD</div>') }</div>
+            <div style="flex:1;min-width:0">
+              <div class="fw-semibold" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(title)}</div>
+              <div class="small text-muted">${escapeHtml((status || '') + (date ? (' · ' + date) : ''))}</div>
+              ${ url ? ('<div style="margin-top:8px"><a href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-primary">View order</a></div>') : '' }
+            </div>
+          </div>`;
+      }
+    } catch (e) { orderHtml = ''; }
     // Attachment rendering: prefer `uploaded_file` metadata when available.
     let attachmentHtml = '';
     let isImageMessage = false;
@@ -367,7 +391,10 @@ function initApp(config = {}) {
       }
     } catch (e) { attachmentHtml = ''; }
     // If we rendered a design card, avoid rendering the separate contentHtml (which may be a duplicate URL link)
-    if (designHtml) {
+    if (orderHtml) {
+      bubble.className = 'bg-white text-dark rounded';
+      bubble.innerHTML = `${orderHtml}${campaignHtml}`;
+    } else if (designHtml) {
       // Override bubble styling so the message bubble is white (not the usual colored bubble)
       bubble.className = 'bg-white text-dark rounded';
       bubble.innerHTML = `${designHtml}${campaignHtml}`;
@@ -1264,11 +1291,26 @@ window.handleChat = function(designerid, options = {}) {
       if (roomId) {
         // If an embedded chat widget is present, open it and select the created room instead of navigating away
           try {
-            const instance = (window.chatApps && window.chatApps['chatwidget']) || null;
+            // Prefer any registered chat app instance rather than assuming a specific key
+            let instance = null;
+            try {
+              if (window.chatApps) {
+                const vals = Object.values(window.chatApps || {});
+                if (vals.length) instance = vals[0];
+              }
+            } catch (e) { instance = null; }
             const panel = document.getElementById('chatwidget_panel');
             const toggle = document.getElementById('chatwidget_toggle');
-            if (panel) { panel.style.display = 'flex'; panel.setAttribute('aria-hidden','false'); }
-            if (toggle) { toggle.style.display = 'none'; }
+            // Prefer using the widget's open hook so animations and toggle visibility are handled consistently
+            try {
+              if (typeof window.chatWidgetOpenPanel === 'function') {
+                window.chatWidgetOpenPanel();
+              } else {
+                if (panel) { panel.style.display = 'flex'; panel.setAttribute('aria-hidden','false'); }
+                if (toggle) { try { toggle.style.display = 'none'; } catch(e) {} }
+              }
+            } catch (e) { /* ignore */ }
+
             if (instance && typeof instance.selectAgent === 'function') {
               // Try to load agents then select the newly created room if present
               instance.loadAgents().then(rooms => {
