@@ -1,7 +1,7 @@
 <?php
 // ==============================
 // File: supplier/dashboard.php
-// 供應商專屬後台首頁 - 支持颜色编辑 (修复版本)
+// 供應商專屬後台首頁 
 // ==============================
 require_once __DIR__ . '/../config.php';
 session_start();
@@ -257,11 +257,14 @@ $colorImageStmt->close();
         <nav>
             <ul class="nav align-items-center">
                 <li class="nav-item me-2">
-                    <a class="nav-link text-muted" href="supplier_profile.php">
-                        <i class="fas fa-user me-1"></i>Hello <?= htmlspecialchars($supplierName) ?>
+                    <a class="nav-link text-muted fw-bold" href="../includes/profile.php">
+                        <i class="fas fa-user-shield me-1"></i>Hello <?= htmlspecialchars($supplierName) ?>
+                        <span class="badge bg-secondary ms-1">Supplier</span>
                     </a>
                 </li>
-                <li class="nav-item"><a class="nav-link" href="../logout.php">Logout</a></li>
+                <li class="nav-item">
+                    <a class="nav-link text-danger" href="../logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a>
+                </li>
             </ul>
         </nav>
     </header>
