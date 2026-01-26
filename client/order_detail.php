@@ -131,17 +131,24 @@ $scheduleStmt->bind_param("i", $orderId);
 $scheduleStmt->execute();
 $schedules = $scheduleStmt->get_result();
 
-// Fetch order references (product references)
-$referencesSql = "SELECT r.orderreferenceid, r.productid, r.added_by_type, r.added_by_id, r.created_at,
-                        p.pname, IFNULL(p.price, 0) as price
-                 FROM OrderReference r
-                 LEFT JOIN Product p ON r.productid = p.productid
-                 WHERE r.orderid = ?
-                 ORDER BY r.created_at ASC";
+$referencesSql = "SELECT r.id AS orderreferenceid, r.productid, r.designid, r.added_by_type, r.added_by_id, r.created_at,
+               p.pname, IFNULL(p.price, 0) as product_price,
+               d.designName as design_name, IFNULL(d.expect_price, 0) as design_price
+           FROM OrderReference r
+           LEFT JOIN Product p ON r.productid = p.productid
+           LEFT JOIN Design d ON r.designid = d.designid
+           WHERE r.orderid = ?
+           ORDER BY r.created_at ASC";
 $referencesStmt = $mysqli->prepare($referencesSql);
-$referencesStmt->bind_param("i", $orderId);
-$referencesStmt->execute();
-$references = $referencesStmt->get_result();
+if (!$referencesStmt) {
+    error_log('[order_detail] failed to prepare references SQL: ' . $mysqli->error);
+    // Fall back to an empty result set so the page can render without fatal error
+    $references = $mysqli->query("SELECT NULL WHERE 0");
+} else {
+    $referencesStmt->bind_param("i", $orderId);
+    $referencesStmt->execute();
+    $references = $referencesStmt->get_result();
+}
 
 // Calculate totals
 $productTotal = 0;
@@ -541,18 +548,34 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—
                 <?php 
                 $referencesTotal = 0;
                 while ($ref = $references->fetch_assoc()): 
+                    // product reference
                     if (!empty($ref['productid']) && !empty($ref['pname'])): 
-                        $referencesTotal += (float)($ref['price'] ?? 0);
+                        $price = (float)($ref['product_price'] ?? 0);
+                        $referencesTotal += $price;
                 ?>
                     <div class="info-row">
                         <div class="info-label">
                             <i class="fas fa-box me-2"></i><?= htmlspecialchars($ref['pname']) ?>
                         </div>
                         <div class="info-value">
-                            <span class="price-highlight">$<?= number_format((float)$ref['price'], 2) ?></span>
+                            <span class="price-highlight">$<?= number_format($price, 2) ?></span>
                         </div>
                     </div>
                 <?php 
+                    // design reference
+                    elseif (!empty($ref['designid']) && !empty($ref['design_name'])):
+                        $dprice = (float)($ref['design_price'] ?? 0);
+                        $referencesTotal += $dprice;
+                ?>
+                    <div class="info-row">
+                        <div class="info-label">
+                            <i class="fas fa-image me-2"></i><?= htmlspecialchars($ref['design_name']) ?> (Design Reference)
+                        </div>
+                        <div class="info-value">
+                            <span class="price-highlight">$<?= number_format($dprice, 2) ?></span>
+                        </div>
+                    </div>
+                <?php
                     endif;
                 endwhile; 
                 ?>
@@ -567,7 +590,7 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—
 
             <!-- Products/Materials Section -->
             <div class="section-title">
-                <i class="fas fa-box me-2"></i>Products & Materials
+                <i class="fas fa-box me-2"></i>References products & materials
             </div>
             <?php if ($products->num_rows > 0): ?>
                 <table class="product-table">

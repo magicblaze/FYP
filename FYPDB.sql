@@ -244,17 +244,19 @@ INSERT INTO `Order`
 
 -- OrderReference table to store design references for each order
 CREATE TABLE `OrderReference` (
-  `orderreferenceid` int NOT NULL AUTO_INCREMENT,
-  `orderid` int NOT NULL,
-  `productid` int NOT NULL,
-  `added_by_type` varchar(50) DEFAULT NULL,
-  `added_by_id` int DEFAULT NULL,
-  `created_at` timestamp DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`orderreferenceid`),
+  `id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `orderid` INT NOT NULL,
+  `productid` INT DEFAULT NULL,
+  `messageid` INT DEFAULT NULL,
+  `designid` INT DEFAULT NULL,
+  `added_by_type` VARCHAR(50) DEFAULT NULL,
+  `added_by_id` INT DEFAULT NULL,
+  `note` TEXT DEFAULT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   KEY `orderid_idx` (`orderid`),
   KEY `productid_idx` (`productid`),
-  CONSTRAINT `fk_or_orderid` FOREIGN KEY (`orderid`) REFERENCES `Order` (`orderid`) ON DELETE CASCADE,
-  CONSTRAINT `fk_or_productid` FOREIGN KEY (`productid`) REFERENCES `Product` (`productid`)
+  KEY `designid_idx` (`designid`),
+  CONSTRAINT `fk_or_orderid` FOREIGN KEY (`orderid`) REFERENCES `Order` (`orderid`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Table to store color-image mapping for each product

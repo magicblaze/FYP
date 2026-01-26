@@ -799,21 +799,6 @@ try {
         }
       } catch (Throwable $__e) {}
     }
-    // create storage table if missing (also add useful unique keys to prevent duplicates)
-    try {
-      $pdo->exec("CREATE TABLE IF NOT EXISTS `OrderReference` (
-        `id` INT AUTO_INCREMENT PRIMARY KEY,
-        `orderid` INT NOT NULL,
-        `messageid` INT DEFAULT NULL,
-        `designid` INT DEFAULT NULL,
-        `added_by_type` VARCHAR(50) DEFAULT NULL,
-        `added_by_id` INT DEFAULT NULL,
-        `note` TEXT DEFAULT NULL,
-        `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE KEY ux_order_design (orderid, designid),
-        UNIQUE KEY ux_order_message (orderid, messageid)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-    } catch (Throwable $__e) { /* ignore create failures */ }
     // Determine added_by_id from session (prefers role-specific id fields)
     $addedByType = $sessionUser['role'] ?? null;
     $addedById = null;

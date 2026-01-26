@@ -8,6 +8,14 @@ session_start();
 
 // Page is accessible to all users (login optional)
 
+// Determine current user's role for conditional UI rendering
+$userRole = isset($_SESSION['user']['role']) ? strtolower($_SESSION['user']['role']) : null;
+if (empty($userRole)) {
+    if (!empty($_SESSION['user']['designerid'])) $userRole = 'designer';
+    elseif (!empty($_SESSION['user']['managerid'])) $userRole = 'manager';
+    elseif (!empty($_SESSION['user']['clientid'])) $userRole = 'client';
+}
+
 $designid = isset($_GET['designid']) ? (int)$_GET['designid'] : 0;
 if ($designid <= 0) { http_response_code(404); die('Design not found.'); }
 
@@ -554,9 +562,11 @@ $mainImg = $baseUrlEarly . $appRoot . '/design_image.php?id=' . (int)$design['de
 
                 <!-- Action Buttons -->
                 <div class="design-actions">
+                    <?php if (!in_array($userRole, ['designer','manager'], true)): ?>
                     <button type="button" class="btn btn-primary btn-order" onclick="handleOrder(<?= (int)$design['designid'] ?>)">
                         <i class="fas fa-shopping-cart me-2"></i>Order
                     </button>
+                    <?php endif; ?>
                     <!-- share button moved into chat widget panel -->
                     <button type="button" class="btn btn-info btn-chat" onclick="(window.handleChat ? window.handleChat(<?= (int)$design['designerid'] ?>, { creatorId: <?= (int)$clientid ?>, otherName: '<?= htmlspecialchars(addslashes($design['dname']), ENT_QUOTES) ?>' }) : (window.location.href = '<?= htmlspecialchars($baseUrlEarly . $appRoot . '/Public/chat_widget.php?designerid=' . (int)$design['designerid']) ?>'))" >
                         <i class="fas fa-comments me-2"></i>Chat
@@ -622,7 +632,7 @@ $mainImg = $baseUrlEarly . $appRoot . '/design_image.php?id=' . (int)$design['de
     // 處理訂單按鈕點擊事件
     function handleOrder(designId) {
         // 重定向到訂單頁面
-        window.location.href = 'order.php?designid=' + designId;
+        window.location.href = 'client/order.php?designid=' + designId;
     }
 
     // 處理標籤點擊事件，重定向到設計儀表板並搜索該標籤
