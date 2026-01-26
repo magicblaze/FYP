@@ -8,9 +8,9 @@ session_start();
 
 // --- 1. 處理過濾邏輯 ---
 $search = trim($_GET['search'] ?? '');
-$min_price = isset($_GET['min_price']) && is_numeric($_GET['min_price']) ? (int)$_GET['min_price'] : 0;
-$max_price = isset($_GET['max_price']) && is_numeric($_GET['max_price']) ? (int)$_GET['max_price'] : 999999;
-$supplier_id = isset($_GET['supplier_id']) && is_numeric($_GET['supplier_id']) ? (int)$_GET['supplier_id'] : '';
+$min_price = isset($_GET['min_price']) && is_numeric($_GET['min_price']) ? (int) $_GET['min_price'] : 0;
+$max_price = isset($_GET['max_price']) && is_numeric($_GET['max_price']) ? (int) $_GET['max_price'] : 999999;
+$supplier_id = isset($_GET['supplier_id']) && is_numeric($_GET['supplier_id']) ? (int) $_GET['supplier_id'] : '';
 $sort_by = isset($_GET['sort_by']) ? $_GET['sort_by'] : 'recent';
 
 $sql = "SELECT p.*, s.sname FROM Product p 
@@ -73,7 +73,8 @@ $supplier_sql = "SELECT DISTINCT s.supplierid, s.sname FROM Supplier s
                  JOIN Product p ON s.supplierid = p.supplierid 
                  WHERE p.category = 'Material' ORDER BY s.sname ASC";
 $supplier_result = $mysqli->query($supplier_sql);
-if (!$supplier_result) die('Query error: ' . $mysqli->error);
+if (!$supplier_result)
+    die('Query error: ' . $mysqli->error);
 
 // 獲取每個產品的第一個顏色圖片
 $productFirstColorImages = [];
@@ -95,16 +96,20 @@ if ($colorImageResult) {
 // 獲取所有材料類型用於過濾下拉菜單
 $material_sql = "SELECT DISTINCT material FROM Product WHERE category = 'Material' AND material IS NOT NULL ORDER BY material ASC";
 $material_result = $mysqli->query($material_sql);
-if (!$material_result) die('Query error: ' . $mysqli->error);
+if (!$material_result)
+    die('Query error: ' . $mysqli->error);
 ?>
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Material - HappyDesign</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
     <link rel="stylesheet" href="css/styles.css">
     <style>
         .search-section {
@@ -114,20 +119,24 @@ if (!$material_result) die('Query error: ' . $mysqli->error);
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
             margin-bottom: 0.5rem;
         }
+
         .search-section .form-control {
             border: 2px solid #ecf0f1;
             border-radius: 8px;
         }
+
         .search-section .form-control:focus {
             border-color: #3498db;
             box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25);
         }
+
         .page-title {
             color: #2c3e50;
             font-weight: 600;
             margin-bottom: 1.5rem;
             font-size: 1.8rem;
         }
+
         .filter-panel {
             background: #fff;
             border-radius: 10px;
@@ -135,51 +144,62 @@ if (!$material_result) die('Query error: ' . $mysqli->error);
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
             margin-bottom: 2rem;
         }
+
         .filter-panel h5 {
             color: #2c3e50;
             font-weight: 600;
             margin-bottom: 1rem;
             font-size: 1.1rem;
         }
+
         .filter-group {
             margin-bottom: 1.5rem;
         }
+
         .filter-group label {
             font-weight: 500;
             color: #34495e;
             margin-bottom: 0.5rem;
             display: block;
         }
+
         .filter-group .form-control,
         .filter-group .form-select {
             border: 2px solid #ecf0f1;
             border-radius: 8px;
             padding: 0.5rem 0.75rem;
         }
+
         .filter-group .form-control:focus,
         .filter-group .form-select:focus {
             border-color: #3498db;
             box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25);
         }
+
         .price-inputs {
             display: flex;
             gap: 0.5rem;
             align-items: center;
         }
+
         .price-inputs .form-control {
             flex: 1;
         }
+
         .price-separator {
             color: #7f8c8d;
             font-weight: 600;
         }
+
         .filter-buttons {
             display: flex;
             gap: 0.5rem;
         }
+
         .filter-buttons button {
             flex: 1;
         }
+
         .btn-apply-filter {
             background: #3498db;
             border: none;
@@ -190,10 +210,12 @@ if (!$material_result) die('Query error: ' . $mysqli->error);
             cursor: pointer;
             transition: background 0.3s;
         }
+
         .btn-apply-filter:hover {
             background: #2980b9;
             color: white;
         }
+
         .btn-clear-filter {
             background: #ecf0f1;
             border: none;
@@ -204,33 +226,40 @@ if (!$material_result) die('Query error: ' . $mysqli->error);
             cursor: pointer;
             transition: background 0.3s;
         }
+
         .btn-clear-filter:hover {
             background: #bdc3c7;
         }
+
         .results-info {
             color: #7f8c8d;
             font-size: 0.95rem;
             margin-bottom: 1rem;
         }
+
         .container-with-filter {
             display: grid;
             grid-template-columns: 1fr;
             gap: 2rem;
         }
+
         @media (max-width: 768px) {
             .container-with-filter {
                 grid-template-columns: 1fr;
             }
+
             .filter-panel {
                 order: 2;
                 position: static;
             }
+
             .main-content {
                 order: 1;
             }
         }
     </style>
 </head>
+
 <body>
     <?php include __DIR__ . '/includes/header.php'; ?>
 
@@ -239,17 +268,16 @@ if (!$material_result) die('Query error: ' . $mysqli->error);
         <div class="search-section">
             <form method="GET" aria-label="Search">
                 <div class="input-group">
-                    <input type="text" name="search" class="form-control form-control-lg" placeholder="Search materials..." value="<?= htmlspecialchars($search) ?>">
+                    <input type="text" name="search" class="form-control form-control-lg"
+                        placeholder="Search materials..." value="<?= htmlspecialchars($search) ?>">
                     <button class="btn btn-outline-secondary" type="submit">
                         <i class="fas fa-search"></i>
                     </button>
                 </div>
             </form>
-        </div>
-
-        <!-- Filter Panel (Under Search Bar) -->
-        <div class="filter-panel">
-            <h5><i class="fas fa-filter me-2"></i>Filters</h5>
+            
+        <!-- Filter Panel -->
+            <h5><i class="fas fa-filter me-2 mt-3"></i>Filters</h5>
             <form method="GET" action="material_dashboard.php" id="filterForm">
                 <!-- Search (Hidden) -->
                 <input type="hidden" name="search" value="<?= htmlspecialchars($search) ?>">
@@ -260,9 +288,11 @@ if (!$material_result) die('Query error: ' . $mysqli->error);
                         <div class="filter-group">
                             <label>Price Range (HK$)</label>
                             <div class="price-inputs">
-                                <input type="number" name="min_price" class="form-control" placeholder="Min" value="<?= $min_price > 0 ? $min_price : '' ?>" min="0">
+                                <input type="number" name="min_price" class="form-control" placeholder="Min"
+                                    value="<?= $min_price > 0 ? $min_price : '' ?>" min="0">
                                 <span class="price-separator">-</span>
-                                <input type="number" name="max_price" class="form-control" placeholder="Max" value="<?= $max_price < 999999 ? $max_price : '' ?>" min="0">
+                                <input type="number" name="max_price" class="form-control" placeholder="Max"
+                                    value="<?= $max_price < 999999 ? $max_price : '' ?>" min="0">
                             </div>
                         </div>
                     </div>
@@ -288,8 +318,10 @@ if (!$material_result) die('Query error: ' . $mysqli->error);
                             <label for="sort_by">Sort By</label>
                             <select name="sort_by" id="sort_by" class="form-select">
                                 <option value="recent" <?= $sort_by === 'recent' ? 'selected' : '' ?>>Newest</option>
-                                <option value="price_low" <?= $sort_by === 'price_low' ? 'selected' : '' ?>>Price: Low to High</option>
-                                <option value="price_high" <?= $sort_by === 'price_high' ? 'selected' : '' ?>>Price: High to Low</option>
+                                <option value="price_low" <?= $sort_by === 'price_low' ? 'selected' : '' ?>>Price: Low to
+                                    High</option>
+                                <option value="price_high" <?= $sort_by === 'price_high' ? 'selected' : '' ?>>Price: High
+                                    to Low</option>
                                 <option value="likes" <?= $sort_by === 'likes' ? 'selected' : '' ?>>Most Liked</option>
                             </select>
                         </div>
@@ -313,6 +345,7 @@ if (!$material_result) die('Query error: ' . $mysqli->error);
         </div>
 
 
+
         <div class="container-with-filter">
             <!-- Main Content -->
             <div class="main-content">
@@ -320,10 +353,11 @@ if (!$material_result) die('Query error: ' . $mysqli->error);
                 <div class="row g-4">
                     <?php if ($result->num_rows > 0): ?>
                         <?php while ($prod = $result->fetch_assoc()): ?>
-                        <div class="col-lg-4 col-md-6 col-sm-12">
-                            <a href="product_detail.php?id=<?= htmlspecialchars($prod['productid']) ?>" style="text-decoration: none;">
-                                <div class="card h-100">
-                                    <?php 
+                            <div class="col-lg-4 col-md-6 col-sm-12">
+                                <a href="product_detail.php?id=<?= htmlspecialchars($prod['productid']) ?>"
+                                    style="text-decoration: none;">
+                                    <div class="card h-100">
+                                        <?php
                                         $prodId = $prod['productid'];
                                         $imageFile = $productFirstColorImages[$prodId] ?? null;
                                         if ($imageFile) {
@@ -331,28 +365,32 @@ if (!$material_result) die('Query error: ' . $mysqli->error);
                                         } else {
                                             $imageSrc = 'uploads/products/placeholder.jpg';
                                         }
-                                    ?>
-                                    <img src="<?= $imageSrc ?>" class="card-img-top" alt="<?= htmlspecialchars($prod['pname']) ?>" style="height: 250px; object-fit: cover;">
-                                    <div class="card-body text-center">
-                                        <h5 class="card-title"><?= htmlspecialchars($prod['pname']) ?></h5>
-                                        <p class="text-muted mb-2">
-                                            <i class="fas fa-store me-1"></i><?= htmlspecialchars($prod['sname']) ?>
-                                        </p>
-                                        <p class="text-muted mb-2" style="font-size: 0.85rem;">
-                                            <?php if (!empty($prod['material'])): ?>
-                                                <i class="fas fa-cube me-1"></i><?= htmlspecialchars($prod['material']) ?>
-                                            <?php endif; ?>
-                                        </p>
-                                        <p class="h6 mb-0" style="color: #e74c3c; font-weight: 700;">HK$<?= number_format($prod['price']) ?></p>
+                                        ?>
+                                        <img src="<?= $imageSrc ?>" class="card-img-top"
+                                            alt="<?= htmlspecialchars($prod['pname']) ?>"
+                                            style="height: 250px; object-fit: cover;">
+                                        <div class="card-body text-center">
+                                            <h5 class="card-title"><?= htmlspecialchars($prod['pname']) ?></h5>
+                                            <p class="text-muted mb-2">
+                                                <i class="fas fa-store me-1"></i><?= htmlspecialchars($prod['sname']) ?>
+                                            </p>
+                                            <p class="text-muted mb-2" style="font-size: 0.85rem;">
+                                                <?php if (!empty($prod['material'])): ?>
+                                                    <i class="fas fa-cube me-1"></i><?= htmlspecialchars($prod['material']) ?>
+                                                <?php endif; ?>
+                                            </p>
+                                            <p class="h6 mb-0" style="color: #e74c3c; font-weight: 700;">
+                                                HK$<?= number_format($prod['price']) ?></p>
+                                        </div>
                                     </div>
-                                </div>
-                            </a>
-                        </div>
+                                </a>
+                            </div>
                         <?php endwhile; ?>
                     <?php else: ?>
                         <div class="col-12">
                             <div class="text-center py-5" style="color: #7f8c8d;">
-                                <i class="fas fa-box-open" style="font-size: 4rem; margin-bottom: 1rem; color: #bdc3c7;"></i>
+                                <i class="fas fa-box-open"
+                                    style="font-size: 4rem; margin-bottom: 1rem; color: #bdc3c7;"></i>
                                 <h3>No Material Found</h3>
                                 <p>Try adjusting your filters to find what you're looking for.</p>
                             </div>
@@ -363,17 +401,12 @@ if (!$material_result) die('Query error: ' . $mysqli->error);
         </div>
     </main>
 
-    <!-- ==================== Chat Widget Integration ==================== -->
     <?php
-    // Include floating chat widget for logged-in users only
     if (isset($_SESSION['user'])) {
         include __DIR__ . '/Public/chat_widget.php';
     }
     ?>
 
-    <!-- Chatfunction and initialization moved into Public/chat_widget.php -->
-    <!-- ==================== End Chat Widget Integration ==================== -->
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
+
 </html>

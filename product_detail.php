@@ -56,13 +56,23 @@ $others = $other_stmt->get_result();
 // Check if current user has liked this product
 $clientid = (int)($_SESSION['user']['clientid'] ?? 0);
 $liked = false;
-if ($clientid > 0) {
-    $like_check_sql = "SELECT COUNT(*) as count FROM ProductLike WHERE clientid = ? AND productid = ?";
+// Determine user_type and user_id the same way as api/handle_like.php
+$user_type = strtolower(trim($_SESSION['user']['role'] ?? '')) ?: 'guest';
+$user_id = 0;
+if (!empty($_SESSION['user']['clientid'])) $user_id = (int)$_SESSION['user']['clientid'];
+elseif (!empty($_SESSION['user']['designerid'])) $user_id = (int)$_SESSION['user']['designerid'];
+elseif (!empty($_SESSION['user']['supplierid'])) $user_id = (int)$_SESSION['user']['supplierid'];
+elseif (!empty($_SESSION['user']['managerid'])) $user_id = (int)$_SESSION['user']['managerid'];
+elseif (!empty($_SESSION['user']['id'])) $user_id = (int)$_SESSION['user']['id'];
+
+if ($user_id > 0) {
+    // Use unified UserLike table to determine initial liked state
+    $like_check_sql = "SELECT COUNT(*) as count FROM UserLike WHERE user_type = ? AND user_id = ? AND item_type = 'product' AND item_id = ?";
     $like_check_stmt = $mysqli->prepare($like_check_sql);
-    $like_check_stmt->bind_param("ii", $clientid, $productid);
+    $like_check_stmt->bind_param("sii", $user_type, $user_id, $productid);
     $like_check_stmt->execute();
     $like_result = $like_check_stmt->get_result()->fetch_assoc();
-    $liked = $like_result['count'] > 0;
+    $liked = (!empty($like_result['count']));
 }
 
 // Determine back button destination based on referrer and category
@@ -261,26 +271,7 @@ function colorNameToHex($colorInput) {
             align-items: center;
             gap: 0.5rem;
         }
-
-        .heart-icon {
-            font-size: 1.5rem;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            user-select: none;
-            background: none;
-            border: none;
-            padding: 0;
-            color: #7f8c8d;
-        }
-
-        .heart-icon:hover {
-            transform: scale(1.2);
-        }
-
-        .heart-icon.liked {
-            color: #e74c3c;
-        }
-
+        
         .product-meta {
             color: #7f8c8d;
             font-size: 0.95rem;
@@ -470,8 +461,8 @@ function colorNameToHex($colorInput) {
 
                 <div class="product-stats">
                     <div class="likes-count">
-                        <button class="heart-icon <?= $liked ? 'liked' : '' ?>" id="likeHeart" data-productid="<?= (int)$product['productid'] ?>" title="Like this product">
-                            <?= $liked ? '♥' : '♡' ?>
+                        <button class="heart-icon <?= $liked ? 'liked' : '' ?>" id="likeHeart" data-productid="<?= (int)$product['productid'] ?>" title="Like this product" aria-pressed="<?= $liked ? 'true' : 'false' ?>">
+                            <i class="<?= $liked ? 'fas' : 'far' ?> fa-heart" aria-hidden="true"></i>
                         </button>
                         <span id="likeCount"><?= (int)$product['likes'] ?></span> Likes
                     </div>
@@ -655,45 +646,6 @@ function colorNameToHex($colorInput) {
         // Use the back URL determined by the server
         window.location.href = '<?= htmlspecialchars($backUrl) ?>';
     }
-
-    // Heart like functionality - Updated for new system
-    document.getElementById('likeHeart').addEventListener('click', function(e) {
-        e.preventDefault();
-        
-        const productid = this.dataset.productid;
-        const heart = this;
-        
-        const formData = new FormData();
-        formData.append('action', 'toggle_like');
-        formData.append('type', 'product');
-        formData.append('id', productid);
-
-        fetch('api/handle_like.php', {
-            method: 'POST',
-            body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                // Update heart icon
-                if (data.liked) {
-                    heart.classList.add('liked');
-                    heart.textContent = '♥';
-                } else {
-                    heart.classList.remove('liked');
-                    heart.textContent = '♡';
-                }
-                // Update like count
-                document.getElementById('likeCount').textContent = data.likes;
-            } else {
-                alert('Error: ' + (data.message || 'Failed to update like'));
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('An error occurred while updating the like.');
-        });
-    });
 
     // Function to get selected color (useful for order placement)
     function getSelectedColor() {

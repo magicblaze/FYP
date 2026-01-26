@@ -960,3 +960,85 @@ main {
         width: 100%;
     }
 }
+
+/* Header specific styles */
+header {
+    position: relative;
+    z-index: 1030;
+    -webkit-font-smoothing:antialiased;
+}
+
+header .user-select-none {
+    font-weight: 700;
+    color: #2c3e50;
+    letter-spacing: 0.2px;
+}
+
+header nav .nav {
+    gap: 0.75rem;
+    align-items: center;
+}
+
+/* Slightly larger clickable area for nav links */
+header .nav-link {
+    padding: 6px 8px;
+    border-radius: 6px;
+}
+
+/* Dropdown caret color and rotation on open */
+header .nav .dropdown-toggle::after {
+    transition: transform 180ms ease, color 180ms ease;
+    color: #7f8c8d;
+}
+
+header .nav-item.dropdown.show > .dropdown-toggle::after {
+    transform: rotate(180deg);
+    color: #3498db;
+}
+
+/* Animated dropdown — rely on the `.show` class toggled by JS/Bootstrap */
+header .dropdown-menu {
+    margin-top: 6px;
+    transition: opacity 160ms ease, transform 160ms ease;
+    opacity: 0;
+    transform: translateY(-6px);
+    will-change: transform, opacity;
+}
+
+header .dropdown-menu.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* Improve dropdown item visuals for header */
+header .dropdown-item {
+    font-size: 1rem;
+    padding: 10px 18px;
+    color: #6e7a80;
+}
+
+header .dropdown-item:hover,
+header .dropdown-item:focus {
+    background: #f4f8ff;
+    color: #3498db;
+}
+
+/* Keep dropdown above page content */
+header .dropdown-menu {
+    box-shadow: 0 10px 30px rgba(0,0,0,0.12);
+}
+
+/* Responsive: compact header on small screens */
+@media (max-width: 575px) {
+    header {
+        padding: 10px 12px;
+    }
+
+    header .h4 {
+        font-size: 1.05rem;
+    }
+
+    header nav .nav {
+        gap: 0.5rem;
+    }
+}
