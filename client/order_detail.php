@@ -131,11 +131,11 @@ $scheduleStmt->bind_param("i", $orderId);
 $scheduleStmt->execute();
 $schedules = $scheduleStmt->get_result();
 
-// Fetch order references
-$referencesSql = "SELECT r.id, r.designid, r.messageid, r.note, r.added_by_type, r.added_by_id, r.created_at,
-                        d.title as design_title, d.expect_price as design_price, d.tag as design_tag
+// Fetch order references (product references)
+$referencesSql = "SELECT r.orderreferenceid, r.productid, r.added_by_type, r.added_by_id, r.created_at,
+                        p.pname, IFNULL(p.price, 0) as price
                  FROM OrderReference r
-                 LEFT JOIN Design d ON r.designid = d.designid
+                 LEFT JOIN Product p ON r.productid = p.productid
                  WHERE r.orderid = ?
                  ORDER BY r.created_at ASC";
 $referencesStmt = $mysqli->prepare($referencesSql);
@@ -535,24 +535,21 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—
             <!-- References Section -->
             <?php if ($references->num_rows > 0): ?>
             <div class="section-title">
-                <i class="fas fa-link me-2"></i>Design References
+                <i class="fas fa-link me-2"></i>Product References
             </div>
             <div class="info-card">
                 <?php 
                 $referencesTotal = 0;
                 while ($ref = $references->fetch_assoc()): 
-                    if (!empty($ref['designid']) && !empty($ref['design_title'])): 
-                        $referencesTotal += (float)($ref['design_price'] ?? 0);
+                    if (!empty($ref['productid']) && !empty($ref['pname'])): 
+                        $referencesTotal += (float)($ref['price'] ?? 0);
                 ?>
                     <div class="info-row">
                         <div class="info-label">
-                            <i class="fas fa-palette me-2"></i><?= htmlspecialchars($ref['design_title']) ?>
-                            <?php if (!empty($ref['design_tag'])): ?>
-                                <br><small class="text-muted"><?= htmlspecialchars($ref['design_tag']) ?></small>
-                            <?php endif; ?>
+                            <i class="fas fa-box me-2"></i><?= htmlspecialchars($ref['pname']) ?>
                         </div>
                         <div class="info-value">
-                            <span class="price-highlight">$<?= number_format((float)$ref['design_price'], 2) ?></span>
+                            <span class="price-highlight">$<?= number_format((float)$ref['price'], 2) ?></span>
                         </div>
                     </div>
                 <?php 
