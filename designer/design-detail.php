@@ -606,7 +606,7 @@ $designerName = isset($_SESSION['user']['name']) ? $_SESSION['user']['name'] : '
                 <div class="design-stats">
                     <div class="likes-count">
                         <i class="fas fa-heart text-danger"></i>
-                        <span><?= $design['likes'] ?? 0 ?> Likes</span>
+                        <span><?= $design['likes'] ?? 0 ?></span>
                     </div>
                 </div>
             </div>

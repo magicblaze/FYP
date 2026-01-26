@@ -39,31 +39,46 @@ body {
     border-radius: 10px;
     padding: 0.35rem 0;
     min-width: 160px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
-    border: 1px solid rgba(0,0,0,0.06);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    border: 1px solid rgba(0, 0, 0, 0.06);
     background: #ffffff;
 }
+
 .nav .dropdown-item {
     padding: 10px 16px;
-    color: #7f8c8d; /* same default color as .nav-link */
+    color: #7f8c8d;
+    /* same default color as .nav-link */
     font-weight: 500;
     transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
-    position: relative; /* allow underline pseudo-element when active */
+    position: relative;
+    /* allow underline pseudo-element when active */
     border-radius: 6px;
 }
+
 .nav .dropdown-item:hover,
 .nav .dropdown-item:focus {
     background: #f4f8ff;
-    color: #3498db; /* same hover color as .nav-link */
+    color: #3498db;
+    /* same hover color as .nav-link */
     transform: translateY(-1px);
 }
-.nav .dropdown-toggle::after { color: #7f8c8d; margin-left: 6px; }
-.nav .dropdown-menu .dropdown-item + .dropdown-item { border-top: 1px solid rgba(0,0,0,0.03); }
+
+.nav .dropdown-toggle::after {
+    color: #7f8c8d;
+    margin-left: 6px;
+}
+
+.nav .dropdown-menu .dropdown-item+.dropdown-item {
+    border-top: 1px solid rgba(0, 0, 0, 0.03);
+}
+
 .nav .dropdown-menu .dropdown-item.active {
     background: #e9f2ff;
-    color: #3498db; /* active color like .nav-link.active */
+    color: #3498db;
+    /* active color like .nav-link.active */
     font-weight: 600;
 }
+
 .nav .dropdown-menu .dropdown-item.active::after {
     content: '';
     position: absolute;
@@ -235,23 +250,32 @@ main {
 }
 
 .heart-icon {
-    font-size: 1.5rem;
+    background: none;
+    border: none;
+    padding: 0;
     cursor: pointer;
-    transition: all 0.3s ease;
+    user-select: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+}
+
+.heart-icon .fa-heart {
+    font-size: 1.5rem;
+    color: #7f8c8d;
+    transition: transform 0.25s ease, color 0.25s ease;
     display: inline-block;
-    color: #bdc3c7;
+    line-height: 1;
 }
 
-.heart-icon:hover {
+.heart-icon:hover .fa-heart {
     transform: scale(1.2);
-    color: #e74c3c;
 }
 
-.heart-icon.liked {
+.heart-icon.liked .fa-heart {
     color: #e74c3c;
-    font-weight: bold;
-    text-shadow: 0 0 5px rgba(231, 76, 60, 0.5);
-    animation: heartBeat 0.3s ease;
 }
 
 @keyframes heartBeat {

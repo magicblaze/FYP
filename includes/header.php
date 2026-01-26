@@ -14,7 +14,7 @@ $baseUrl = $scheme . '://' . $host . $appRoot;
 ?>
 <header class="bg-white shadow p-3 d-flex justify-content-between align-items-center">
   <div class="d-flex align-items-center gap-3">
-    <div class="h4 mb-0"><a href="<?= htmlspecialchars($baseUrl ?: '/') ?>" style="text-decoration: none; color: inherit;">HappyDesign</a></div>
+    <div class="h4 mb-0 user-select-none">HappyDesign</div>
     <nav>
       <ul class="nav align-items-center gap-2">
         <?php if ($role === 'designer'): ?>

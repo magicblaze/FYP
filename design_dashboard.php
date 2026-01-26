@@ -335,7 +335,7 @@ if (!$designer_result)
                                             <p class="h6 mb-2" style="color: #2c3e50; font-weight: 600;">
                                                 <?= htmlspecialchars($row['designName']) ?>
                                             </p>
-                                            <p class="text-muted mb-2"><?= htmlspecialchars($row['likes']) ?> Likes</p>
+                                            <p class="text-muted mb-2"><i class="fas fa-heart text-danger me-1" aria-hidden="true"></i><?= htmlspecialchars($row['likes']) ?></p>
                                             <p class="h6 mb-0" style="color: #e74c3c; font-weight: 700;">
                                                 HK$<?= number_format((int) $row['expect_price']) ?></p>
                                         </div>

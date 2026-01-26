@@ -35,20 +35,6 @@ if ($user_id <= 0) {
     exit;
 }
 
-// Ensure unified UserLike table exists
-$createUserLike = "CREATE TABLE IF NOT EXISTS UserLike (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    user_type VARCHAR(32) NOT NULL,
-    user_id INT NOT NULL,
-    item_type VARCHAR(16) NOT NULL,
-    item_id INT NOT NULL,
-    note VARCHAR(255) DEFAULT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY ux_user_item (user_type, user_id, item_type, item_id),
-    INDEX (item_type, item_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;";
-@$mysqli->query($createUserLike);
-
 // Support both JSON and FormData input
 $input = [];
 $content_type = $_SERVER['CONTENT_TYPE'] ?? '';
