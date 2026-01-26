@@ -131,6 +131,18 @@ $scheduleStmt->bind_param("i", $orderId);
 $scheduleStmt->execute();
 $schedules = $scheduleStmt->get_result();
 
+// Fetch order references
+$referencesSql = "SELECT r.id, r.designid, r.messageid, r.note, r.added_by_type, r.added_by_id, r.created_at,
+                        d.title as design_title, d.expect_price as design_price, d.tag as design_tag
+                 FROM OrderReference r
+                 LEFT JOIN Design d ON r.designid = d.designid
+                 WHERE r.orderid = ?
+                 ORDER BY r.created_at ASC";
+$referencesStmt = $mysqli->prepare($referencesSql);
+$referencesStmt->bind_param("i", $orderId);
+$referencesStmt->execute();
+$references = $referencesStmt->get_result();
+
 // Calculate totals
 $productTotal = 0;
 $productsTemp = $products->fetch_all(MYSQLI_ASSOC);
@@ -517,6 +529,42 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—
             </div>
             <div class="info-card">
                 <p class="mb-0"><?= htmlspecialchars($order['Requirements']) ?></p>
+            </div>
+            <?php endif; ?>
+
+            <!-- References Section -->
+            <?php if ($references->num_rows > 0): ?>
+            <div class="section-title">
+                <i class="fas fa-link me-2"></i>Design References
+            </div>
+            <div class="info-card">
+                <?php 
+                $referencesTotal = 0;
+                while ($ref = $references->fetch_assoc()): 
+                    if (!empty($ref['designid']) && !empty($ref['design_title'])): 
+                        $referencesTotal += (float)($ref['design_price'] ?? 0);
+                ?>
+                    <div class="info-row">
+                        <div class="info-label">
+                            <i class="fas fa-palette me-2"></i><?= htmlspecialchars($ref['design_title']) ?>
+                            <?php if (!empty($ref['design_tag'])): ?>
+                                <br><small class="text-muted"><?= htmlspecialchars($ref['design_tag']) ?></small>
+                            <?php endif; ?>
+                        </div>
+                        <div class="info-value">
+                            <span class="price-highlight">$<?= number_format((float)$ref['design_price'], 2) ?></span>
+                        </div>
+                    </div>
+                <?php 
+                    endif;
+                endwhile; 
+                ?>
+                <?php if ($referencesTotal > 0): ?>
+                <div class="info-row" style="border-top: 2px solid #3498db; margin-top: 0.5rem; padding-top: 0.75rem;">
+                    <span class="info-label"><strong>References Total:</strong></span>
+                    <span class="info-value price-highlight"><strong>$<?= number_format($referencesTotal, 2) ?></strong></span>
+                </div>
+                <?php endif; ?>
             </div>
             <?php endif; ?>
 
