@@ -9,19 +9,45 @@ session_start();
 
 header('Content-Type: application/json');
 
-// Check if user is logged in
+// Check if user is logged in and determine user type/id
 if (empty($_SESSION['user'])) {
     http_response_code(401);
     echo json_encode(['success' => false, 'message' => 'User not logged in']);
     exit;
 }
 
-$clientid = (int)($_SESSION['user']['clientid'] ?? 0);
-if ($clientid <= 0) {
+$user = $_SESSION['user'];
+$user_type = strtolower(trim($user['role'] ?? '')) ?: 'guest';
+$user_id = 0;
+// Map common id fields present in session
+if (!empty($user['clientid'])) $user_id = (int)$user['clientid'];
+elseif (!empty($user['designerid'])) $user_id = (int)$user['designerid'];
+elseif (!empty($user['supplierid'])) $user_id = (int)$user['supplierid'];
+elseif (!empty($user['managerid'])) $user_id = (int)$user['managerid'];
+
+// If we couldn't determine numeric id, fall back to generic uid if present
+if ($user_id <= 0 && !empty($user['id'])) $user_id = (int)$user['id'];
+
+if ($user_id <= 0) {
+    // allow likes only for logged-in users with an id
     http_response_code(403);
-    echo json_encode(['success' => false, 'message' => 'Invalid session']);
+    echo json_encode(['success' => false, 'message' => 'Invalid session identity']);
     exit;
 }
+
+// Ensure unified UserLike table exists
+$createUserLike = "CREATE TABLE IF NOT EXISTS UserLike (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_type VARCHAR(32) NOT NULL,
+    user_id INT NOT NULL,
+    item_type VARCHAR(16) NOT NULL,
+    item_id INT NOT NULL,
+    note VARCHAR(255) DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY ux_user_item (user_type, user_id, item_type, item_id),
+    INDEX (item_type, item_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;";
+@$mysqli->query($createUserLike);
 
 // Support both JSON and FormData input
 $input = [];
@@ -77,11 +103,8 @@ try {
         $action = 'remove_like';
     }
 
-    if ($type === 'product') {
-        handleProductLike($mysqli, $clientid, $id, $action);
-    } else { // design
-        handleDesignLike($mysqli, $clientid, $id, $action);
-    }
+    // Use unified user-based like table for all roles
+    handleUserLike($mysqli, $user_type, $user_id, $type, $id, $action);
 } catch (Exception $e) {
     http_response_code(500);
     echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
@@ -90,32 +113,40 @@ try {
 // ==============================
 // Product Like Handler
 // ==============================
-function handleProductLike($mysqli, $clientid, $productid, $action) {
+function handleUserLike($mysqli, $user_type, $user_id, $item_type, $item_id, $action) {
+    // Validate types
+    $item_type = ($item_type === 'product') ? 'product' : 'design';
+
     if ($action === 'toggle_like') {
-        // Check if already liked
-        $check_sql = "SELECT COUNT(*) as count FROM ProductLike WHERE clientid = ? AND productid = ?";
+        // Check if already liked by this user
+        $check_sql = "SELECT COUNT(*) as count FROM UserLike WHERE user_type = ? AND user_id = ? AND item_type = ? AND item_id = ?";
         $check_stmt = $mysqli->prepare($check_sql);
-        $check_stmt->bind_param("ii", $clientid, $productid);
+        $check_stmt->bind_param("sisi", $user_type, $user_id, $item_type, $item_id);
         $check_stmt->execute();
         $check_result = $check_stmt->get_result()->fetch_assoc();
 
         if ($check_result['count'] > 0) {
-            // Unlike
-            $delete_sql = "DELETE FROM ProductLike WHERE clientid = ? AND productid = ?";
+            // Unlike: delete row
+            $delete_sql = "DELETE FROM UserLike WHERE user_type = ? AND user_id = ? AND item_type = ? AND item_id = ?";
             $delete_stmt = $mysqli->prepare($delete_sql);
-            $delete_stmt->bind_param("ii", $clientid, $productid);
+            $delete_stmt->bind_param("sisi", $user_type, $user_id, $item_type, $item_id);
             $delete_stmt->execute();
 
-            // Decrease like count
-            $update_sql = "UPDATE Product SET likes = GREATEST(likes - 1, 0) WHERE productid = ?";
+            // Decrease like count on item table
+            if ($item_type === 'product') {
+                $update_sql = "UPDATE Product SET likes = GREATEST(likes - 1, 0) WHERE productid = ?";
+            } else {
+                $update_sql = "UPDATE Design SET likes = GREATEST(likes - 1, 0) WHERE designid = ?";
+            }
             $update_stmt = $mysqli->prepare($update_sql);
-            $update_stmt->bind_param("i", $productid);
+            $update_stmt->bind_param("i", $item_id);
             $update_stmt->execute();
 
             // Get updated likes count
-            $get_sql = "SELECT likes FROM Product WHERE productid = ?";
+            if ($item_type === 'product') $get_sql = "SELECT likes FROM Product WHERE productid = ?";
+            else $get_sql = "SELECT likes FROM Design WHERE designid = ?";
             $get_stmt = $mysqli->prepare($get_sql);
-            $get_stmt->bind_param("i", $productid);
+            $get_stmt->bind_param("i", $item_id);
             $get_stmt->execute();
             $result = $get_stmt->get_result()->fetch_assoc();
 
@@ -123,25 +154,30 @@ function handleProductLike($mysqli, $clientid, $productid, $action) {
                 'success' => true,
                 'liked' => false,
                 'likes' => (int)$result['likes'],
-                'message' => 'Product unliked successfully'
+                'message' => ucfirst($item_type) . ' unliked successfully'
             ]);
         } else {
-            // Like
-            $insert_sql = "INSERT INTO ProductLike (clientid, productid) VALUES (?, ?)";
+            // Insert like record
+            $insert_sql = "INSERT INTO UserLike (user_type, user_id, item_type, item_id) VALUES (?, ?, ?, ?)";
             $insert_stmt = $mysqli->prepare($insert_sql);
-            $insert_stmt->bind_param("ii", $clientid, $productid);
+            $insert_stmt->bind_param("sisi", $user_type, $user_id, $item_type, $item_id);
             $insert_stmt->execute();
 
             // Increase like count
-            $update_sql = "UPDATE Product SET likes = likes + 1 WHERE productid = ?";
+            if ($item_type === 'product') {
+                $update_sql = "UPDATE Product SET likes = likes + 1 WHERE productid = ?";
+            } else {
+                $update_sql = "UPDATE Design SET likes = likes + 1 WHERE designid = ?";
+            }
             $update_stmt = $mysqli->prepare($update_sql);
-            $update_stmt->bind_param("i", $productid);
+            $update_stmt->bind_param("i", $item_id);
             $update_stmt->execute();
 
             // Get updated likes count
-            $get_sql = "SELECT likes FROM Product WHERE productid = ?";
+            if ($item_type === 'product') $get_sql = "SELECT likes FROM Product WHERE productid = ?";
+            else $get_sql = "SELECT likes FROM Design WHERE designid = ?";
             $get_stmt = $mysqli->prepare($get_sql);
-            $get_stmt->bind_param("i", $productid);
+            $get_stmt->bind_param("i", $item_id);
             $get_stmt->execute();
             $result = $get_stmt->get_result()->fetch_assoc();
 
@@ -149,46 +185,44 @@ function handleProductLike($mysqli, $clientid, $productid, $action) {
                 'success' => true,
                 'liked' => true,
                 'likes' => (int)$result['likes'],
-                'message' => 'Product liked successfully'
+                'message' => ucfirst($item_type) . ' liked successfully'
             ]);
         }
     } elseif ($action === 'remove_like') {
-        // Remove like
-        $delete_sql = "DELETE FROM ProductLike WHERE clientid = ? AND productid = ?";
+        $delete_sql = "DELETE FROM UserLike WHERE user_type = ? AND user_id = ? AND item_type = ? AND item_id = ?";
         $delete_stmt = $mysqli->prepare($delete_sql);
-        $delete_stmt->bind_param("ii", $clientid, $productid);
+        $delete_stmt->bind_param("sisi", $user_type, $user_id, $item_type, $item_id);
         $delete_stmt->execute();
 
-        // Decrease like count
-        $update_sql = "UPDATE Product SET likes = GREATEST(likes - 1, 0) WHERE productid = ?";
+        if ($item_type === 'product') $update_sql = "UPDATE Product SET likes = GREATEST(likes - 1, 0) WHERE productid = ?";
+        else $update_sql = "UPDATE Design SET likes = GREATEST(likes - 1, 0) WHERE designid = ?";
         $update_stmt = $mysqli->prepare($update_sql);
-        $update_stmt->bind_param("i", $productid);
+        $update_stmt->bind_param("i", $item_id);
         $update_stmt->execute();
 
-        // Get updated likes count
-        $get_sql = "SELECT likes FROM Product WHERE productid = ?";
+        if ($item_type === 'product') $get_sql = "SELECT likes FROM Product WHERE productid = ?";
+        else $get_sql = "SELECT likes FROM Design WHERE designid = ?";
         $get_stmt = $mysqli->prepare($get_sql);
-        $get_stmt->bind_param("i", $productid);
+        $get_stmt->bind_param("i", $item_id);
         $get_stmt->execute();
         $result = $get_stmt->get_result()->fetch_assoc();
 
         echo json_encode([
             'success' => true,
             'likes' => (int)$result['likes'],
-            'message' => 'Product removed from likes'
+            'message' => ucfirst($item_type) . ' removed from likes'
         ]);
     } elseif ($action === 'check_like') {
-        // Check if user has liked this product
-        $check_sql = "SELECT COUNT(*) as count FROM ProductLike WHERE clientid = ? AND productid = ?";
+        $check_sql = "SELECT COUNT(*) as count FROM UserLike WHERE user_type = ? AND user_id = ? AND item_type = ? AND item_id = ?";
         $check_stmt = $mysqli->prepare($check_sql);
-        $check_stmt->bind_param("ii", $clientid, $productid);
+        $check_stmt->bind_param("sisi", $user_type, $user_id, $item_type, $item_id);
         $check_stmt->execute();
         $check_result = $check_stmt->get_result()->fetch_assoc();
 
-        // Get current likes count
-        $get_sql = "SELECT likes FROM Product WHERE productid = ?";
+        if ($item_type === 'product') $get_sql = "SELECT likes FROM Product WHERE productid = ?";
+        else $get_sql = "SELECT likes FROM Design WHERE designid = ?";
         $get_stmt = $mysqli->prepare($get_sql);
-        $get_stmt->bind_param("i", $productid);
+        $get_stmt->bind_param("i", $item_id);
         $get_stmt->execute();
         $result = $get_stmt->get_result()->fetch_assoc();
 

@@ -44,7 +44,7 @@ $search = isset($_GET['search']) ? mysqli_real_escape_string($mysqli, $_GET['sea
 // Build query conditions - only show pending orders for current manager
 $where_conditions = array(
     "(o.ostatus = 'Pending' OR o.ostatus = 'pending')",
-    "EXISTS (SELECT 1 FROM OrderProduct op WHERE op.orderid = o.orderid AND op.managerid = $user_id)"
+    "EXISTS (SELECT 1 FROM OrderDelivery op WHERE op.orderid = o.orderid AND op.managerid = $user_id)"
 );
 
 if(!empty($search)) {
@@ -81,7 +81,7 @@ $stats_sql = "SELECT
               FROM `Order` o
               LEFT JOIN `Client` c ON o.clientid = c.clientid
               WHERE (o.ostatus = 'Pending' OR o.ostatus = 'pending')
-              AND EXISTS (SELECT 1 FROM OrderProduct op WHERE op.orderid = o.orderid AND op.managerid = $user_id)";
+              AND EXISTS (SELECT 1 FROM OrderDelivery op WHERE op.orderid = o.orderid AND op.managerid = $user_id)";
 $stats_result = safe_mysqli_query($mysqli, $stats_sql);
 $stats = mysqli_fetch_assoc($stats_result);
 ?>

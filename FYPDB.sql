@@ -28,7 +28,7 @@ DROP TABLE IF EXISTS `Designer`;
 DROP TABLE IF EXISTS `Supplier`;
 DROP TABLE IF EXISTS `Material`;
 DROP TABLE IF EXISTS `Order`;
-DROP TABLE IF EXISTS `OrderProduct`;
+DROP TABLE IF EXISTS `OrderDelivery`;
 DROP TABLE IF EXISTS `Order_Contractors`;
 DROP TABLE IF EXISTS `Design`;
 DROP TABLE IF EXISTS `Comment_design`;
@@ -42,6 +42,11 @@ DROP TABLE IF EXISTS `MessageRead`;
 DROP TABLE IF EXISTS `UploadedFiles`;
 DROP TABLE IF EXISTS `DesignImage`;
 DROP TABLE IF EXISTS `OrderReference`;
+DROP TABLE IF EXISTS `DesignReference`;
+DROP TABLE IF EXISTS `UserLike`;
+DROP TABLE IF EXISTS `OrderMaterial`;
+DROP TABLE IF EXISTS `Comment_material`;
+DROP TABLE IF EXISTS `DesignMaterial`;
 
 -- Client table
 CREATE TABLE `Client` (
@@ -265,6 +270,32 @@ INSERT INTO `OrderReference` (`orderid`, `productid`, `added_by_type`, `added_by
 (2, 3, 'client', 2), 
 (2, 4, 'client', 2); 
 
+CREATE TABLE `DesignReference` (
+  `id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `designid` INT NOT NULL,
+  `productid` INT NOT NULL,
+  `note` VARCHAR(255) DEFAULT NULL,
+  `added_by_designerid` INT DEFAULT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  KEY `designid_idx` (`designid`),
+  KEY `productid_idx` (`productid`),
+  CONSTRAINT `fk_dr_designid` FOREIGN KEY (`designid`) REFERENCES `Design`(`designid`) ON DELETE CASCADE,
+  CONSTRAINT `fk_dr_productid` FOREIGN KEY (`productid`) REFERENCES `Product`(`productid`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE `UserLike` (
+  `id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `user_type` VARCHAR(32) NOT NULL,
+  `user_id` INT NOT NULL,
+  `item_type` VARCHAR(16) NOT NULL,
+  `item_id` INT NOT NULL,
+  `note` VARCHAR(255) DEFAULT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY `ux_user_item` (`user_type`, `user_id`, `item_type`, `item_id`),
+  KEY `item_idx` (`item_type`, `item_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
 -- Table to store color-image mapping for each product
 CREATE TABLE `ProductColorImage` (
   `id` int NOT NULL AUTO_INCREMENT,
@@ -287,9 +318,9 @@ INSERT INTO `ProductColorImage` (`id`, `productid`, `color`, `image`) VALUES
 (8, 6, 'Brown', 'table.jpg'),
 (9, 6, 'White', 'table_white.jpg');
 
--- OrderMaterial table
-CREATE TABLE `OrderProduct` (
-  `orderproductid` int NOT NULL AUTO_INCREMENT,
+-- OrderDelivery table
+CREATE TABLE `OrderDelivery` (
+  `orderdeliveryid` int NOT NULL AUTO_INCREMENT,
   `productid` int NOT NULL,
   `quantity` int NOT NULL,
   `orderid` int NOT NULL,
@@ -297,17 +328,17 @@ CREATE TABLE `OrderProduct` (
   `status` varchar(255) NOT NULL,
   `managerid` int NOT NULL,
   `color` varchar(100) DEFAULT NULL,
-  PRIMARY KEY (`orderproductid`),
-  KEY `productid_OrderProduct_idx` (`productid`),
-  KEY `orderid_OrderProduct_idx` (`orderid`),
-  KEY `managerid_OrderProduct_idx` (`managerid`),
-  CONSTRAINT `fk_OrderProduct_materialid` FOREIGN KEY (`productid`) REFERENCES `Product` (`productid`),
-  CONSTRAINT `fk_OrderProduct_orderid` FOREIGN KEY (`orderid`) REFERENCES `Order` (`orderid`),
-  CONSTRAINT `fk_OrderProduct_managerid` FOREIGN KEY (`managerid`) REFERENCES `Manager` (`managerid`)
+  PRIMARY KEY (`orderdeliveryid`),
+  KEY `productid_OrderDelivery_idx` (`productid`),
+  KEY `orderid_OrderDelivery_idx` (`orderid`),
+  KEY `managerid_OrderDelivery_idx` (`managerid`),
+  CONSTRAINT `fk_OrderDelivery_materialid` FOREIGN KEY (`productid`) REFERENCES `Product` (`productid`),
+  CONSTRAINT `fk_OrderDelivery_orderid` FOREIGN KEY (`orderid`) REFERENCES `Order` (`orderid`),
+  CONSTRAINT `fk_OrderDelivery_managerid` FOREIGN KEY (`managerid`) REFERENCES `Manager` (`managerid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-INSERT INTO `OrderProduct`
-(`orderproductid`, `productid`, `quantity`, `orderid`, `deliverydate`,`status`, `managerid`, `color`) VALUES
+INSERT INTO `OrderDelivery`
+(`orderdeliveryid`, `productid`, `quantity`, `orderid`, `deliverydate`,`status`, `managerid`, `color`) VALUES
 (1, 1, 10, 1, '2026-01-13', 'Pending', 1, 'Grey'),
 (2, 2, 20, 1, '2026-01-23', 'Shipped', 1, 'Brown');
 
@@ -542,7 +573,7 @@ INSERT INTO `MessageRead` (`messagereadid`, `messageid`, `ChatRoomMemberid`, `is
 INSERT INTO `Order` (`orderid`, `odate`, `clientid`, `Requirements`,`designid`,`ostatus`,`designedPicture`) VALUES
 (3, '2025-07-01 09:00:00', 1, 'Need quick remodel', 1, 'Pending', NULL);
 
-INSERT INTO `OrderProduct` (`orderproductid`, `productid`, `quantity`, `orderid`, `deliverydate`, `status`, `managerid`, `color`) VALUES
+INSERT INTO `OrderDelivery` (`orderdeliveryid`, `productid`, `quantity`, `orderid`, `deliverydate`, `status`, `managerid`, `color`) VALUES
 (3, 3, 50, 3, '2026-01-13', 'Pending', 1, 'White');
 
 INSERT INTO `Order_Contractors` (`order_Contractorid`, `contractorid`, `orderid`, `managerid`) VALUES
