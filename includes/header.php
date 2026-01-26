@@ -18,12 +18,21 @@ $baseUrl = $scheme . '://' . $host . ($appRoot === '' ? '' : $appRoot);
           <li class="nav-item"><a class="nav-link" href="<?= $baseUrl ?>/designer/schedule.php">Schedule</a></li>
           <li class="nav-item"><a class="nav-link" href="<?= $baseUrl ?>/designer/DesignManager.php">Designs</a></li>
           <li class="nav-item"><a class="nav-link" href="<?= $baseUrl ?>/designer/OrderManager.php">Orders</a></li>
+          <li class="nav-item"><a class="nav-link" href="<?= $baseUrl ?>/design_dashboard.php">Design Dashboard</a></li>
+          <li class="nav-item"><a class="nav-link" href="<?= $baseUrl ?>/material_dashboard.php">Material Dashboard</a></li>
+          <li class="nav-item"><a class="nav-link" href="<?= $baseUrl ?>/furniture_dashboard.php">Furniture Dashboard</a></li>
         <?php elseif ($role === 'supplier'): ?>
           <li class="nav-item"><a class="nav-link" href="<?= $baseUrl ?>/supplier/dashboard.php">Dashboard</a></li>
           <li class="nav-item"><a class="nav-link" href="<?= $baseUrl ?>/supplier/product-detail.php">Products</a></li>
+          <li class="nav-item"><a class="nav-link" href="<?= $baseUrl ?>/design_dashboard.php">Design Dashboard</a></li>
+          <li class="nav-item"><a class="nav-link" href="<?= $baseUrl ?>/material_dashboard.php">Material Dashboard</a></li>
+          <li class="nav-item"><a class="nav-link" href="<?= $baseUrl ?>/furniture_dashboard.php">Furniture Dashboard</a></li>
         <?php elseif ($role === 'manager'): ?>
           <li class="nav-item"><a class="nav-link" href="<?= $baseUrl ?>/Manager/Manager_MyOrder.php">Orders</a></li>
           <li class="nav-item"><a class="nav-link" href="<?= $baseUrl ?>/Manager/Manager_Schedule.php">Schedule</a></li>
+          <li class="nav-item"><a class="nav-link" href="<?= $baseUrl ?>/design_dashboard.php">Design Dashboard</a></li>
+          <li class="nav-item"><a class="nav-link" href="<?= $baseUrl ?>/material_dashboard.php">Material Dashboard</a></li>
+          <li class="nav-item"><a class="nav-link" href="<?= $baseUrl ?>/furniture_dashboard.php">Furniture Dashboard</a></li>
         <?php else: ?>
           <li class="nav-item"><a class="nav-link" href="<?= $baseUrl ?>/design_dashboard.php">Design</a></li>
           <li class="nav-item"><a class="nav-link" href="<?= $baseUrl ?>/material_dashboard.php">Material</a></li>
