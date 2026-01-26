@@ -432,7 +432,7 @@ $stmt->close();
                             <div class="order-title">Order #<?= $order['orderid'] ?></div>
                             <div class="order-price">HK$<?= number_format($order['budget']) ?> Budget</div>
                             <div class="order-id">Design: <a
-                                    href="../client/design_detail.php?designid=<?= (int) $order['designid'] ?>" target="_blank"
+                                    href="../design_detail.php?designid=<?= (int) $order['designid'] ?>" target="_blank"
                                     rel="noopener"><?= htmlspecialchars($order['designName'] ?? ('Design #' . $order['designid'])) ?></a>
                             </div>
                             <div id="status_<?= $order['orderid'] ?>" style="margin-top:6px"><strong>Status:</strong>
@@ -615,7 +615,7 @@ $stmt->close();
                                             if ($ir = $imr->fetch_assoc()) $refImg = $ir['image_filename'];
                                             $imst->close();
                                         }
-                                        $refLink = '../client/design_detail.php?designid=' . $did;
+                                        $refLink = '../design_detail.php?designid=' . $did;
                                     } elseif (!empty($ref['messageid'])) {
                                         $mid = (int)$ref['messageid'];
                                         $mstmt = $mysqli->prepare('SELECT content, message_type, fileid FROM Message WHERE messageid = ? LIMIT 1');
@@ -657,7 +657,7 @@ $stmt->close();
                                                         if ($ir = $imr->fetch_assoc()) $refImg = $ir['image_filename'];
                                                         $imst->close();
                                                     }
-                                                    $refLink = '../client/design_detail.php?designid=' . $did;
+                                                    $refLink = '../design_detail.php?designid=' . $did;
                                                 }
                                                 // if message had uploaded file, try to show that as thumbnail
                                                 if (empty($refImg) && !empty($mrow['fileid'])) {
@@ -696,7 +696,7 @@ $stmt->close();
                                             <?php if (!empty($refLink) && !empty($refName)): ?>
                                                 <a href="<?= htmlspecialchars($refLink) ?>" target="_blank" rel="noopener" style="text-decoration:none;color:#333;font-weight:600"><?= htmlspecialchars($refName) ?></a>
                                             <?php elseif (!empty($ref['designid'])): ?>
-                                                <a href="../client/design_detail.php?designid=<?= (int)$ref['designid'] ?>" target="_blank" rel="noopener" style="text-decoration:none;color:#333;font-weight:600">Design #<?= (int)$ref['designid'] ?></a>
+                                                <a href="../design_detail.php?designid=<?= (int)$ref['designid'] ?>" target="_blank" rel="noopener" style="text-decoration:none;color:#333;font-weight:600">Design #<?= (int)$ref['designid'] ?></a>
                                             <?php elseif (!empty($ref['messageid'])): ?>
                                                 <span style="font-weight:600">Message #<?= (int)$ref['messageid'] ?></span>
                                             <?php else: ?>

@@ -320,7 +320,7 @@ try {
               } catch (Throwable $__e) {}
               $r['share'] = [
                 'title' => $drow['designName'] ?? '',
-                'url' => $appRoot . '/client/design_detail.php?designid=' . (int)$drow['designid'],
+                'url' => $appRoot . '/design_detail.php?designid=' . (int)$drow['designid'],
                 'image' => $img,
                 'type' => 'design',
                 'price' => isset($drow['expect_price']) ? $drow['expect_price'] : null,

@@ -194,34 +194,7 @@ $orders = $stmt->get_result();
     </style>
 </head>
 <body>
-    <header class="bg-white shadow p-3 d-flex justify-content-between align-items-center">
-        <div class="d-flex align-items-center gap-3">
-            <div class="h4 mb-0"><a href="../design_dashboard.php" style="text-decoration: none; color: inherit;">HappyDesign</a></div>
-            <nav>
-                <ul class="nav align-items-center gap-2">
-                    <li class="nav-item"><a class="nav-link" href="../design_dashboard.php">Design</a></li>
-                    <li class="nav-item"><a class="nav-link" href="../material_dashboard.php">Material</a></li>
-                    <li class="nav-item"><a class="nav-link" href="../furniture_dashboard.php">Furniture</a></li>
-                </ul>
-            </nav>
-        </div>
-        <nav>
-            <ul class="nav align-items-center">
-                <?php if (isset($_SESSION['user'])): ?>
-                    <li class="nav-item me-2">
-                        <a class="nav-link text-muted " href="../client/profile.php">
-                            <i class="fas fa-user me-1"></i>Hello <?= htmlspecialchars($clientData['cname'] ?? $_SESSION['user']['name'] ?? 'User') ?>
-                        </a>
-                    </li>
-                    <li class="nav-item"><a class="nav-link" href="../client/my_likes.php">My Likes</a></li>
-                    <li class="nav-item"><a class="nav-link active" href="../client/order_history.php">Order History</a></li>
-                    <li class="nav-item"><a class="nav-link" href="../logout.php">Logout</a></li>
-                  <?php else: ?>
-                    <li class="nav-item"><a class="nav-link" href="../login.php">Login</a></li>
-                <?php endif; ?>
-            </ul>
-        </nav>
-    </header>
+    <?php include_once __DIR__ . '/../includes/header.php'; ?>
 
     <main class="container mt-4">
         <div class="order-history-container">

@@ -232,34 +232,7 @@ if (!$material_result) die('Query error: ' . $mysqli->error);
     </style>
 </head>
 <body>
-    <header class="bg-white shadow p-3 d-flex justify-content-between align-items-center">
-        <div class="d-flex align-items-center gap-3">
-            <div class="h4 mb-0"><a href="design_dashboard.php" style="text-decoration: none; color: inherit;">HappyDesign</a></div>
-            <nav>
-                <ul class="nav align-items-center gap-2">
-                    <li class="nav-item"><a class="nav-link" href="design_dashboard.php">Design</a></li>
-                    <li class="nav-item"><a class="nav-link active" href="material_dashboard.php">Material</a></li>
-                    <li class="nav-item"><a class="nav-link" href="furniture_dashboard.php">Furniture</a></li>
-                </ul>
-            </nav>
-        </div>
-        <nav>
-            <ul class="nav align-items-center">
-                <?php if (isset($_SESSION['user'])): ?>
-                    <li class="nav-item me-2">
-                        <a class="nav-link text-muted" href="client/profile.php">
-                            <i class="fas fa-user me-1"></i>Hello <?= htmlspecialchars($_SESSION['user']['name'] ?? 'User') ?>
-                        </a>
-                    </li>
-                    <li class="nav-item"><a class="nav-link" href="client/my_likes.php">My Likes</a></li>
-                    <li class="nav-item"><a class="nav-link" href="client/order_history.php">Order History</a></li>
-                    <li class="nav-item"><a class="nav-link" href="logout.php">Logout</a></li>
-                <?php else: ?>
-                    <li class="nav-item"><a class="nav-link" href="login.php">Login</a></li>
-                <?php endif; ?>
-            </ul>
-        </nav>
-    </header>
+    <?php include __DIR__ . '/includes/header.php'; ?>
 
     <main class="container-lg mt-4">
         <!-- Search Bar -->
@@ -348,7 +321,7 @@ if (!$material_result) die('Query error: ' . $mysqli->error);
                     <?php if ($result->num_rows > 0): ?>
                         <?php while ($prod = $result->fetch_assoc()): ?>
                         <div class="col-lg-4 col-md-6 col-sm-12">
-                            <a href="client/product_detail.php?id=<?= htmlspecialchars($prod['productid']) ?>" style="text-decoration: none;">
+                            <a href="product_detail.php?id=<?= htmlspecialchars($prod['productid']) ?>" style="text-decoration: none;">
                                 <div class="card h-100">
                                     <?php 
                                         $prodId = $prod['productid'];

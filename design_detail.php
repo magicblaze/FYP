@@ -3,15 +3,10 @@
 // File: design_detail.php (UPDATED for new like system)
 // Purpose: Display design details with new unified like system
 // ==============================
-require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/config.php';
 session_start();
 
-// Check if user is logged in
-if (empty($_SESSION['user'])) {
-    $redirect = 'client/design_detail.php' . (isset($_GET['designid']) ? ('?designid=' . urlencode((string)$_GET['designid'])) : '');
-    header('Location: ../login.php?redirect=' . urlencode($redirect));
-    exit;
-}
+// Page is accessible to all users (login optional)
 
 $designid = isset($_GET['designid']) ? (int)$_GET['designid'] : 0;
 if ($designid <= 0) { http_response_code(404); die('Design not found.'); }
@@ -80,7 +75,8 @@ if ($clientid > 0) {
 }
 
 // Determine back button destination based on referrer
-$backUrl = '../design_dashboard.php'; // Default destination
+// Default destination (file is in project root)
+$backUrl = 'design_dashboard.php';
 if (isset($_GET['from']) && $_GET['from'] === 'my_likes') {
     $backUrl = 'my_likes.php';
 }
@@ -111,7 +107,7 @@ $mainImg = $baseUrlEarly . $appRoot . '/design_image.php?id=' . (int)$design['de
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HappyDesign - <?= htmlspecialchars($design['dname']) ?></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="../css/styles.css">
+    <link rel="stylesheet" href="css/styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         .design-detail-wrapper {
@@ -466,7 +462,7 @@ $mainImg = $baseUrlEarly . $appRoot . '/design_image.php?id=' . (int)$design['de
     </style>
 </head>
 <body>
-    <?php include_once __DIR__ . '/../includes/header.php'; ?>
+    <?php include_once __DIR__ . '/includes/header.php'; ?>
 
     <main>
         <div class="design-detail-wrapper">
@@ -476,7 +472,7 @@ $mainImg = $baseUrlEarly . $appRoot . '/design_image.php?id=' . (int)$design['de
                     <div class="design-carousel" id="designCarousel">
                     <?php foreach ($images as $index => $image): ?>
                         <div class="carousel-item <?= $index === 0 ? 'active' : '' ?>">
-                            <img src="<?= htmlspecialchars('../uploads/designs/' . $image['image_filename']) ?>" alt="<?= htmlspecialchars($design['dname']) ?> Image <?= $index + 1 ?>">
+                            <img src="<?= htmlspecialchars('uploads/designs/' . $image['image_filename']) ?>" alt="<?= htmlspecialchars($design['dname']) ?> Image <?= $index + 1 ?>">
                         </div>
                     <?php endforeach; ?>
 
@@ -507,7 +503,7 @@ $mainImg = $baseUrlEarly . $appRoot . '/design_image.php?id=' . (int)$design['de
                     <div class="thumbnail-strip">
                         <?php foreach ($images as $index => $image): ?>
                             <div class="thumbnail <?= $index === 0 ? 'active' : '' ?>" onclick="goToImage(<?= $index ?>)">
-                                <img src="<?= htmlspecialchars('../uploads/designs/' . $image['image_filename']) ?>" alt="Thumbnail <?= $index + 1 ?>">
+                                <img src="<?= htmlspecialchars('uploads/designs/' . $image['image_filename']) ?>" alt="Thumbnail <?= $index + 1 ?>">
                             </div>
                         <?php endforeach; ?>
                     </div>
@@ -614,7 +610,7 @@ $mainImg = $baseUrlEarly . $appRoot . '/design_image.php?id=' . (int)$design['de
                     $img_filename = $img_result ? $img_result['image_filename'] : 'placeholder.jpg';
                 ?>
                 <a href="design_detail.php?designid=<?= (int)$r['designid'] ?>">
-                    <img src="<?= htmlspecialchars('../uploads/designs/' . $img_filename) ?>" alt="Design">
+                    <img src="<?= htmlspecialchars('uploads/designs/' . $img_filename) ?>" alt="Design">
                 </a>
             <?php endwhile; ?>
         </div>
@@ -632,7 +628,7 @@ $mainImg = $baseUrlEarly . $appRoot . '/design_image.php?id=' . (int)$design['de
     // 處理標籤點擊事件，重定向到設計儀表板並搜索該標籤
     function searchTag(tag) {
         const encodedTag = encodeURIComponent(tag);
-        window.location.href = '../design_dashboard.php?tag=' + encodedTag;
+        window.location.href = 'design_dashboard.php?tag=' + encodedTag;
     }
 
     let currentImageIndex = 0;
@@ -685,7 +681,7 @@ $mainImg = $baseUrlEarly . $appRoot . '/design_image.php?id=' . (int)$design['de
                 formData.append('type', 'design');
                 formData.append('id', designid);
 
-                fetch('../api/handle_like.php', { method: 'POST', body: formData })
+                fetch('api/handle_like.php', { method: 'POST', body: formData })
                     .then(r=>r.json())
                     .then(data=>{
                         if (data && data.success) {
@@ -702,6 +698,6 @@ $mainImg = $baseUrlEarly . $appRoot . '/design_image.php?id=' . (int)$design['de
 
     <!-- Chat widget: include unified PHP widget (handles markup and initialization) -->
     <?php
-    include __DIR__ . '/../Public/chat_widget.php'; ?>
+    include __DIR__ . '/Public/chat_widget.php'; ?>
 </body>
 </html>
