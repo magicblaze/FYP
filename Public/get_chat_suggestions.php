@@ -67,22 +67,22 @@ $recommended_products = [];
 // - Suppliers from products the user liked (ProductLike)
 // - Recommended designs/products from Design/Product tables
 
-// 1) Designers from liked designs
+// 1) Designers from liked designs (use unified UserLike)
 $designerIds = [];
-$dl = @$mysqli->prepare("SELECT DISTINCT d.designerid FROM DesignLike dl JOIN Design d ON dl.designid = d.designid WHERE dl.clientid = ? LIMIT 20");
+$dl = @$mysqli->prepare("SELECT DISTINCT d.designerid FROM UserLike ul JOIN Design d ON ul.item_id = d.designid WHERE ul.user_type = ? AND ul.user_id = ? AND ul.item_type = 'design' LIMIT 20");
 if ($dl) {
-  $dl->bind_param('i', $uid);
+  $dl->bind_param('si', $role, $uid);
   $dl->execute();
   $dres = $dl->get_result();
   while ($row = $dres->fetch_assoc()) { $designerIds[] = (int)$row['designerid']; }
   $dl->close();
 }
 
-// 2) Suppliers from liked products
+// 2) Suppliers from liked products (use unified UserLike)
 $supplierIds = [];
-$pl = @$mysqli->prepare("SELECT DISTINCT p.supplierid FROM ProductLike pl JOIN Product p ON pl.productid = p.productid WHERE pl.clientid = ? LIMIT 20");
+$pl = @$mysqli->prepare("SELECT DISTINCT p.supplierid FROM UserLike ul JOIN Product p ON ul.item_id = p.productid WHERE ul.user_type = ? AND ul.user_id = ? AND ul.item_type = 'product' LIMIT 20");
 if ($pl) {
-  $pl->bind_param('i', $uid);
+  $pl->bind_param('si', $role, $uid);
   $pl->execute();
   $pres = $pl->get_result();
   while ($row = $pres->fetch_assoc()) { $supplierIds[] = (int)$row['supplierid']; }
@@ -150,12 +150,12 @@ try {
   // build absolute image URLs early so liked_designs can use it
   $baseUrl = ((isset($_SERVER['HTTPS']) && $_SERVER['HTTPS']) ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? '') . rtrim(dirname(dirname($_SERVER['SCRIPT_NAME'])), '/\\');
   $likedIds = [];
-  $dl = $mysqli->prepare("SELECT designid FROM DesignLike WHERE clientid = ?");
+  $dl = $mysqli->prepare("SELECT item_id FROM UserLike WHERE user_type = ? AND user_id = ? AND item_type = 'design'");
   if ($dl) {
-    $dl->bind_param('i', $clientId);
+    $dl->bind_param('si', $role, $clientId);
     $dl->execute();
     $ldr = $dl->get_result();
-    while ($row = $ldr->fetch_assoc()) $likedIds[] = (int)$row['designid'];
+    while ($row = $ldr->fetch_assoc()) $likedIds[] = (int)$row['item_id'];
     $dl->close();
   }
 
@@ -199,12 +199,12 @@ try {
 
   // --- Liked products: similar approach using ProductLike + Product + ProductColorImage ---
   $likedProductIds = [];
-  $pl = $mysqli->prepare("SELECT productid FROM ProductLike WHERE clientid = ?");
+  $pl = $mysqli->prepare("SELECT item_id FROM UserLike WHERE user_type = ? AND user_id = ? AND item_type = 'product'");
   if ($pl) {
-    $pl->bind_param('i', $clientId);
+    $pl->bind_param('si', $role, $clientId);
     $pl->execute();
     $pr = $pl->get_result();
-    while ($row = $pr->fetch_assoc()) $likedProductIds[] = (int)$row['productid'];
+    while ($row = $pr->fetch_assoc()) $likedProductIds[] = (int)$row['item_id'];
     $pl->close();
   }
 

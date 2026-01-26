@@ -3,12 +3,12 @@
 // File: my_likes.php
 // Purpose: Display all products and designs that the user has liked
 // ==============================
-require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/config.php';
 session_start();
 
 // Check if user is logged in
 if (empty($_SESSION['user'])) {
-    header('Location: ../login.php?redirect=' . urlencode('my_likes.php'));
+    header('Location: login.php?redirect=' . urlencode('my_likes.php'));
     exit;
 }
 
@@ -16,11 +16,16 @@ if (empty($_SESSION['user'])) {
 $user = $_SESSION['user'];
 $user_type = strtolower(trim($user['role'] ?? '')) ?: 'client';
 $user_id = 0;
-if (!empty($user['clientid'])) $user_id = (int)$user['clientid'];
-elseif (!empty($user['designerid'])) $user_id = (int)$user['designerid'];
-elseif (!empty($user['supplierid'])) $user_id = (int)$user['supplierid'];
-elseif (!empty($user['managerid'])) $user_id = (int)$user['managerid'];
-elseif (!empty($user['id'])) $user_id = (int)$user['id'];
+if (!empty($user['clientid']))
+    $user_id = (int) $user['clientid'];
+elseif (!empty($user['designerid']))
+    $user_id = (int) $user['designerid'];
+elseif (!empty($user['supplierid']))
+    $user_id = (int) $user['supplierid'];
+elseif (!empty($user['managerid']))
+    $user_id = (int) $user['managerid'];
+elseif (!empty($user['id']))
+    $user_id = (int) $user['id'];
 
 if ($user_id <= 0) {
     http_response_code(403);
@@ -30,7 +35,8 @@ if ($user_id <= 0) {
 // If the new unified UserLike table exists, use it; otherwise fall back to legacy ProductLike/DesignLike for clients
 $hasUserLike = false;
 $tbl = $mysqli->query("SHOW TABLES LIKE 'UserLike'");
-if ($tbl && $tbl->num_rows) $hasUserLike = true;
+if ($tbl && $tbl->num_rows)
+    $hasUserLike = true;
 
 // Get liked products with their first color images
 if ($hasUserLike) {
@@ -40,7 +46,8 @@ if ($hasUserLike) {
         $pr->bind_param('si', $user_type, $user_id);
         $pr->execute();
         $res = $pr->get_result();
-        while ($r = $res->fetch_assoc()) $likedProductIds[] = (int)$r['item_id'];
+        while ($r = $res->fetch_assoc())
+            $likedProductIds[] = (int) $r['item_id'];
         $pr->close();
     }
 
@@ -57,26 +64,6 @@ if ($hasUserLike) {
     } else {
         $liked_products = $mysqli->query("SELECT * FROM Product WHERE 0");
     }
-} else {
-    // legacy fallback: only clients supported
-    $clientid = (int)($user['clientid'] ?? 0);
-    if ($clientid <= 0) {
-        $liked_products = $mysqli->query("SELECT * FROM Product WHERE 0");
-    } else {
-        $products_sql = "SELECT p.*, s.sname, pci.image as first_color_image
-                         FROM Product p
-                         JOIN Supplier s ON p.supplierid = s.supplierid
-                         LEFT JOIN ProductColorImage pci ON p.productid = pci.productid
-                         WHERE p.productid IN (
-                             SELECT productid FROM ProductLike WHERE clientid = ?
-                         )
-                         GROUP BY p.productid
-                         ORDER BY p.productid DESC";
-        $products_stmt = $mysqli->prepare($products_sql);
-        $products_stmt->bind_param("i", $clientid);
-        $products_stmt->execute();
-        $liked_products = $products_stmt->get_result();
-    }
 }
 
 // Get liked designs
@@ -87,7 +74,8 @@ if ($hasUserLike) {
         $dr->bind_param('si', $user_type, $user_id);
         $dr->execute();
         $dres = $dr->get_result();
-        while ($r = $dres->fetch_assoc()) $likedDesignIds[] = (int)$r['item_id'];
+        while ($r = $dres->fetch_assoc())
+            $likedDesignIds[] = (int) $r['item_id'];
         $dr->close();
     }
 
@@ -103,26 +91,6 @@ if ($hasUserLike) {
         $liked_designs = $mysqli->query($designs_sql);
     } else {
         $liked_designs = $mysqli->query("SELECT * FROM Design WHERE 0");
-    }
-} else {
-    // legacy fallback: only clients supported
-    $clientid = (int)($user['clientid'] ?? 0);
-    if ($clientid <= 0) {
-        $liked_designs = $mysqli->query("SELECT * FROM Design WHERE 0");
-    } else {
-        $designs_sql = "SELECT d.*, dz.dname, di.image_filename
-                        FROM Design d
-                        JOIN Designer dz ON d.designerid = dz.designerid
-                        LEFT JOIN DesignImage di ON d.designid = di.designid
-                        WHERE d.designid IN (
-                            SELECT designid FROM DesignLike WHERE clientid = ?
-                        )
-                        GROUP BY d.designid
-                        ORDER BY d.designid DESC";
-        $designs_stmt = $mysqli->prepare($designs_sql);
-        $designs_stmt->bind_param("i", $clientid);
-        $designs_stmt->execute();
-        $liked_designs = $designs_stmt->get_result();
     }
 }
 
@@ -149,12 +117,13 @@ $total_count = $products_count + $designs_count;
 ?>
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HappyDesign - My Likes</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="../css/styles.css">
+    <link rel="stylesheet" href="css/styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         .my-likes-container {
@@ -399,8 +368,9 @@ $total_count = $products_count + $designs_count;
         }
     </style>
 </head>
+
 <body>
-    <?php include_once __DIR__ . '/../includes/header.php'; ?>
+    <?php include_once __DIR__ . '/includes/header.php'; ?>
 
     <main>
         <div class="my-likes-container">
@@ -412,109 +382,112 @@ $total_count = $products_count + $designs_count;
 
             <!-- Statistics Bar -->
             <?php if ($total_count > 0): ?>
-            <div class="stats-bar">
-                <div class="stat-item">
-                    <span class="stat-number"><?= $total_count ?></span>
-                    <span class="stat-label">Total Likes</span>
+                <div class="stats-bar">
+                    <div class="stat-item">
+                        <span class="stat-number"><?= $total_count ?></span>
+                        <span class="stat-label">Total Likes</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-number"><?= $products_count ?></span>
+                        <span class="stat-label">Products</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-number"><?= $designs_count ?></span>
+                        <span class="stat-label">Designs</span>
+                    </div>
                 </div>
-                <div class="stat-item">
-                    <span class="stat-number"><?= $products_count ?></span>
-                    <span class="stat-label">Products</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-number"><?= $designs_count ?></span>
-                    <span class="stat-label">Designs</span>
-                </div>
-            </div>
             <?php endif; ?>
 
             <!-- Liked Products Section -->
             <?php if ($products_count > 0): ?>
-            <div class="section-title">
-                <i class="fas fa-shopping-bag"></i> Liked Products (<?= $products_count ?>)
-            </div>
-            <div class="likes-grid">
-                <?php while ($product = $liked_products->fetch_assoc()): 
-                    // Use first color image from ProductColorImage table, or placeholder if not available
-                    $productImageUrl = !empty($product['first_color_image']) 
-                        ? '../uploads/products/' . htmlspecialchars($product['first_color_image'])
-                        : '../uploads/products/placeholder.jpg';
-                ?>
-                <div class="like-card">
-                    <div class="like-card-image">
-                        <img src="<?= $productImageUrl ?>" alt="<?= htmlspecialchars($product['pname']) ?>">
-                    </div>
-                    <div class="like-card-body">
-                        <div class="like-card-title" title="<?= htmlspecialchars($product['pname']) ?>">
-                            <?= htmlspecialchars($product['pname']) ?>
-                        </div>
-                        <div class="like-card-meta">
-                            <i class="fas fa-store"></i> <?= htmlspecialchars($product['sname']) ?>
-                        </div>
-                        <div class="like-card-meta">
-                            <i class="fas fa-tag"></i> <?= htmlspecialchars($product['category']) ?>
-                        </div>
-                        <div class="like-card-price">HK$<?= number_format((float)$product['price']) ?></div>
-                        <div class="like-card-designer">
-                            <i class="fas fa-heart"></i> <?= (int)$product['likes'] ?> likes
-                        </div>
-                        <div class="like-card-footer">
-                            <a href="product_detail.php?id=<?= (int)$product['productid'] ?>&from=my_likes" class="like-card-btn view">
-                                <i class="fas fa-eye"></i> View
-                            </a>
-                        </div>
-                    </div>
+                <div class="section-title">
+                    <i class="fas fa-shopping-bag"></i> Liked Products (<?= $products_count ?>)
                 </div>
-                <?php endwhile; ?>
-            </div>
+                <div class="likes-grid">
+                    <?php while ($product = $liked_products->fetch_assoc()):
+                        // Use first color image from ProductColorImage table, or placeholder if not available
+                        $productImageUrl = !empty($product['first_color_image'])
+                            ? '/uploads/products/' . htmlspecialchars($product['first_color_image'])
+                            : '/uploads/products/placeholder.jpg';
+                        ?>
+                        <div class="like-card">
+                            <div class="like-card-image">
+                                <img src="<?= $productImageUrl ?>" alt="<?= htmlspecialchars($product['pname']) ?>">
+                            </div>
+                            <div class="like-card-body">
+                                <div class="like-card-title" title="<?= htmlspecialchars($product['pname']) ?>">
+                                    <?= htmlspecialchars($product['pname']) ?>
+                                </div>
+                                <div class="like-card-meta">
+                                    <i class="fas fa-store"></i> <?= htmlspecialchars($product['sname']) ?>
+                                </div>
+                                <div class="like-card-meta">
+                                    <i class="fas fa-tag"></i> <?= htmlspecialchars($product['category']) ?>
+                                </div>
+                                <div class="like-card-price">HK$<?= number_format((float) $product['price']) ?></div>
+                                <div class="like-card-designer">
+                                    <i class="fas fa-heart"></i> <?= (int) $product['likes'] ?> likes
+                                </div>
+                                <div class="like-card-footer">
+                                    <a href="product_detail.php?id=<?= (int) $product['productid'] ?>&from=my_likes"
+                                        class="like-card-btn view">
+                                        <i class="fas fa-eye"></i> View
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    <?php endwhile; ?>
+                </div>
             <?php endif; ?>
 
             <!-- Liked Designs Section -->
             <?php if ($designs_count > 0): ?>
-            <div class="section-title">
-                <i class="fas fa-pencil-ruler"></i> Liked Designs (<?= $designs_count ?>)
-            </div>
-            <div class="likes-grid">
-                <?php foreach ($designs_list as $design): ?>
-                <div class="like-card">
-                    <div class="like-card-image">
-                        <img src="../uploads/designs/<?= htmlspecialchars($design['image_filename']) ?>" alt="<?= htmlspecialchars($design['dname']) ?>">
-                    </div>
-                    <div class="like-card-body">
-                        <div class="like-card-title" title="<?= htmlspecialchars($design['dname']) ?>">
-                            <?= htmlspecialchars($design['dname']) ?>
-                        </div>
-                        <div class="like-card-meta">
-                            <i class="fas fa-user"></i> Designer
-                        </div>
-                        <div class="like-card-price">HK$<?= number_format((float)$design['expect_price']) ?></div>
-                        <div class="like-card-designer">
-                            <i class="fas fa-heart"></i> <?= (int)$design['likes'] ?> likes
-                        </div>
-                        <div class="like-card-footer">
-                            <a href="design_detail.php?designid=<?= (int)$design['designid'] ?>&from=my_likes" class="like-card-btn view">
-                                <i class="fas fa-eye"></i> View
-                            </a>
-                        </div>
-                    </div>
+                <div class="section-title">
+                    <i class="fas fa-pencil-ruler"></i> Liked Designs (<?= $designs_count ?>)
                 </div>
-                <?php endforeach; ?>
-            </div>
+                <div class="likes-grid">
+                    <?php foreach ($designs_list as $design): ?>
+                        <div class="like-card">
+                            <div class="like-card-image">
+                                <img src="/uploads/designs/<?= htmlspecialchars($design['image_filename']) ?>"
+                                    alt="<?= htmlspecialchars($design['dname']) ?>">
+                            </div>
+                            <div class="like-card-body">
+                                <div class="like-card-title" title="<?= htmlspecialchars($design['dname']) ?>">
+                                    <?= htmlspecialchars($design['dname']) ?>
+                                </div>
+                                <div class="like-card-meta">
+                                    <i class="fas fa-user"></i> Designer
+                                </div>
+                                <div class="like-card-price">HK$<?= number_format((float) $design['expect_price']) ?></div>
+                                <div class="like-card-designer">
+                                    <i class="fas fa-heart"></i> <?= (int) $design['likes'] ?> likes
+                                </div>
+                                <div class="like-card-footer">
+                                    <a href="design_detail.php?designid=<?= (int) $design['designid'] ?>&from=my_likes"
+                                        class="like-card-btn view">
+                                        <i class="fas fa-eye"></i> View
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
             <?php endif; ?>
 
             <!-- Complete Empty State -->
             <?php if ($total_count === 0): ?>
-            <div class="empty-state" style="grid-column: 1 / -1;">
-                <i class="fas fa-heart-broken"></i>
-                <h3>You haven't liked anything yet</h3>
-                <p>Start exploring our products and designs to build your collection of favorites!</p>
-            </div>
+                <div class="empty-state" style="grid-column: 1 / -1;">
+                    <i class="fas fa-heart-broken"></i>
+                    <h3>You haven't liked anything yet</h3>
+                    <p>Start exploring our products and designs to build your collection of favorites!</p>
+                </div>
             <?php endif; ?>
         </div>
     </main>
 
 
+    <?php include __DIR__ . '/Public/chat_widget.php'; ?>
 </body>
-</html>
 
-<?php include __DIR__ . '/../Public/chat_widget.php'; ?>
+</html>

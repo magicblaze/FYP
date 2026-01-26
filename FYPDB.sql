@@ -473,37 +473,6 @@ INSERT INTO `MessageRead` (`messagereadid`, `messageid`, `ChatRoomMemberid`, `is
 (3, 2, 1, 0, NULL),
 (4, 2, 2, 1, '2025-01-01 10:05:00');
 
-CREATE TABLE `ProductLike` (
-  `productlikeid` INT NOT NULL AUTO_INCREMENT,
-  `clientid` INT NOT NULL,
-  `productid` INT NOT NULL,
-  PRIMARY KEY (`productlikeid`),
-  UNIQUE KEY `unique_client_product` (`clientid`, `productid`),
-  KEY `idx_clientid` (`clientid`),
-  KEY `idx_productid` (`productid`),
-  CONSTRAINT `fk_productlike_clientid` FOREIGN KEY (`clientid`) REFERENCES `Client` (`clientid`) ON DELETE CASCADE,
-  CONSTRAINT `fk_productlike_productid` FOREIGN KEY (`productid`) REFERENCES `Product` (`productid`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-INSERT INTO `ProductLike` (`productlikeid`, `clientid`, `productid`) VALUES
-(1, 1, 1),
-(2, 2, 2);
-
-CREATE TABLE `DesignLike` (
-  `designlikeid` INT NOT NULL AUTO_INCREMENT,
-  `clientid` INT NOT NULL,
-  `designid` INT NOT NULL,
-  PRIMARY KEY (`designlikeid`),
-  UNIQUE KEY `unique_client_design` (`clientid`, `designid`),
-  KEY `idx_clientid` (`clientid`),
-  KEY `idx_designid` (`designid`),
-  CONSTRAINT `fk_designlike_clientid` FOREIGN KEY (`clientid`) REFERENCES `Client` (`clientid`) ON DELETE CASCADE,
-  CONSTRAINT `fk_designlike_designid` FOREIGN KEY (`designid`) REFERENCES `Design` (`designid`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-INSERT INTO `DesignLike` (`designlikeid`, `clientid`, `designid`) VALUES
-(1, 1, 1),
-(2, 2, 2);
-
 CREATE TABLE `DesignImage` (
   `imageid` int NOT NULL AUTO_INCREMENT,
   `designid` int NOT NULL,

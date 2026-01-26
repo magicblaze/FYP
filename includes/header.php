@@ -110,8 +110,8 @@ $baseUrl = $scheme . '://' . $host . $appRoot;
         </li>
       <?php endif; ?>
       <?php if (!empty($_SESSION['user'])): ?>
+        <li class=""><a class="nav-link" href="<?= $baseUrl ?>/my_likes.php">My Likes</a></li>
         <?php if ($role === 'client'): ?>
-          <li class=""><a class="nav-link" href="<?= $baseUrl ?>/my_likes.php">My Likes</a></li>
           <li class=""><a class="nav-link" href="<?= $baseUrl ?>/client/order_history.php">Order History</a></li>
         <?php endif; ?>
         <li class=""><a class="nav-link" href="<?= $baseUrl ?>/logout.php">Logout</a></li>
