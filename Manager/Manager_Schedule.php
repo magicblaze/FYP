@@ -94,9 +94,9 @@ $weekly_stats = mysqli_fetch_assoc($weekly_result);
 
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+    <?php include_once __DIR__ . '/../includes/header.php'; ?>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="../css/Manager_style.css">
@@ -244,29 +244,7 @@ $weekly_stats = mysqli_fetch_assoc($weekly_result);
     </style>
 </head>
 <body>
-    <!-- Navbar -->
-    <header class="bg-white shadow p-3 d-flex justify-content-between align-items-center">
-        <div class="d-flex align-items-center gap-3">
-            <div class="h4 mb-0"><a href="Manager_MyOrder.php" style="text-decoration: none; color: inherit;">HappyDesign</a></div>
-            <nav>
-                <ul class="nav align-items-center gap-2">
-                    <li class="nav-item"><a class="nav-link" href="Manager_introduct.php">Introduct</a></li>
-                    <li class="nav-item"><a class="nav-link" href="Manager_MyOrder.php">MyOrder</a></li>
-                    <li class="nav-item"><a class="nav-link" href="Manager_Schedule.php">Schedule</a></li>
-                </ul>
-            </nav>
-        </div>
-        <nav>
-            <ul class="nav align-items-center">
-                <li class="nav-item me-2">
-                    <a class="nav-link text-muted" href="#">
-                        <i class="fas fa-user me-1"></i>Hello <?php echo htmlspecialchars($user_name); ?>
-                    </a>
-                </li>
-                <li class="nav-item"><a class="nav-link" href="../logout.php">Logout</a></li>
-            </ul>
-        </nav>
-    </header>
+    <?php include_once __DIR__ . '/../includes/header.php'; ?>
 
     <!-- 主要内容 -->
     <div class="page-container">

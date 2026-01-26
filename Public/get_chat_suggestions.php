@@ -182,13 +182,13 @@ try {
           'likes' => (int)($r['likes'] ?? 0),
           'designerid' => (int)($r['designerid'] ?? 0),
           'image' => $baseUrl . '/uploads/designs/' . ltrim($img, '/'),
-          'url' => $baseUrl . '/client/design_detail.php?designid=' . $id,
+          'url' => $baseUrl . '/design_detail.php?designid=' . $id,
           'share' => [
             'design_id' => $id,
             'id' => $id,
             'title' => $r['title'] ?? '',
             'image' => $baseUrl . '/uploads/designs/' . ltrim($img, '/'),
-            'url' => $baseUrl . '/client/design_detail.php?designid=' . $id,
+            'url' => $baseUrl . '/design_detail.php?designid=' . $id,
             'type' => 'design'
           ]
         ];
@@ -238,13 +238,13 @@ try {
         'likes' => (int)($p['likes'] ?? 0),
         'supplierid' => (int)($p['supplierid'] ?? 0),
         'image' => $imgPath ? ($baseUrl . '/uploads/products/' . ltrim($imgPath, '/')) : null,
-        'url' => $baseUrl . '/client/product_detail.php?id=' . $pid,
+        'url' => $baseUrl . '/product_detail.php?id=' . $pid,
         'share' => [
           'product_id' => $pid,
           'id' => $pid,
           'title' => $p['pname'] ?? '',
           'image' => $imgPath ? ($baseUrl . '/uploads/products/' . ltrim($imgPath, '/')) : null,
-          'url' => $baseUrl . '/client/product_detail.php?id=' . $pid,
+          'url' => $baseUrl . '/product_detail.php?id=' . $pid,
           'type' => 'product'
         ]
       ];
@@ -325,7 +325,7 @@ try {
       'image' => $baseUrl . '/uploads/designs/' . ltrim($img, '/'),
       'price' => $d['price'] ?? null,
       'likes' => (int)($d['likes'] ?? 0),
-      'url' => $baseUrl . '/client/design_detail.php?designid=' . $id
+      'url' => $baseUrl . '/design_detail.php?designid=' . $id
     ];
     // preview-ready share payload
     $recommended_designs[count($recommended_designs)-1]['share'] = [
@@ -333,7 +333,7 @@ try {
       'id' => $id,
       'title' => $d['designName'] ?? ($d['title'] ?? ''),
       'image' => $baseUrl . '/uploads/designs/' . ltrim($img, '/'),
-      'url' => $baseUrl . '/client/design_detail.php?designid=' . $id,
+      'url' => $baseUrl . '/design_detail.php?designid=' . $id,
       'type' => 'design'
     ];
   }

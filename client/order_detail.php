@@ -764,7 +764,7 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—
                 const formData = new FormData();
                 formData.append('pictureid', pictureId);
 
-                fetch('../client/approve_picture.php', {
+                fetch('approve_picture.php', {
                     method: 'POST',
                     body: formData
                 })
@@ -827,7 +827,7 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—
             formData.append('pictureid', rejectModalPictureId);
             formData.append('reason', reason);
 
-            fetch('../client/reject_picture.php', {
+            fetch('reject_picture.php', {
                 method: 'POST',
                 body: formData
             })

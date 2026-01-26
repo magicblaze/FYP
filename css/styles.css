@@ -34,6 +34,48 @@ body {
     border-radius: 2px;
 }
 
+/* Browse dropdown styling (header) — match `.nav-link` appearance */
+.nav .dropdown-menu {
+    border-radius: 10px;
+    padding: 0.35rem 0;
+    min-width: 160px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+    border: 1px solid rgba(0,0,0,0.06);
+    background: #ffffff;
+}
+.nav .dropdown-item {
+    padding: 10px 16px;
+    color: #7f8c8d; /* same default color as .nav-link */
+    font-weight: 500;
+    transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+    position: relative; /* allow underline pseudo-element when active */
+    border-radius: 6px;
+}
+.nav .dropdown-item:hover,
+.nav .dropdown-item:focus {
+    background: #f4f8ff;
+    color: #3498db; /* same hover color as .nav-link */
+    transform: translateY(-1px);
+}
+.nav .dropdown-toggle::after { color: #7f8c8d; margin-left: 6px; }
+.nav .dropdown-menu .dropdown-item + .dropdown-item { border-top: 1px solid rgba(0,0,0,0.03); }
+.nav .dropdown-menu .dropdown-item.active {
+    background: #e9f2ff;
+    color: #3498db; /* active color like .nav-link.active */
+    font-weight: 600;
+}
+.nav .dropdown-menu .dropdown-item.active::after {
+    content: '';
+    position: absolute;
+    left: 16px;
+    right: 16px;
+    bottom: 8px;
+    height: 3px;
+    background-color: #3498db;
+    border-radius: 2px;
+}
+
+
 main {
     flex: 1;
     padding: 10px 0;

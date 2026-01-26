@@ -8,7 +8,7 @@ session_start();
 
 // Check if user is logged in
 if (empty($_SESSION['user'])) {
-    header('Location: ../login.php?redirect=' . urlencode('client/my_likes.php'));
+    header('Location: ../login.php?redirect=' . urlencode('my_likes.php'));
     exit;
 }
 

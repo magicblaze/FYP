@@ -617,7 +617,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     const toAdd = likedCurrentList.filter(d => likedSelected.has(d.designid || d.id || d.design_id || 0));
                     toAdd.forEach(d => {
                         const title = d.title || ('Design ' + (d.designid || d.id || ''));
-                        const url = d.url || ('../client/design_detail.php?designid=' + (d.designid || d.id || ''));
+                        const url = d.url || ('../design_detail.php?designid=' + (d.designid || d.id || ''));
                         references.push({ title: title, url: url });
                     });
                     renderReferences();
