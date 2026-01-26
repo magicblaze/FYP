@@ -692,6 +692,43 @@ $mainImg = $baseUrlEarly . $appRoot . '/design_image.php?id=' . (int) $design['d
         });
     </script>
 
+    <script>
+        // Like toggle for designs (AJAX)
+        (function () {
+            const heart = document.getElementById('likeHeart');
+            if (!heart) return;
+            heart.addEventListener('click', function (e) {
+                e.preventDefault();
+                const designid = this.dataset.designid;
+                const btn = this;
+                const formData = new FormData();
+                formData.append('action', 'toggle_like');
+                formData.append('type', 'design');
+                formData.append('id', designid);
+
+                fetch('api/handle_like.php', { method: 'POST', body: formData })
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data && data.success) {
+                            const icon = btn.querySelector('i');
+                            if (data.liked) {
+                                btn.classList.add('liked');
+                                if (icon) { icon.classList.remove('far'); icon.classList.add('fas'); }
+                                btn.setAttribute('aria-pressed', 'true');
+                            } else {
+                                btn.classList.remove('liked');
+                                if (icon) { icon.classList.remove('fas'); icon.classList.add('far'); }
+                                btn.setAttribute('aria-pressed', 'false');
+                            }
+                            const lc = document.getElementById('likeCount'); if (lc) lc.textContent = data.likes;
+                        } else {
+                            alert('Error: ' + (data.message || 'Failed to update like'));
+                        }
+                    }).catch(err => { console.error(err); alert('An error occurred while updating the like.'); });
+            });
+        })();
+    </script>
+
     <!-- Chat widget: include unified PHP widget (handles markup and initialization) -->
     <?php
     include __DIR__ . '/Public/chat_widget.php'; ?>

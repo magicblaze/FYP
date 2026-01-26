@@ -647,6 +647,57 @@ function colorNameToHex($colorInput) {
         window.location.href = '<?= htmlspecialchars($backUrl) ?>';
     }
 
+    // Like toggle for products (AJAX) — copied pattern from design_detail.php
+    (function () {
+        const heart = document.getElementById('likeHeart');
+        if (!heart) return;
+        heart.addEventListener('click', function (e) {
+            e.preventDefault();
+            const productid = this.dataset.productid;
+            const btn = this;
+            const formData = new FormData();
+            formData.append('action', 'toggle_like');
+            formData.append('type', 'product');
+            formData.append('id', productid);
+
+            fetch('api/handle_like.php', { method: 'POST', body: formData })
+                .then(r => r.json())
+                    .then(data => {
+                        if (data && data.success) {
+                            const icon = btn.querySelector('i');
+                            if (data.liked) {
+                                btn.classList.add('liked');
+                                if (icon) { icon.classList.remove('far'); icon.classList.add('fas'); icon.style.color = '#e74c3c'; }
+                                btn.setAttribute('aria-pressed', 'true');
+                            } else {
+                                btn.classList.remove('liked');
+                                if (icon) { icon.classList.remove('fas'); icon.classList.add('far'); icon.style.color = '#7f8c8d'; }
+                                btn.setAttribute('aria-pressed', 'false');
+                            }
+                            const lc = document.getElementById('likeCount'); if (lc) lc.textContent = data.likes;
+                        } else {
+                            alert('Error: ' + (data.message || 'Failed to update like'));
+                        }
+                    }).catch(err => { console.error(err); alert('An error occurred while updating the like.'); });
+        });
+
+        // Ensure initial state matches server-rendered attributes/classes
+        (function syncInitialHeart() {
+            const icon = heart.querySelector('i');
+            const pressed = heart.getAttribute('aria-pressed');
+            const isLiked = heart.classList.contains('liked') || pressed === 'true';
+            if (isLiked) {
+                heart.classList.add('liked');
+                if (icon) { icon.classList.remove('far'); icon.classList.add('fas'); icon.style.color = '#e74c3c'; }
+                heart.setAttribute('aria-pressed', 'true');
+            } else {
+                heart.classList.remove('liked');
+                if (icon) { icon.classList.remove('fas'); icon.classList.add('far'); icon.style.color = '#7f8c8d'; }
+                heart.setAttribute('aria-pressed', 'false');
+            }
+        })();
+    })();
+
     // Function to get selected color (useful for order placement)
     function getSelectedColor() {
         return document.getElementById('selectedColor').value;
