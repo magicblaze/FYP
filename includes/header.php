@@ -14,7 +14,7 @@ $baseUrl = $scheme . '://' . $host . $appRoot;
 ?>
 <header class="bg-white shadow p-3 d-flex justify-content-between align-items-center">
   <div class="d-flex align-items-center gap-3">
-    <div class="h4 mb-0"><a href="<?= htmlspecialchars($baseUrl ?: '/') ?>" style="text-decoration: none; color: inherit;">HappyDesign</a></div>
+    <div class="h4 mb-0 user-select-none">HappyDesign</div>
     <nav>
       <ul class="nav align-items-center gap-2">
         <?php if ($role === 'designer'): ?>
@@ -88,3 +88,42 @@ $baseUrl = $scheme . '://' . $host . $appRoot;
     </ul>
   </nav>
 </header>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// Enable dropdown on hover for non-touch devices (only for top nav .nav-item.dropdown)
+(function(){
+  if ('ontouchstart' in window) return; // skip touch devices
+  const opens = new WeakMap();
+  const closes = new WeakMap();
+  const OPEN_DELAY = 120; // ms
+  const CLOSE_DELAY = 220; // ms
+  document.querySelectorAll('.nav .nav-item.dropdown').forEach(function(drop){
+    const toggle = drop.querySelector('.dropdown-toggle');
+    if (!toggle) return;
+    let bs = null;
+    drop.addEventListener('mouseenter', function(){
+      clearTimeout(closes.get(drop));
+      opens.set(drop, setTimeout(()=>{
+        bs = bootstrap.Dropdown.getOrCreateInstance(toggle);
+        bs.show();
+        toggle.setAttribute('aria-expanded','true');
+      }, OPEN_DELAY));
+    });
+    drop.addEventListener('mouseleave', function(){
+      clearTimeout(opens.get(drop));
+      closes.set(drop, setTimeout(()=>{
+        if (!bs) bs = bootstrap.Dropdown.getOrCreateInstance(toggle);
+        bs.hide();
+        toggle.setAttribute('aria-expanded','false');
+      }, CLOSE_DELAY));
+    });
+    // also close when focus leaves (keyboard navigation)
+    toggle.addEventListener('blur', function(){
+      if (!bs) bs = bootstrap.Dropdown.getOrCreateInstance(toggle);
+      bs.hide();
+      toggle.setAttribute('aria-expanded','false');
+    });
+  });
+})();
+</script>

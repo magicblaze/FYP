@@ -705,7 +705,8 @@ function colorNameToHex($colorInput) {
         return document.getElementById('selectedColorHex').value;
     }
     </script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
+    <?php include __DIR__ . '/Public/chat_widget.php'; ?>
 </body>
 </html>
-
-<?php include __DIR__ . '/Public/chat_widget.php'; ?>
