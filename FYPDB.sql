@@ -41,6 +41,7 @@ DROP TABLE IF EXISTS `DesignLike`;
 DROP TABLE IF EXISTS `MessageRead`;
 DROP TABLE IF EXISTS `UploadedFiles`;
 DROP TABLE IF EXISTS `DesignImage`;
+DROP TABLE IF EXISTS `OrderReference`;
 
 -- Client table
 CREATE TABLE `Client` (
@@ -240,6 +241,21 @@ INSERT INTO `Order`
 (`orderid`, `odate`, `clientid`, `budget`, `cost`, `gross_floor_area`, `Requirements`,`designid`,`ostatus`,`designedPicture`) VALUES
 (1, '2025-04-12 17:50:00', 1, NULL, NULL, NULL, 'abc',2,'Designing',NULL),
 (2, '2025-05-10 12:00:00', 2, NULL, NULL, NULL, 'abc',1,'Completed',NULL);
+
+-- OrderReference table to store design references for each order
+CREATE TABLE `OrderReference` (
+  `orderreferenceid` int NOT NULL AUTO_INCREMENT,
+  `orderid` int NOT NULL,
+  `productid` int NOT NULL,
+  `added_by_type` varchar(50) DEFAULT NULL,
+  `added_by_id` int DEFAULT NULL,
+  `created_at` timestamp DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`orderreferenceid`),
+  KEY `orderid_idx` (`orderid`),
+  KEY `productid_idx` (`productid`),
+  CONSTRAINT `fk_or_orderid` FOREIGN KEY (`orderid`) REFERENCES `Order` (`orderid`) ON DELETE CASCADE,
+  CONSTRAINT `fk_or_productid` FOREIGN KEY (`productid`) REFERENCES `Product` (`productid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Table to store color-image mapping for each product
 CREATE TABLE `ProductColorImage` (

@@ -266,39 +266,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->bind_param("iddsi", $clientId, $budget, $gfa, $requirements, $designid);
         if ($stmt && $stmt->execute()) {
             $orderId = $stmt->insert_id;
-            // If design references exist, insert them into OrderReference table so they persist with the order
-            if (!empty($references) && $orderId) {
-                $insRef = $mysqli->prepare('INSERT INTO OrderReference (orderid, designid, added_by_type, added_by_id) VALUES (?,?,?,?)');
+            // If product references exist, insert them into OrderReference table so they persist with the order
+            if (!empty($product_refs) && $orderId) {
+                $insRef = $mysqli->prepare('INSERT INTO OrderReference (orderid, productid, added_by_type, added_by_id) VALUES (?,?,?,?)');
                 if ($insRef) {
                     $addedByType = 'client';
                     $addedById = $clientId;
-                    foreach ($references as $did) {
-                        $insRef->bind_param('iisi', $orderId, $did, $addedByType, $addedById);
+                    foreach ($product_refs as $pid => $qty) {
+                        $insRef->bind_param('iisi', $orderId, $pid, $addedByType, $addedById);
                         $insRef->execute();
                     }
                     $insRef->close();
-                }
-            }
-            // If product references exist, insert them into OrderProduct (quantity=1)
-            if (!empty($product_refs) && $orderId) {
-                // determine a manager to assign (fallback to first Manager)
-                $mgrId = 0;
-                $mgrQ = $mysqli->prepare('SELECT managerid FROM Manager ORDER BY managerid ASC LIMIT 1');
-                if ($mgrQ) {
-                    $mgrQ->execute();
-                    $r = $mgrQ->get_result()->fetch_assoc();
-                    $mgrQ->close();
-                    if ($r && !empty($r['managerid']))
-                        $mgrId = (int) $r['managerid'];
-                }
-                $insP = $mysqli->prepare('INSERT INTO OrderProduct (productid, quantity, orderid, status, managerid) VALUES (?,?,?,?,?)');
-                if ($insP) {
-                    $status = 'Pending';
-                    foreach ($product_refs as $pid => $qty) {
-                        $insP->bind_param('iiisi', $pid, $qty, $orderId, $status, $mgrId);
-                        $insP->execute();
-                    }
-                    $insP->close();
                 }
             }
             $success = 'Order created successfully. Order ID: ' . $orderId;
