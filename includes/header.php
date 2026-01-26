@@ -104,7 +104,7 @@ $baseUrl = $scheme . '://' . $host . $appRoot;
     <ul class="nav align-items-center">
       <?php if (!empty($name) || isset($clientData)): ?>
         <li class=" me-2">
-          <a class="nav-link text-muted" href="<?= $baseUrl ?>/client/profile.php">
+          <a class="nav-link text-muted" href="<?= $baseUrl ?>/includes/profile.php">
             <i class="fas fa-user me-1"></i>Hello <?= htmlspecialchars($name ?: ($clientData['cname'] ?? 'User')) ?>
           </a>
         </li>

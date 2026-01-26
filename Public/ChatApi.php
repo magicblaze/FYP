@@ -751,12 +751,25 @@ try {
       break;
     }
     try {
-      // Join ChatRoomMember to Message and count messages newer than last_opened (or all not sent by member if last_opened NULL)
-      $sql = "SELECT COUNT(*) as cnt FROM Message m JOIN ChatRoomMember crm ON crm.ChatRoomid = m.ChatRoomid AND crm.member_type = ? AND crm.memberid = ? WHERE ( (crm.last_opened IS NOT NULL AND m.timestamp > crm.last_opened) OR (crm.last_opened IS NULL AND NOT (m.sender_type = ? AND m.sender_id = ?)) ) AND NOT (m.sender_type = ? AND m.sender_id = ?)";
-      $q = $pdo->prepare($sql);
-      $q->execute([$user_type, $user_id, $user_type, $user_id, $user_type, $user_id]);
-      $row = $q->fetch();
-      $total = $row ? (int)$row['cnt'] : 0;
+      // Check whether `last_opened` column exists to avoid SQL errors on older schemas
+      $colCheck = $pdo->prepare("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'ChatRoomMember' AND COLUMN_NAME = 'last_opened'");
+      $colCheck->execute([$db]);
+      $hasCol = (int)$colCheck->fetchColumn();
+      if ($hasCol) {
+        // Use the more efficient single-query path when column exists
+        $sql = "SELECT COUNT(*) as cnt FROM Message m JOIN ChatRoomMember crm ON crm.ChatRoomid = m.ChatRoomid AND crm.member_type = ? AND crm.memberid = ? WHERE ( (crm.last_opened IS NOT NULL AND m.timestamp > crm.last_opened) OR (crm.last_opened IS NULL AND NOT (m.sender_type = ? AND m.sender_id = ?)) ) AND NOT (m.sender_type = ? AND m.sender_id = ?)";
+        $q = $pdo->prepare($sql);
+        $q->execute([$user_type, $user_id, $user_type, $user_id, $user_type, $user_id]);
+        $row = $q->fetch();
+        $total = $row ? (int)$row['cnt'] : 0;
+      } else {
+        // Fallback for older DB schemas: sum unread counts per room without referencing last_opened
+        $sql = "SELECT SUM(cnt) AS cnt FROM (SELECT (SELECT COUNT(*) FROM Message m WHERE m.ChatRoomid = crm.ChatRoomid AND NOT (m.sender_type = ? AND m.sender_id = ?)) AS cnt FROM ChatRoomMember crm WHERE crm.member_type = ? AND crm.memberid = ?) AS s";
+        $q = $pdo->prepare($sql);
+        $q->execute([$user_type, $user_id, $user_type, $user_id]);
+        $row = $q->fetch();
+        $total = $row ? (int)$row['cnt'] : 0;
+      }
       send_json(['ok'=>true,'total'=> $total]);
     } catch (Throwable $e) {
       send_json(['ok'=>false,'error'=>'server_error','message'=>$e->getMessage()], 500);

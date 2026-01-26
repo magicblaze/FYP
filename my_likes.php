@@ -5,7 +5,10 @@
 // ==============================
 require_once __DIR__ . '/config.php';
 session_start();
-
+ 
+// Compute application root (handles hosting under a subfolder like /FYP)
+$appRoot = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\');
+if ($appRoot === '' || $appRoot === '/' ) $appRoot = '';
 // Check if user is logged in
 if (empty($_SESSION['user'])) {
     header('Location: login.php?redirect=' . urlencode('my_likes.php'));
@@ -53,12 +56,12 @@ if ($hasUserLike) {
 
     if (count($likedProductIds)) {
         $in = implode(',', array_map('intval', $likedProductIds));
-        $products_sql = "SELECT p.*, s.sname, pci.image as first_color_image
+        // Use a correlated subquery to reliably fetch the first ProductColorImage.image for each product
+        $products_sql = "SELECT p.*, s.sname,
+                         (SELECT pci.image FROM ProductColorImage pci WHERE pci.productid = p.productid ORDER BY pci.id ASC LIMIT 1) AS first_color_image
                          FROM Product p
                          JOIN Supplier s ON p.supplierid = s.supplierid
-                         LEFT JOIN ProductColorImage pci ON p.productid = pci.productid
                          WHERE p.productid IN ($in)
-                         GROUP BY p.productid
                          ORDER BY p.productid DESC";
         $liked_products = $mysqli->query($products_sql);
     } else {
@@ -405,10 +408,14 @@ $total_count = $products_count + $designs_count;
                 </div>
                 <div class="likes-grid">
                     <?php while ($product = $liked_products->fetch_assoc()):
-                        // Use first color image from ProductColorImage table, or placeholder if not available
-                        $productImageUrl = !empty($product['first_color_image'])
-                            ? '/uploads/products/' . htmlspecialchars($product['first_color_image'])
-                            : '/uploads/products/placeholder.jpg';
+                        // Use first color image from ProductColorImage table, or placeholder if not available or missing on disk
+                        $fname = basename((string)($product['first_color_image'] ?? ''));
+                        $diskPath = __DIR__ . '/uploads/products/' . $fname;
+                        if ($fname && is_file($diskPath)) {
+                            $productImageUrl = $appRoot . '/uploads/products/' . rawurlencode($fname);
+                        } else {
+                            $productImageUrl = $appRoot . '/uploads/products/placeholder.jpg';
+                        }
                         ?>
                         <div class="like-card">
                             <div class="like-card-image">
@@ -446,10 +453,14 @@ $total_count = $products_count + $designs_count;
                     <i class="fas fa-pencil-ruler"></i> Liked Designs (<?= $designs_count ?>)
                 </div>
                 <div class="likes-grid">
-                    <?php foreach ($designs_list as $design): ?>
+                    <?php foreach ($designs_list as $design):
+                        $dname = basename((string)($design['image_filename'] ?? ''));
+                        $dpath = __DIR__ . '/uploads/designs/' . $dname;
+                        $designImageUrl = ($dname && is_file($dpath)) ? $appRoot . '/uploads/designs/' . rawurlencode($dname) : $appRoot . '/uploads/designs/placeholder.jpg';
+                        ?>
                         <div class="like-card">
                             <div class="like-card-image">
-                                <img src="/uploads/designs/<?= htmlspecialchars($design['image_filename']) ?>"
+                                <img src="<?= $designImageUrl ?>"
                                     alt="<?= htmlspecialchars($design['dname']) ?>">
                             </div>
                             <div class="like-card-body">

@@ -64,11 +64,11 @@ $res = $stmt->get_result();
   <?php include_once __DIR__ . '/../includes/header.php'; ?>
   <main class="container-lg mt-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
-      <h2 class="page-title mb-0">Designs Manager</h2>
+      <h2 class="page-title">Designs Manager</h2>
     </div>
     <div class="card shadow-sm border-0">
-      <div class="card-header bg-white py-3 d-flex justify-content-between">
-        <h5 class="mb-0"><i class="fas fa-palette"></i>My Designs List</h5>
+      <div class="card-header bg-white d-flex justify-content-between">
+        <h5 class="p-1">Designs List</h5>
         <a href="add_design.php" class="btn btn-success">Add New Design</a>
       </div>
       <div class="card-body p-0">

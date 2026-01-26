@@ -72,9 +72,11 @@ $res = $stmt->get_result();
 <body>
   <?php include_once __DIR__ . '/../includes/header.php'; ?>
   <main class="container-lg mt-4">
+    <h1 class="page-title mb-3">Order Manager</h1>
     <div class="card">
       <div class="card-body p-0">
         <div class="table-responsive">
+        <h5 class="p-3">Orders List</h5>
           <table class="table table-hover mb-0 align-middle">
             <thead class="table-light">
               <tr>
