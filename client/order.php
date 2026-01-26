@@ -63,8 +63,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         if (move_uploaded_file($fp['tmp_name'], $dst)) {
                             $pathRel = 'uploads/floor_plan/' . $fname;
                             $upd = $mysqli->prepare('UPDATE Client SET floor_plan = ? WHERE clientid = ?');
-                            if ($upd) { $upd->bind_param('si', $pathRel, $clientId); $upd->execute(); $upd->close(); }
-                            $resp['success'] = true; $resp['message'] = 'Uploaded'; $resp['path'] = $pathRel; $clientData['floor_plan'] = $pathRel;
+                            if ($upd) {
+                                $upd->bind_param('si', $pathRel, $clientId);
+                                $upd->execute();
+                                $upd->close();
+                            }
+                            $resp['success'] = true;
+                            $resp['message'] = 'Uploaded';
+                            $resp['path'] = $pathRel;
+                            $clientData['floor_plan'] = $pathRel;
                         } else {
                             $resp['message'] = 'Failed to move uploaded file.';
                         }
@@ -102,10 +109,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // surface a helpful upload error
                 $phpErr = $fp['error'];
                 $msg = 'Floor plan upload failed.';
-                if ($phpErr === UPLOAD_ERR_INI_SIZE || $phpErr === UPLOAD_ERR_FORM_SIZE) $msg = 'Uploaded file is too large.';
-                elseif ($phpErr === UPLOAD_ERR_PARTIAL) $msg = 'File upload was interrupted.';
-                elseif ($phpErr === UPLOAD_ERR_NO_TMP_DIR) $msg = 'Server misconfiguration: missing temp folder.';
-                elseif ($phpErr === UPLOAD_ERR_CANT_WRITE) $msg = 'Server error writing uploaded file.';
+                if ($phpErr === UPLOAD_ERR_INI_SIZE || $phpErr === UPLOAD_ERR_FORM_SIZE)
+                    $msg = 'Uploaded file is too large.';
+                elseif ($phpErr === UPLOAD_ERR_PARTIAL)
+                    $msg = 'File upload was interrupted.';
+                elseif ($phpErr === UPLOAD_ERR_NO_TMP_DIR)
+                    $msg = 'Server misconfiguration: missing temp folder.';
+                elseif ($phpErr === UPLOAD_ERR_CANT_WRITE)
+                    $msg = 'Server error writing uploaded file.';
                 $error = $msg;
             } elseif (empty($error) && is_uploaded_file($fp['tmp_name'])) {
                 $ext = strtolower(pathinfo($fp['name'], PATHINFO_EXTENSION));
@@ -149,14 +160,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $pmData['fps_id'] = trim((string) ($_POST['fps_id'] ?? ''));
                 $pmData['fps_name'] = trim((string) ($_POST['fps_name'] ?? ''));
             }
-            $pmJson = json_encode($pmData);
-            $upd2 = $mysqli->prepare('UPDATE Client SET payment_method = ? WHERE clientid = ?');
-            if ($upd2) {
-                $upd2->bind_param('si', $pmJson, $clientId);
-                $upd2->execute();
-                $upd2->close();
+            // Determine whether to persist payment details to profile. Default to true for backward compat.
+            $savePayment = array_key_exists('save_payment_to_profile', $_POST) ? (bool) $_POST['save_payment_to_profile'] : true;
+            if ($savePayment) {
+                $pmJson = json_encode($pmData);
+                $upd2 = $mysqli->prepare('UPDATE Client SET payment_method = ? WHERE clientid = ?');
+                if ($upd2) {
+                    $upd2->bind_param('si', $pmJson, $clientId);
+                    $upd2->execute();
+                    $upd2->close();
+                }
             }
-            $paymentMethodData = $pmData; // use updated data for validation below
+            // Use updated data for validation below regardless of persistence
+            $paymentMethodData = $pmData;
         }
     }
 
@@ -176,7 +192,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // Validate budget cannot be lower than design cost
     if (!$error && $budget < (float) $design['expect_price']) {
-        $error = 'Budget cannot be lower than the design cost (HK$' . number_format((float) $design['expect_price'], 2) . ').';
+        $error = 'Budget cannot be lower than the design cost (HK$' . number_format((float) $design['expect_price'], 0) . ').';
     }
 
     // Parse references (comma-separated design ids) and compute references total
@@ -573,6 +589,26 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
         .payment-method-display .edit-link a:hover {
             text-decoration: underline;
         }
+
+        /* Liked product card selection */
+        .liked-product-card {
+            position: relative;
+            cursor: pointer;
+        }
+
+        .liked-product-card.selected {
+            outline: 2px solid rgba(13, 110, 253, 0.25);
+            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.08);
+        }
+        /* Reference list in Order Summary */
+        #referenceList { margin-top: 0.5rem; color: #263238; }
+        #referenceList .ref-item { padding: 0.35rem 0; color: #546e7a; font-size: 0.95rem; display:flex; align-items:center; justify-content:space-between; }
+        #referenceList .ref-item .ref-left { display:flex; align-items:center; }
+        #referenceList .ref-item .ref-title { margin-right: .5rem; }
+        #referenceList .ref-item .ref-qty { color: #607d8b; margin-right: .5rem; }
+        #referenceList .ref-item .ref-price { color: #37474f; font-weight:600; }
+        /* Place a single divider above the total */
+        .summary-item.summary-total { padding-top: .75rem; border-top: 1px solid rgba(0,0,0,0.12); margin-top: .5rem; }
     </style>
 </head>
 
@@ -617,8 +653,9 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                                     <div class="info-value"><?= htmlspecialchars($clientData['address'] ?? '—') ?></div>
                                 </div>
                             </div>
-                            <p class="text-muted small"><i class="fas fa-info-circle me-1"></i> To update your
-                                information, please visit your account settings.</p>
+                            <p class="text-muted small"><i class="fas fa-info-circle me-1"></i> Please ensure your
+                                detail is correct before proceeding payment. Visit your account settings to update your
+                                information if there are any changes.</p>
                         </div>
 
                         <!-- Design Requirements Section -->
@@ -646,6 +683,36 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                                         <?php endif; ?>
                                     </div>
                                 </div>
+                            </div>
+                            <div class="mt-3 mb-3">
+                                <label class="form-label fw-bold">Order budget</label>
+                                <?php $initialBudget = $budgetDisplay > 0 ? $budgetDisplay : (float) $design['expect_price']; ?>
+                                <div id="budgetView" class="d-flex align-items-center">
+                                    <div id="budgetDisplayText" class="me-2">
+                                        HK$
+                                        <?= number_format((float) $initialBudget, 0) ?>
+                                    </div>
+                                    <button type="button" id="budgetEditBtn" class="btn btn-sm btn-outline-secondary"
+                                        title="Edit budget"><i class="fas fa-pencil-alt"></i></button>
+                                </div>
+
+                                <div id="budgetEdit" style="display:none; margin-top:.5rem;">
+                                    <input type="number" step="0.01" min="0" id="budgetInput" class="form-control"
+                                        value="<?= htmlspecialchars($initialBudget) ?>">
+                                    <div class="mt-2">
+                                        <button type="button" id="budgetSaveBtn"
+                                            class="btn btn-sm btn-primary">Save</button>
+                                        <button type="button" id="budgetCancelBtn"
+                                            class="btn btn-sm btn-secondary">Cancel</button>
+                                    </div>
+                                </div>
+
+                                <!-- Hidden field that will be submitted as the budget value -->
+                                <input type="hidden" id="budget" name="budget"
+                                    value="<?= htmlspecialchars($initialBudget) ?>">
+
+                                <small class="form-text text-muted mt-2"><i class="fas fa-info-circle me-1"></i>This is
+                                    the budget that will be used for the order.</small>
                             </div>
                             <!-- Floor Plan Section-->
                             <label class="form-label fw-bold mb-3">Floor Plan</label>
@@ -675,13 +742,17 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                                     </div>
                                 </div>
                             <?php else: ?>
-                                <div id="floorPlanView" class="alert alert-warning d-flex justify-content-between align-items-center" role="alert">
+                                <div id="floorPlanView"
+                                    class="alert alert-warning d-flex justify-content-between align-items-center"
+                                    role="alert">
                                     <div class="d-flex align-items-center">
                                         <i class="fas fa-exclamation-triangle me-2"></i>
-                                        <strong>No floor plan uploaded!</strong>
+                                        <strong>Please upload a floor plan</strong>
                                     </div>
                                     <div>
-                                        <button type="button" id="floorPlanEditBtn" class="btn btn-sm btn-outline-secondary"><i class="fas fa-pencil-alt"></i></button>
+                                        <button type="button" id="floorPlanEditBtn"
+                                            class="btn btn-sm btn-outline-secondary"><i
+                                                class="fas fa-pencil-alt"></i></button>
                                     </div>
                                 </div>
                             <?php endif; ?>
@@ -692,10 +763,14 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                                 <div class="form-text">Accepted: PDF, PNG, JPG. Upload will update your profile floor
                                     plan.</div>
                                 <div class="mt-2 d-flex gap-2">
-                                    <button type="button" id="floorPlanUploadBtn" class="btn btn-sm btn-primary">Upload</button>
-                                    <button type="button" id="floorPlanCancelBtn" class="btn btn-sm btn-secondary">Cancel</button>
+                                    <button type="button" id="floorPlanUploadBtn"
+                                        class="btn btn-sm btn-primary">Upload</button>
+                                    <button type="button" id="floorPlanCancelBtn"
+                                        class="btn btn-sm btn-secondary">Cancel</button>
                                 </div>
                             </div>
+                            <small class="form-text text-muted mt-2 mb-3"><i class="fas fa-info-circle me-1"></i>Please
+                                upload a floor plan which is required changes for the order.</small>
                             <div class="mb-3">
                                 <label class="form-label fw-bold">Gross Floor Area (m²)</label>
                                 <?php $initialGfa = isset($clientData['gross_floor_area']) ? (float) $clientData['gross_floor_area'] : 0.0; ?>
@@ -718,17 +793,18 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                                 </div>
                                 <input type="hidden" id="gross_floor_area" name="gross_floor_area"
                                     value="<?= htmlspecialchars($initialGfa) ?>">
-                                <small class="form-text text-muted mt-2">Required: provide the gross floor area (m²) for the project.</small>
+                                <small class="form-text text-muted mt-2">Please provide the gross floor area (m²) for
+                                    the project.</small>
                             </div>
                         </div>
                         <div class="mb-3">
-                            <label for="requirements" class="form-label">Request</label>
+                            <label for="requirements" class="form-label fw-bold">Request</label>
                             <textarea class="form-control" id="requirements" name="requirements" rows="4"
                                 placeholder="Any specific requirements, preferences, or notes for the designer..."
                                 maxlength="255"></textarea>
                         </div>
                         <div class="mb-3">
-                            <label for="references" class="form-label">References</label>
+                            <div class="form-label fw-bold">References</div>
                             <div class="d-flex justify-content-between align-items-start mt-2">
                                 <div id="selectedProducts" class="d-flex flex-wrap gap-2"></div>
                                 <div class="ms-2">
@@ -747,45 +823,14 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                         <div class="order-summary">
                             <h3 class="section-title">Order Summary</h3>
                             <div class="summary-item">
-                                <span>Estimated Design cost:</span>
-                                <span>$<?= number_format((float) $design['expect_price'], 2) ?></span>
+                                <span>Designer cost:</span>
+                                <span>HK$<?= number_format((float) $design['expect_price'], 0) ?></span>
                             </div>
-
-                            <div class="mt-3 mb-3">
-                                <label class="form-label fw-bold">Order budget</label>
-                                <?php $initialBudget = $budgetDisplay > 0 ? $budgetDisplay : (float) $design['expect_price']; ?>
-                                <div id="budgetView" class="d-flex align-items-center">
-                                    <div id="budgetDisplayText" class="me-2">
-                                        $<?= number_format((float) $initialBudget, 2) ?></div>
-                                    <button type="button" id="budgetEditBtn" class="btn btn-sm btn-outline-secondary"
-                                        title="Edit budget"><i class="fas fa-pencil-alt"></i></button>
-                                </div>
-
-                                <div id="budgetEdit" style="display:none; margin-top:.5rem;">
-                                    <input type="number" step="0.01" min="0" id="budgetInput" class="form-control"
-                                        value="<?= htmlspecialchars($initialBudget) ?>">
-                                    <div class="mt-2">
-                                        <button type="button" id="budgetSaveBtn"
-                                            class="btn btn-sm btn-primary">Save</button>
-                                        <button type="button" id="budgetCancelBtn"
-                                            class="btn btn-sm btn-secondary">Cancel</button>
-                                    </div>
-                                </div>
-
-                                <!-- Hidden field that will be submitted as the budget value -->
-                                <input type="hidden" id="budget" name="budget"
-                                    value="<?= htmlspecialchars($initialBudget) ?>">
-
-                                <small class="form-text text-muted mt-2"><i class="fas fa-info-circle me-1"></i>You may
-                                    edit your budget for this order; this value will be saved to the order
-                                    record.</small>
-                            </div>
+                            <div id="referenceList" class="mt-3"></div>
                             <div class="mt-4">
                                 <div class="summary-item summary-total">
                                     <span>Total:</span>
-                                    <span id="orderTotal">$
-                                        <?= number_format($total_amount, 2) ?>
-                                    </span>
+                                    <span id="orderTotal">HK$<?= number_format($total_amount, 0) ?></span>
                                 </div>
                                 <!-- Payment Method Section-->
                                 <div class="order-section">
@@ -806,8 +851,95 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                                         class="payment-method-display d-flex justify-content-between align-items-start">
                                         <div>
                                             <div class="payment-method-label">Current: <?= $paymentSummary ?></div>
-                                            <div class="payment-method-value small text-muted">Stored payment details
-                                                will be used unless you edit.</div>
+                                            <!-- Hidden fields to submit existing payment values when not editing -->
+                                            <input type="hidden" name="payment_method" id="payment_method_hidden"
+                                                value="<?= htmlspecialchars($pmCurrent ?? '') ?>">
+                                            <input type="hidden" name="alipay_hk_email" id="alipay_hk_email_hidden"
+                                                value="<?= htmlspecialchars($paymentMethodData['alipay_hk_email'] ?? '') ?>">
+                                            <input type="hidden" name="alipay_hk_phone" id="alipay_hk_phone_hidden"
+                                                value="<?= htmlspecialchars($paymentMethodData['alipay_hk_phone'] ?? '') ?>">
+                                            <input type="hidden" name="paypal_email" id="paypal_email_hidden"
+                                                value="<?= htmlspecialchars($paymentMethodData['paypal_email'] ?? '') ?>">
+                                            <input type="hidden" name="fps_id" id="fps_id_hidden"
+                                                value="<?= htmlspecialchars($paymentMethodData['fps_id'] ?? '') ?>">
+                                            <input type="hidden" name="fps_name" id="fps_name_hidden"
+                                                value="<?= htmlspecialchars($paymentMethodData['fps_name'] ?? '') ?>">
+
+                                            <div id="paymentEdit" style="display:none;">
+                                                <div class="mb-2">
+                                                    <div class="form-check form-check-inline">
+                                                        <input class="form-check-input" type="radio"
+                                                            name="payment_method_edit" id="pm_alipay" value="alipay_hk"
+                                                            <?= ($pmCurrent === 'alipay_hk') ? 'checked' : '' ?>>
+                                                        <label class="form-check-label" for="pm_alipay">AlipayHK</label>
+                                                    </div>
+                                                    <div class="form-check form-check-inline">
+                                                        <input class="form-check-input" type="radio"
+                                                            name="payment_method_edit" id="pm_paypal" value="paypal"
+                                                            <?= ($pmCurrent === 'paypal') ? 'checked' : '' ?>>
+                                                        <label class="form-check-label" for="pm_paypal">PayPal</label>
+                                                    </div>
+                                                    <div class="form-check form-check-inline">
+                                                        <input class="form-check-input" type="radio"
+                                                            name="payment_method_edit" id="pm_fps" value="fps"
+                                                            <?= ($pmCurrent === 'fps') ? 'checked' : '' ?>>
+                                                        <label class="form-check-label" for="pm_fps">FPS</label>
+                                                    </div>
+                                                </div>
+
+                                                <div id="alipayHKForm_edit"
+                                                    style="display: <?= ($pmCurrent === 'alipay_hk') ? 'block' : 'none' ?>;">
+                                                    <div class="mb-2">
+                                                        <label class="form-label">AlipayHK Email</label>
+                                                        <input id="alipayHKEmail" class="form-control"
+                                                            value="<?= htmlspecialchars($paymentMethodData['alipay_hk_email'] ?? '') ?>">
+                                                    </div>
+                                                    <div class="mb-2">
+                                                        <label class="form-label">Phone</label>
+                                                        <input id="alipayHKPhone" class="form-control"
+                                                            value="<?= htmlspecialchars($paymentMethodData['alipay_hk_phone'] ?? '') ?>">
+                                                    </div>
+                                                </div>
+
+                                                <div id="paypalForm_edit"
+                                                    style="display: <?= ($pmCurrent === 'paypal') ? 'block' : 'none' ?>;">
+                                                    <div class="mb-2">
+                                                        <label class="form-label">PayPal Email</label>
+                                                        <input id="paypalEmail" class="form-control"
+                                                            value="<?= htmlspecialchars($paymentMethodData['paypal_email'] ?? '') ?>">
+                                                    </div>
+                                                </div>
+
+                                                <div id="fpsForm_edit"
+                                                    style="display: <?= ($pmCurrent === 'fps') ? 'block' : 'none' ?>;">
+                                                    <div class="mb-2">
+                                                        <label class="form-label">FPS ID</label>
+                                                        <input id="fpsId" class="form-control"
+                                                            value="<?= htmlspecialchars($paymentMethodData['fps_id'] ?? '') ?>">
+                                                    </div>
+                                                    <div class="mb-2">
+                                                        <label class="form-label">FPS Name</label>
+                                                        <input id="fpsName" class="form-control"
+                                                            value="<?= htmlspecialchars($paymentMethodData['fps_name'] ?? '') ?>">
+                                                    </div>
+                                                </div>
+
+                                                <div class="mt-2 d-flex flex-column align-items-start gap-3">
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="checkbox" value="1"
+                                                            id="savePaymentToProfile" name="save_payment_to_profile"
+                                                            checked>
+                                                        <label class="form-check-label" for="savePaymentToProfile">Set
+                                                            as default payment method</label>
+                                                    </div>
+                                                    <div>
+                                                        <button type="button" id="paymentSaveBtn"
+                                                            class="btn btn-sm btn-primary">Save</button>
+                                                        <button type="button" id="paymentCancelBtn"
+                                                            class="btn btn-sm btn-secondary">Cancel</button>
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
                                         <div>
                                             <button type="button" id="paymentEditBtn"
@@ -816,86 +948,9 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                                         </div>
                                     </div>
 
-                                    <!-- Hidden fields to submit existing payment values when not editing -->
-                                    <input type="hidden" name="payment_method" id="payment_method_hidden"
-                                        value="<?= htmlspecialchars($pmCurrent ?? '') ?>">
-                                    <input type="hidden" name="alipay_hk_email" id="alipay_hk_email_hidden"
-                                        value="<?= htmlspecialchars($paymentMethodData['alipay_hk_email'] ?? '') ?>">
-                                    <input type="hidden" name="alipay_hk_phone" id="alipay_hk_phone_hidden"
-                                        value="<?= htmlspecialchars($paymentMethodData['alipay_hk_phone'] ?? '') ?>">
-                                    <input type="hidden" name="paypal_email" id="paypal_email_hidden"
-                                        value="<?= htmlspecialchars($paymentMethodData['paypal_email'] ?? '') ?>">
-                                    <input type="hidden" name="fps_id" id="fps_id_hidden"
-                                        value="<?= htmlspecialchars($paymentMethodData['fps_id'] ?? '') ?>">
-                                    <input type="hidden" name="fps_name" id="fps_name_hidden"
-                                        value="<?= htmlspecialchars($paymentMethodData['fps_name'] ?? '') ?>">
 
-                                    <div id="paymentEdit" style="display:none;">
-                                        <div class="mb-2">
-                                            <div class="form-check form-check-inline">
-                                                <input class="form-check-input" type="radio" name="payment_method_edit"
-                                                    id="pm_alipay" value="alipay_hk" <?= ($pmCurrent === 'alipay_hk') ? 'checked' : '' ?>>
-                                                <label class="form-check-label" for="pm_alipay">AlipayHK</label>
-                                            </div>
-                                            <div class="form-check form-check-inline">
-                                                <input class="form-check-input" type="radio" name="payment_method_edit"
-                                                    id="pm_paypal" value="paypal" <?= ($pmCurrent === 'paypal') ? 'checked' : '' ?>>
-                                                <label class="form-check-label" for="pm_paypal">PayPal</label>
-                                            </div>
-                                            <div class="form-check form-check-inline">
-                                                <input class="form-check-input" type="radio" name="payment_method_edit"
-                                                    id="pm_fps" value="fps" <?= ($pmCurrent === 'fps') ? 'checked' : '' ?>>
-                                                <label class="form-check-label" for="pm_fps">FPS</label>
-                                            </div>
-                                        </div>
-
-                                        <div id="alipayHKForm_edit"
-                                            style="display: <?= ($pmCurrent === 'alipay_hk') ? 'block' : 'none' ?>;">
-                                            <div class="mb-2">
-                                                <label class="form-label">AlipayHK Email</label>
-                                                <input id="alipayHKEmail" class="form-control"
-                                                    value="<?= htmlspecialchars($paymentMethodData['alipay_hk_email'] ?? '') ?>">
-                                            </div>
-                                            <div class="mb-2">
-                                                <label class="form-label">Phone</label>
-                                                <input id="alipayHKPhone" class="form-control"
-                                                    value="<?= htmlspecialchars($paymentMethodData['alipay_hk_phone'] ?? '') ?>">
-                                            </div>
-                                        </div>
-
-                                        <div id="paypalForm_edit"
-                                            style="display: <?= ($pmCurrent === 'paypal') ? 'block' : 'none' ?>;">
-                                            <div class="mb-2">
-                                                <label class="form-label">PayPal Email</label>
-                                                <input id="paypalEmail" class="form-control"
-                                                    value="<?= htmlspecialchars($paymentMethodData['paypal_email'] ?? '') ?>">
-                                            </div>
-                                        </div>
-
-                                        <div id="fpsForm_edit"
-                                            style="display: <?= ($pmCurrent === 'fps') ? 'block' : 'none' ?>;">
-                                            <div class="mb-2">
-                                                <label class="form-label">FPS ID</label>
-                                                <input id="fpsId" class="form-control"
-                                                    value="<?= htmlspecialchars($paymentMethodData['fps_id'] ?? '') ?>">
-                                            </div>
-                                            <div class="mb-2">
-                                                <label class="form-label">FPS Name</label>
-                                                <input id="fpsName" class="form-control"
-                                                    value="<?= htmlspecialchars($paymentMethodData['fps_name'] ?? '') ?>">
-                                            </div>
-                                        </div>
-
-                                        <div class="mt-2">
-                                            <button type="button" id="paymentSaveBtn"
-                                                class="btn btn-sm btn-primary">Save</button>
-                                            <button type="button" id="paymentCancelBtn"
-                                                class="btn btn-sm btn-secondary">Cancel</button>
-                                        </div>
-                                    </div>
-
-                                    <div class="form-text mt-2">You can edit payment details here; they will be saved to
-                                        your profile.</div>
+                                    <div class="form-text mt-2">Your information is securely stored and used for order
+                                        only.</div>
                                 </div>
                                 <button type="submit" class="btn btn-success w-100 py-2">
                                     <i class="fas fa-check-circle me-2"></i>Place Order
@@ -933,7 +988,7 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                 budgetSaveBtn.addEventListener('click', function () {
                     const val = parseFloat(budgetInput.value) || 0;
                     budgetHidden.value = val;
-                    budgetDisplayText.textContent = '$' + val.toFixed(2);
+                    budgetDisplayText.textContent = 'HK$' + val.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
                     budgetEdit.style.display = 'none';
                     budgetView.style.display = 'flex';
                 });
@@ -964,39 +1019,81 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                 });
             }
 
-                // reflect chosen file name in UI when user selects a file
-                const floorFileInput = document.getElementById('floor_plan_file');
-                const floorFileNameEl = document.getElementById('floorPlanFileName');
-                if (floorFileInput && floorFileNameEl) {
-                    floorFileInput.addEventListener('change', function () {
-                        const f = (this.files && this.files[0]) ? this.files[0] : null;
-                        if (f) floorFileNameEl.textContent = f.name;
-                    });
-                }
-                // AJAX upload button
-                const floorPlanUploadBtn = document.getElementById('floorPlanUploadBtn');
-                if (floorPlanUploadBtn && floorFileInput) {
-                    floorPlanUploadBtn.addEventListener('click', async function () {
-                        const f = (floorFileInput.files && floorFileInput.files[0]) ? floorFileInput.files[0] : null;
-                        if (!f) return alert('Please select a file to upload.');
-                        const fd = new FormData();
-                        fd.append('ajax', 'floor_upload');
-                        fd.append('floor_plan_file', f);
-                        try {
-                            const res = await fetch(location.pathname, { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' } });
-                            const j = await res.json();
-                            if (j.success) {
-                                alert('Floor plan uploaded successfully.');
-                                // update view to show new filename and view link
-                                if (floorFileNameEl) floorFileNameEl.textContent = j.path.split('/').pop();
-                                if (floorPlanView) floorPlanView.style.display = '';
-                                if (floorPlanEdit) floorPlanEdit.style.display = 'none';
-                            } else {
-                                alert('Upload failed: ' + (j.message || 'Unknown'));
+            // reflect chosen file name in UI when user selects a file
+            const floorFileInput = document.getElementById('floor_plan_file');
+            const floorFileNameEl = document.getElementById('floorPlanFileName');
+            if (floorFileInput && floorFileNameEl) {
+                floorFileInput.addEventListener('change', function () {
+                    const f = (this.files && this.files[0]) ? this.files[0] : null;
+                    if (f) floorFileNameEl.textContent = f.name;
+                });
+            }
+            // AJAX upload button
+            const floorPlanUploadBtn = document.getElementById('floorPlanUploadBtn');
+            if (floorPlanUploadBtn && floorFileInput) {
+                floorPlanUploadBtn.addEventListener('click', async function () {
+                    const f = (floorFileInput.files && floorFileInput.files[0]) ? floorFileInput.files[0] : null;
+                    if (!f) return alert('Please select a file to upload.');
+                    const fd = new FormData();
+                    fd.append('ajax', 'floor_upload');
+                    fd.append('floor_plan_file', f);
+                    try {
+                        // include the current query string so server-side code receives required GET params (e.g. designid)
+                        const res = await fetch(location.pathname + location.search, { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+                        const j = await res.json();
+                        if (j.success) {
+                            alert('Floor plan uploaded successfully.');
+                            const fname = j.path.split('/').pop();
+                            // update filename element (create if missing)
+                            if (floorFileNameEl) {
+                                floorFileNameEl.textContent = fname;
+                            } else if (floorPlanView) {
+                                // try to insert a filename element before the edit button
+                                const editBtn = document.getElementById('floorPlanEditBtn');
+                                if (editBtn && editBtn.parentElement) {
+                                    const infoDiv = document.createElement('div');
+                                    infoDiv.className = 'd-flex align-items-center';
+                                    const strong = document.createElement('strong');
+                                    strong.id = 'floorPlanFileName';
+                                    strong.textContent = fname;
+                                    infoDiv.appendChild(strong);
+                                    // insert the filename info before the button container
+                                    editBtn.parentElement.parentElement.insertBefore(infoDiv, editBtn.parentElement);
+                                    // update the reference for future changes
+                                    // (note: floorFileNameEl variable is not updated here, but DOM is updated)
+                                }
                             }
-                        } catch (err) { alert('Upload failed (network error).'); }
-                    });
-                }
+
+                            // ensure a 'View' link exists next to the Change button, update or create it
+                            const editBtn = document.getElementById('floorPlanEditBtn');
+                            if (editBtn && editBtn.parentElement) {
+                                let viewLink = editBtn.parentElement.querySelector('a.btn-outline-success');
+                                if (!viewLink) {
+                                    viewLink = document.createElement('a');
+                                    viewLink.className = 'btn btn-sm btn-outline-success me-2';
+                                    viewLink.target = '_blank';
+                                    viewLink.innerHTML = '<i class="fas fa-download me-1"></i>View';
+                                    editBtn.parentElement.insertBefore(viewLink, editBtn);
+                                }
+                                viewLink.href = '../' + j.path;
+                            }
+
+                            // if the view area was a warning, remove alert classes and add simple styling
+                            if (floorPlanView) {
+                                floorPlanView.classList.remove('alert', 'alert-warning');
+                                floorPlanView.style.background = '#e8f8f0';
+                                floorPlanView.style.border = '1px solid #27ae60';
+                                floorPlanView.style.borderRadius = '8px';
+                                floorPlanView.style.padding = '1rem';
+                                floorPlanView.style.display = '';
+                            }
+                            if (floorPlanEdit) floorPlanEdit.style.display = 'none';
+                        } else {
+                            alert('Upload failed: ' + (j.message || 'Unknown'));
+                        }
+                    } catch (err) { alert('Upload failed (network error).'); }
+                });
+            }
 
             // GFA (Gross Floor Area) toggle
             const gfaView = document.getElementById('gfaView');
@@ -1018,7 +1115,7 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                 gfaSaveBtn.addEventListener('click', function () {
                     const val = parseFloat(gfaInput.value) || 0;
                     gfaHidden.value = val;
-                    gfaDisplayText.innerHTML = val > 0 ? val.toFixed(2) + ' m²' : '<span class="text-muted">Not provided</span>';
+                    gfaDisplayText.innerHTML = val > 0 ? val.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",") + ' m²' : '<span class="text-muted">Not provided</span>';
                     gfaEdit.style.display = 'none';
                     gfaView.style.display = 'flex';
                 });
@@ -1098,7 +1195,9 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
             // Ensure hidden fields are updated before any submit (capture phase)
             const orderForm = document.getElementById('orderForm');
             if (orderForm) {
+                // clear previous validation flag at submit start
                 orderForm.addEventListener('submit', function (e) {
+                    try { orderForm.dataset.hasValidationError = '0'; } catch (ex) { /* ignore */ }
                     // budget
                     if (budgetEdit.style.display !== 'none') {
                         budgetHidden.value = parseFloat(budgetInput.value) || 0;
@@ -1124,6 +1223,7 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                         const gfaVal = (gfaHidden && gfaHidden.value) ? parseFloat(gfaHidden.value) : 0;
                         if (!gfaVal || gfaVal <= 0) {
                             e.preventDefault();
+                            try { orderForm.dataset.hasValidationError = '1'; } catch (ex) { /* ignore */ }
                             alert('Please provide Gross Floor Area (m²) before placing the order.');
                             if (typeof gfaEdit !== 'undefined' && gfaEdit) {
                                 if (gfaView) gfaView.style.display = 'none';
@@ -1180,6 +1280,10 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
             const agreeBtn = document.getElementById('termsAcceptBtn');
 
             orderForm.addEventListener('submit', function (e) {
+                // If earlier validation prevented submission, don't open the Terms modal
+                if (orderForm.dataset && orderForm.dataset.hasValidationError === '1') {
+                    return; // earlier handler already handled the alert/prevent
+                }
                 if (!window.__termsAccepted) {
                     e.preventDefault();
                     if (termsModal) termsModal.show();
@@ -1238,12 +1342,12 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                     likedProducts.forEach(p => {
                         const col = document.createElement('div'); col.className = 'col-6 col-md-4';
                         col.innerHTML = `
-                            <div class="card h-100">
-                                <div class="card-body p-2 d-flex align-items-center">
-                                    <input type="checkbox" class="form-check-input me-2 liked-product-cb" data-id="${p.productid}">
-                                    <div>
+                            <div class="card h-100 liked-product-card" data-id="${p.productid}">
+                                <div class="card-body p-2 d-flex align-items-center rounded">
+                                    <img src="${p.image || '../css/placeholder.png'}" alt="thumb" class="me-2" style="width:56px;height:56px;object-fit:cover;border-radius:6px;">
+                                    <div class="flex-grow-1">
                                         <div class="fw-semibold">${p.title}</div>
-                                        <div class="text-muted small">HK$${Number(p.price || 0).toFixed(2)}</div>
+                                        <div class="text-muted small">HK$${Number(p.price || 0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}</div>
                                     </div>
                                 </div>
                             </div>
@@ -1274,9 +1378,11 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                 if (!items.length) { selectedContainer.innerHTML = '<div class="text-muted">No products selected.</div>'; return; }
                 selectedContainer.innerHTML = items.map(i => {
                     const qty = map[String(i.productid)] || 1;
-                    return `<div class="badge bg-secondary text-white p-2 d-flex align-items-center" data-id="${i.productid}">
+                    const thumb = i.image ? `<img src="${i.image}" alt="thumb" style="width:40px;height:40px;object-fit:cover;border-radius:4px;" class="me-2">` : '';
+                    return `<div class="badge bs-white text-muted p-2 d-flex align-items-center rounded shadow-sm " data-id="${i.productid}">
+                                ${thumb}
                                 <div class="me-2">${i.title} <small class="ms-1">x${qty}</small></div>
-                                <div class="ms-2 small">HK$${(Number(i.price || 0) * qty).toFixed(2)}</div>
+                                <div class="ms-2 small">HK$${(Number(i.price || 0) * qty).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}</div>
                                 <button type="button" class="btn btn-sm btn-light ms-2 prod-edit" data-id="${i.productid}" aria-label="Edit">✎</button>
                                 <button type="button" class="btn btn-sm btn-danger ms-1 prod-remove" data-id="${i.productid}" aria-label="Remove">×</button>
                             </div>`;
@@ -1289,7 +1395,7 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                     // set checkboxes based on hidden input (ids only)
                     const map = parseProductHidden();
                     const ids = Object.keys(map);
-                    document.querySelectorAll('.liked-product-cb').forEach(cb => { cb.checked = ids.includes(cb.dataset.id); });
+                    document.querySelectorAll('.liked-product-card').forEach(card => { card.classList.toggle('selected', ids.includes(card.dataset.id)); });
                     if (bsModal) bsModal.show();
                 });
             }
@@ -1297,7 +1403,7 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
             if (confirmBtn) {
                 confirmBtn.addEventListener('click', function () {
                     const existing = parseProductHidden();
-                    const selected = Array.from(document.querySelectorAll('.liked-product-cb')).filter(cb => cb.checked).map(cb => cb.dataset.id);
+                    const selected = Array.from(document.querySelectorAll('.liked-product-card.selected')).map(card => card.dataset.id);
                     const out = [];
                     selected.forEach(id => { const q = existing[id] || 1; out.push(id + ':' + q); });
                     prodHidden.value = out.join(',');
@@ -1335,6 +1441,18 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
 
             // initialize UI from any existing hidden value
             updateSelectedUI();
+
+            // Allow clicking the product card to toggle selection (delegated)
+            if (likedGrid) {
+                likedGrid.addEventListener('click', function (e) {
+                    const card = e.target.closest('.liked-product-card');
+                    if (!card) return;
+                    // if the click originated on an interactive control, ignore (the control handles it)
+                    if (e.target.closest('input, button, a')) return;
+                    // toggle selection class on the card
+                    card.classList.toggle('selected');
+                });
+            }
         })();
     </script>
     <script>
@@ -1346,7 +1464,7 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
 
             function setTotal(refsSum) {
                 const total = designPrice + (Number(refsSum) || 0);
-                if (totalEl) totalEl.textContent = '$' + total.toFixed(2);
+                if (totalEl) totalEl.textContent = 'HK$' + total.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
             }
 
             async function fetchRefsSum(designIds, productQtys) {
@@ -1354,9 +1472,32 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                     const qs = [];
                     if (designIds) qs.push('designs=' + encodeURIComponent(designIds));
                     if (productQtys) qs.push('products_qty=' + encodeURIComponent(productQtys));
+                    // request detail for itemized breakdown
+                    qs.push('detail=1');
                     const resp = await fetch('get_design_prices.php?' + qs.join('&'));
                     if (!resp.ok) return 0;
                     const j = await resp.json();
+                    // update reference list UI if available
+                    try {
+                        const refListEl = document.getElementById('referenceList');
+                        if (refListEl) {
+                            const lines = [];
+                            if (j.designs && j.designs.length) {
+                                j.designs.forEach(d => {
+                                    const title = d.title ? d.title : ('#' + d.designid);
+                                    lines.push(`<div class="ref-item"><div class="ref-left"><span class="ref-title">${title}</span></div><span class="ref-price">HK$${Number(d.price || 0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}</span></div>`);
+                                });
+                            }
+                            if (j.products && j.products.length) {
+                                j.products.forEach(p => {
+                                    const title = p.title ? p.title : ('#' + p.productid);
+                                    const qty = p.qty || 1;
+                                    lines.push(`<div class="ref-item"><div class="ref-left"><span class="ref-title">${title}</span><span class="ref-qty">x${qty}</span></div><span class="ref-price">HK$${Number(p.price || 0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}</span></div>`);
+                                });
+                            }
+                            refListEl.innerHTML = lines.length ? lines.join('') : '<div class="text-muted"></div>';
+                        }
+                    } catch (ex) { /* ignore UI failures */ }
                     return Number(j.refs_sum || 0);
                 } catch (e) { return 0; }
             }
@@ -1372,8 +1513,13 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                     }, 300);
                 });
             }
-            // initialize
-            setTotal(<?= json_encode($references_total) ?>);
+            // initialize: fetch itemized refs and set total
+            (async function initRefs() {
+                const dids = refsInput ? refsInput.value.trim() : '';
+                const pqty = (document.getElementById('product_references') || { value: '' }).value.trim();
+                const sum = await fetchRefsSum(dids, pqty);
+                setTotal(sum);
+            })();
         })();
     </script>
 </body>

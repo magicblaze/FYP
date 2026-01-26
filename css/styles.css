@@ -47,10 +47,24 @@ main {
     overflow: hidden;
 }
 
+.na-list {
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    transition: none;
+    overflow: hidden;
+}
+
 .card:hover {
     transform: translateY(-5px);
     box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
 }
+
+.na-list:hover {
+    transform: none;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+}
+
 
 .card-img-top {
     height: 200px;
@@ -82,30 +96,35 @@ main {
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 1.25rem 0.75rem; /* compact vertical spacing */
+    padding: 1.25rem 0.75rem;
+    /* compact vertical spacing */
     min-height: calc(100vh - 80px);
 }
 
 .detail-container {
     width: 100%;
-    max-width: 840px;  /* compact width from prior steps */
+    max-width: 840px;
+    /* compact width from prior steps */
     background-color: white;
     border-radius: 15px;
     box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
     overflow: hidden;
-    padding: 1rem;     /* compact inner padding */
+    padding: 1rem;
+    /* compact inner padding */
     margin: 0 auto;
 }
 
 .detail-content {
     display: flex;
-    gap: 0.7rem;       /* compact gap */
+    gap: 0.7rem;
+    /* compact gap */
     align-items: stretch;
 }
 
 .detail-image-section {
     flex: 0 0 52%;
-    min-height: 260px; /* shorter hero image area */
+    min-height: 260px;
+    /* shorter hero image area */
 }
 
 .detail-image-section img {
@@ -194,10 +213,21 @@ main {
 }
 
 @keyframes heartBeat {
-    0% { transform: scale(1); }
-    25% { transform: scale(1.3); }
-    50% { transform: scale(1.1); }
-    100% { transform: scale(1); }
+    0% {
+        transform: scale(1);
+    }
+
+    25% {
+        transform: scale(1.3);
+    }
+
+    50% {
+        transform: scale(1.1);
+    }
+
+    100% {
+        transform: scale(1);
+    }
 }
 
 .detail-actions {
@@ -285,11 +315,32 @@ main {
 }
 
 /* 捲軸樣式 */
-.detail-comments-list::-webkit-scrollbar { width: 10px; }
-.detail-comments-list::-webkit-scrollbar-track { background: transparent; border-radius: 8px; }
-.detail-comments-list::-webkit-scrollbar-thumb { background: #b0b8c1; border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
-.detail-comments-list::-webkit-scrollbar-thumb:hover { background: #8b92a0; border: 2px solid transparent; background-clip: padding-box; }
-.detail-comments-list { scrollbar-color: #b0b8c1 transparent; scrollbar-width: thin; }
+.detail-comments-list::-webkit-scrollbar {
+    width: 10px;
+}
+
+.detail-comments-list::-webkit-scrollbar-track {
+    background: transparent;
+    border-radius: 8px;
+}
+
+.detail-comments-list::-webkit-scrollbar-thumb {
+    background: #b0b8c1;
+    border-radius: 8px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+
+.detail-comments-list::-webkit-scrollbar-thumb:hover {
+    background: #8b92a0;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+
+.detail-comments-list {
+    scrollbar-color: #b0b8c1 transparent;
+    scrollbar-width: thin;
+}
 
 /* ========= Gallery under the panel ========= */
 
@@ -302,9 +353,12 @@ main {
 
 /* Base gallery styles (outside the panel) */
 .detail-gallery {
-    margin: 16px auto 0;   /* creates a gap under the white panel */
-    padding: 0.75rem 0;    /* light internal padding */
-    border-top: none;      /* no divider line from inside the panel */
+    margin: 16px auto 0;
+    /* creates a gap under the white panel */
+    padding: 0.75rem 0;
+    /* light internal padding */
+    border-top: none;
+    /* no divider line from inside the panel */
 }
 
 .detail-gallery h3 {
@@ -354,8 +408,8 @@ main {
 }
 
 /* If the gallery is actually placed after .detail-main, make it full width nicely */
-.detail-main + .detail-gallery,
-.detail-container + .detail-gallery {
+.detail-main+.detail-gallery,
+.detail-container+.detail-gallery {
     display: block;
     max-width: 1200px;
     margin: 16px auto 0 !important;
@@ -426,7 +480,7 @@ main {
 
 .images img:hover {
     transform: scale(1.05);
-    box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
 }
 
 .filter-section {
@@ -495,11 +549,13 @@ main {
     transform: translateY(-2px);
 }
 
-.btn-info, .btn-primary {
+.btn-info,
+.btn-primary {
     background-color: #3498db;
 }
 
-.btn-info:hover, .btn-primary:hover {
+.btn-info:hover,
+.btn-primary:hover {
     background-color: #2980b9;
     transform: translateY(-2px);
 }
@@ -527,7 +583,8 @@ main {
     box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25);
 }
 
-.order-container, .container-class {
+.order-container,
+.container-class {
     background-color: white;
     border-radius: 15px;
     box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
@@ -554,7 +611,8 @@ main {
     border-bottom: 2px solid #3498db;
 }
 
-.customer-info-card, .order-summary {
+.customer-info-card,
+.order-summary {
     background-color: #f8f9fa;
     border-radius: 10px;
     padding: 1rem;
@@ -620,7 +678,7 @@ main {
 .design-preview {
     border-radius: 10px;
     overflow: hidden;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
 .file-input-label {
@@ -634,12 +692,31 @@ main {
 
 /* 響應式：手機調整 */
 @media (max-width: 768px) {
-    .detail-image-section { min-height: 200px; }
-    .detail-comments-section { max-height: 360px; padding: 0.875rem; }
-    .detail-main { padding: 1rem 0.5rem; }
-    .detail-content { gap: 0.6rem; flex-direction: column; }
-    .detail-container { max-width: 100%; }
-    .detail-gallery-wrapper { padding: 0 0.5rem; }
+    .detail-image-section {
+        min-height: 200px;
+    }
+
+    .detail-comments-section {
+        max-height: 360px;
+        padding: 0.875rem;
+    }
+
+    .detail-main {
+        padding: 1rem 0.5rem;
+    }
+
+    .detail-content {
+        gap: 0.6rem;
+        flex-direction: column;
+    }
+
+    .detail-container {
+        max-width: 100%;
+    }
+
+    .detail-gallery-wrapper {
+        padding: 0 0.5rem;
+    }
 }
 
 /* Payment Method Styles */
@@ -686,13 +763,13 @@ main {
     font-size: 0.95rem;
 }
 
-.payment-option input[type="radio"]:checked + .payment-label {
+.payment-option input[type="radio"]:checked+.payment-label {
     border-color: #27ae60;
     background-color: #e8f8f0;
     box-shadow: 0 4px 12px rgba(39, 174, 96, 0.2);
 }
 
-.payment-option input[type="radio"]:checked + .payment-label i {
+.payment-option input[type="radio"]:checked+.payment-label i {
     color: #27ae60;
     transform: scale(1.1);
 }
@@ -726,6 +803,7 @@ main {
         opacity: 0;
         transform: translateY(-10px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);

@@ -14,8 +14,18 @@ $sql = "SELECT d.*, (
     SELECT di.image_filename FROM DesignImage di WHERE di.designid = d.designid ORDER BY di.image_order ASC LIMIT 1
 ) AS image_filename FROM Design d WHERE d.designerid = ? ORDER BY d.designid DESC";
 $stmt = $mysqli->prepare($sql);
-$stmt->bind_param('i', $designerId);
-$stmt->execute();
+if (!$stmt) {
+  error_log('DesignManager prepare failed: ' . ($mysqli->error ?? 'unknown'));
+  die('Database error.');
+}
+if (!$stmt->bind_param('i', $designerId)) {
+  error_log('DesignManager bind_param failed: ' . ($stmt->error ?? 'unknown'));
+  die('Database error.');
+}
+if (!$stmt->execute()) {
+  error_log('DesignManager execute failed: ' . ($stmt->error ?? 'unknown'));
+  die('Database error.');
+}
 $res = $stmt->get_result();
 ?>
 <!doctype html>
@@ -48,7 +58,7 @@ $res = $stmt->get_result();
 
 <body>
     <?php include_once __DIR__ . '/../includes/header.php'; ?>
-<main class="container d-lg mt-4">
+<main class="container-lg mt-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
       <h2 class="page-title mb-0">Designs Manager</h2>
       <a href="add_design.php" class="btn btn-success">Add New Design</a>
