@@ -84,7 +84,7 @@ if ($user_type === 'designer') {
     // Supplier sees schedules for orders that include their products
     $sql = "
         SELECT 
-            op.orderproductid,
+            op.orderdeliveryid,
             op.deliverydate as FinishDate,
             o.orderid,
             o.odate as OrderDate,
@@ -95,7 +95,7 @@ if ($user_type === 'designer') {
             m.mname as ManagerName,
             p.pname as ProductName,
             op.quantity
-        FROM `OrderProduct` op
+        FROM `OrderDelivery` op
         JOIN `Order` o ON op.orderid = o.orderid
         JOIN `Product` p ON op.productid = p.productid
         JOIN `Client` c ON o.clientid = c.clientid
@@ -623,13 +623,13 @@ $month_name = date('F', mktime(0, 0, 0, $current_month, 1));
                                                         </span>
                                                     </a>
                                                 <?php else: ?>
-                                                    <a class="schedule-item <?php echo getStatusBadgeClass($schedule['ProductStatus']); ?>" 
-                                                       data-bs-toggle="modal" 
-                                                       data-bs-target="#scheduleModal<?php echo $schedule['orderproductid']; ?>"
-                                                       title="<?php echo htmlspecialchars($schedule['ProductName']); ?>"
-                                                       href="javascript:void(0);">
+                                                                     <a class="schedule-item <?php echo getStatusBadgeClass($schedule['ProductStatus']); ?>" 
+                                                                         data-bs-toggle="modal" 
+                                                                         data-bs-target="#scheduleModal<?php echo $schedule['orderdeliveryid']; ?>"
+                                                                         title="<?php echo htmlspecialchars($schedule['ProductName']); ?>"
+                                                                         href="javascript:void(0);">
                                                         <span class="schedule-item-text">
-                                                            OP #<?php echo $schedule['orderproductid']; ?> - <?php echo htmlspecialchars($schedule['ProductName']); ?>
+                                                            Delivery #<?php echo $schedule['orderdeliveryid']; ?> - <?php echo htmlspecialchars($schedule['ProductName']); ?>
                                                         </span>
                                                     </a>
                                                 <?php endif; ?>
@@ -763,20 +763,20 @@ $month_name = date('F', mktime(0, 0, 0, $current_month, 1));
                 </div>
             </div>
         <?php else: ?>
-            <!-- Designer/Supplier Modal: Show OrderProduct information -->
-            <div class="modal fade" id="scheduleModal<?php echo $schedule['orderproductid']; ?>" tabindex="-1">
+            <!-- Designer/Supplier Modal: Show Order Delivery information -->
+            <div class="modal fade" id="scheduleModal<?php echo $schedule['orderdeliveryid']; ?>" tabindex="-1">
                 <div class="modal-dialog modal-dialog-centered">
                     <div class="modal-content">
                         <div class="modal-header">
                             <h5 class="modal-title">
-                                <i class="fas fa-calendar-check me-2"></i>OrderProduct #<?php echo $schedule['orderproductid']; ?>
+                                <i class="fas fa-calendar-check me-2"></i>Delivery #<?php echo $schedule['orderdeliveryid']; ?>
                             </h5>
                             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                         </div>
                         <div class="modal-body">
                             <div class="schedule-detail">
-                                <div class="detail-label">OrderProduct ID</div>
-                                <div class="detail-value">#<?php echo htmlspecialchars($schedule['orderproductid']); ?></div>
+                                <div class="detail-label">Order Delivery ID</div>
+                                <div class="detail-value">#<?php echo htmlspecialchars($schedule['orderdeliveryid']); ?></div>
                             </div>
 
                             <div class="schedule-detail">

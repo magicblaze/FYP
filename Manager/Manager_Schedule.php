@@ -19,7 +19,7 @@ $status_filter = isset($_GET['status']) ? $_GET['status'] : '';
 // 构建查询条件 - 只显示已批准的订单（Designing 和 Completed）且属于当前经理
 $where_conditions = array(
     "(o.ostatus = 'Designing' OR o.ostatus = 'Completed')",
-    "EXISTS (SELECT 1 FROM OrderProduct op WHERE op.orderid = o.orderid AND op.managerid = $user_id)"
+    "EXISTS (SELECT 1 FROM OrderDelivery op WHERE op.orderid = o.orderid AND op.managerid = $user_id)"
 );
 
 if(!empty($search)) {
@@ -77,7 +77,7 @@ $stats_sql = "SELECT
               FROM `Order` o
               LEFT JOIN `Schedule` s ON o.orderid = s.orderid
               WHERE (o.ostatus = 'Designing' OR o.ostatus = 'Completed')
-              AND EXISTS (SELECT 1 FROM OrderProduct op WHERE op.orderid = o.orderid AND op.managerid = $user_id)";
+              AND EXISTS (SELECT 1 FROM OrderDelivery op WHERE op.orderid = o.orderid AND op.managerid = $user_id)";
 $stats_result = mysqli_query($mysqli, $stats_sql);
 $stats = mysqli_fetch_assoc($stats_result);
 
@@ -87,7 +87,7 @@ $weekly_completed_sql = "SELECT COUNT(*) as weekly_completed
                         LEFT JOIN `Schedule` s ON o.orderid = s.orderid
                         WHERE o.ostatus = 'Completed' 
                         AND YEARWEEK(s.OrderFinishDate, 1) = YEARWEEK(CURDATE(), 1)
-                        AND EXISTS (SELECT 1 FROM OrderProduct op WHERE op.orderid = o.orderid AND op.managerid = $user_id)";
+                        AND EXISTS (SELECT 1 FROM OrderDelivery op WHERE op.orderid = o.orderid AND op.managerid = $user_id)";
 $weekly_result = mysqli_query($mysqli, $weekly_completed_sql);
 $weekly_stats = mysqli_fetch_assoc($weekly_result);
 ?>

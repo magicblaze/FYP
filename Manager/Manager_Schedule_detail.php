@@ -54,7 +54,7 @@ $sql = "
     LEFT JOIN `Design` d ON o.designid = d.designid
     LEFT JOIN `Designer` des ON d.designerid = des.designerid
     LEFT JOIN `Schedule` sch ON o.orderid = sch.orderid
-    LEFT JOIN `OrderProduct` op ON o.orderid = op.orderid
+    LEFT JOIN `OrderDelivery` op ON o.orderid = op.orderid
     WHERE sch.managerid = ? 
     AND op.managerid = ?
     AND sch.orderid IS NOT NULL
@@ -135,7 +135,7 @@ $unscheduled_sql = "
     FROM `Order` o
     JOIN `Client` c ON o.clientid = c.clientid
     LEFT JOIN `Schedule` sch ON o.orderid = sch.orderid
-    LEFT JOIN `OrderProduct` op ON o.orderid = op.orderid
+    LEFT JOIN `OrderDelivery` op ON o.orderid = op.orderid
     WHERE op.managerid = ?
     AND sch.orderid IS NULL
     AND LOWER(o.ostatus) NOT IN ('pending', 'cancelled')  -- 添加状态过滤

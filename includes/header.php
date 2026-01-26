@@ -53,9 +53,9 @@ $profileUrl = $baseUrl . '/includes/profile.php';
             <i class="fas fa-user me-1"></i>Hello <?= htmlspecialchars($name) ?>
           </a>
         </li>
-        
+      <?php endif; ?>
+      <?php if (!empty($_SESSION['user'])): ?>
         <?php if ($role === 'client'): ?>
-          <li class="nav-item"><a class="nav-link" href="<?= $baseUrl ?>/my_likes.php">My Likes</a></li>
           <li class="nav-item"><a class="nav-link" href="<?= $baseUrl ?>/client/order_history.php">Order History</a></li>
         <?php endif; ?>
 

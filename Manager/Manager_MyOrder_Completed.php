@@ -21,7 +21,7 @@ $sql = "SELECT DISTINCT o.orderid, o.odate, o.Requirements, o.ostatus,
         LEFT JOIN `Client` c ON o.clientid = c.clientid
         LEFT JOIN `Design` d ON o.designid = d.designid
         LEFT JOIN `Schedule` s ON o.orderid = s.orderid
-        LEFT JOIN `OrderProduct` op ON o.orderid = op.orderid
+        LEFT JOIN `OrderDelivery` op ON o.orderid = op.orderid
         WHERE (o.ostatus = 'Completed' OR o.ostatus = 'completed')
         AND op.managerid = ?
         ORDER BY s.OrderFinishDate DESC";
@@ -98,7 +98,7 @@ $result = mysqli_stmt_get_result($stmt);
             $budget_sql = "SELECT SUM(c.budget) as total_budget 
                            FROM `Order` o
                            LEFT JOIN `Client` c ON o.clientid = c.clientid
-                           LEFT JOIN `OrderProduct` op ON o.orderid = op.orderid
+                           LEFT JOIN `OrderDelivery` op ON o.orderid = op.orderid
                            WHERE (o.ostatus = 'Completed' OR o.ostatus = 'completed')
                            AND op.managerid = ?";
             $budget_stmt = mysqli_prepare($mysqli, $budget_sql);

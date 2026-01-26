@@ -19,6 +19,93 @@ $stmt->execute();
 $design = $stmt->get_result()->fetch_assoc();
 if (!$design) { http_response_code(404); die('Design not found.'); }
 
+// Handle edit save (designer-only, must own the design)
+$saveErr = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['action']) && $_POST['action'] === 'save_edit')) {
+    // require designer session and ownership
+    if (empty($_SESSION['user']) || ($_SESSION['user']['role'] ?? '') !== 'designer' || (int)($_SESSION['user']['designerid'] ?? 0) !== (int)$design['designerid']) {
+        $saveErr = 'Permission denied.';
+    } else {
+        $newName = trim((string)($_POST['designName'] ?? ''));
+        $newPrice = isset($_POST['expect_price']) ? (float)$_POST['expect_price'] : (float)$design['expect_price'];
+        $newDesc = trim((string)($_POST['description'] ?? ''));
+        $newTag = trim((string)($_POST['tag'] ?? ''));
+        $upd = $mysqli->prepare("UPDATE Design SET designName = ?, expect_price = ?, description = ?, tag = ? WHERE designid = ?");
+        if ($upd) {
+            $upd->bind_param('sdssi', $newName, $newPrice, $newDesc, $newTag, $designid);
+            if ($upd->execute()) {
+                $upd->close();
+                // Redirect to GET to avoid resubmission and refresh displayed data
+                header('Location: ' . $_SERVER['REQUEST_URI']);
+                exit;
+            } else {
+                $saveErr = 'Failed to save changes: ' . $upd->error;
+            }
+        } else {
+            $saveErr = 'Failed to prepare update: ' . $mysqli->error;
+        }
+    }
+}
+
+// Handle add/delete product reference (designer-owner only)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && in_array($_POST['action'], ['add_product_ref', 'delete_product_ref'], true)) {
+    if (empty($_SESSION['user']) || ($_SESSION['user']['role'] ?? '') !== 'designer' || (int)($_SESSION['user']['designerid'] ?? 0) !== (int)$design['designerid']) {
+        $saveErr = 'Permission denied.';
+    } else {
+        if ($_POST['action'] === 'add_product_ref') {
+            $pid = isset($_POST['productid']) ? (int)$_POST['productid'] : 0;
+            $note = trim((string)($_POST['product_note'] ?? '')) ?: null;
+            if ($pid <= 0) {
+                $saveErr = 'Invalid product id.';
+            } else {
+                $ins = $mysqli->prepare("INSERT INTO DesignReference (designid, productid, note, added_by_designerid) VALUES (?, ?, ?, ?)");
+                if ($ins) {
+                    $designerId = (int)($_SESSION['user']['designerid'] ?? 0);
+                    $ins->bind_param('iiis', $designid, $pid, $note, $designerId);
+                    // Note: bind_param with NULL string should be passed as nullable string; using 's' for note
+                    // but variable types must match - use 'iiss' to be safe
+                    $ins->close();
+                    // Reprepare with correct types
+                    $ins = $mysqli->prepare("INSERT INTO DesignReference (designid, productid, note, added_by_designerid) VALUES (?, ?, ?, ?)");
+                    if ($ins) {
+                        $ins->bind_param('iisi', $designid, $pid, $note, $designerId);
+                        if ($ins->execute()) {
+                            $ins->close();
+                            header('Location: ' . $_SERVER['REQUEST_URI']);
+                            exit;
+                        } else {
+                            $saveErr = 'Failed to add reference: ' . $ins->error;
+                        }
+                    } else {
+                        $saveErr = 'Failed to prepare insert: ' . $mysqli->error;
+                    }
+                } else {
+                    $saveErr = 'Failed to prepare insert: ' . $mysqli->error;
+                }
+            }
+        } elseif ($_POST['action'] === 'delete_product_ref') {
+            $refid = isset($_POST['refid']) ? (int)$_POST['refid'] : 0;
+            if ($refid <= 0) {
+                $saveErr = 'Invalid reference id.';
+            } else {
+                $del = $mysqli->prepare("DELETE FROM DesignReference WHERE id = ? AND designid = ?");
+                if ($del) {
+                    $del->bind_param('ii', $refid, $designid);
+                    if ($del->execute()) {
+                        $del->close();
+                        header('Location: ' . $_SERVER['REQUEST_URI']);
+                        exit;
+                    } else {
+                        $saveErr = 'Failed to delete reference: ' . $del->error;
+                    }
+                } else {
+                    $saveErr = 'Failed to prepare delete: ' . $mysqli->error;
+                }
+            }
+        }
+    }
+}
+
 // Get all design images
 $imagesql = "SELECT imageid, image_filename FROM DesignImage WHERE designid = ? ORDER BY image_order ASC";
 $imageStmt = $mysqli->prepare($imagesql);
@@ -50,6 +137,20 @@ while ($row = $commentResult->fetch_assoc()) {
     $comments[] = $row;
 }
 $commentStmt->close();
+
+// Load product references for this design
+$productRefs = [];
+$refSql = "SELECT r.*, COALESCE(p.productName, p.name, NULL) AS product_name FROM DesignReference r LEFT JOIN Product p ON p.productid = r.productid WHERE r.designid = ? ORDER BY r.created_at DESC";
+$refStmt = $mysqli->prepare($refSql);
+if ($refStmt) {
+    $refStmt->bind_param('i', $designid);
+    $refStmt->execute();
+    $refResult = $refStmt->get_result();
+    while ($r = $refResult->fetch_assoc()) {
+        $productRefs[] = $r;
+    }
+    $refStmt->close();
+}
 
 // Define designer name
 $designerName = isset($_SESSION['user']['name']) ? $_SESSION['user']['name'] : 'Guest';
@@ -388,6 +489,15 @@ $designerName = isset($_SESSION['user']['name']) ? $_SESSION['user']['name'] : '
                     </button>
                 </div>
 
+                <?php
+                // Show edit controls only to the designer who owns this design
+                $isOwnerDesigner = !empty($_SESSION['user']) && (($_SESSION['user']['role'] ?? '') === 'designer') && ((int)($_SESSION['user']['designerid'] ?? 0) === (int)$design['designerid']);
+                if ($isOwnerDesigner): ?>
+                    <div class="mb-3">
+                        <button id="startEditBtn" type="button" class="btn btn-primary" onclick="showEditForm()">Start Edit</button>
+                    </div>
+                <?php endif; ?>
+
                 <div class="design-title"><?= htmlspecialchars($design['designName'] ?? 'Untitled Design') ?></div>
                 <div style="font-size: 0.9rem; color: #7f8c8d; margin-bottom: 1rem;">Design ID: <?= $designid ?></div>
                 <div class="design-price">HK$<?= number_format((float)($design['expect_price'] ?? 0)) ?></div>
@@ -412,6 +522,85 @@ $designerName = isset($_SESSION['user']['name']) ? $_SESSION['user']['name'] : '
                     <?php endforeach; ?>
                 </div>
                 <?php endif; ?>
+
+                <?php if (!empty($saveErr)): ?>
+                    <div class="alert alert-danger mt-3"><?= htmlspecialchars($saveErr) ?></div>
+                <?php endif; ?>
+
+                <!-- Edit Form (hidden by default) -->
+                <?php if ($isOwnerDesigner): ?>
+                <div id="editFormWrapper" class="mt-3" style="display:none;">
+                    <form method="post" novalidate>
+                        <input type="hidden" name="action" value="save_edit">
+                        <div class="mb-3">
+                            <label class="form-label">Design Name</label>
+                            <input name="designName" class="form-control" value="<?= htmlspecialchars($design['designName'] ?? '') ?>">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Expected Price (HK$)</label>
+                            <input name="expect_price" type="number" step="0.01" class="form-control" value="<?= htmlspecialchars($design['expect_price'] ?? '') ?>">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Tags (comma separated)</label>
+                            <input name="tag" class="form-control" value="<?= htmlspecialchars($design['tag'] ?? '') ?>">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Description</label>
+                            <textarea name="description" class="form-control" rows="4"><?= htmlspecialchars($design['description'] ?? '') ?></textarea>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-success">Save Changes</button>
+                            <button type="button" class="btn btn-secondary" onclick="hideEditForm()">Cancel</button>
+                        </div>
+                    </form>
+                </div>
+                <?php endif; ?>
+
+                <!-- Product References -->
+                <div class="mt-4">
+                    <h6>Product References</h6>
+                    <?php if (count($productRefs) > 0): ?>
+                        <ul class="list-group mb-2">
+                        <?php foreach ($productRefs as $ref): ?>
+                            <li class="list-group-item d-flex justify-content-between align-items-start">
+                                <div>
+                                    <strong><?= htmlspecialchars($ref['product_name'] ?? ('Product #' . ($ref['productid'] ?? ''))) ?></strong>
+                                    <?php if (!empty($ref['note'])): ?>
+                                        <div class="text-muted small"><?= htmlspecialchars($ref['note']) ?></div>
+                                    <?php endif; ?>
+                                    <div class="text-muted small">Added: <?= htmlspecialchars($ref['created_at'] ?? '') ?></div>
+                                </div>
+                                <?php if ($isOwnerDesigner): ?>
+                                    <form method="post" style="margin:0">
+                                        <input type="hidden" name="action" value="delete_product_ref">
+                                        <input type="hidden" name="refid" value="<?= (int)$ref['id'] ?>">
+                                        <button class="btn btn-sm btn-outline-danger" type="submit" onclick="return confirm('Remove this reference?')">Remove</button>
+                                    </form>
+                                <?php endif; ?>
+                            </li>
+                        <?php endforeach; ?>
+                        </ul>
+                    <?php else: ?>
+                        <p class="text-muted">No product references yet.</p>
+                    <?php endif; ?>
+
+                    <?php if ($isOwnerDesigner): ?>
+                        <form method="post" class="row g-2 align-items-center">
+                            <input type="hidden" name="action" value="add_product_ref">
+                            <div class="col-auto">
+                                <label class="visually-hidden">Product ID</label>
+                                <input name="productid" class="form-control" placeholder="Product ID" required>
+                            </div>
+                            <div class="col">
+                                <label class="visually-hidden">Note</label>
+                                <input name="product_note" class="form-control" placeholder="Optional note">
+                            </div>
+                            <div class="col-auto">
+                                <button class="btn btn-sm btn-primary" type="submit">Add Reference</button>
+                            </div>
+                        </form>
+                    <?php endif; ?>
+                </div>
 
                 <!-- Design Stats -->
                 <div class="design-stats">
@@ -490,6 +679,22 @@ $designerName = isset($_SESSION['user']['name']) ? $_SESSION['user']['name'] : '
             if (event.key === 'ArrowRight') nextImage();
             if (event.key === 'ArrowLeft') previousImage();
         });
+
+        // Edit form toggles for designer-owner
+        function showEditForm() {
+            const wrapper = document.getElementById('editFormWrapper');
+            const startBtn = document.getElementById('startEditBtn');
+            if (wrapper) wrapper.style.display = 'block';
+            if (startBtn) startBtn.style.display = 'none';
+            window.scrollTo({ top: wrapper ? wrapper.offsetTop - 20 : 0, behavior: 'smooth' });
+        }
+
+        function hideEditForm() {
+            const wrapper = document.getElementById('editFormWrapper');
+            const startBtn = document.getElementById('startEditBtn');
+            if (wrapper) wrapper.style.display = 'none';
+            if (startBtn) startBtn.style.display = 'inline-block';
+        }
     </script>
 </body>
 </html>

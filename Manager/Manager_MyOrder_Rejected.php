@@ -42,7 +42,7 @@ $sql = "SELECT DISTINCT o.orderid, o.odate, o.Requirements, o.ostatus,
         LEFT JOIN `Client` c ON o.clientid = c.clientid
         LEFT JOIN `Design` d ON o.designid = d.designid
         LEFT JOIN `Schedule` s ON o.orderid = s.orderid
-        LEFT JOIN `OrderProduct` op ON o.orderid = op.orderid
+        LEFT JOIN `OrderDelivery` op ON o.orderid = op.orderid
         $where_clause
         ORDER BY o.odate DESC";
 
@@ -61,7 +61,7 @@ $stats_sql = "SELECT
                 MAX(o.odate) as latest_cancellation
               FROM `Order` o
               LEFT JOIN `Client` c ON o.clientid = c.clientid
-              LEFT JOIN `OrderProduct` op ON o.orderid = op.orderid
+              LEFT JOIN `OrderDelivery` op ON o.orderid = op.orderid
               WHERE (o.ostatus = 'Cancelled' OR o.ostatus = 'cancelled')
               AND op.managerid = $user_id";
 $stats_result = mysqli_query($mysqli, $stats_sql);
