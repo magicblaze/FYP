@@ -15,21 +15,19 @@ $user_name = $user['name'];
 if(isset($_GET['id'])) {
     $orderid = mysqli_real_escape_string($mysqli, $_GET['id']);
     
-    // Check if order belongs to current manager
-    $check_manager_sql = "SELECT COUNT(*) as count FROM `OrderProduct` op 
-                          JOIN `Manager` m ON op.managerid = m.managerid 
-                          WHERE op.orderid = ? AND m.managerid = ?";
-    $check_stmt = mysqli_prepare($mysqli, $check_manager_sql);
-    mysqli_stmt_bind_param($check_stmt, "ii", $orderid, $user_id);
+    // FIXED: Check if order exists (removed OrderProduct requirement)
+    $check_order_sql = "SELECT COUNT(*) as count FROM `Order` WHERE orderid = ?";
+    $check_stmt = mysqli_prepare($mysqli, $check_order_sql);
+    mysqli_stmt_bind_param($check_stmt, "i", $orderid);
     mysqli_stmt_execute($check_stmt);
     $check_result = mysqli_stmt_get_result($check_stmt);
-    $manager_check = mysqli_fetch_assoc($check_result);
+    $order_check = mysqli_fetch_assoc($check_result);
     
-    if ($manager_check['count'] == 0) {
-        die("You don't have permission to view this order.");
+    if ($order_check['count'] == 0) {
+        die("Order not found.");
     }
     
-    // 修改后的SQL查询：使用别名将expect_price重命名为price
+    // 修改后的SQL查询：使用别名将expect_price重命名为price，并添加cost字段
     $sql = "SELECT 
                 o.*, 
                 c.*,
@@ -43,6 +41,27 @@ if(isset($_GET['id'])) {
     
     $result = mysqli_query($mysqli, $sql);
     $order = mysqli_fetch_assoc($result);
+    
+    // Fetch order references (products used as references for this order)
+    $ref_sql = "SELECT 
+                    orr.orderreferenceid, 
+                    orr.productid,
+                    p.pname, 
+                    p.price as product_price, 
+                    p.category,
+                    p.description as product_description
+                FROM `OrderReference` orr
+                LEFT JOIN `Product` p ON orr.productid = p.productid
+                WHERE orr.orderid = ?";
+    
+    $ref_stmt = mysqli_prepare($mysqli, $ref_sql);
+    mysqli_stmt_bind_param($ref_stmt, "i", $orderid);
+    mysqli_stmt_execute($ref_stmt);
+    $ref_result = mysqli_stmt_get_result($ref_stmt);
+    $references = array();
+    while($ref_row = mysqli_fetch_assoc($ref_result)) {
+        $references[] = $ref_row;
+    }
 }
 ?>
 
@@ -113,6 +132,14 @@ if(isset($_GET['id'])) {
                         <p class="mb-0"><strong class="text-success">$<?php echo number_format($order['budget'], 2); ?></strong></p>
                     </div>
                     <div class="col-md-3 mb-3">
+                        <label class="fw-bold text-muted">Cost</label>
+                        <p class="mb-0">
+                            <strong class="text-info">
+                                $<?php echo isset($order['cost']) && $order['cost'] ? number_format($order['cost'], 2) : '0.00'; ?>
+                            </strong>
+                        </p>
+                    </div>
+                    <div class="col-md-3 mb-3">
                         <label class="fw-bold text-muted">Status</label>
                         <p class="mb-0">
                             <?php 
@@ -125,7 +152,7 @@ if(isset($_GET['id'])) {
                             }
                             ?>
                             <span class="status-badge <?php echo $status_class; ?>">
-                                <?php echo htmlspecialchars($order['ostatus']); ?>
+                                <?php echo htmlspecialchars($order['ostatus'] ?? 'Pending'); ?>
                             </span>
                         </p>
                     </div>
@@ -200,6 +227,41 @@ if(isset($_GET['id'])) {
                 </div>
             </div>
         </div>
+
+        <!-- Design References Card -->
+        <?php if(!empty($references)): ?>
+        <div class="card mb-4">
+            <div class="card-header bg-light">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-link me-2"></i>Product References
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="color: black; width: 25%; text-align: left;">Product Name</th>
+                                <th style="color: black; width: 15%; text-align: left;">Category</th>
+                                <th style="color: black; width: 15%; text-align: left;">Price</th>
+                                <th style="color: black; width: 45%; text-align: left;">Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach($references as $ref): ?>
+                            <tr>
+                                <td style="width: 25%; text-align: left;"><?php echo htmlspecialchars($ref['pname']); ?></td>
+                                <td style="width: 15%; text-align: left;"><span class="badge bg-secondary"><?php echo htmlspecialchars($ref['category']); ?></span></td>
+                                <td style="width: 15%; text-align: left;"><strong class="text-success">$<?php echo number_format($ref['product_price'], 2); ?></strong></td>
+                                <td style="width: 45%; text-align: left;"><small><?php echo htmlspecialchars($ref['product_description'] ?? 'N/A'); ?></small></td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
 
         <!-- Schedule Information Card -->
         <div class="card mb-4">
@@ -288,5 +350,6 @@ if(isset($_GET['id'])) {
 
 <?php
 if(isset($result)) mysqli_free_result($result);
+if(isset($ref_result)) mysqli_free_result($ref_result);
 mysqli_close($mysqli);
 ?>

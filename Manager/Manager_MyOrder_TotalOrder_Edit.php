@@ -14,22 +14,20 @@ $user_name = $user['name'];
 
 $orderid = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
-// Check if order belongs to current manager
-$check_manager_sql = "SELECT COUNT(*) as count FROM `OrderProduct` op 
-                      JOIN `Manager` m ON op.managerid = m.managerid 
-                      WHERE op.orderid = ? AND m.managerid = ?";
-$check_stmt = mysqli_prepare($mysqli, $check_manager_sql);
-mysqli_stmt_bind_param($check_stmt, "ii", $orderid, $user_id);
+// FIXED: Check if order exists (removed OrderProduct requirement)
+$check_order_sql = "SELECT COUNT(*) as count FROM `Order` WHERE orderid = ?";
+$check_stmt = mysqli_prepare($mysqli, $check_order_sql);
+mysqli_stmt_bind_param($check_stmt, "i", $orderid);
 mysqli_stmt_execute($check_stmt);
 $check_result = mysqli_stmt_get_result($check_stmt);
-$manager_check = mysqli_fetch_assoc($check_result);
+$order_check = mysqli_fetch_assoc($check_result);
 
-if ($manager_check['count'] == 0) {
-    die("You don't have permission to edit this order.");
+if ($order_check['count'] == 0) {
+    die("Order not found.");
 }
 
-// Use prepared statement to prevent SQL injection
-$sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus,
+// Use prepared statement to prevent SQL injection - ADDED cost field
+$sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.cost,
                c.clientid, c.cname as client_name, c.ctel, c.cemail, c.budget,
                d.designid, d.designName, d.expect_price as design_price, d.tag as design_tag,
                s.scheduleid, s.OrderFinishDate, s.DesignFinishDate
@@ -44,6 +42,27 @@ mysqli_stmt_bind_param($stmt, "i", $orderid);
 mysqli_stmt_execute($stmt);
 $result = mysqli_stmt_get_result($stmt);
 $order = mysqli_fetch_assoc($result);
+
+// Fetch order references
+$ref_sql = "SELECT 
+                orr.orderreferenceid, 
+                orr.productid,
+                p.pname, 
+                p.price as product_price, 
+                p.category,
+                p.description as product_description
+            FROM `OrderReference` orr
+            LEFT JOIN `Product` p ON orr.productid = p.productid
+            WHERE orr.orderid = ?";
+
+$ref_stmt = mysqli_prepare($mysqli, $ref_sql);
+mysqli_stmt_bind_param($ref_stmt, "i", $orderid);
+mysqli_stmt_execute($ref_stmt);
+$ref_result = mysqli_stmt_get_result($ref_stmt);
+$references = array();
+while($ref_row = mysqli_fetch_assoc($ref_result)) {
+    $references[] = $ref_row;
+}
 
 $edit_status = isset($_GET['edit']) && $_GET['edit'] == 'status';
 $edit_order = isset($_GET['edit']) && $_GET['edit'] == 'order';
@@ -88,16 +107,19 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
         $requirements = mysqli_real_escape_string($mysqli, $_POST['Requirements']);
         $clientid = intval($_POST['clientid']);
         $designid = intval($_POST['designid']);
+        $cost = isset($_POST['cost']) && !empty($_POST['cost']) ? floatval($_POST['cost']) : null;
         
         // Note: Budget is stored in Client table, not Order table
+        // UPDATED: Added cost field to update
         $update_order_sql = "UPDATE `Order` SET 
                             Requirements = ?,
                             clientid = ?,
-                            designid = ?
+                            designid = ?,
+                            cost = ?
                             WHERE orderid = ?";
         
         $update_order_stmt = mysqli_prepare($mysqli, $update_order_sql);
-        mysqli_stmt_bind_param($update_order_stmt, "siii", $requirements, $clientid, $designid, $orderid);
+        mysqli_stmt_bind_param($update_order_stmt, "siidi", $requirements, $clientid, $designid, $cost, $orderid);
         
         if(mysqli_stmt_execute($update_order_stmt)) {
             header("Location: Manager_MyOrder_TotalOrder.php");
@@ -167,6 +189,14 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
                         <p class="mb-0"><strong class="text-success">$<?php echo number_format($order["budget"], 2); ?></strong></p>
                     </div>
                     <div class="col-md-6 mb-3">
+                        <label class="fw-bold text-muted">Cost</label>
+                        <p class="mb-0">
+                            <strong class="text-info">
+                                $<?php echo isset($order["cost"]) && $order["cost"] ? number_format($order["cost"], 2) : '0.00'; ?>
+                            </strong>
+                        </p>
+                    </div>
+                    <div class="col-md-6 mb-3">
                         <label class="fw-bold text-muted">Design</label>
                         <div>
                             <small>Design #<?php echo htmlspecialchars($order["designid"] ?? 'N/A'); ?></small>
@@ -201,6 +231,41 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
                 </div>
             </div>
         </div>
+
+        <!-- Design References Card -->
+        <?php if(!empty($references)): ?>
+        <div class="card mb-4">
+            <div class="card-header bg-light">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-link me-2"></i>Product References
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="color: black; width: 25%; text-align: left;">Product Name</th>
+                                <th style="color: black; width: 15%; text-align: left;">Category</th>
+                                <th style="color: black; width: 15%; text-align: left;">Price</th>
+                                <th style="color: black; width: 45%; text-align: left;">Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach($references as $ref): ?>
+                            <tr>
+                                <td style="width: 25%; text-align: left;"><?php echo htmlspecialchars($ref['pname']); ?></td>
+                                <td style="width: 15%; text-align: left;"><span class="badge bg-secondary"><?php echo htmlspecialchars($ref['category']); ?></span></td>
+                                <td style="width: 15%; text-align: left;"><strong class="text-success">$<?php echo number_format($ref['product_price'], 2); ?></strong></td>
+                                <td style="width: 45%; text-align: left;"><small><?php echo htmlspecialchars($ref['product_description'] ?? 'N/A'); ?></small></td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
 
         <!-- Edit Sections -->
         <div class="row">
@@ -325,7 +390,7 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
                                     <select name="designid" class="form-select" required>
                                         <option value="">Select Design</option>
                                         <?php
-                                        $design_stmt = mysqli_prepare($mysqli, "SELECT designid, price, tag FROM Design ORDER BY designid");
+                                        $design_stmt = mysqli_prepare($mysqli, "SELECT designid, expect_price as price, tag FROM Design ORDER BY designid");
                                         mysqli_stmt_execute($design_stmt);
                                         $design_result = mysqli_stmt_get_result($design_stmt);
                                         while($design = mysqli_fetch_assoc($design_result)){
@@ -338,6 +403,13 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
                                         mysqli_stmt_close($design_stmt);
                                         ?>
                                     </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Cost</label>
+                                    <input type="number" name="cost" class="form-control" step="0.01" min="0" 
+                                           value="<?php echo isset($order["cost"]) && $order["cost"] ? htmlspecialchars($order["cost"]) : ''; ?>"
+                                           placeholder="Enter order cost (optional)">
+                                    <small class="text-muted">The actual cost of fulfilling this order</small>
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label fw-bold">Requirements</label>
@@ -384,5 +456,6 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
 
 <?php
 if(isset($result)) mysqli_free_result($result);
+if(isset($ref_result)) mysqli_free_result($ref_result);
 mysqli_close($mysqli);
 ?>

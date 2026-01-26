@@ -259,6 +259,12 @@ CREATE TABLE `OrderReference` (
   CONSTRAINT `fk_or_orderid` FOREIGN KEY (`orderid`) REFERENCES `Order` (`orderid`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+INSERT INTO `OrderReference` (`orderid`, `productid`, `added_by_type`, `added_by_id`) VALUES
+(1, 1, 'client', 1), 
+(1, 2, 'client', 1), 
+(2, 3, 'client', 2), 
+(2, 4, 'client', 2); 
+
 -- Table to store color-image mapping for each product
 CREATE TABLE `ProductColorImage` (
   `id` int NOT NULL AUTO_INCREMENT,

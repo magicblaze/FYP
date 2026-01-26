@@ -16,8 +16,8 @@ $user_name = $user['name'];
 $status_filter = isset($_GET['status']) ? $_GET['status'] : 'all';
 $search = isset($_GET['search']) ? mysqli_real_escape_string($mysqli, $_GET['search']) : '';
 
-// Build query conditions - only show current manager's orders
-$where_conditions = array("EXISTS (SELECT 1 FROM OrderProduct op WHERE op.orderid = o.orderid AND op.managerid = $user_id)");
+// Build query conditions
+$where_conditions = array();
 
 if($status_filter != 'all') {
     $status_filter = mysqli_real_escape_string($mysqli, $status_filter);
@@ -35,31 +35,33 @@ if(!empty($search)) {
 
 $where_clause = !empty($where_conditions) ? "WHERE " . implode(" AND ", $where_conditions) : "";
 
-// Build SQL query
-$sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus,
+// Build SQL query - FIXED: Added Designer filter to show only designs linked to this manager
+$sql = "SELECT DISTINCT o.orderid, o.odate, o.Requirements, o.ostatus,
                c.clientid, c.cname as client_name, c.budget,
                d.designid, d.expect_price as design_price, d.tag as design_tag,
                s.OrderFinishDate, s.DesignFinishDate
         FROM `Order` o
         LEFT JOIN `Client` c ON o.clientid = c.clientid
         LEFT JOIN `Design` d ON o.designid = d.designid
+        INNER JOIN `Designer` des ON d.designerid = des.designerid AND des.managerid = $user_id
         LEFT JOIN `Schedule` s ON o.orderid = s.orderid
         $where_clause
         ORDER BY o.odate DESC";
 
 $result = mysqli_query($mysqli, $sql);
 
-// Get total count - only current manager's orders
-$count_sql = "SELECT COUNT(*) as total 
-              FROM `Order` o 
-              WHERE EXISTS (SELECT 1 FROM OrderProduct op WHERE op.orderid = o.orderid AND op.managerid = $user_id)";
+// Get total count - FIXED: Added Designer filter
+$count_sql = "SELECT COUNT(DISTINCT o.orderid) as total 
+              FROM `Order` o
+              LEFT JOIN `Design` d ON o.designid = d.designid
+              INNER JOIN `Designer` des ON d.designerid = des.designerid AND des.managerid = $user_id";
 $count_result = mysqli_query($mysqli, $count_sql);
 $count_row = mysqli_fetch_assoc($count_result);
 $total_orders = $count_row['total'];
 
-// Get statistics - only current manager's orders
+// Get statistics - FIXED: Added Designer filter
 $stats_sql = "SELECT 
-                COUNT(*) as total_orders,
+                COUNT(DISTINCT o.orderid) as total_orders,
                 SUM(c.budget) as total_budget,
                 AVG(c.budget) as avg_budget,
                 SUM(CASE WHEN o.ostatus = 'Pending' THEN 1 ELSE 0 END) as pending_count,
@@ -67,7 +69,8 @@ $stats_sql = "SELECT
                 SUM(CASE WHEN o.ostatus = 'Completed' THEN 1 ELSE 0 END) as completed_count
                FROM `Order` o
               LEFT JOIN `Client` c ON o.clientid = c.clientid
-              WHERE EXISTS (SELECT 1 FROM OrderProduct op WHERE op.orderid = o.orderid AND op.managerid = $user_id)";
+              LEFT JOIN `Design` d ON o.designid = d.designid
+              INNER JOIN `Designer` des ON d.designerid = des.designerid AND des.managerid = $user_id";
 $stats_result = mysqli_query($mysqli, $stats_sql);
 $stats = mysqli_fetch_assoc($stats_result);
 ?>
@@ -285,7 +288,7 @@ $stats = mysqli_fetch_assoc($stats_result);
                         </td>
                         <td>
                             <span class="status-badge <?php echo $status_class; ?>">
-                                <?php echo htmlspecialchars($row["ostatus"] ?? 'Pending'); ?>
+                                <?php echo htmlspecialchars($row["ostatus"]); ?>
                             </span>
                         </td>
                         <td>
