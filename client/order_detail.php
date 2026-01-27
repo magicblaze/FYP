@@ -84,15 +84,15 @@ if (empty($_SESSION['shown_order_chat'][$orderId])) {
 }
 
 // Fetch products/materials for this order
-$productsSql = "SELECT op.orderproductid, op.productid, op.quantity, op.managerid, op.status,
-                       op.color,
+$productsSql = "SELECT od.orderdeliveryid, od.productid, od.quantity, od.managerid, od.status,
+                       od.color,
                        p.pname, p.price, p.category, p.description,
                        m.mname as manager_name
-                FROM OrderProduct op
-                JOIN Product p ON op.productid = p.productid
-                JOIN Manager m ON op.managerid = m.managerid
-                WHERE op.orderid = ?
-                ORDER BY op.orderproductid ASC";
+                FROM OrderDelivery od
+                JOIN Product p ON od.productid = p.productid
+                JOIN Manager m ON od.managerid = m.managerid
+                WHERE od.orderid = ?
+                ORDER BY od.orderdeliveryid ASC";
 $productsStmt = $mysqli->prepare($productsSql);
 $productsStmt->bind_param("i", $orderId);
 $productsStmt->execute();

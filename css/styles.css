@@ -1042,3 +1042,28 @@ header .dropdown-menu {
         gap: 0.5rem;
     }
 }
+/* Profile Page Styles */
+        body { background: #f6f6f7; color: #444; font-family: 'Segoe UI', sans-serif; }
+        .banner { height: 280px; background: url('https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1600&q=80') center/cover; }
+        .profile-header-card { background: #fff; border-radius: 12px; padding: 25px; margin-top: -60px; box-shadow: 0 8px 30px rgba(0,0,0,0.08); display: flex; align-items: center; position: relative; z-index: 10; }
+        .logo-box { width: 90px; height: 90px; border: 1px solid #eee; border-radius: 10px; display: flex; align-items: center; justify-content: center; margin-right: 25px; background: #fff; }
+        .logo-box img { max-width: 100%; max-height: 100%; border-radius: 5px; }
+        
+        .sidebar-box { background: #fcfcfc; border-radius: 10px; padding: 20px; margin-bottom: 20px; border: 1px solid #f0f0f0; }
+        .sidebar-title { font-size: 0.75rem; font-weight: 700; color: #999; text-transform: uppercase; margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+        .sidebar-label { color: #aaa; font-size: 0.8rem; display: block; margin-top: 10px; }
+
+        .content-section { background: #fff; border-radius: 12px; padding: 30px; margin-top: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        .blue-section-header { border-bottom: 2px solid #3498db; padding-bottom: 8px; margin-bottom: 20px; color: #2c3e50; font-weight: 700; display: flex; align-items: center; }
+        .blue-section-header i { margin-right: 12px; color: #3498db; }
+
+        /* Worker Card */
+        .worker-card { border: 1px solid #eee; border-radius: 10px; padding: 15px; margin-bottom: 15px; display: flex; align-items: center; position: relative; background: #fff; }
+        .worker-img { width: 65px; height: 65px; border-radius: 8px; object-fit: cover; margin-right: 15px; background: #eee; }
+        .edit-w-btn { position: absolute; right: 15px; top: 15px; color: #3498db; cursor: pointer; }
+
+        /* Client Info Style */
+        .info-row { display: flex; padding: 12px 0; border-bottom: 1px solid #f8f9fa; align-items: center; }
+        .info-label { width: 120px; color: #7f8c8d; font-weight: 600; font-size: 0.95rem; }
+        .info-val { color: #333; font-weight: 500; }
+        .grey-card-box { background: #f8f9fa; border-radius: 10px; padding: 20px; margin-top: 10px; }

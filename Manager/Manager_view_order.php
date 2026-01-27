@@ -44,7 +44,7 @@ if(isset($_GET['id'])) {
     
     // Fetch order references (products used as references for this order)
     $ref_sql = "SELECT 
-                    orr.orderreferenceid, 
+                    orr.id, 
                     orr.productid,
                     p.pname, 
                     p.price as product_price, 
