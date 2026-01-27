@@ -30,6 +30,41 @@ function getAppRoot() {
   return !empty($appRoot) ? $appRoot : '/FYP';
 }
 
+// Fetch current user's name from database based on role and ID
+function getUserNameFromDB($role, $uid) {
+  if (!$uid || !$role) return null;
+  
+  try {
+    // Include database config
+    $configPath = __DIR__ . '/../config.php';
+    if (!file_exists($configPath)) return null;
+    require_once $configPath;
+    
+    // Map role to table and column
+    $tables = [
+      'client' => ['table' => 'Client', 'idcol' => 'clientid', 'namecol' => 'cname'],
+      'designer' => ['table' => 'Designer', 'idcol' => 'designerid', 'namecol' => 'dname'],
+      'manager' => ['table' => 'Manager', 'idcol' => 'managerid', 'namecol' => 'mname'],
+      'Contractors' => ['table' => 'Contractors', 'idcol' => 'contractorid', 'namecol' => 'cname'],
+      'contractor' => ['table' => 'Contractors', 'idcol' => 'contractorid', 'namecol' => 'cname'],
+      'supplier' => ['table' => 'Supplier', 'idcol' => 'supplierid', 'namecol' => 'sname']
+    ];
+    
+    $roleKey = strtolower($role);
+    if (!isset($tables[$roleKey])) return null;
+    
+    $cfg = $tables[$roleKey];
+    $stmt = $pdo->prepare("SELECT {$cfg['namecol']} FROM {$cfg['table']} WHERE {$cfg['idcol']}=? LIMIT 1");
+    $stmt->execute([(int)$uid]);
+    $name = $stmt->fetchColumn();
+    return $name ?: null;
+  } catch (Exception $e) {
+    return null;
+  }
+}
+
+$userName = $logged && $uid ? getUserNameFromDB($role, $uid) : null;
+
 $APP_ROOT = getAppRoot();
 // Centralized paths (dynamically resolved so they work in any deployment)
 $CHAT_API_PATH = $APP_ROOT . '/Public/ChatApi.php?action=';
@@ -1057,7 +1092,7 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
     try {
       if (typeof initApp === 'function') {
         window.chatApps = window.chatApps || {};
-        window.chatApps['chatwidget'] = initApp({ apiPath: <?= json_encode($CHAT_API_PATH) ?>, userType: <?= json_encode($role) ?>, userId: <?= json_encode($uid) ?>, userName: <?= json_encode($_SESSION['user']['name'] ?? '') ?>, rootId: 'chatwidget', items: [] });
+        window.chatApps['chatwidget'] = initApp({ apiPath: <?= json_encode($CHAT_API_PATH) ?>, userType: <?= json_encode($role) ?>, userId: <?= json_encode($uid) ?>, userName: <?= json_encode($userName ?? $_SESSION['user']['name'] ?? '') ?>, rootId: 'chatwidget', items: [] });
       }
     } catch(e) { console.error('chatwidget initApp failed', e); }
     <?php endif; ?>

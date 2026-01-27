@@ -372,7 +372,7 @@ function initApp(config = {}) {
           if (mm) orderId = mm.order.id || mm.order.orderid;
         }
         if (orderId) {
-          const refs = await apiGet('listReferences&orderid=' + encodeURIComponent(orderId));
+          const refs = await apiPost('listReferences', { orderid: orderId });
           const list = (refs && refs.references) ? refs.references : (refs || []);
           list.forEach(r => {
             if (r.messageid) currentOrderReferences.messageIds.add(String(r.messageid));
@@ -1585,7 +1585,7 @@ function initApp(config = {}) {
     totalPollTimer = setInterval(() => {
       try {
         // Use ChatApi.getTotalUnread which is optimized to return a single count
-        apiGet('getTotalUnread&user_type=' + encodeURIComponent(userType) + '&user_id=' + encodeURIComponent(userId)).then(resp => {
+        apiPost('getTotalUnread', { user_type: userType, user_id: userId }).then(resp => {
           try {
             if (resp && resp.ok) {
               const tot = parseInt(resp.total || 0, 10) || 0;

@@ -87,7 +87,8 @@ function normalize_member_type($t) {
   return $t ?: null;
 }
 
-$action = $_GET['action'] ?? '';
+$data = json_decode(file_get_contents('php://input'), true) ?: ($_POST ?: $_GET);
+$action = $data['action'] ?? $_GET['action'] ?? '';
 
 try {
   // Block unauthenticated users from using chat endpoints
@@ -97,8 +98,8 @@ try {
   }
   switch ($action) {
   case 'listRooms':
-    $user_type = normalize_member_type($_GET['user_type'] ?? null);
-    $user_id = isset($_GET['user_id']) ? (int)$_GET['user_id'] : 0;
+    $user_type = normalize_member_type($data['user_type'] ?? null);
+    $user_id = isset($data['user_id']) ? (int)$data['user_id'] : 0;
     if ($user_type && $user_id > 0) {
       $stmt = $pdo->prepare("SELECT cr.* FROM ChatRoom cr JOIN ChatRoomMember m ON m.ChatRoomid=cr.ChatRoomid WHERE m.member_type=? AND m.memberid=? ORDER BY cr.ChatRoomid DESC");
       $stmt->execute([$user_type, $user_id]);
@@ -163,15 +164,15 @@ try {
     break;
 
   case 'getMembers':
-    $roomId = (int)($_GET['room'] ?? 0);
+    $roomId = (int)($data['room'] ?? 0);
     $stmt = $pdo->prepare("SELECT * FROM ChatRoomMember WHERE ChatRoomid=?");
     $stmt->execute([$roomId]);
     send_json($stmt->fetchAll());
     break;
 
   case 'getMessages':
-    $roomId = (int)($_GET['room'] ?? 0);
-    $since = isset($_GET['since']) ? (int)$_GET['since'] : 0;
+    $roomId = (int)($data['room'] ?? 0);
+    $since = isset($data['since']) ? (int)$data['since'] : 0;
     // Fetch messages for room; if `since` provided, filter in PHP to support different DB schemas
     $stmt = $pdo->prepare("SELECT * FROM Message WHERE ChatRoomid=? ORDER BY timestamp ASC");
     $stmt->execute([$roomId]);
