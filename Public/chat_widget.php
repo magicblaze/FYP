@@ -32,14 +32,10 @@ function getAppRoot() {
 
 // Fetch current user's name from database based on role and ID
 function getUserNameFromDB($role, $uid) {
-  if (!$uid || !$role) return null;
+  global $pdo;
+  if (!$uid || !$role || !$pdo) return null;
   
   try {
-    // Include database config
-    $configPath = __DIR__ . '/../config.php';
-    if (!file_exists($configPath)) return null;
-    require_once $configPath;
-    
     // Map role to table and column
     $tables = [
       'client' => ['table' => 'Client', 'idcol' => 'clientid', 'namecol' => 'cname'],
@@ -61,6 +57,11 @@ function getUserNameFromDB($role, $uid) {
   } catch (Exception $e) {
     return null;
   }
+}
+
+// Ensure database connection is available
+if (!isset($pdo) || $pdo === null) {
+  require_once __DIR__ . '/../config.php';
 }
 
 $userName = $logged && $uid ? getUserNameFromDB($role, $uid) : null;
