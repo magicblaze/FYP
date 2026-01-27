@@ -36,24 +36,19 @@ DROP TABLE IF EXISTS `Schedule`;
 DROP TABLE IF EXISTS `ChatRoom`;
 DROP TABLE IF EXISTS `ChatRoomMember`;
 DROP TABLE IF EXISTS `Message`;
-DROP TABLE IF EXISTS `ProductLike`;
-DROP TABLE IF EXISTS `DesignLike`;
 DROP TABLE IF EXISTS `MessageRead`;
 DROP TABLE IF EXISTS `UploadedFiles`;
 DROP TABLE IF EXISTS `DesignImage`;
 DROP TABLE IF EXISTS `OrderReference`;
 DROP TABLE IF EXISTS `DesignReference`;
 DROP TABLE IF EXISTS `UserLike`;
-DROP TABLE IF EXISTS `OrderMaterial`;
-DROP TABLE IF EXISTS `Comment_material`;
-DROP TABLE IF EXISTS `DesignMaterial`;
 DROP TABLE IF EXISTS `workerallocation`;
 
 -- Client table
 CREATE TABLE `Client` (
   `clientid` int NOT NULL AUTO_INCREMENT,
   `cname` varchar(255) NOT NULL,
-  `ctel` int DEFAULT NULL,
+  `ctel` varchar(32) DEFAULT NULL,
   `cemail` varchar(255) DEFAULT NULL,
   `cpassword` varchar(255) NOT NULL,
   `address` varchar(255) DEFAULT NULL,
@@ -111,7 +106,9 @@ CREATE TABLE `Worker` (
   `email` varchar(255) DEFAULT NULL,
   `phone` varchar(32) DEFAULT NULL,
   `certificate` varchar(255) DEFAULT NULL,
-  `image` varchar(255) DEFAULT NULL, 
+  `image` varchar(255) DEFAULT NULL,
+  `work_hours_per_week` DECIMAL(5,1) DEFAULT 40.0,
+  `available_hours_this_week` DECIMAL(5,1) DEFAULT 40.0,
   `supplierid` int NOT NULL,
   PRIMARY KEY (`workerid`),
   KEY `supplierid_Worker_idx` (`supplierid`),
@@ -572,9 +569,7 @@ INSERT INTO `Schedule` (`scheduleid`,`managerid`,`OrderFinishDate`,`DesignFinish
 ALTER TABLE `Message`
   ADD CONSTRAINT `fk_message_fileid` FOREIGN KEY (`fileid`) REFERENCES `UploadedFiles` (`fileid`) ON DELETE SET NULL;
 
-ALTER TABLE `worker` 
-ADD COLUMN IF NOT EXISTS `work_hours_per_week` DECIMAL(5,1) DEFAULT 40.0,
-ADD COLUMN IF NOT EXISTS `available_hours_this_week` DECIMAL(5,1) DEFAULT 40.0;
+-- Work hours columns merged into `Worker` CREATE TABLE above; no ALTER needed here.
 
 DELIMITER $$
 CREATE PROCEDURE IF NOT EXISTS `ResetWeeklyHours`()

@@ -35,66 +35,56 @@ if ($user_id <= 0) {
     die('Invalid session. Please sign in again.');
 }
 
-// If the new unified UserLike table exists, use it; otherwise fall back to legacy ProductLike/DesignLike for clients
-$hasUserLike = false;
-$tbl = $mysqli->query("SHOW TABLES LIKE 'UserLike'");
-if ($tbl && $tbl->num_rows)
-    $hasUserLike = true;
-
-// Get liked products with their first color images
-if ($hasUserLike) {
-    $likedProductIds = [];
-    $pr = $mysqli->prepare("SELECT item_id FROM UserLike WHERE user_type = ? AND user_id = ? AND item_type = 'product'");
-    if ($pr) {
-        $pr->bind_param('si', $user_type, $user_id);
-        $pr->execute();
-        $res = $pr->get_result();
-        while ($r = $res->fetch_assoc())
-            $likedProductIds[] = (int) $r['item_id'];
-        $pr->close();
-    }
-
-    if (count($likedProductIds)) {
-        $in = implode(',', array_map('intval', $likedProductIds));
-        // Use a correlated subquery to reliably fetch the first ProductColorImage.image for each product
-        $products_sql = "SELECT p.*, s.sname,
-                         (SELECT pci.image FROM ProductColorImage pci WHERE pci.productid = p.productid ORDER BY pci.id ASC LIMIT 1) AS first_color_image
-                         FROM Product p
-                         JOIN Supplier s ON p.supplierid = s.supplierid
-                         WHERE p.productid IN ($in)
-                         ORDER BY p.productid DESC";
-        $liked_products = $mysqli->query($products_sql);
-    } else {
-        $liked_products = $mysqli->query("SELECT * FROM Product WHERE 0");
-    }
+// Get liked products with their first color images (UserLike only)
+$likedProductIds = [];
+$pr = $mysqli->prepare("SELECT item_id FROM UserLike WHERE user_type = ? AND user_id = ? AND item_type = 'product'");
+if ($pr) {
+    $pr->bind_param('si', $user_type, $user_id);
+    $pr->execute();
+    $res = $pr->get_result();
+    while ($r = $res->fetch_assoc())
+        $likedProductIds[] = (int) $r['item_id'];
+    $pr->close();
 }
 
-// Get liked designs
-if ($hasUserLike) {
-    $likedDesignIds = [];
-    $dr = $mysqli->prepare("SELECT item_id FROM UserLike WHERE user_type = ? AND user_id = ? AND item_type = 'design'");
-    if ($dr) {
-        $dr->bind_param('si', $user_type, $user_id);
-        $dr->execute();
-        $dres = $dr->get_result();
-        while ($r = $dres->fetch_assoc())
-            $likedDesignIds[] = (int) $r['item_id'];
-        $dr->close();
-    }
+if (count($likedProductIds)) {
+    $in = implode(',', array_map('intval', $likedProductIds));
+    // Use a correlated subquery to reliably fetch the first ProductColorImage.image for each product
+    $products_sql = "SELECT p.*, s.sname,
+                     (SELECT pci.image FROM ProductColorImage pci WHERE pci.productid = p.productid ORDER BY pci.id ASC LIMIT 1) AS first_color_image
+                     FROM Product p
+                     JOIN Supplier s ON p.supplierid = s.supplierid
+                     WHERE p.productid IN ($in)
+                     ORDER BY p.productid DESC";
+    $liked_products = $mysqli->query($products_sql);
+} else {
+    $liked_products = $mysqli->query("SELECT * FROM Product WHERE 0");
+}
 
-    if (count($likedDesignIds)) {
-        $in = implode(',', array_map('intval', $likedDesignIds));
-        $designs_sql = "SELECT d.*, dz.dname, di.image_filename
-                        FROM Design d
-                        JOIN Designer dz ON d.designerid = dz.designerid
-                        LEFT JOIN DesignImage di ON d.designid = di.designid
-                        WHERE d.designid IN ($in)
-                        GROUP BY d.designid
-                        ORDER BY d.designid DESC";
-        $liked_designs = $mysqli->query($designs_sql);
-    } else {
-        $liked_designs = $mysqli->query("SELECT * FROM Design WHERE 0");
-    }
+// Get liked designs (UserLike only)
+$likedDesignIds = [];
+$dr = $mysqli->prepare("SELECT item_id FROM UserLike WHERE user_type = ? AND user_id = ? AND item_type = 'design'");
+if ($dr) {
+    $dr->bind_param('si', $user_type, $user_id);
+    $dr->execute();
+    $dres = $dr->get_result();
+    while ($r = $dres->fetch_assoc())
+        $likedDesignIds[] = (int) $r['item_id'];
+    $dr->close();
+}
+
+if (count($likedDesignIds)) {
+    $in = implode(',', array_map('intval', $likedDesignIds));
+    $designs_sql = "SELECT d.*, dz.dname, di.image_filename
+                    FROM Design d
+                    JOIN Designer dz ON d.designerid = dz.designerid
+                    LEFT JOIN DesignImage di ON d.designid = di.designid
+                    WHERE d.designid IN ($in)
+                    GROUP BY d.designid
+                    ORDER BY d.designid DESC";
+    $liked_designs = $mysqli->query($designs_sql);
+} else {
+    $liked_designs = $mysqli->query("SELECT * FROM Design WHERE 0");
 }
 
 // Process designs and get first image for each

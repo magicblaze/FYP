@@ -262,7 +262,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (!$error) {
         // Persist per-order budget; cost and gross_floor_area left NULL until later updates
-        $stmt = $mysqli->prepare("INSERT INTO `Order` (odate, clientid, budget, cost, gross_floor_area, Requirements, designid, ostatus) VALUES (NOW(), ?, ?, NULL, ?, ?, ?, 'Waiting Confirm')");
+        $stmt = $mysqli->prepare("INSERT INTO `Order` (odate, clientid, budget, cost, gross_floor_area, Requirements, designid, ostatus) VALUES (NOW(), ?, ?, NULL, ?, ?, ?, 'Pending')");
         $stmt->bind_param("iddsi", $clientId, $budget, $gfa, $requirements, $designid);
         if ($stmt && $stmt->execute()) {
             $orderId = $stmt->insert_id;
@@ -309,17 +309,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $insRoom->execute();
                             $roomId = $insRoom->insert_id;
                             $insRoom->close();
-                            // insert client and designer members
+                            // insert client and designer members (safe INSERT-IF-NOT-EXISTS)
+                            $chkM = $mysqli->prepare("SELECT COUNT(*) FROM ChatRoomMember WHERE ChatRoomid=? AND member_type=? AND memberid=?");
                             $insM = $mysqli->prepare("INSERT INTO ChatRoomMember (ChatRoomid, member_type, memberid) VALUES (?,?,?)");
-                            if ($insM) {
+                            if ($chkM && $insM) {
                                 $mt1 = 'client';
                                 $mid1 = $clientId;
-                                $insM->bind_param('isi', $roomId, $mt1, $mid1);
-                                $insM->execute();
+                                $chkM->bind_param('isi', $roomId, $mt1, $mid1);
+                                $chkM->execute();
+                                $cnt = $chkM->get_result()->fetch_row()[0] ?? 0;
+                                if ((int)$cnt === 0) {
+                                    $insM->bind_param('isi', $roomId, $mt1, $mid1);
+                                    $insM->execute();
+                                }
                                 $mt2 = 'designer';
                                 $mid2 = $designerId;
-                                $insM->bind_param('isi', $roomId, $mt2, $mid2);
-                                $insM->execute();
+                                $chkM->bind_param('isi', $roomId, $mt2, $mid2);
+                                $chkM->execute();
+                                $cnt = $chkM->get_result()->fetch_row()[0] ?? 0;
+                                if ((int)$cnt === 0) {
+                                    $insM->bind_param('isi', $roomId, $mt2, $mid2);
+                                    $insM->execute();
+                                }
+                                $chkM->close();
                                 $insM->close();
                             }
                             // attempt to add the designer's manager as a member. If designer has no manager, fallback to first Manager.
@@ -347,11 +359,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 }
                             }
                             if (!empty($mgrId)) {
+                                $chkMgr = $mysqli->prepare("SELECT COUNT(*) FROM ChatRoomMember WHERE ChatRoomid=? AND member_type=? AND memberid=?");
                                 $insMgr = $mysqli->prepare("INSERT INTO ChatRoomMember (ChatRoomid, member_type, memberid) VALUES (?,?,?)");
-                                if ($insMgr) {
+                                if ($chkMgr && $insMgr) {
                                     $mtm = 'manager';
-                                    $insMgr->bind_param('isi', $roomId, $mtm, $mgrId);
-                                    $insMgr->execute();
+                                    $chkMgr->bind_param('isi', $roomId, $mtm, $mgrId);
+                                    $chkMgr->execute();
+                                    $cnt = $chkMgr->get_result()->fetch_row()[0] ?? 0;
+                                    if ((int)$cnt === 0) {
+                                        $insMgr->bind_param('isi', $roomId, $mtm, $mgrId);
+                                        $insMgr->execute();
+                                    }
+                                    $chkMgr->close();
                                     $insMgr->close();
                                 }
                             }
@@ -1024,90 +1043,47 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                             const fname = (j.path || '').split('/').pop();
                             const relPath = (j.path && j.path.charAt(0) === '/') ? j.path : ('../' + (j.path || ''));
 
-                            // Ensure the view container exists
+                            // Rebuild the floorPlanView element with the uploaded file info
                             if (floorPlanView) {
-                                // Update or create filename element
-                                let nameEl = floorPlanView.querySelector('#floorPlanFileName');
-                                if (!nameEl) {
-                                    // try to find first column where to insert
-                                    const leftCol = floorPlanView.querySelector('.d-flex') || floorPlanView;
-                                    const container = document.createElement('div');
-                                    container.className = 'd-flex align-items-center';
-                                    const icon = document.createElement('i');
-                                    icon.className = 'fas fa-file-pdf';
-                                    icon.style.cssText = 'font-size:1.5rem;color:#27ae60;margin-right:.5rem;';
-                                    const meta = document.createElement('div');
-                                    const strong = document.createElement('strong');
-                                    strong.id = 'floorPlanFileName';
-                                    strong.textContent = fname;
-                                    const small = document.createElement('small');
-                                    small.className = 'text-muted';
-                                    small.textContent = 'Floor plan on file';
-                                    meta.appendChild(strong);
-                                    meta.appendChild(document.createElement('br'));
-                                    meta.appendChild(small);
-                                    container.appendChild(icon);
-                                    container.appendChild(meta);
-                                    // if leftCol looks like the left area, replace it; otherwise prepend
-                                    if (leftCol && leftCol.parentElement) leftCol.parentElement.insertBefore(container, leftCol);
-                                    nameEl = strong;
-                                } else {
-                                    nameEl.textContent = fname;
-                                }
+                                // Remove all alert classes and rebuild as success state
+                                floorPlanView.className = '';
+                                floorPlanView.style.cssText = 'background: #e8f8f0; border: 1px solid #27ae60; border-radius: 8px; padding: 1rem; margin-bottom: 1rem;';
+                                
+                                // Build the complete structure
+                                floorPlanView.innerHTML = `
+                                    <div class="d-flex align-items-center justify-content-between">
+                                        <div class="d-flex align-items-center">
+                                            <i class="fas fa-file-pdf" style="font-size: 1.5rem; color: #27ae60; margin-right: 0.5rem;"></i>
+                                            <div>
+                                                <strong id="floorPlanFileName">${fname}</strong>
+                                                <br>
+                                                <small class="text-muted">Floor plan on file</small>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <a href="${relPath}" target="_blank" class="btn btn-sm btn-outline-success me-2">
+                                                <i class="fas fa-download me-1"></i>View
+                                            </a>
+                                            <button type="button" id="floorPlanEditBtn" class="btn btn-sm btn-outline-secondary">
+                                                <i class="fas fa-pencil-alt"></i> Change
+                                            </button>
+                                        </div>
+                                    </div>
+                                `;
 
-                                // Update or create view link and edit button
-                                let editBtnLocal = floorPlanView.querySelector('#floorPlanEditBtn');
-                                let viewLink = floorPlanView.querySelector('a.btn-outline-success');
-                                if (!viewLink) {
-                                    viewLink = document.createElement('a');
-                                    viewLink.className = 'btn btn-sm btn-outline-success me-2';
-                                    viewLink.target = '_blank';
-                                    viewLink.innerHTML = '<i class="fas fa-download me-1"></i>View';
-                                }
-                                viewLink.href = relPath;
-
-                                if (!editBtnLocal) {
-                                    editBtnLocal = document.createElement('button');
-                                    editBtnLocal.type = 'button';
-                                    editBtnLocal.id = 'floorPlanEditBtn';
-                                    editBtnLocal.className = 'btn btn-sm btn-outline-secondary';
-                                    editBtnLocal.innerHTML = '<i class="fas fa-pencil-alt"></i> Change';
-                                }
-
-                                // Ensure the action container exists and contains viewLink + edit button
-                                const actionHolder = floorPlanView.querySelector('.d-flex.justify-content-between') || floorPlanView.querySelector('div') || floorPlanView;
-                                // append or replace the right-side actions
-                                const rightCol = actionHolder.querySelector('div:nth-child(2)') || null;
-                                if (rightCol) {
-                                    // clear existing and append
-                                    rightCol.innerHTML = '';
-                                    rightCol.appendChild(viewLink);
-                                    rightCol.appendChild(editBtnLocal);
-                                } else {
-                                    // fallback: append to container
-                                    actionHolder.appendChild(viewLink);
-                                    actionHolder.appendChild(editBtnLocal);
-                                }
-
-                                // style the view container as 'has file'
-                                floorPlanView.classList.remove('alert', 'alert-warning');
-                                floorPlanView.style.background = '#e8f8f0';
-                                floorPlanView.style.border = '1px solid #27ae60';
-                                floorPlanView.style.borderRadius = '8px';
-                                floorPlanView.style.padding = '1rem';
-                                floorPlanView.style.display = '';
-
-                                // (re)bind edit button to open the edit area
-                                if (floorPlanEdit) {
+                                // Re-bind the edit button click handler
+                                const editBtnLocal = floorPlanView.querySelector('#floorPlanEditBtn');
+                                if (editBtnLocal && floorPlanEdit) {
                                     editBtnLocal.addEventListener('click', function () {
                                         floorPlanEdit.style.display = 'block';
                                         floorPlanView.style.display = 'none';
                                     });
                                 }
-                            }
 
-                            // hide the inline edit panel if present
-                            if (floorPlanEdit) floorPlanEdit.style.display = 'none';
+                                // Show the view and hide the edit panel
+                                floorPlanView.style.display = '';
+                                if (floorPlanEdit) floorPlanEdit.style.display = 'none';
+                            }
                         } else {
                             alert('Upload failed: ' + (j.message || 'Unknown'));
                         }
