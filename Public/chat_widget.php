@@ -10,11 +10,28 @@ $uid = $logged ? (int) ($_SESSION['user'][$roleRaw . 'id'] ?? $_SESSION['user'][
 // Normalize role to match DB ENUM: 'Contractors' needs capital C, others lowercase
 $role = $roleRaw;
 if ($role === 'contractor' || $role === 'contractors') $role = 'Contractors';
-// Dynamically resolve app root to support any project path (not just /FYP/)
-$scriptPath = $_SERVER['SCRIPT_NAME'] ?? '';
-$parts = explode('/', ltrim($scriptPath, '/'));
-$APP_ROOT = isset($parts[0]) && $parts[0] !== '' ? '/' . $parts[0] : '';
-// Centralized paths (use dynamic app root so pages work in any project location)
+
+// Dynamically resolve app root to support any project path deployment
+// Extract app root from SCRIPT_NAME or REQUEST_URI (e.g., /FYP/public/... → /FYP)
+function getAppRoot() {
+  $scriptPath = $_SERVER['SCRIPT_NAME'] ?? '';
+  if (empty($scriptPath) && !empty($_SERVER['REQUEST_URI'])) {
+    $scriptPath = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+  }
+  
+  if (empty($scriptPath)) {
+    // Fallback: assume /FYP as default
+    return '/FYP';
+  }
+  
+  $parts = explode('/', ltrim($scriptPath, '/'));
+  // First part is the app root (e.g., 'FYP' from /FYP/public/chat_widget.php)
+  $appRoot = (isset($parts[0]) && $parts[0] !== '') ? '/' . $parts[0] : '';
+  return !empty($appRoot) ? $appRoot : '/FYP';
+}
+
+$APP_ROOT = getAppRoot();
+// Centralized paths (dynamically resolved so they work in any deployment)
 $CHAT_API_PATH = $APP_ROOT . '/Public/ChatApi.php?action=';
 $CHAT_JS_SRC = $APP_ROOT . '/Public/Chatfunction.js';
 $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
