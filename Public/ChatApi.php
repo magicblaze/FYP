@@ -76,6 +76,17 @@ function get_enum_values(PDO $pdo, $table, $column) {
   }
 }
 
+// Normalize member_type to match the ENUM values in ChatRoomMember table
+// ENUM is: 'client','designer','manager','Contractors','supplier'
+function normalize_member_type($t) {
+  $t = strtolower(trim((string)$t));
+  if ($t === 'supplier_company') return 'supplier';
+  // Map contractor variations to the DB ENUM value 'Contractors' (capital C)
+  if ($t === 'contractor' || $t === 'contractors') return 'Contractors';
+  // All other types are lowercase in ENUM
+  return $t ?: null;
+}
+
 $action = $_GET['action'] ?? '';
 
 try {
@@ -86,7 +97,7 @@ try {
   }
   switch ($action) {
   case 'listRooms':
-    $user_type = $_GET['user_type'] ?? null;
+    $user_type = normalize_member_type($_GET['user_type'] ?? null);
     $user_id = isset($_GET['user_id']) ? (int)$_GET['user_id'] : 0;
     if ($user_type && $user_id > 0) {
       $stmt = $pdo->prepare("SELECT cr.* FROM ChatRoom cr JOIN ChatRoomMember m ON m.ChatRoomid=cr.ChatRoomid WHERE m.member_type=? AND m.memberid=? ORDER BY cr.ChatRoomid DESC");
@@ -108,7 +119,7 @@ try {
               case 'client': $q = $pdo->prepare('SELECT cname AS name FROM Client WHERE clientid=? LIMIT 1'); break;
               case 'designer': $q = $pdo->prepare('SELECT dname AS name FROM Designer WHERE designerid=? LIMIT 1'); break;
               case 'manager': $q = $pdo->prepare('SELECT mname AS name FROM Manager WHERE managerid=? LIMIT 1'); break;
-              case 'Contractors': $q = $pdo->prepare('SELECT cname AS name FROM Contractors WHERE contractorid=? LIMIT 1'); break;
+              case 'contractor': $q = $pdo->prepare('SELECT cname AS name FROM Contractors WHERE contractorid=? LIMIT 1'); break;
               case 'supplier': $q = $pdo->prepare('SELECT sname AS name FROM Supplier WHERE supplierid=? LIMIT 1'); break;
               default: $q = null; break;
             }
@@ -176,7 +187,7 @@ try {
           $q = $pdo->prepare('SELECT dname AS name FROM Designer WHERE designerid=? LIMIT 1'); $q->execute([$sid]); $n = $q->fetchColumn(); break;
         case 'manager':
           $q = $pdo->prepare('SELECT mname AS name FROM Manager WHERE managerid=? LIMIT 1'); $q->execute([$sid]); $n = $q->fetchColumn(); break;
-        case 'Contractors':
+        case 'contractor':
           $q = $pdo->prepare('SELECT cname AS name FROM Contractors WHERE contractorid=? LIMIT 1'); $q->execute([$sid]); $n = $q->fetchColumn(); break;
         case 'supplier':
           $q = $pdo->prepare('SELECT sname AS name FROM Supplier WHERE supplierid=? LIMIT 1'); $q->execute([$sid]); $n = $q->fetchColumn(); break;
@@ -513,6 +524,10 @@ try {
         }
         // Respect caller-provided message_type (e.g., 'design') when present; otherwise derive from mime
         $finalMessageType = $data['message_type'] ?? null;
+        // Log incoming share/product item ids for debugging when provided
+        if (!empty($data['item_id']) || !empty($data['product_id']) || !empty($data['design_id'])) {
+          try { error_log('[ChatApi][sendMessage] share payload item_id=' . json_encode([ 'item_id'=>$data['item_id'] ?? null, 'product_id'=>$data['product_id'] ?? null, 'design_id'=>$data['design_id'] ?? null, 'share_type'=>$data['share_type'] ?? null ])); } catch(Throwable $__e) {}
+        }
         // Ensure compatibility with DB enum values to avoid warnings/exceptions
         $supportedTypes = get_enum_values($pdo, 'Message', 'message_type');
         // Prefer explicit IDs when provided for structured payloads
@@ -598,7 +613,7 @@ try {
         case 'client': $q = $pdo->prepare('SELECT cname AS name FROM Client WHERE clientid=? LIMIT 1'); break;
         case 'designer': $q = $pdo->prepare('SELECT dname AS name FROM Designer WHERE designerid=? LIMIT 1'); break;
         case 'manager': $q = $pdo->prepare('SELECT mname AS name FROM Manager WHERE managerid=? LIMIT 1'); break;
-        case 'Contractors': $q = $pdo->prepare('SELECT cname AS name FROM Contractors WHERE contractorid=? LIMIT 1'); break;
+        case 'contractor': $q = $pdo->prepare('SELECT cname AS name FROM Contractors WHERE contractorid=? LIMIT 1'); break;
         case 'supplier': $q = $pdo->prepare('SELECT sname AS name FROM Supplier WHERE supplierid=? LIMIT 1'); break;
         default: $q = null; break;
       }
@@ -646,9 +661,9 @@ try {
   case 'createRoom':
     // Create or return an existing private room between two members
     $data = json_decode(file_get_contents('php://input'), true) ?: $_POST;
-    $creator_type = $data['creator_type'] ?? null;
+    $creator_type = normalize_member_type($data['creator_type'] ?? null);
     $creator_id = isset($data['creator_id']) ? (int)$data['creator_id'] : 0;
-    $other_type = $data['other_type'] ?? null;
+    $other_type = normalize_member_type($data['other_type'] ?? null);
     $other_id = isset($data['other_id']) ? (int)$data['other_id'] : 0;
     if (!$creator_type || $creator_id <= 0 || !$other_type || $other_id <= 0) {
       send_json(['ok'=>false,'error'=>'missing_fields'], 400);
@@ -671,12 +686,17 @@ try {
     $ins->execute([$roomname, '', 'private', $creator_type, $creator_id]);
     $roomId = $pdo->lastInsertId();
 
+    // Safe INSERT-IF-NOT-EXISTS: check if member already exists before inserting
+    $checkM = $pdo->prepare("SELECT COUNT(*) FROM ChatRoomMember WHERE ChatRoomid=? AND member_type=? AND memberid=?");
     $insM = $pdo->prepare("INSERT INTO ChatRoomMember (ChatRoomid, member_type, memberid) VALUES (?,?,?)");
     try {
-      $insM->execute([$roomId, $creator_type, $creator_id]);
-      $insM->execute([$roomId, $other_type, $other_id]);
+      $checkM->execute([$roomId, $creator_type, $creator_id]);
+      if ((int)$checkM->fetchColumn() === 0) $insM->execute([$roomId, $creator_type, $creator_id]);
+      $checkM->execute([$roomId, $other_type, $other_id]);
+      if ((int)$checkM->fetchColumn() === 0) $insM->execute([$roomId, $other_type, $other_id]);
     } catch (Throwable $e) {
       // If unique constraint or other issue, continue — try to fetch room
+      error_log('[ChatApi][createRoom] member insert warning: ' . $e->getMessage());
     }
 
     $fetch = $pdo->prepare("SELECT * FROM ChatRoom WHERE ChatRoomid = ? LIMIT 1");
