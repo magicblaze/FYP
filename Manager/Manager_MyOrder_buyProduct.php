@@ -76,15 +76,15 @@ if(isset($_GET['action']) && $_GET['action'] == 'get_products' && isset($_GET['o
     exit;
 }
 
-// Handle AJAX request to save product to OrderProduct table
+// Handle AJAX request to save product to OrderDelivery table
 if(isset($_POST['action']) && $_POST['action'] == 'add_product_to_order') {
     $orderid = intval($_POST['orderid']);
     $productid = intval($_POST['productid']);
     $color = mysqli_real_escape_string($mysqli, $_POST['color']);
     $quantity = isset($_POST['quantity']) ? intval($_POST['quantity']) : 1;
     
-    // Insert into OrderProduct table
-    $insert_sql = "INSERT INTO `OrderProduct` (productid, quantity, orderid, status, managerid, color) 
+    // Insert into OrderDelivery table
+    $insert_sql = "INSERT INTO `OrderDelivery` (productid, quantity, orderid, status, managerid, color) 
                    VALUES (?, ?, ?, 'Pending', ?, ?)";
     
     $insert_stmt = mysqli_prepare($mysqli, $insert_sql);
@@ -246,29 +246,8 @@ if(isset($_POST['action']) && $_POST['action'] == 'add_product_to_order') {
 </head>
 
 <body>
-    <!-- Header Navigation (matching design_dashboard.php style) -->
-    <header class="bg-white shadow p-3 d-flex justify-content-between align-items-center">
-        <div class="d-flex align-items-center gap-3">
-            <div class="h4 mb-0"><a href="Manager_MyOrder.php" style="text-decoration: none; color: inherit;">HappyDesign</a></div>
-            <nav>
-                <ul class="nav align-items-center gap-2">
-                    <li class="nav-item"><a class="nav-link" href="Manager_introduct.php">Introduct</a></li>
-                    <li class="nav-item"><a class="nav-link active" href="Manager_MyOrder.php">MyOrder</a></li>
-                    <li class="nav-item"><a class="nav-link" href="Manager_Schedule.php">Schedule</a></li>
-                </ul>
-            </nav>
-        </div>
-        <nav>
-            <ul class="nav align-items-center">
-                <li class="nav-item me-2">
-                    <a class="nav-link text-muted" href="#">
-                        <i class="fas fa-user me-1"></i>Hello <?php echo htmlspecialchars($user_name); ?>
-                    </a>
-                </li>
-                <li class="nav-item"><a class="nav-link" href="../logout.php">Logout</a></li>
-            </ul>
-        </nav>
-    </header>
+    
+    <?php include_once __DIR__ . '/../includes/header.php'; ?>
 
     <main class="container-lg mt-4">
         <!-- Page Title -->
@@ -286,9 +265,9 @@ if(isset($_POST['action']) && $_POST['action'] == 'add_product_to_order') {
                 LEFT JOIN `Client` c ON o.clientid = c.clientid
                 LEFT JOIN `Design` d ON o.designid = d.designid
                 LEFT JOIN `Schedule` s ON o.orderid = s.orderid
-                LEFT JOIN `OrderProduct` op ON o.orderid = op.orderid
+                LEFT JOIN `OrderDelivery` od ON o.orderid = od.orderid
                 WHERE o.ostatus = 'Designing'
-                AND op.managerid = ?
+                AND od.managerid = ?
                 ORDER BY o.odate DESC";
         
         $stmt = mysqli_prepare($mysqli, $sql);
@@ -659,7 +638,7 @@ if(isset($_POST['action']) && $_POST['action'] == 'add_product_to_order') {
             return;
         }
         
-        // Send AJAX request to save to OrderProduct table
+        // Send AJAX request to save to OrderDelivery table
         const formData = new FormData();
         formData.append('action', 'add_product_to_order');
         formData.append('orderid', currentOrderId);

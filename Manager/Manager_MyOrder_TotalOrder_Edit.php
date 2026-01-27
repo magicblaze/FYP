@@ -44,8 +44,8 @@ $result = mysqli_stmt_get_result($stmt);
 $order = mysqli_fetch_assoc($result);
 
 // Fetch order references
-$ref_sql = "SELECT 
-                orr.orderreferenceid, 
+        $ref_sql = "SELECT 
+                orr.id, 
                 orr.productid,
                 p.pname, 
                 p.price as product_price, 
