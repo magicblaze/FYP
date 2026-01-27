@@ -328,8 +328,7 @@ function initApp(config = {}) {
 
   function loadAgents() {
     // Use ChatApi listRooms endpoint
-    const qs = `listRooms${userType?('&user_type=' + encodeURIComponent(userType)):''}${userId?('&user_id=' + encodeURIComponent(userId)):''}`;
-    return apiGet(qs).then(data => {
+    return apiPost('listRooms', { user_type: userType, user_id: userId }).then(data => {
       const rooms = Array.isArray(data) ? data : (data.rooms || []);
       console.debug('chatwidget: loadAgents fetched', rooms.length, 'rooms');
       // sync server-provided unread counts into local cache so UI can display consistently
@@ -356,7 +355,7 @@ function initApp(config = {}) {
 
   function loadMessages(roomId) {
     if (elements.messages) elements.messages.innerHTML = '';
-    return apiGet('getMessages&room=' + encodeURIComponent(roomId)).then(async data => {
+    return apiPost('getMessages', { room: roomId }).then(async data => {
       const messages = Array.isArray(data) ? data : (data.messages || []);
       // preload references when this is an order room
       currentOrderReferences = { messageIds: new Set(), designIds: new Set() };
@@ -406,7 +405,7 @@ function initApp(config = {}) {
     if (pollTimer) clearInterval(pollTimer);
     currentRoomId = roomId;
     pollTimer = setInterval(() => {
-          apiGet('getMessages&room=' + encodeURIComponent(roomId) + '&since=' + encodeURIComponent(lastMessageId)).then(ms => {
+          apiPost('getMessages', { room: roomId, since: lastMessageId }).then(ms => {
             const messages = Array.isArray(ms) ? ms : (ms.messages || []);
             messages.forEach(m => {
               const who = (m.sender_type === userType && String(m.sender_id) == String(userId)) ? 'me' : 'them';
@@ -427,7 +426,7 @@ function initApp(config = {}) {
           }).catch(() => {});
 
       // typing status
-      apiGet('getTyping&room=' + encodeURIComponent(roomId)).then(tp => {
+      apiPost('getTyping', { room: roomId }).then(tp => {
         const el = document.getElementById('typingIndicator');
         if (!el) return;
         if (tp && tp.typing && !(tp.sender === userType && String(tp.sender_id) === String(userId))) {
@@ -1690,7 +1689,7 @@ window.handleChat = function(designerid, options = {}) {
   if (orderId) {
     // try to find existing room by name via listRooms
     try {
-      return fetch(API + 'listRooms')
+      return fetch(API + 'listRooms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_type: creatorType, user_id: creatorId }) })
         .then(r => r.json())
         .then(list => {
           const rooms = Array.isArray(list) ? list : (list.rooms || []);
