@@ -936,6 +936,16 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
 </script>
 <!-- Initialize chat widget. Chatfunction and API paths are centralized here -->
 <script src="<?= htmlspecialchars($CHAT_JS_SRC) ?>"></script>
+<!-- Set global chatApiBase for handleChat() on all pages that include this widget -->
+<script>
+  (function(){
+    try {
+      if (typeof window.chatApiBase === 'undefined') {
+        window.chatApiBase = <?= json_encode($CHAT_API_PATH) ?>;
+      }
+    } catch (e) { console.warn('Failed to set window.chatApiBase', e); }
+  })();
+</script>
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
 <script>
   document.addEventListener('DOMContentLoaded', function(){
