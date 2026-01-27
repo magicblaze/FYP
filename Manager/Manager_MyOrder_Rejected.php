@@ -15,10 +15,12 @@ $user_name = $user['name'];
 // Get search parameter
 $search = isset($_GET['search']) ? mysqli_real_escape_string($mysqli, $_GET['search']) : '';
 
-// Build query conditions - only show cancelled orders for current manager
+// Build query conditions - 修复：使用设计师关联逻辑
 $where_conditions = array(
     "(o.ostatus = 'Cancelled' OR o.ostatus = 'cancelled')",
-    "op.managerid = $user_id"
+    "EXISTS (SELECT 1 FROM `Design` d 
+             JOIN `Designer` des ON d.designerid = des.designerid 
+             WHERE d.designid = o.designid AND des.managerid = $user_id)"
 );
 
 if(!empty($search)) {
@@ -42,7 +44,6 @@ $sql = "SELECT DISTINCT o.orderid, o.odate, o.Requirements, o.ostatus,
         LEFT JOIN `Client` c ON o.clientid = c.clientid
         LEFT JOIN `Design` d ON o.designid = d.designid
         LEFT JOIN `Schedule` s ON o.orderid = s.orderid
-        LEFT JOIN `OrderDelivery` op ON o.orderid = op.orderid
         $where_clause
         ORDER BY o.odate DESC";
 
@@ -52,7 +53,7 @@ if(!$result) {
     die("Database Error: " . mysqli_error($mysqli));
 }
 
-// Calculate statistics - only for current manager's orders
+// Calculate statistics - 修复：使用相同的设计师关联逻辑
 $stats_sql = "SELECT 
                 COUNT(DISTINCT o.orderid) as total_cancelled,
                 SUM(c.budget) as total_budget,
@@ -61,13 +62,14 @@ $stats_sql = "SELECT
                 MAX(o.odate) as latest_cancellation
               FROM `Order` o
               LEFT JOIN `Client` c ON o.clientid = c.clientid
-              LEFT JOIN `OrderDelivery` op ON o.orderid = op.orderid
+              LEFT JOIN `Design` d ON o.designid = d.designid
               WHERE (o.ostatus = 'Cancelled' OR o.ostatus = 'cancelled')
-              AND op.managerid = $user_id";
+              AND EXISTS (SELECT 1 FROM `Design` d2 
+                         JOIN `Designer` des ON d2.designerid = des.designerid 
+                         WHERE d2.designid = o.designid AND des.managerid = $user_id)";
 $stats_result = mysqli_query($mysqli, $stats_sql);
 $stats = mysqli_fetch_assoc($stats_result);
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
 

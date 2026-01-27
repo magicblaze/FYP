@@ -12,7 +12,7 @@ $user = $_SESSION['user'];
 $user_id = $user['managerid'];
 $user_name = $user['name'];
 
-// Get completed orders - only show current manager's orders
+// Get completed orders - 修复：使用设计师关联逻辑
 $sql = "SELECT DISTINCT o.orderid, o.odate, o.Requirements, o.ostatus,
                c.clientid, c.cname as client_name, c.budget as client_budget,
                d.designid, d.expect_price as design_price, d.tag as design_tag,
@@ -20,10 +20,9 @@ $sql = "SELECT DISTINCT o.orderid, o.odate, o.Requirements, o.ostatus,
         FROM `Order` o
         LEFT JOIN `Client` c ON o.clientid = c.clientid
         LEFT JOIN `Design` d ON o.designid = d.designid
+        INNER JOIN `Designer` des ON d.designerid = des.designerid AND des.managerid = ?
         LEFT JOIN `Schedule` s ON o.orderid = s.orderid
-        LEFT JOIN `OrderDelivery` op ON o.orderid = op.orderid
         WHERE (o.ostatus = 'Completed' OR o.ostatus = 'completed')
-        AND op.managerid = ?
         ORDER BY s.OrderFinishDate DESC";
 
 $stmt = mysqli_prepare($mysqli, $sql);

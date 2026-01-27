@@ -24,10 +24,11 @@ if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
 
 $orderid = intval($_GET['id']);
 
-// Check if order belongs to current manager
-$check_manager_sql = "SELECT COUNT(*) as count FROM `OrderProduct` op 
-                      JOIN `Manager` m ON op.managerid = m.managerid 
-                      WHERE op.orderid = ? AND m.managerid = ?";
+// 修复：检查订单是否属于当前经理（使用设计师关联）
+$check_manager_sql = "SELECT COUNT(*) as count FROM `Order` o
+                      JOIN `Design` d ON o.designid = d.designid
+                      JOIN `Designer` des ON d.designerid = des.designerid
+                      WHERE o.orderid = ? AND des.managerid = ?";
 $check_stmt = mysqli_prepare($mysqli, $check_manager_sql);
 mysqli_stmt_bind_param($check_stmt, "ii", $orderid, $user_id);
 mysqli_stmt_execute($check_stmt);

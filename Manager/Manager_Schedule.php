@@ -16,10 +16,12 @@ $user_name = $user['name'];
 $search = isset($_GET['search']) ? mysqli_real_escape_string($mysqli, $_GET['search']) : '';
 $status_filter = isset($_GET['status']) ? $_GET['status'] : '';
 
-// 构建查询条件 - 只显示已批准的订单（Designing 和 Completed）且属于当前经理
+// 构建查询条件 - 修复：使用设计师关联逻辑代替OrderDelivery
 $where_conditions = array(
     "(o.ostatus = 'Designing' OR o.ostatus = 'Completed')",
-    "EXISTS (SELECT 1 FROM OrderDelivery op WHERE op.orderid = o.orderid AND op.managerid = $user_id)"
+    "EXISTS (SELECT 1 FROM `Design` d 
+             JOIN `Designer` des ON d.designerid = des.designerid 
+             WHERE d.designid = o.designid AND des.managerid = $user_id)"
 );
 
 if(!empty($search)) {
@@ -67,7 +69,7 @@ if(!$result) {
     die("Database Error: " . mysqli_error($mysqli));
 }
 
-// 统计查询
+// 统计查询 - 修复：使用相同的设计师关联逻辑
 $stats_sql = "SELECT 
                 COUNT(*) as total_scheduled,
                 SUM(CASE WHEN o.ostatus = 'Designing' THEN 1 ELSE 0 END) as total_designing,
@@ -76,18 +78,24 @@ $stats_sql = "SELECT
                 SUM(CASE WHEN DATE(s.OrderFinishDate) = CURDATE() THEN 1 ELSE 0 END) as total_today
               FROM `Order` o
               LEFT JOIN `Schedule` s ON o.orderid = s.orderid
+              LEFT JOIN `Design` d ON o.designid = d.designid
               WHERE (o.ostatus = 'Designing' OR o.ostatus = 'Completed')
-              AND EXISTS (SELECT 1 FROM OrderDelivery op WHERE op.orderid = o.orderid AND op.managerid = $user_id)";
+              AND EXISTS (SELECT 1 FROM `Design` d2 
+                         JOIN `Designer` des ON d2.designerid = des.designerid 
+                         WHERE d2.designid = o.designid AND des.managerid = $user_id)";
 $stats_result = mysqli_query($mysqli, $stats_sql);
 $stats = mysqli_fetch_assoc($stats_result);
 
-// 每周完成统计
+// 每周完成统计 - 修复：使用相同的设计师关联逻辑
 $weekly_completed_sql = "SELECT COUNT(*) as weekly_completed
                         FROM `Order` o
                         LEFT JOIN `Schedule` s ON o.orderid = s.orderid
+                        LEFT JOIN `Design` d ON o.designid = d.designid
                         WHERE o.ostatus = 'Completed' 
                         AND YEARWEEK(s.OrderFinishDate, 1) = YEARWEEK(CURDATE(), 1)
-                        AND EXISTS (SELECT 1 FROM OrderDelivery op WHERE op.orderid = o.orderid AND op.managerid = $user_id)";
+                        AND EXISTS (SELECT 1 FROM `Design` d2 
+                                   JOIN `Designer` des ON d2.designerid = des.designerid 
+                                   WHERE d2.designid = o.designid AND des.managerid = $user_id)";
 $weekly_result = mysqli_query($mysqli, $weekly_completed_sql);
 $weekly_stats = mysqli_fetch_assoc($weekly_result);
 ?>

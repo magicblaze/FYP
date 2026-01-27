@@ -23,10 +23,11 @@ if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
 
 $orderid = intval($_GET['id']);
 
-// 检查订单是否属于当前经理（使用预处理语句）
-$check_manager_sql = "SELECT COUNT(*) as count FROM `OrderProduct` op 
-                      JOIN `Manager` m ON op.managerid = m.managerid 
-                      WHERE op.orderid = ? AND m.managerid = ?";
+// 修复：检查订单是否属于当前经理（使用设计师关联）
+$check_manager_sql = "SELECT COUNT(*) as count FROM `Order` o
+                      JOIN `Design` d ON o.designid = d.designid
+                      JOIN `Designer` des ON d.designerid = des.designerid
+                      WHERE o.orderid = ? AND des.managerid = ?";
 $check_stmt = mysqli_prepare($mysqli, $check_manager_sql);
 mysqli_stmt_bind_param($check_stmt, "ii", $orderid, $user_id);
 mysqli_stmt_execute($check_stmt);
@@ -143,26 +144,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="../css/Manager_style.css">
     <title>Update Schedule - HappyDesign</title>
 </head>
 <body>
     <!-- 导航栏 -->
-    <nav class="nav-bar">
-        <div class="nav-container">
-            <a href="#" class="nav-brand">HappyDesign</a>
-            <div class="nav-links">
-                <a href="Manager_introduct.php">Introduct</a>
-                <a href="Manager_MyOrder.php">MyOrder</a>
-                 <a href="Manager_Schedule.php">Schedule</a>
-            </div>
-            <div class="user-info">
-                <span>Welcome, <?php echo htmlspecialchars($user_name); ?></span>
-                <a href="../logout.php" class="btn-logout">Logout</a>
-            </div>
-        </div>
-    </nav>
-
+     <?php include_once __DIR__ . '/../includes/header.php'; ?>
+    <main class="container-lg mt-4">
     <!-- 主要内容 -->
     <div class="page-container">
         <h1 class="page-title">Update Schedule for Order #<?php echo htmlspecialchars($orderid); ?></h1>

@@ -257,23 +257,24 @@ if(isset($_POST['action']) && $_POST['action'] == 'add_product_to_order') {
 
         <?php
         // Get designing orders for this manager
-        $sql = "SELECT DISTINCT o.orderid, o.odate, o.Requirements, o.ostatus,
-                       c.clientid, c.cname as client_name, c.budget as client_budget,
-                       d.designid, d.expect_price as design_price, d.tag as design_tag,
-                       s.OrderFinishDate, s.DesignFinishDate
-                FROM `Order` o
-                LEFT JOIN `Client` c ON o.clientid = c.clientid
-                LEFT JOIN `Design` d ON o.designid = d.designid
-                LEFT JOIN `Schedule` s ON o.orderid = s.orderid
-                LEFT JOIN `OrderDelivery` od ON o.orderid = od.orderid
-                WHERE o.ostatus = 'Designing'
-                AND od.managerid = ?
-                ORDER BY o.odate DESC";
-        
-        $stmt = mysqli_prepare($mysqli, $sql);
-        mysqli_stmt_bind_param($stmt, "i", $user_id);
-        mysqli_stmt_execute($stmt);
-        $result = mysqli_stmt_get_result($stmt);
+       $sql = "SELECT DISTINCT o.orderid, o.odate, o.Requirements, o.ostatus,
+               c.clientid, c.cname as client_name, c.budget as client_budget,
+               d.designid, d.expect_price as design_price, d.tag as design_tag,
+               s.OrderFinishDate, s.DesignFinishDate
+        FROM `Order` o
+        LEFT JOIN `Client` c ON o.clientid = c.clientid
+        LEFT JOIN `Design` d ON o.designid = d.designid
+        LEFT JOIN `Schedule` s ON o.orderid = s.orderid
+        WHERE o.ostatus = 'Designing'
+        AND EXISTS (SELECT 1 FROM `Design` d2 
+                   JOIN `Designer` des ON d2.designerid = des.designerid 
+                   WHERE d2.designid = o.designid AND des.managerid = ?)
+        ORDER BY o.odate DESC";
+    
+$stmt = mysqli_prepare($mysqli, $sql);
+mysqli_stmt_bind_param($stmt, "i", $user_id);
+mysqli_stmt_execute($stmt);
+$result = mysqli_stmt_get_result($stmt);
         
         if(!$result){
             echo '<div class="alert alert-danger" role="alert">

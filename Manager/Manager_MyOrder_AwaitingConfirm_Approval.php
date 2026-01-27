@@ -20,10 +20,12 @@ if($order_id <= 0) {
     exit;
 }
 
-// Check if order belongs to current manager
-$check_manager_sql = "SELECT COUNT(*) as count FROM `OrderProduct` op 
-                      JOIN `Manager` m ON op.managerid = m.managerid 
-                      WHERE op.orderid = ? AND m.managerid = ?";
+// Check if order belongs to current manager - 修复：使用设计师关联逻辑
+$check_manager_sql = "SELECT COUNT(*) as count 
+                      FROM `Order` o
+                      JOIN `Design` d ON o.designid = d.designid
+                      JOIN `Designer` des ON d.designerid = des.designerid
+                      WHERE o.orderid = ? AND des.managerid = ?";
 $check_stmt = mysqli_prepare($mysqli, $check_manager_sql);
 mysqli_stmt_bind_param($check_stmt, "ii", $order_id, $user_id);
 mysqli_stmt_execute($check_stmt);
@@ -187,7 +189,6 @@ function sendApprovalEmail($order, $status, $manager_reply, $additional_notes, $
 }
 
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
 

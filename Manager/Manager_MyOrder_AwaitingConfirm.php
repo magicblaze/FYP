@@ -2,7 +2,7 @@
 session_start();
 require_once dirname(__DIR__) . '/config.php';
 
-// 检查用户是否以经理身份登录
+// Check if user is logged in as manager
 if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'manager') {
     header('Location: ../login.php?redirect=' . urlencode($_SERVER['REQUEST_URI']));
     exit;
@@ -12,457 +12,494 @@ $user = $_SESSION['user'];
 $user_id = $user['managerid'];
 $user_name = $user['name'];
 
-// 处理搜索功能
-$search = isset($_GET['search']) ? trim($_GET['search']) : '';
+// Safe query function with connection check
+function safe_mysqli_query($mysqli, $sql) {
+    if (!isset($mysqli) || !($mysqli instanceof mysqli)) {
+        die("Database connection invalid");
+    }
+    
+    if (!method_exists($mysqli, 'ping') || $mysqli->ping() === false) {
+        // Try reloading config to (re)establish connection if available
+        if (file_exists(dirname(__DIR__) . '/config.php')) {
+            require_once dirname(__DIR__) . '/config.php';
+            global $mysqli;
+            if (!isset($mysqli) || !($mysqli instanceof mysqli) || $mysqli->ping() === false) {
+                die("Database connection lost");
+            }
+        } else {
+            die("Database connection lost");
+        }
+    }
+    
+    $result = mysqli_query($mysqli, $sql);
+    if(!$result) {
+        die("Database Error: " . mysqli_error($mysqli));
+    }
+    return $result;
+}
 
-// 获取等待确认的订单（Pending 或 Waiting Confirm 状态）
-$sql = "SELECT 
-            o.orderid, 
-            o.odate, 
-            o.Requirements, 
-            o.ostatus,
-            c.clientid, 
-            c.cname as client_name, 
-            c.cemail as client_email,
-            c.budget,
-            d.designid, 
-            d.expect_price as design_price,
-            d.tag as design_tag,
-            s.OrderFinishDate,
-            s.DesignFinishDate
+// Get search parameter
+$search = isset($_GET['search']) ? mysqli_real_escape_string($mysqli, $_GET['search']) : '';
+
+// Build query conditions - 修复：使用设计师关联代替OrderDelivery
+$where_conditions = array(
+    "(o.ostatus = 'Pending' OR o.ostatus = 'pending')",
+    "EXISTS (SELECT 1 FROM `Design` d 
+             JOIN `Designer` des ON d.designerid = des.designerid 
+             WHERE d.designid = o.designid AND des.managerid = $user_id)"
+);
+
+if(!empty($search)) {
+    $search_conditions = array();
+    $search_conditions[] = "o.orderid LIKE '%$search%'";
+    $search_conditions[] = "c.cname LIKE '%$search%'";
+    $search_conditions[] = "c.cemail LIKE '%$search%'";
+    $search_conditions[] = "o.Requirements LIKE '%$search%'";
+    $search_conditions[] = "d.tag LIKE '%$search%'";
+    $where_conditions[] = "(" . implode(" OR ", $search_conditions) . ")";
+}
+
+$where_clause = !empty($where_conditions) ? "WHERE " . implode(" AND ", $where_conditions) : "";
+
+// Get all pending orders
+$sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus,
+               c.clientid, c.cname as client_name, c.cemail as client_email, c.ctel as client_phone, c.budget,
+               d.designid, d.expect_price as design_price, d.tag as design_tag,
+               s.OrderFinishDate, s.DesignFinishDate
         FROM `Order` o
         LEFT JOIN `Client` c ON o.clientid = c.clientid
         LEFT JOIN `Design` d ON o.designid = d.designid
-        LEFT JOIN `OrderProduct` op ON o.orderid = op.orderid
         LEFT JOIN `Schedule` s ON o.orderid = s.orderid
-        WHERE o.ostatus IN ('Pending', 'Waiting Confirm') 
-        AND (op.managerid = ? OR s.managerid = ?)";
+        $where_clause
+        ORDER BY o.odate DESC";
 
-// 添加搜索条件
-if (!empty($search)) {
-    $search_term = "%" . $search . "%";
-    $sql .= " AND (o.orderid LIKE ? 
-                OR c.cname LIKE ? 
-                OR c.cemail LIKE ? 
-                OR o.Requirements LIKE ? 
-                OR d.tag LIKE ?)";
-    $sql .= " GROUP BY o.orderid";
-}
+$result = safe_mysqli_query($mysqli, $sql);
 
-$sql .= " ORDER BY o.orderid DESC";
-
-$stmt = mysqli_prepare($mysqli, $sql);
-
-if (!empty($search)) {
-    // 有搜索条件
-    mysqli_stmt_bind_param($stmt, "iisssss", 
-        $user_id, 
-        $user_id, 
-        $search_term, 
-        $search_term, 
-        $search_term, 
-        $search_term, 
-        $search_term
-    );
-} else {
-    // 无搜索条件
-    mysqli_stmt_bind_param($stmt, "ii", $user_id, $user_id);
-}
-
-mysqli_stmt_execute($stmt);
-$result = mysqli_stmt_get_result($stmt);
-
-$orders = [];
-while($row = mysqli_fetch_assoc($result)) {
-    $orders[] = $row;
-}
-
-// 处理消息提示
-$message = '';
-if (isset($_GET['msg'])) {
-    switch ($_GET['msg']) {
-        case 'approved':
-            $message = '<div class="alert alert-success alert-dismissible fade show" role="alert">
-                        <i class="fas fa-check-circle me-2"></i>Order has been approved successfully!';
-            if (isset($_GET['email'])) {
-                if ($_GET['email'] == 'sent') {
-                    $message .= ' Email notification has been sent to the client.';
-                } else {
-                    $message .= ' <strong>Note:</strong> Email notification failed to send.';
-                }
-            }
-            $message .= '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                        </div>';
-            break;
-        case 'notfound':
-            $message = '<div class="alert alert-warning alert-dismissible fade show" role="alert">
-                        <i class="fas fa-exclamation-triangle me-2"></i>Order not found or you don\'t have permission to access it.
-                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                        </div>';
-            break;
-    }
-}
+// Calculate statistics - 修复：使用相同的设计师关联逻辑
+$stats_sql = "SELECT 
+                COUNT(*) as total_pending,
+                SUM(c.budget) as total_budget,
+                AVG(c.budget) as avg_budget
+              FROM `Order` o
+              LEFT JOIN `Client` c ON o.clientid = c.clientid
+              LEFT JOIN `Design` d ON o.designid = d.designid
+              WHERE (o.ostatus = 'Pending' OR o.ostatus = 'pending')
+              AND EXISTS (SELECT 1 FROM `Design` d2 
+                         JOIN `Designer` des ON d2.designerid = des.designerid 
+                         WHERE d2.designid = o.designid AND des.managerid = $user_id)";
+$stats_result = safe_mysqli_query($mysqli, $stats_sql);
+$stats = mysqli_fetch_assoc($stats_result);
 ?>
 
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HappyDesign - Awaiting Confirmation Orders</title>
+    <title>HappyDesign - Awaiting Confirmation</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="../css/Manager_style.css">
-    <style>
-        .status-badge {
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 0.85rem;
-            font-weight: 600;
-        }
-        .status-pending {
-            background-color: #fff3cd;
-            color: #856404;
-            border: 1px solid #ffeaa7;
-        }
-        .status-waiting {
-            background-color: #cce5ff;
-            color: #004085;
-            border: 1px solid #b8daff;
-        }
-        .status-designing {
-            background-color: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-        .order-row:hover {
-            background-color: #f8f9fa;
-            cursor: pointer;
-        }
-        .search-form {
-            max-width: 600px;
-        }
-        .table-container {
-            overflow-x: auto;
-        }
-        .page-title {
-            font-size: 1.75rem;
-            font-weight: 600;
-            color: #2c3e50;
-            margin-bottom: 1.5rem;
-            padding-bottom: 0.5rem;
-            border-bottom: 3px solid #3498db;
-        }
-    </style>
 </head>
+
 <body>
-    <!-- 头部导航 -->
+    <!-- Header Navigation (matching Manager_MyOrder.php style) -->
     <?php include_once __DIR__ . '/../includes/header.php'; ?>
 
     <main class="container-lg mt-4">
-        <!-- 页面标题 -->
+        <!-- Page Title -->
         <div class="page-title">
-            <i class="fas fa-clock me-2"></i>Awaiting Confirmation Orders
+            <i class="fas fa-hourglass-half me-2"></i>Awaiting Confirmation Orders
         </div>
 
-        <!-- 消息提示 -->
-        <?php echo $message; ?>
+        <!-- Success Message -->
+        <?php if(isset($_GET['msg']) && $_GET['msg'] == 'approved'): ?>
+            <div class="alert alert-success mb-4" role="alert">
+                <i class="fas fa-check-circle me-2"></i>
+                <strong>Order #<?php echo htmlspecialchars($_GET['id'] ?? ''); ?> has been processed successfully!</strong>
+                <?php if(isset($_GET['email']) && $_GET['email'] == 'sent'): ?>
+                    <br><small>Email notification has been sent to the client.</small>
+                <?php elseif(isset($_GET['email']) && $_GET['email'] == 'failed'): ?>
+                    <br><small class="text-danger">Warning: Email notification failed to send.</small>
+                <?php endif; ?>
+            </div>
+        <?php endif; ?>
 
-        <!-- 搜索卡片 -->
+        <!-- Search Card -->
         <div class="card mb-4">
             <div class="card-body">
-                <h5 class="card-title mb-4">
+                <h5 class="card-title mb-3">
                     <i class="fas fa-search me-2"></i>Search Orders
                 </h5>
-                <form method="GET" action="" class="search-form">
-                    <div class="input-group">
-                        <span class="input-group-text">
-                            <i class="fas fa-search"></i>
-                        </span>
-                        <input type="text" 
-                               class="form-control" 
-                               name="search"
-                               placeholder="Search by Order ID, Client Name, Email, Requirements or Tags..."
-                               value="<?php echo htmlspecialchars($search); ?>">
-                        <button class="btn btn-primary" type="submit">
-                            <i class="fas fa-search me-1"></i>Search
-                        </button>
-                        <?php if (!empty($search)): ?>
-                            <a href="Manager_MyOrder_AwaitingConfirm.php" class="btn btn-outline-secondary">
-                                <i class="fas fa-times me-1"></i>Clear
-                            </a>
-                        <?php endif; ?>
-                    </div>
-                    <small class="text-muted mt-2 d-block">
-                        <i class="fas fa-info-circle me-1"></i>Showing orders with status: <strong>Pending</strong>
-                    </small>
+                <form method="GET" action="" class="d-flex gap-2">
+                    <input type="text" name="search" class="form-control" 
+                           placeholder="Search by Order ID, Client Name, Email, Requirements or Tags..." 
+                           value="<?php echo htmlspecialchars($search); ?>">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-search me-2"></i>Search
+                    </button>
+                    <?php if(!empty($search)): ?>
+                        <a href="Manager_MyOrder_AwaitingConfirm.php" class="btn btn-secondary">
+                            <i class="fas fa-times me-2"></i>Clear
+                        </a>
+                    <?php endif; ?>
                 </form>
             </div>
         </div>
 
-        <!-- 订单表格卡片 -->
-        <div class="card">
-            <div class="card-body">
-                <h5 class="card-title mb-4">
-                    <i class="fas fa-list me-2"></i>Order List
-                    <span class="badge bg-primary ms-2"><?php echo count($orders); ?> orders</span>
-                </h5>
-                
-                <?php if (empty($orders)): ?>
-                    <!-- 无订单时的显示 -->
-                    <div class="text-center py-5">
-                        <i class="fas fa-inbox fa-4x mb-4" style="color: #dee2e6;"></i>
-                        <h4 class="mb-3">No Pending Orders Found</h4>
-                        <p class="text-muted mb-4">
-                            <?php if (!empty($search)): ?>
-                                No orders found matching your search criteria.
-                            <?php else: ?>
-                                All new orders will appear here when they are submitted by clients.
-                            <?php endif; ?>
-                        </p>
-                        <?php if (!empty($search)): ?>
-                            <a href="Manager_MyOrder_AwaitingConfirm.php" class="btn btn-primary">
-                                <i class="fas fa-arrow-left me-1"></i>View All Orders
-                            </a>
-                        <?php endif; ?>
-                    </div>
-                <?php else: ?>
-                    <!-- 订单表格 -->
-                    <div class="table-container">
-                        <table class="table table-hover">
-                            <thead>
-                                <tr>
-                                    <th>#</th>
-                                    <th>Order Date</th>
-                                    <th>Client</th>
-                                    <th>Budget</th>
-                                    <th>Design</th>
-                                    <th>Price</th>
-                                    <th>Status</th>
-                                    <th>Finish Date</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <?php foreach ($orders as $order): ?>
-                                <tr class="order-row">
-                                    <td>
-                                        <strong>#<?php echo htmlspecialchars($order['orderid']); ?></strong>
-                                    </td>
-                                    <td>
-                                        <?php echo date('Y-m-d', strtotime($order['odate'])); ?>
-                                    </td>
-                                    <td>
-                                        <div class="fw-medium"><?php echo htmlspecialchars($order['client_name']); ?></div>
-                                        <small class="text-muted">ID: <?php echo htmlspecialchars($order['clientid']); ?></small>
-                                    </td>
-                                    <td>
-                                        <span class="text-success fw-bold">
-                                            $<?php echo number_format($order['budget'], 2); ?>
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <span class="badge bg-info">
-                                            Design #<?php echo htmlspecialchars($order['designid']); ?>
-                                        </span>
-                                        <?php if (!empty($order['design_tag'])): ?>
-                                            <div><small class="text-muted"><?php echo htmlspecialchars($order['design_tag']); ?></small></div>
-                                        <?php endif; ?>
-                                    </td>
-                                    <td>
-                                        <span class="fw-medium">
-                                            $<?php echo number_format($order['design_price'], 2); ?>
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <?php if ($order['ostatus'] == 'Pending'): ?>
-                                            <span class="status-badge status-pending">
-                                                <i class="fas fa-clock me-1"></i>Pending
-                                            </span>
-                                        <?php elseif ($order['ostatus'] == 'Waiting Confirm'): ?>
-                                            <span class="status-badge status-waiting">
-                                                <i class="fas fa-hourglass-half me-1"></i>Waiting Confirm
-                                            </span>
-                                        <?php else: ?>
-                                            <span class="status-badge">
-                                                <?php echo htmlspecialchars($order['ostatus']); ?>
-                                            </span>
-                                        <?php endif; ?>
-                                    </td>
-                                    <td>
-                                        <?php if (!empty($order['OrderFinishDate']) && $order['OrderFinishDate'] != '0000-00-00 00:00:00'): ?>
-                                            <?php echo date('Y-m-d', strtotime($order['OrderFinishDate'])); ?>
-                                        <?php else: ?>
-                                            <span class="text-muted">Not scheduled</span>
-                                        <?php endif; ?>
-                                    </td>
-                                    <td>
-                                        <div class="btn-group btn-group-sm">
-                                            <a href="Manager_MyOrder_AwaitingConfirm_Approval.php?id=<?php echo $order['orderid']; ?>" 
-                                               class="btn btn-outline-primary" 
-                                               title="Review and Approve">
-                                                <i class="fas fa-edit"></i> Review
-                                            </a>
-                                            <a href="Manager_MyOrder_View.php?id=<?php echo $order['orderid']; ?>" 
-                                               class="btn btn-outline-secondary" 
-                                               title="View Details">
-                                                <i class="fas fa-eye"></i> View
-                                            </a>
-                                        </div>
-                                    </td>
-                                </tr>
-                                <!-- 需求详情行（可展开） -->
-                                <tr class="details-row" style="display: none;">
-                                    <td colspan="9">
-                                        <div class="p-3 bg-light rounded">
-                                            <h6 class="mb-2">
-                                                <i class="fas fa-file-alt me-2"></i>Requirements:
-                                            </h6>
-                                            <div class="bg-white p-3 rounded border">
-                                                <?php echo nl2br(htmlspecialchars($order['Requirements'] ?? 'No requirements specified')); ?>
-                                            </div>
-                                        </div>
-                                    </td>
-                                </tr>
-                                <?php endforeach; ?>
-                            </tbody>
-                        </table>
-                    </div>
-                    
-                    <!-- 订单统计 -->
-                    <div class="mt-4 pt-3 border-top">
-                        <div class="row">
-                            <div class="col-md-6">
-                                <small class="text-muted">
-                                    <i class="fas fa-info-circle me-1"></i>
-                                    Showing <?php echo count($orders); ?> order(s) requiring your approval
-                                </small>
-                            </div>
-                            <div class="col-md-6 text-end">
-                                <small class="text-muted">
-                                    Last updated: <?php echo date('Y-m-d H:i:s'); ?>
-                                </small>
-                            </div>
+        <?php
+        if(mysqli_num_rows($result) == 0){
+            echo '<div class="card">
+                <div class="card-body text-center py-5">
+                    <i class="fas fa-inbox" style="font-size: 3rem; color: #bdc3c7; margin-bottom: 1rem; display: block;"></i>
+                    <h5 class="text-muted mb-2">No Pending Orders Found</h5>
+                    <p class="text-muted mb-0">All new orders will appear here when they are submitted by clients.</p>
+                </div>
+            </div>';
+        } else {
+            $total_pending = $stats['total_pending'] ?? 0;
+        ?>
+
+        <!-- Statistics Cards -->
+        <div class="row mb-4">
+            <div class="col-md-4 mb-3">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <div style="font-size: 2.5rem; color: #f39c12; font-weight: 700; margin-bottom: 0.5rem;">
+                            <?php echo $total_pending; ?>
+                        </div>
+                        <div style="color: #7f8c8d; font-weight: 500;">
+                            <i class="fas fa-hourglass-half me-2"></i>Pending Orders
                         </div>
                     </div>
-                <?php endif; ?>
-            </div>
-        </div>
-        
-        <!-- 快速操作卡片 -->
-        <div class="card mt-4">
-            <div class="card-body">
-                <h6 class="card-title mb-3">
-                    <i class="fas fa-bolt me-2"></i>Quick Actions
-                </h6>
-                <div class="btn-group">
-                    <a href="../Manager/Manager_Dashboard.php" class="btn btn-outline-secondary">
-                        <i class="fas fa-tachometer-alt me-1"></i>Dashboard
-                    </a>
-                    <a href="Manager_MyOrder_All.php" class="btn btn-outline-secondary">
-                        <i class="fas fa-list-alt me-1"></i>All Orders
-                    </a>
-                    <a href="../Manager/Manager_ClientList.php" class="btn btn-outline-secondary">
-                        <i class="fas fa-users me-1"></i>Clients
-                    </a>
                 </div>
             </div>
+            <div class="col-md-4 mb-3">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <div style="font-size: 2.5rem; color: #27ae60; font-weight: 700; margin-bottom: 0.5rem;">
+                            $<?php echo number_format($stats['total_budget'] ?? 0, 2); ?>
+                        </div>
+                        <div style="color: #7f8c8d; font-weight: 500;">
+                            <i class="fas fa-dollar-sign me-2"></i>Total Budget
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 mb-3">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <div style="font-size: 2.5rem; color: #3498db; font-weight: 700; margin-bottom: 0.5rem;">
+                            $<?php echo number_format($stats['avg_budget'] ?? 0, 2); ?>
+                        </div>
+                        <div style="color: #7f8c8d; font-weight: 500;">
+                            <i class="fas fa-chart-line me-2"></i>Average Budget
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Orders Table -->
+        <div class="table-container">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th><i class="fas fa-hashtag me-2"></i>Order ID</th>
+                        <th><i class="fas fa-calendar me-2"></i>Order Date</th>
+                        <th><i class="fas fa-user me-2"></i>Client</th>
+                        <th><i class="fas fa-dollar-sign me-2"></i>Budget</th>
+                        <th><i class="fas fa-image me-2"></i>Design</th>
+                        <th><i class="fas fa-file-alt me-2"></i>Requirements</th>
+                        <th><i class="fas fa-info-circle me-2"></i>Status</th>
+                        <th><i class="fas fa-clock me-2"></i>Finish Date</th>
+                        <th><i class="fas fa-cogs me-2"></i>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php while($row = mysqli_fetch_assoc($result)): ?>
+                    <tr>
+                        <td>
+                            <strong>#<?php echo htmlspecialchars($row["orderid"]); ?></strong>
+                        </td>
+                        <td>
+                            <?php echo date('Y-m-d', strtotime($row["odate"])); ?>
+                        </td>
+                        <td>
+                            <div>
+                                <strong><?php echo htmlspecialchars($row["client_name"] ?? 'N/A'); ?></strong>
+                                <br>
+                                <small class="text-muted">ID: <?php echo htmlspecialchars($row["clientid"] ?? 'N/A'); ?></small>
+                                <?php if(!empty($row["client_email"])): ?>
+                                    <br><small class="text-muted"><?php echo htmlspecialchars($row["client_email"]); ?></small>
+                                <?php endif; ?>
+                            </div>
+                        </td>
+                        <td>
+                            <span style="color: #27ae60; font-weight: 600;">$<?php echo number_format($row["budget"], 2); ?></span>
+                        </td>
+                        <td>
+                            <div>
+                                <small>Design #<?php echo htmlspecialchars($row["designid"] ?? 'N/A'); ?></small>
+                                <br>
+                                <small class="text-muted">$<?php echo number_format($row["design_price"] ?? 0, 2); ?></small>
+                            </div>
+                        </td>
+                        <td>
+                            <small class="text-muted">
+                                <?php echo htmlspecialchars(substr($row["Requirements"] ?? '', 0, 50)) . (strlen($row["Requirements"] ?? '') > 50 ? '...' : ''); ?>
+                            </small>
+                        </td>
+                        <td>
+                            <span class="status-badge status-pending">
+                                <i class="fas fa-hourglass-half me-1"></i><?php echo htmlspecialchars($row["ostatus"] ?? 'Pending'); ?>
+                            </span>
+                        </td>
+                        <td>
+                            <small>
+                                <?php 
+                                if(isset($row["OrderFinishDate"]) && $row["OrderFinishDate"] != '0000-00-00 00:00:00'){
+                                    echo date('Y-m-d', strtotime($row["OrderFinishDate"]));
+                                } else {
+                                    echo '<span class="text-muted">Not scheduled</span>';
+                                }
+                                ?>
+                            </small>
+                        </td>
+                        <td>
+                            <div class="btn-group">
+                                <button onclick="viewOrder(<?php echo $row['orderid']; ?>)" 
+                                        class="btn btn-sm btn-primary">
+                                    <i class="fas fa-eye me-1"></i>View
+                                </button>
+                                <button onclick="approveOrder(<?php echo $row['orderid']; ?>)" 
+                                        class="btn btn-sm btn-success">
+                                    <i class="fas fa-check me-1"></i>Approve
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    <?php endwhile; ?>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Summary Card -->
+        <div class="card mt-4">
+            <div class="card-body d-flex justify-content-between align-items-center">
+                <div>
+                    <strong>Showing <?php echo mysqli_num_rows($result); ?> pending orders</strong>
+                    <p class="text-muted mb-0">Total: <?php echo $total_pending; ?> orders awaiting confirmation</p>
+                </div>
+                <div class="btn-group">
+                    <button onclick="printPage()" class="btn btn-outline">
+                        <i class="fas fa-print me-2"></i>Print List
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <?php
+        }
+        ?>
+
+        <!-- Action Buttons -->
+        <div class="d-flex justify-content-between align-items-center mt-4">
+            <a href="Manager_MyOrder.php" class="btn btn-secondary">
+                <i class="fas fa-arrow-left me-2"></i>Back to Orders Manager
+            </a>
         </div>
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+    function viewOrder(orderId) {
+        window.location.href = 'Manager_view_order.php?id=' + orderId;
+    }
+    
+    function approveOrder(orderId) {
+        window.location.href = 'Manager_MyOrder_AwaitingConfirm_Approval.php?id=' + orderId;
+    }
+
+    function printPage() {
+        window.print();
+    }
+    
+    // Keyboard shortcuts support
     document.addEventListener('DOMContentLoaded', function() {
-        // 展开/收起需求详情
-        const orderRows = document.querySelectorAll('.order-row');
-        orderRows.forEach(row => {
-            row.addEventListener('click', function(e) {
-                // 防止点击按钮时触发
-                if (e.target.tagName === 'A' || e.target.tagName === 'BUTTON' || 
-                    e.target.closest('a') || e.target.closest('button')) {
-                    return;
-                }
-                
-                const detailsRow = this.nextElementSibling;
-                if (detailsRow && detailsRow.classList.contains('details-row')) {
-                    if (detailsRow.style.display === 'none' || detailsRow.style.display === '') {
-                        detailsRow.style.display = 'table-row';
-                        this.style.backgroundColor = '#f1f8ff';
-                    } else {
-                        detailsRow.style.display = 'none';
-                        this.style.backgroundColor = '';
-                    }
-                }
-            });
-        });
-        
-        // 自动聚焦搜索框
-        const searchInput = document.querySelector('input[name="search"]');
-        if (searchInput) {
-            searchInput.focus();
-            searchInput.select();
-        }
-        
-        // 键盘快捷键
         document.addEventListener('keydown', function(e) {
-            // Ctrl+F 聚焦搜索框
-            if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+            // Ctrl+F focus search box
+            if(e.ctrlKey && e.key === 'f') {
                 e.preventDefault();
-                if (searchInput) {
+                const searchInput = document.querySelector('input[name="search"]');
+                if(searchInput) {
                     searchInput.focus();
                     searchInput.select();
                 }
             }
             
-            // Esc 清空搜索框
-            if (e.key === 'Escape' && searchInput && searchInput.value) {
-                window.location.href = 'Manager_MyOrder_AwaitingConfirm.php';
+            // Ctrl+P print
+            if(e.ctrlKey && e.key === 'p') {
+                e.preventDefault();
+                printPage();
+            }
+            
+            // Esc key to go back
+            if(e.key === 'Escape') {
+                window.location.href = 'Manager_MyOrder.php';
             }
         });
         
-        // 自动关闭警告框
-        const alerts = document.querySelectorAll('.alert');
-        alerts.forEach(alert => {
-            setTimeout(() => {
-                const bsAlert = new bootstrap.Alert(alert);
-                bsAlert.close();
-            }, 5000);
-        });
-        
-        // 高亮搜索关键词
-        function highlightSearchTerms() {
-            const searchTerm = "<?php echo addslashes($search); ?>";
-            if (!searchTerm) return;
-            
-            const table = document.querySelector('table');
-            if (!table) return;
-            
-            const regex = new RegExp(`(${searchTerm})`, 'gi');
-            const walker = document.createTreeWalker(
-                table,
-                NodeFilter.SHOW_TEXT,
-                null,
-                false
-            );
-            
-            let node;
-            while (node = walker.nextNode()) {
-                if (node.parentNode.tagName !== 'SCRIPT' && node.parentNode.tagName !== 'STYLE') {
-                    const newHTML = node.textContent.replace(regex, '<mark class="bg-warning">$1</mark>');
-                    if (newHTML !== node.textContent) {
-                        const span = document.createElement('span');
-                        span.innerHTML = newHTML;
-                        node.parentNode.replaceChild(span, node);
-                    }
+        // Search box enter to submit
+        const searchInput = document.querySelector('input[name="search"]');
+        if(searchInput) {
+            searchInput.addEventListener('keypress', function(e) {
+                if(e.key === 'Enter') {
+                    document.querySelector('form').submit();
                 }
-            }
+            });
         }
         
-        highlightSearchTerms();
+        // Highlight search results
+        const urlParams = new URLSearchParams(window.location.search);
+        const searchTerm = urlParams.get('search');
+        if(searchTerm) {
+            setTimeout(() => {
+                highlightSearchTerm(searchTerm);
+            }, 100);
+        }
+        
+        // Add hover effects
+        const tableRows = document.querySelectorAll('.table tbody tr');
+        tableRows.forEach(row => {
+            row.addEventListener('mouseenter', function() {
+                this.style.transform = 'translateY(-2px)';
+                this.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+            });
+            
+            row.addEventListener('mouseleave', function() {
+                this.style.transform = 'translateY(0)';
+                this.style.boxShadow = 'none';
+            });
+        });
     });
+    
+    function highlightSearchTerm(term) {
+        const table = document.querySelector('.table');
+        if(!table) return;
+        
+        const regex = new RegExp(`(${term})`, 'gi');
+        const walker = document.createTreeWalker(
+            table,
+            NodeFilter.SHOW_TEXT,
+            null,
+            false
+        );
+        
+        let node;
+        const textNodes = [];
+        while(node = walker.nextNode()) {
+            textNodes.push(node);
+        }
+        
+        textNodes.forEach(node => {
+            if(node.parentNode.nodeName !== 'SCRIPT' && node.parentNode.nodeName !== 'STYLE') {
+                const newHTML = node.textContent.replace(regex, '<mark class="highlight">$1</mark>');
+                if(newHTML !== node.textContent) {
+                    const span = document.createElement('span');
+                    span.innerHTML = newHTML;
+                    node.parentNode.replaceChild(span, node);
+                }
+            }
+        });
+    }
+    
+    // Auto-check for new orders every 60 seconds
+    function checkForNewOrders() {
+        fetch('check_new_orders.php?manager_id=<?php echo $user_id; ?>')
+            .then(response => response.json())
+            .then(data => {
+                if(data.newOrders > 0) {
+                    showNewOrderNotification(data.newOrders);
+                }
+            })
+            .catch(error => console.error('Error checking for new orders:', error));
+    }
+    
+    function showNewOrderNotification(count) {
+        const notification = document.createElement('div');
+        notification.className = 'alert alert-info mt-3';
+        notification.innerHTML = `
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <i class="fas fa-bell me-2"></i>
+                    <strong>New Orders Available</strong>
+                    <p class="mb-0">There are ${count} new pending order(s).</p>
+                </div>
+                <div class="btn-group">
+                    <button onclick="location.reload()" class="btn btn-sm btn-primary">
+                        <i class="fas fa-sync-alt me-1"></i>Refresh Now
+                    </button>
+                    <button onclick="this.parentElement.parentElement.parentElement.remove()" class="btn btn-sm btn-outline">
+                        <i class="fas fa-times me-1"></i>Dismiss
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        const mainElement = document.querySelector('main');
+        const pageTitle = document.querySelector('.page-title');
+        if(mainElement && pageTitle) {
+            mainElement.insertBefore(notification, pageTitle.nextSibling);
+        }
+        
+        // Auto-dismiss after 10 seconds
+        setTimeout(() => {
+            if(notification.parentNode) {
+                notification.remove();
+            }
+        }, 10000);
+    }
+    
+    // Check for new orders every 60 seconds
+    setInterval(checkForNewOrders, 60000);
     </script>
 
-    <!-- 包含聊天组件 -->
+    <style>
+        .highlight {
+            background-color: #fff3cd;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-weight: bold;
+        }
+        
+        .table tbody tr {
+            transition: all 0.3s ease;
+        }
+        
+        @media print {
+            header,
+            .search-section,
+            .stats-grid,
+            .btn-group,
+            .alert {
+                display: none !important;
+            }
+            
+            .table-container {
+                box-shadow: none !important;
+                border: 1px solid #ddd !important;
+            }
+            
+            .page-title {
+                margin-bottom: 20px !important;
+            }
+        }
+    </style>
+
+    <!-- Include chat widget -->
     <?php include __DIR__ . '/../Public/chat_widget.php'; ?>
 </body>
+
 </html>

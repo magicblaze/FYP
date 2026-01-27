@@ -31,13 +31,13 @@ if ($current_year < 2000 || $current_year > 2100) {
 // 获取订单ID（如果有）
 $order_id = isset($_GET['orderid']) ? (int)$_GET['orderid'] : 0;
 
-// 获取经理管理的所有排程 - 修正：使用 c.budget 而不是 o.budget
+// 获取经理管理的所有排程 - 修正：使用设计师关联而不是OrderDelivery
 $sql = "
     SELECT DISTINCT
         o.orderid,
         o.odate as OrderDate,
         o.ostatus as OrderStatus,
-        c.budget as budget,  -- 修正：从Client表获取budget
+        c.budget as budget,
         o.Requirements,
         c.cname as ClientName,
         c.ctel as ClientPhone,
@@ -54,11 +54,10 @@ $sql = "
     LEFT JOIN `Design` d ON o.designid = d.designid
     LEFT JOIN `Designer` des ON d.designerid = des.designerid
     LEFT JOIN `Schedule` sch ON o.orderid = sch.orderid
-    LEFT JOIN `OrderDelivery` op ON o.orderid = op.orderid
-    WHERE sch.managerid = ? 
-    AND op.managerid = ?
+    WHERE sch.managerid = ?  -- 排程表中经理ID
+    AND des.managerid = ?    -- 设计师表中的经理ID（权限检查）
     AND sch.orderid IS NOT NULL
-    AND LOWER(o.ostatus) NOT IN ('pending', 'cancelled')  -- 添加状态过滤
+    AND LOWER(o.ostatus) NOT IN ('pending', 'cancelled')
     " . ($order_id > 0 ? " AND o.orderid = ?" : "") . "
     ORDER BY sch.OrderFinishDate ASC, sch.DesignFinishDate ASC
 ";
@@ -121,24 +120,25 @@ foreach ($design_finish_by_date as $date => $items) {
     );
 }
 
-// 获取未排程的订单（没有Schedule记录的订单）- 修正：使用 c.budget
+// 获取未排程的订单（没有Schedule记录的订单）- 修正：使用设计师关联
 $unscheduled_sql = "
     SELECT DISTINCT
         o.orderid,
         o.odate as OrderDate,
         o.ostatus as OrderStatus,
-        c.budget,  -- 修正：从Client表获取budget
+        c.budget,
         o.Requirements,
         c.cname as ClientName,
         c.ctel as ClientPhone,
         c.cemail as ClientEmail
     FROM `Order` o
     JOIN `Client` c ON o.clientid = c.clientid
+    LEFT JOIN `Design` d ON o.designid = d.designid
+    LEFT JOIN `Designer` des ON d.designerid = des.designerid
     LEFT JOIN `Schedule` sch ON o.orderid = sch.orderid
-    LEFT JOIN `OrderDelivery` op ON o.orderid = op.orderid
-    WHERE op.managerid = ?
+    WHERE des.managerid = ?  -- 设计师表中的经理ID（权限检查）
     AND sch.orderid IS NULL
-    AND LOWER(o.ostatus) NOT IN ('pending', 'cancelled')  -- 添加状态过滤
+    AND LOWER(o.ostatus) NOT IN ('pending', 'cancelled')
     " . ($order_id > 0 ? " AND o.orderid = ?" : "") . "
     ORDER BY o.odate DESC
     LIMIT 6
