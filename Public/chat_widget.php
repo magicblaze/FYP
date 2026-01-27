@@ -783,8 +783,10 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
         const empty = document.createElement('div'); empty.style.padding='10px'; empty.style.color='#999'; empty.textContent='No users available'; chooserList.appendChild(empty);
       }
     } catch (e) {
-      status.textContent = 'Failed to load suggestions';
-      console.error(e);
+      status.textContent = 'Failed to load suggestions. Please check your connection and try again.';
+      console.error('fetchSuggestions error:', e);
+      // Show a user-friendly message in the list
+      chooserList.innerHTML = '<div style="padding:20px;text-align:center;color:#999;"><i class="bi bi-exclamation-triangle" style="font-size:2rem;display:block;margin-bottom:10px;"></i><p>Unable to load users</p><p class="small">Please check your internet connection and try again.</p></div>';
     }
   }
 
@@ -923,8 +925,12 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
         return;
       }
       console.warn('No room ID extracted from response:', jr);
-      alert('Unable to open chat with that user.');
-    } catch (e) { console.error(e); alert('Failed to open chat.'); }
+      alert('Unable to open chat with that user. Please try again or contact support if the issue persists.');
+    } catch (e) { 
+      console.error('openChatWith error:', e); 
+      const errorMsg = e && e.message ? e.message : 'Unknown error';
+      alert('Failed to open chat: ' + errorMsg + '. Please check your internet connection and try again.');
+    }
   }
 })();
 </script>
