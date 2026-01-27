@@ -1021,50 +1021,92 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                         const j = await res.json();
                         if (j.success) {
                             alert('Floor plan uploaded successfully.');
-                            const fname = j.path.split('/').pop();
-                            // update filename element (create if missing)
-                            if (floorFileNameEl) {
-                                floorFileNameEl.textContent = fname;
-                            } else if (floorPlanView) {
-                                // try to insert a filename element before the edit button
-                                const editBtn = document.getElementById('floorPlanEditBtn');
-                                if (editBtn && editBtn.parentElement) {
-                                    const infoDiv = document.createElement('div');
-                                    infoDiv.className = 'd-flex align-items-center';
+                            const fname = (j.path || '').split('/').pop();
+                            const relPath = (j.path && j.path.charAt(0) === '/') ? j.path : ('../' + (j.path || ''));
+
+                            // Ensure the view container exists
+                            if (floorPlanView) {
+                                // Update or create filename element
+                                let nameEl = floorPlanView.querySelector('#floorPlanFileName');
+                                if (!nameEl) {
+                                    // try to find first column where to insert
+                                    const leftCol = floorPlanView.querySelector('.d-flex') || floorPlanView;
+                                    const container = document.createElement('div');
+                                    container.className = 'd-flex align-items-center';
+                                    const icon = document.createElement('i');
+                                    icon.className = 'fas fa-file-pdf';
+                                    icon.style.cssText = 'font-size:1.5rem;color:#27ae60;margin-right:.5rem;';
+                                    const meta = document.createElement('div');
                                     const strong = document.createElement('strong');
                                     strong.id = 'floorPlanFileName';
                                     strong.textContent = fname;
-                                    infoDiv.appendChild(strong);
-                                    // insert the filename info before the button container
-                                    editBtn.parentElement.parentElement.insertBefore(infoDiv, editBtn.parentElement);
-                                    // update the reference for future changes
-                                    // (note: floorFileNameEl variable is not updated here, but DOM is updated)
+                                    const small = document.createElement('small');
+                                    small.className = 'text-muted';
+                                    small.textContent = 'Floor plan on file';
+                                    meta.appendChild(strong);
+                                    meta.appendChild(document.createElement('br'));
+                                    meta.appendChild(small);
+                                    container.appendChild(icon);
+                                    container.appendChild(meta);
+                                    // if leftCol looks like the left area, replace it; otherwise prepend
+                                    if (leftCol && leftCol.parentElement) leftCol.parentElement.insertBefore(container, leftCol);
+                                    nameEl = strong;
+                                } else {
+                                    nameEl.textContent = fname;
                                 }
-                            }
 
-                            // ensure a 'View' link exists next to the Change button, update or create it
-                            const editBtn = document.getElementById('floorPlanEditBtn');
-                            if (editBtn && editBtn.parentElement) {
-                                let viewLink = editBtn.parentElement.querySelector('a.btn-outline-success');
+                                // Update or create view link and edit button
+                                let editBtnLocal = floorPlanView.querySelector('#floorPlanEditBtn');
+                                let viewLink = floorPlanView.querySelector('a.btn-outline-success');
                                 if (!viewLink) {
                                     viewLink = document.createElement('a');
                                     viewLink.className = 'btn btn-sm btn-outline-success me-2';
                                     viewLink.target = '_blank';
                                     viewLink.innerHTML = '<i class="fas fa-download me-1"></i>View';
-                                    editBtn.parentElement.insertBefore(viewLink, editBtn);
                                 }
-                                viewLink.href = '../' + j.path;
-                            }
+                                viewLink.href = relPath;
 
-                            // if the view area was a warning, remove alert classes and add simple styling
-                            if (floorPlanView) {
+                                if (!editBtnLocal) {
+                                    editBtnLocal = document.createElement('button');
+                                    editBtnLocal.type = 'button';
+                                    editBtnLocal.id = 'floorPlanEditBtn';
+                                    editBtnLocal.className = 'btn btn-sm btn-outline-secondary';
+                                    editBtnLocal.innerHTML = '<i class="fas fa-pencil-alt"></i> Change';
+                                }
+
+                                // Ensure the action container exists and contains viewLink + edit button
+                                const actionHolder = floorPlanView.querySelector('.d-flex.justify-content-between') || floorPlanView.querySelector('div') || floorPlanView;
+                                // append or replace the right-side actions
+                                const rightCol = actionHolder.querySelector('div:nth-child(2)') || null;
+                                if (rightCol) {
+                                    // clear existing and append
+                                    rightCol.innerHTML = '';
+                                    rightCol.appendChild(viewLink);
+                                    rightCol.appendChild(editBtnLocal);
+                                } else {
+                                    // fallback: append to container
+                                    actionHolder.appendChild(viewLink);
+                                    actionHolder.appendChild(editBtnLocal);
+                                }
+
+                                // style the view container as 'has file'
                                 floorPlanView.classList.remove('alert', 'alert-warning');
                                 floorPlanView.style.background = '#e8f8f0';
                                 floorPlanView.style.border = '1px solid #27ae60';
                                 floorPlanView.style.borderRadius = '8px';
                                 floorPlanView.style.padding = '1rem';
                                 floorPlanView.style.display = '';
+
+                                // (re)bind edit button to open the edit area
+                                if (floorPlanEdit) {
+                                    editBtnLocal.addEventListener('click', function () {
+                                        floorPlanEdit.style.display = 'block';
+                                        floorPlanView.style.display = 'none';
+                                    });
+                                }
                             }
+
+                            // hide the inline edit panel if present
                             if (floorPlanEdit) floorPlanEdit.style.display = 'none';
                         } else {
                             alert('Upload failed: ' + (j.message || 'Unknown'));

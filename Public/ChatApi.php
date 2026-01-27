@@ -710,7 +710,13 @@ try {
     $mm = $pdo->prepare('SELECT ChatRoomMemberid FROM ChatRoomMember WHERE ChatRoomid = ? AND member_type = ? AND memberid = ? LIMIT 1');
     $mm->execute([$room, $member_type, $member_id]);
     $memberRow = $mm->fetchColumn();
-    if (!$memberRow) { send_json(['ok' => false, 'error' => 'not_member'], 400); break; }
+    if (!$memberRow) {
+      // Caller attempted to mark read but is not a member of the room.
+      // Return a 200 JSON response with ok=false to avoid throwing network errors
+      // in clients that treat non-2xx responses as exceptions.
+      send_json(['ok' => false, 'error' => 'not_member'], 200);
+      break;
+    }
     $memberChatId = (int)$memberRow;
     // First, update any existing MessageRead rows to mark read
     try {
