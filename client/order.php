@@ -272,7 +272,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (!$error) {
         // Persist per-order budget; cost and gross_floor_area left NULL until later updates
-        $stmt = $mysqli->prepare("INSERT INTO `Order` (odate, clientid, budget, cost, gross_floor_area, Requirements, designid, ostatus) VALUES (NOW(), ?, ?, NULL, ?, ?, ?, 'Waiting Confirm')");
+        $stmt = $mysqli->prepare("INSERT INTO `Order` (odate, clientid, budget, cost, gross_floor_area, Requirements, designid, ostatus) VALUES (NOW(), ?, ?, NULL, ?, ?, ?, 'Pending')");
         $stmt->bind_param("iddsi", $clientId, $budget, $gfa, $requirements, $designid);
         if ($stmt && $stmt->execute()) {
             $orderId = $stmt->insert_id;
