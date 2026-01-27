@@ -23,9 +23,8 @@ if (isset($_SESSION['user'])) {
         case 'manager':
             $dest = 'Manager/Manager_MyOrder.php';
             break;
-        case 'contractors':
-            // need edit
-            $dest = '';
+        case 'contractor':
+            $dest = 'design_dashboard.php';
             break;
         default:
             $dest = 'dashboard.php';
@@ -62,7 +61,7 @@ $roleConfigs = [
         'name_col'  => 'mname',
     ],
     [
-        'role'      => 'contractors',
+        'role'      => 'contractor',
         'table'     => 'Contractors',
         'email_col' => 'cemail',
         'pass_col'  => 'cpassword',
@@ -146,9 +145,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 case 'manager':
                     $dest = 'Manager/Manager_MyOrder.php';
                     break;
-                case 'contractors':
-                    // No dedicated contractors UI in repo; send to design dashboard by default
-                    $dest = '';
+                case 'contractor':
+                    // Contractor default destination
+                    $dest = !empty($redirect) ? $redirect : 'design_dashboard.php';
                     break;
                 default:
                     $dest = 'login.php';

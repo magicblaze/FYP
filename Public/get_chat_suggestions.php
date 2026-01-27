@@ -62,12 +62,6 @@ $liked_designs = [];
 $liked_products = [];
 $recommended_products = [];
 
-// Strategy: build recommendations from the existing schema
-// - Designers from designs the user liked (DesignLike)
-// - Suppliers from products the user liked (ProductLike)
-// - Recommended designs/products from Design/Product tables
-
-// 1) Designers from liked designs (use unified UserLike)
 $designerIds = [];
 $dl = @$mysqli->prepare("SELECT DISTINCT d.designerid FROM UserLike ul JOIN Design d ON ul.item_id = d.designid WHERE ul.user_type = ? AND ul.user_id = ? AND ul.item_type = 'design' LIMIT 20");
 if ($dl) {
@@ -89,13 +83,55 @@ if ($pl) {
   $pl->close();
 }
 
+// Deduplicate liked targets to avoid repeated entries
+$designerIds = array_values(array_unique(array_filter($designerIds)));
+$supplierIds = array_values(array_unique(array_filter($supplierIds)));
+
+// Get users that already have chatrooms with the current user (to exclude from suggestions)
+// Store by role for precise exclusion
+$existingDesigners = [];
+$existingSuppliers = [];
+$existingManagers = [];
+$existingContractors = [];
+$existingClients = [];
+
+try {
+  // Query existing chats with all member types
+  $q = "SELECT DISTINCT m.member_type, m.memberid FROM ChatRoom cr 
+        JOIN ChatRoomMember m1 ON m1.ChatRoomid = cr.ChatRoomid AND m1.member_type = '$role' AND m1.memberid = $uid
+        JOIN ChatRoomMember m ON m.ChatRoomid = cr.ChatRoomid AND (m.member_type != '$role' OR m.memberid != $uid)
+        WHERE cr.room_type = 'private'";
+  
+  if ($r = @$mysqli->query($q)) {
+    while ($row = $r->fetch_assoc()) {
+      $memberId = (int)$row['memberid'];
+      $memberType = strtolower((string)$row['member_type']);
+      // Normalize Contractors (with capital C from DB) to lowercase for comparison
+      if ($memberType === 'contractors') $memberType = 'contractor';
+      
+      if ($memberType === 'designer') $existingDesigners[] = $memberId;
+      else if ($memberType === 'supplier') $existingSuppliers[] = $memberId;
+      else if ($memberType === 'manager') $existingManagers[] = $memberId;
+      else if ($memberType === 'contractor') $existingContractors[] = $memberId;
+      else if ($memberType === 'client') $existingClients[] = $memberId;
+    }
+    $r->close();
+  }
+} catch (Exception $e) {
+  // Silently ignore if query fails
+}
+
+
+
 // Build recommended list from gathered designer and supplier ids
 if (count($designerIds)) {
   $in = implode(',', array_map('intval', $designerIds));
   $q = "SELECT designerid, dname FROM Designer WHERE designerid IN ($in) LIMIT 20";
   if ($r = $mysqli->query($q)) {
     while ($u = $r->fetch_assoc()) {
-      $recommended[] = ['id'=> (int)$u['designerid'], 'name'=>$u['dname'] ?? '', 'role'=>'designer', 'avatar'=> ''];
+      $did = (int)$u['designerid'];
+      if (in_array($did, $existingDesigners, true)) continue; // skip if already chatting
+      $recommended[] = ['id'=> $did, 'name'=>$u['dname'] ?? '', 'role'=>'designer', 'avatar'=> ''];
     }
     $r->close();
   }
@@ -105,42 +141,123 @@ if (count($supplierIds)) {
   $q = "SELECT supplierid, sname FROM Supplier WHERE supplierid IN ($in) LIMIT 20";
   if ($r = $mysqli->query($q)) {
     while ($u = $r->fetch_assoc()) {
-      $recommended[] = ['id'=> (int)$u['supplierid'], 'name'=>$u['sname'] ?? '', 'role'=>'supplier', 'avatar'=> ''];
+      $sid = (int)$u['supplierid'];
+      if (in_array($sid, $existingSuppliers, true)) continue; // skip if already chatting
+      $recommended[] = ['id'=> $sid, 'name'=>$u['sname'] ?? '', 'role'=>'supplier', 'avatar'=> ''];
     }
     $r->close();
   }
 }
 
-// 3) Fill 'others' with available designers and suppliers (exclude any already recommended)
-$exclude = array_map('intval', array_column($recommended, 'id'));
-// Note: $uid is a client id, not comparable with designer/supplier ids, but keep for safety
-$exclude = array_filter($exclude);
-$othersLimit = 40;
-// Query designers
-$desWhere = '';
-if (count($exclude)) {
-  $desWhere = 'WHERE designerid NOT IN (' . implode(',', $exclude) . ')';
+// 3) Fill 'others' with available users from all roles (exclude recommended, existing chatroom users for that role, and the current user)
+$excludeRecommended = array_map('intval', array_column($recommended, 'id'));
+$excludeRecommended = array_filter($excludeRecommended);
+$othersLimit = 50;
+
+// Query designers (exclude current user if they are a designer, and exclude existing chat designers)
+$desWhere = 'WHERE 1=1';
+$desExclude = $excludeRecommended;
+if (!empty($existingDesigners)) $desExclude = array_merge($desExclude, $existingDesigners);
+$desExclude = array_unique(array_filter($desExclude));
+if (count($desExclude)) {
+  $desWhere .= ' AND designerid NOT IN (' . implode(',', $desExclude) . ')';
 }
-$qdes = "SELECT designerid AS id, dname AS name, 'designer' AS role FROM Designer $desWhere LIMIT $othersLimit";
+if ($role === 'designer') {
+  $desWhere .= ' AND designerid != ' . (int)$uid;
+}
+$qdes = "SELECT designerid AS id, dname AS name, 'designer' AS role FROM Designer $desWhere ORDER BY RAND() LIMIT $othersLimit";
 if ($r = $mysqli->query($qdes)) {
   while ($row = $r->fetch_assoc()) {
     $others[] = ['id'=> (int)$row['id'], 'name'=>$row['name'] ?? '', 'role'=>$row['role'], 'avatar'=>''];
   }
   $r->close();
 }
-// If we still need more, query suppliers
+
+// Query suppliers (exclude current user if they are a supplier)
 if (count($others) < $othersLimit) {
   $need = $othersLimit - count($others);
-  $supWhere = '';
-  if (count($exclude)) {
-    $supWhere = 'WHERE supplierid NOT IN (' . implode(',', $exclude) . ')';
+  $supWhere = 'WHERE 1=1';
+  $supExclude = $excludeRecommended;
+  if (!empty($existingSuppliers)) $supExclude = array_merge($supExclude, $existingSuppliers);
+  $supExclude = array_unique(array_filter($supExclude));
+  if (count($supExclude)) {
+    $supWhere .= ' AND supplierid NOT IN (' . implode(',', $supExclude) . ')';
   }
-  $qsup = "SELECT supplierid AS id, sname AS name, 'supplier' AS role FROM Supplier $supWhere LIMIT $need";
+  if ($role === 'supplier') {
+    $supWhere .= ' AND supplierid != ' . (int)$uid;
+  }
+  $qsup = "SELECT supplierid AS id, sname AS name, 'supplier' AS role FROM Supplier $supWhere ORDER BY RAND() LIMIT $need";
   if ($r2 = $mysqli->query($qsup)) {
     while ($row = $r2->fetch_assoc()) {
       $others[] = ['id'=> (int)$row['id'], 'name'=>$row['name'] ?? '', 'role'=>$row['role'], 'avatar'=>''];
     }
     $r2->close();
+  }
+}
+
+// Query managers (exclude current user if they are a manager)
+if (count($others) < $othersLimit) {
+  $need = $othersLimit - count($others);
+  $mgWhere = 'WHERE 1=1';
+  $mgExclude = $excludeRecommended;
+  if (!empty($existingManagers)) $mgExclude = array_merge($mgExclude, $existingManagers);
+  $mgExclude = array_unique(array_filter($mgExclude));
+  if (count($mgExclude)) {
+    $mgWhere .= ' AND managerid NOT IN (' . implode(',', $mgExclude) . ')';
+  }
+  if ($role === 'manager') {
+    $mgWhere .= ' AND managerid != ' . (int)$uid;
+  }
+  $qmg = "SELECT managerid AS id, mname AS name, 'manager' AS role FROM Manager $mgWhere ORDER BY RAND() LIMIT $need";
+  if ($r3 = $mysqli->query($qmg)) {
+    while ($row = $r3->fetch_assoc()) {
+      $others[] = ['id'=> (int)$row['id'], 'name'=>$row['name'] ?? '', 'role'=>$row['role'], 'avatar'=>''];
+    }
+    $r3->close();
+  }
+}
+
+// Query contractors (exclude current user if they are a contractor)
+if (count($others) < $othersLimit) {
+  $need = $othersLimit - count($others);
+  $ctWhere = 'WHERE 1=1';
+  $ctExclude = $excludeRecommended;
+  if (!empty($existingContractors)) $ctExclude = array_merge($ctExclude, $existingContractors);
+  $ctExclude = array_unique(array_filter($ctExclude));
+  if (count($ctExclude)) {
+    $ctWhere .= ' AND contractorid NOT IN (' . implode(',', $ctExclude) . ')';
+  }
+  if ($role === 'contractor') {
+    $ctWhere .= ' AND contractorid != ' . (int)$uid;
+  }
+  $qct = "SELECT contractorid AS id, cname AS name, 'contractor' AS role FROM Contractors $ctWhere ORDER BY RAND() LIMIT $need";
+  if ($r4 = $mysqli->query($qct)) {
+    while ($row = $r4->fetch_assoc()) {
+      $others[] = ['id'=> (int)$row['id'], 'name'=>$row['name'] ?? '', 'role'=>$row['role'], 'avatar'=>''];
+    }
+    $r4->close();
+  }
+}
+
+// Query clients (exclude current user if they are a client)
+if (count($others) < $othersLimit) {
+  $need = $othersLimit - count($others);
+  $clWhere = 'WHERE 1=1';
+  $clExclude = $excludeRecommended;
+  if (!empty($existingClients)) $clExclude = array_merge($clExclude, $existingClients);
+  $clExclude = array_unique(array_filter($clExclude));
+  if (count($clExclude)) {
+    $clWhere .= ' AND clientid NOT IN (' . implode(',', $clExclude) . ')';
+  }
+  if ($role === 'client') {
+    $clWhere .= ' AND clientid != ' . (int)$uid;
+  }
+  $qcl = "SELECT clientid AS id, cname AS name, 'client' AS role FROM Client $clWhere ORDER BY RAND() LIMIT $need";
+  if ($r5 = $mysqli->query($qcl)) {
+    while ($row = $r5->fetch_assoc()) {
+      $others[] = ['id'=> (int)$row['id'], 'name'=>$row['name'] ?? '', 'role'=>$row['role'], 'avatar'=>''];
+    }
+    $r5->close();
   }
 }
 
@@ -162,7 +279,6 @@ try {
   // Fetch liked designs details for use in share grid
   if (count($likedIds)) {
     $in = implode(',', array_map('intval', $likedIds));
-    $in = implode(',', array_map('intval', $likedIds));
     $qlike_sql = "SELECT d.designid, d.designName AS title, d.expect_price AS price, d.likes, d.designerid,
                      (SELECT di.image_filename FROM DesignImage di WHERE di.designid = d.designid ORDER BY di.image_order ASC LIMIT 1) AS image_filename
                    FROM Design d WHERE d.designid IN ($in) LIMIT 20";
@@ -170,35 +286,39 @@ try {
     if ($qlike) {
       while ($r = $qlike->fetch_assoc()) {
         $id = (int)$r['designid'];
-        // Only include designs that have an explicit DesignImage (no fallback)
         $img = trim((string)($r['image_filename'] ?? ''));
         if ($img === '') continue;
-        $liked_designs[] = [
-          'designid' => $id,
-          'id' => $id,
-          'design_id' => $id,
-          'title' => $r['title'] ?? '',
-          'price' => $r['price'] ?? null,
-          'likes' => (int)($r['likes'] ?? 0),
-          'designerid' => (int)($r['designerid'] ?? 0),
-          'image' => $baseUrl . '/uploads/designs/' . ltrim($img, '/'),
-          'url' => $baseUrl . '/design_detail.php?designid=' . $id,
-          'share' => [
-            'design_id' => $id,
+          $liked_designs[] = [
+            'designid' => $id,
             'id' => $id,
+            'design_id' => $id,
+            // canonical fields for clients: item_id + item_type
+            'item_id' => $id,
+            'item_type' => 'design',
             'title' => $r['title'] ?? '',
+            'price' => $r['price'] ?? null,
+            'likes' => (int)($r['likes'] ?? 0),
+            'designerid' => (int)($r['designerid'] ?? 0),
             'image' => $baseUrl . '/uploads/designs/' . ltrim($img, '/'),
             'url' => $baseUrl . '/design_detail.php?designid=' . $id,
-            'type' => 'design'
-          ]
-        ];
+            'share' => [
+              'design_id' => $id,
+              'id' => $id,
+              'item_id' => $id,
+              'item_type' => 'design',
+              'title' => $r['title'] ?? '',
+              'image' => $baseUrl . '/uploads/designs/' . ltrim($img, '/'),
+              'url' => $baseUrl . '/design_detail.php?designid=' . $id,
+              'type' => 'design'
+            ]
+          ];
       }
       $qlike->close();
     }
   }
 
-  // --- Liked products: similar approach using ProductLike + Product + ProductColorImage ---
-  $likedProductIds = [];
+  // --- Liked products: similar approach using UserLike + Product + ProductColorImage ---
+    $likedProductIds = []; 
   $pl = $mysqli->prepare("SELECT item_id FROM UserLike WHERE user_type = ? AND user_id = ? AND item_type = 'product'");
   if ($pl) {
     $pl->bind_param('si', $role, $clientId);
@@ -233,6 +353,9 @@ try {
         'productid' => $pid,
         'id' => $pid,
         'product_id' => $pid,
+        // canonical fields for clients: item_id + item_type
+        'item_id' => $pid,
+        'item_type' => 'product',
         'title' => $p['pname'] ?? '',
         'price' => $p['price'] ?? null,
         'likes' => (int)($p['likes'] ?? 0),
@@ -242,6 +365,8 @@ try {
         'share' => [
           'product_id' => $pid,
           'id' => $pid,
+          'item_id' => $pid,
+          'item_type' => 'product',
           'title' => $p['pname'] ?? '',
           'image' => $imgPath ? ($baseUrl . '/uploads/products/' . ltrim($imgPath, '/')) : null,
           'url' => $baseUrl . '/product_detail.php?id=' . $pid,
@@ -286,7 +411,7 @@ try {
       $conds[] = "tag LIKE '%{$tk}%'";
     }
     $where = '(' . implode(' OR ', $conds) . ') ' . $exclClause;
-    $q = "SELECT d.designid, d.expect_price AS price, d.likes,
+    $q = "SELECT d.designid, d.designName AS designName, d.designerid, d.expect_price AS price, d.likes,
              (SELECT di.image_filename FROM DesignImage di WHERE di.designid = d.designid ORDER BY di.image_order ASC LIMIT 1) AS image_filename
            FROM Design d WHERE $where ORDER BY likes DESC LIMIT 5";
     $resq = $mysqli->query($q);
@@ -298,7 +423,7 @@ try {
 
   if (!count($designs)) {
     // fallback: popular designs not already liked
-    $q2 = "SELECT d.designid, d.expect_price AS price, d.likes,
+    $q2 = "SELECT d.designid, d.designName AS designName, d.designerid, d.expect_price AS price, d.likes,
               (SELECT di.image_filename FROM DesignImage di WHERE di.designid = d.designid ORDER BY di.image_order ASC LIMIT 1) AS image_filename
             FROM Design d WHERE 1 $exclClause ORDER BY likes DESC LIMIT 5";
     $r2 = $mysqli->query($q2);
@@ -331,6 +456,8 @@ try {
     $recommended_designs[count($recommended_designs)-1]['share'] = [
       'design_id' => $id,
       'id' => $id,
+      'item_id' => $id,
+      'item_type' => 'design',
       'title' => $d['designName'] ?? ($d['title'] ?? ''),
       'image' => $baseUrl . '/uploads/designs/' . ltrim($img, '/'),
       'url' => $baseUrl . '/design_detail.php?designid=' . $id,

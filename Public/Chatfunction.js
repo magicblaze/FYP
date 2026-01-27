@@ -1,7 +1,9 @@
 function initApp(config = {}) {
   const API = config.apiPath || (location.pathname + '?action=');
+  // expose the resolved API base so non-widget helpers (handleChat) can reuse it
+  try { window.chatApiBase = API; } catch (e) {}
   const userId = config.userId ?? 0;
-  const userType = config.userType || 'client';
+  const userType = (config.userType || 'client').toLowerCase().trim();
   const userName = config.userName || '';
   // expose current user globally so URL handlers can access it
   try { window.chatUserId = userId; window.chatUserType = userType; } catch (e) {}
@@ -1668,9 +1670,12 @@ function initApp(config = {}) {
 }
 
 window.handleChat = function(designerid, options = {}) {
-  const creatorType = options.creatorType || 'client';
+  // prefer the API base resolved by initApp; fallback to current page query handler
+  const API = (typeof window.chatApiBase !== 'undefined') ? window.chatApiBase : (location.pathname + '?action=');
+  // Use actual user's role if available, otherwise fall back to options or default to 'client'
+  const creatorType = options.creatorType || (typeof window.chatUserType !== 'undefined' ? window.chatUserType : 'client');
   const creatorId = (typeof options.creatorId !== 'undefined') ? options.creatorId : (window.chatUserId ?? 0);
-  const otherType = 'designer';
+  const otherType = options.otherType || 'designer';
   const otherId = designerid;
 
   if (!creatorId) {
@@ -1685,7 +1690,7 @@ window.handleChat = function(designerid, options = {}) {
   if (orderId) {
     // try to find existing room by name via listRooms
     try {
-      return fetch('../Public/ChatApi.php?action=listRooms')
+      return fetch(API + 'listRooms')
         .then(r => r.json())
         .then(list => {
           const rooms = Array.isArray(list) ? list : (list.rooms || []);
@@ -1703,7 +1708,7 @@ window.handleChat = function(designerid, options = {}) {
           }
           // not found, fall through to create with roomname set
           const bodyObj = Object.assign({ creator_type: creatorType, creator_id: creatorId, other_type: otherType, other_id: otherId }, (options.otherName ? { other_name: options.otherName } : {}), { roomname: 'order-' + String(orderId), room_type: 'group' });
-          return fetch('../Public/ChatApi.php?action=createRoom', {
+          return fetch(API + 'createRoom', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(bodyObj)
@@ -1714,7 +1719,7 @@ window.handleChat = function(designerid, options = {}) {
         }).catch(err => {
           console.error('listRooms error', err);
           // fallback to createRoom without roomname
-          return fetch('../Public/ChatApi.php?action=createRoom', {
+          return fetch(API + 'createRoom', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(Object.assign({ creator_type: creatorType, creator_id: creatorId, other_type: otherType, other_id: otherId }, (options.otherName ? { other_name: options.otherName } : {})))
@@ -1725,7 +1730,7 @@ window.handleChat = function(designerid, options = {}) {
     }
   }
 
-  return fetch('../Public/ChatApi.php?action=createRoom', {
+  return fetch(API + 'createRoom', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(Object.assign({ creator_type: creatorType, creator_id: creatorId, other_type: otherType, other_id: otherId }, (options.otherName ? { other_name: options.otherName } : {})))

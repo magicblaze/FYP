@@ -4,8 +4,12 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
   session_start();
 }
 $logged = isset($_SESSION['user']) && !empty($_SESSION['user']);
-$role = $_SESSION['user']['role'] ?? 'client';
-$uid = (int) ($_SESSION['user'][$role . 'id'] ?? $_SESSION['user']['id'] ?? 0);
+$roleRaw = $logged ? trim(strtolower($_SESSION['user']['role'] ?? 'client')) : 'client';
+// Get user ID first (before normalizing role for DB)
+$uid = $logged ? (int) ($_SESSION['user'][$roleRaw . 'id'] ?? $_SESSION['user']['id'] ?? 0) : 0;
+// Normalize role to match DB ENUM: 'Contractors' needs capital C, others lowercase
+$role = $roleRaw;
+if ($role === 'contractor' || $role === 'contractors') $role = 'Contractors';
 // Centralized paths (use absolute project paths so pages don't need to set these)
 $CHAT_API_PATH = '/FYP/Public/ChatApi.php?action=';
 $CHAT_JS_SRC = '/FYP/Public/Chatfunction.js';
@@ -731,7 +735,7 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
       <div style="font-weight:700">Start a chat</div>
       <div><button id="chatwidget_chooser_close" class="btn btn-sm btn-light">Close</button></div>
     </div>
-    <div id="chatwidget_chooser_status" class="small text-muted">Recommended users appear first</div>
+    <div id="chatwidget_chooser_status" class="small text-muted">Showing recommended and other users</div>
     <div id="chatwidget_chooser_list" class="list">
       <!-- sections appended here -->
     </div>
@@ -759,17 +763,24 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
       const data = await res.json();
       if (data.error) { status.textContent = 'Error: ' + data.error; return; }
       status.textContent = '';
-      // build sections
-      if (data.recommended && data.recommended.length){
-        const h = document.createElement('div'); h.className='section-title'; h.textContent='Recommended'; chooserList.appendChild(h);
+      // build sections - show both by default
+      const hasRecommended = data.recommended && data.recommended.length > 0;
+      const hasOthers = data.others && data.others.length > 0;
+      
+      // Always show Recommended section
+      const h1 = document.createElement('div'); h1.className='section-title'; h1.textContent='From content you liked'; chooserList.appendChild(h1);
+      if (hasRecommended) {
         data.recommended.forEach(u => chooserList.appendChild(renderUserItem(u, true)));
+      } else {
+        const empty = document.createElement('div'); empty.style.padding='10px'; empty.style.color='#999'; empty.textContent='No recommendations yet, like some content then come back.'; chooserList.appendChild(empty);
       }
-      if (data.others && data.others.length){
-        const h2 = document.createElement('div'); h2.className='section-title'; h2.textContent='Users you may like'; chooserList.appendChild(h2);
+      
+      // Always show Users you may like section
+      const h2 = document.createElement('div'); h2.className='section-title'; h2.textContent='Users you may like'; chooserList.appendChild(h2);
+      if (hasOthers) {
         data.others.forEach(u => chooserList.appendChild(renderUserItem(u, false)));
-      }
-      if ((!data.recommended || !data.recommended.length) && (!data.others || !data.others.length)){
-        chooserList.textContent = 'No users found.';
+      } else {
+        const empty = document.createElement('div'); empty.style.padding='10px'; empty.style.color='#999'; empty.textContent='No users available'; chooserList.appendChild(empty);
       }
     } catch (e) {
       status.textContent = 'Failed to load suggestions';
@@ -789,16 +800,20 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
     const uid = u.id || u.clientid || u.designerid || u.supplierid || u.managerid || u.contractorid || u.userid || u.user_id || u.memberid || u.member_id || null;
 
     // Normalize role label for nicer display and detect role from id fields when missing
-    const roleMap = { designer: 'designer', supplier: 'supplier', manager: 'manager', client: 'client', Contractors: 'contractor', supplier_company: 'supplier' };
+    const roleMap = { designer: 'designer', supplier: 'supplier', manager: 'manager', client: 'client', contractor: 'contractor', supplier_company: 'supplier' };
     let rawRole = u.role || u.type || u.member_type || '';
     if (!rawRole) {
       if (u.supplierid) rawRole = 'supplier';
       else if (u.managerid) rawRole = 'manager';
       else if (u.designerid) rawRole = 'designer';
       else if (u.clientid) rawRole = 'client';
-      else if (u.contractorid) rawRole = 'Contractors';
+      else if (u.contractorid) rawRole = 'contractor';
     }
+    // Normalize rawRole to lowercase for consistent handling
+    rawRole = (rawRole && String(rawRole).toLowerCase()) || 'client';
     const roleLabel = roleMap[rawRole] ? roleMap[rawRole] : (rawRole ? rawRole : '');
+
+    console.debug('renderUserItem user data:', { u, rawRole, uid, displayName });
 
     const name = document.createElement('div'); name.className='title'; name.textContent = displayName;
     const role = document.createElement('div'); role.className='subtitle'; role.textContent = roleLabel;
@@ -831,7 +846,7 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
         return null;
       }
 
-      // Prefer window.handleChat only for designer targets (handleChat is designer-specific)
+      // Prefer the shared window.handleChat helper when available
       // Provide a helper to load agents and select the created room so the UI list refreshes
       async function openAndSelect(roomId, otherName) {
         hideChooser();
@@ -849,8 +864,26 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
         } catch (e) { console.warn('openAndSelect failed', e); if (typeof window.chatWidgetOpenPanel === 'function') window.chatWidgetOpenPanel(); }
       }
 
-      if (window.handleChat && u && String(u.role || '').toLowerCase() === 'designer') {
-        const res = await window.handleChat(u.id, { otherName: u.name });
+      // Normalize other_type to match server member_type ENUM values
+      // DB ENUM is: 'client','designer','manager','Contractors','supplier'
+      const roleToMember = function(r) {
+        if (!r) return 'client';
+        const rr = String(r).trim().toLowerCase();
+        console.debug('roleToMember converting:', { input: r, normalized: rr });
+        if (rr === 'designer') return 'designer';
+        if (rr === 'supplier' || rr === 'supplier_company') return 'supplier';
+        if (rr === 'manager') return 'manager';
+        // IMPORTANT: DB ENUM uses 'Contractors' with capital C
+        if (rr === 'contractor' || rr === 'contractors') return 'Contractors';
+        if (rr === 'client') return 'client';
+        return rr; // fallback
+      };
+      const otherTypeNorm = roleToMember(u.role || 'client');
+      const otherId = parseInt(u.id, 10) || 0;
+
+      // Allow all authenticated users to create chat rooms using the shared helper
+      if (window.handleChat && u) {
+        const res = await window.handleChat(u.id, { creatorType: <?= json_encode($role) ?>, otherType: otherTypeNorm, otherName: u.name, creatorId: <?= json_encode($uid) ?> });
         const roomId = extractRoomId(res);
         if (roomId) {
           await openAndSelect(roomId, u.name);
@@ -858,32 +891,38 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
         }
       }
 
-      // Normalize other_type to match server member_type values
-      const roleToMember = function(r) {
-        if (!r) return 'client';
-        const rr = String(r).toLowerCase();
-        if (rr === 'designer') return 'designer';
-        if (rr === 'supplier' || rr === 'supplier_company') return 'supplier';
-        if (rr === 'manager') return 'manager';
-        if (rr === 'contractor' || rr === 'contractors') return 'Contractors';
-        if (rr === 'client') return 'client';
-        return rr; // fallback
-      };
-
       // fallback: try to call ChatApi createRoom if available
       const apiPath = <?= json_encode($CHAT_API_PATH) ?>;
       const createUrl = apiPath + 'createRoom';
-      const otherTypeNorm = roleToMember(u.role || 'client');
-      const otherId = parseInt(u.id, 10) || 0;
+      console.debug('openChatWith:', { user: u, otherTypeNorm, otherId, creatorType: <?= json_encode($role) ?>, creatorId: <?= json_encode($uid) ?> });
       if (!otherId) { alert('Unable to determine user id to start chat'); return; }
       const payload = { creator_type: <?= json_encode($role) ?>, creator_id: <?= json_encode($uid) ?>, other_type: otherTypeNorm, other_id: otherId };
+      if (payload.creator_id <= 0) {
+        console.error('Creator ID is invalid:', payload.creator_id);
+        alert('Error: Unable to identify your user ID for chat. Please log out and log in again.');
+        return;
+      }
+      console.debug('Sending createRoom payload:', payload);
       const r = await fetch(createUrl, { method:'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+      if (!r.ok) {
+        const text = await r.text();
+        console.error('createRoom HTTP error:', r.status, text);
+        alert(`Error creating chat room: HTTP ${r.status}`);
+        return;
+      }
       const jr = await r.json();
+      console.debug('createRoom response:', jr);
+      if (jr.error) {
+        console.error('createRoom API error:', jr.error);
+        alert(`Error: ${jr.error}`);
+        return;
+      }
       const roomId = extractRoomId(jr);
       if (roomId) {
         await openAndSelect(roomId, u.name);
         return;
       }
+      console.warn('No room ID extracted from response:', jr);
       alert('Unable to open chat with that user.');
     } catch (e) { console.error(e); alert('Failed to open chat.'); }
   }
@@ -981,12 +1020,14 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
 
 
     // rootId 'chatwidget' maps to IDs like 'chatwidget_messages', 'chatwidget_input' etc.
+    <?php if ($logged): ?>
     try {
       if (typeof initApp === 'function') {
         window.chatApps = window.chatApps || {};
         window.chatApps['chatwidget'] = initApp({ apiPath: <?= json_encode($CHAT_API_PATH) ?>, userType: <?= json_encode($role) ?>, userId: <?= json_encode($uid) ?>, userName: <?= json_encode($_SESSION['user']['name'] ?? '') ?>, rootId: 'chatwidget', items: [] });
       }
     } catch(e) { console.error('chatwidget initApp failed', e); }
+    <?php endif; ?>
     // After init, wire the share button if a page provided a payload
     try {
       const tryWireShare = () => {
@@ -1306,12 +1347,13 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
           const total = selectedDesigns.length; let sent = 0; let failed = 0;
           const statusEl = document.getElementById('chatwidget_share_status');
           if (statusEl) statusEl.textContent = `Sending 0 / ${total}...`;
-          for (const sd of selectedDesigns) {
+            for (const sd of selectedDesigns) {
             const payload = {
               sender_type: 'client', sender_id: <?= json_encode($uid) ?>,
               content: sd.url || sd.title || '', room: roomId,
               attachment_url: sd.image || sd.url || '', attachment_name: (sd.title||sd.type||'item') + '.jpg',
-              message_type: 'design', share_title: sd.title || '', share_url: sd.url || '', share_type: sd.type === 'product' ? 'product' : 'design'
+              message_type: 'design', share_title: sd.title || '', share_url: sd.url || '', share_type: sd.type === 'product' ? 'product' : 'design',
+              item_id: sd.id || sd.productid || sd.productId || sd.designid || sd.designId || sd.id
             };
             try {
               const resp = (inst && typeof inst.apiPost === 'function') ? await inst.apiPost('sendMessage', payload) : await (fetch(<?= json_encode($CHAT_API_PATH) ?> + 'sendMessage', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) }).then(r=>r.json()));
@@ -1339,7 +1381,7 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
               const inst2 = window.chatApps && window.chatApps['chatwidget'];
               if (inst2) {
                 const mtype = 'design';
-                await inst2.apiPost('sendMessage', { sender_type: 'client', sender_id: <?= json_encode($uid) ?>, content: sd.url || sd.title || '', room: roomId, attachment_url: sd.image || sd.url || '', attachment_name: (sd.title||sd.type||'item') + '.jpg', message_type: mtype, share_title: sd.title || '', share_url: sd.url || '' });
+                await inst2.apiPost('sendMessage', { sender_type: 'client', sender_id: <?= json_encode($uid) ?>, content: sd.url || sd.title || '', room: roomId, attachment_url: sd.image || sd.url || '', attachment_name: (sd.title||sd.type||'item') + '.jpg', message_type: mtype, share_title: sd.title || '', share_url: sd.url || '', item_id: sd.id || sd.productid || sd.designid || sd.id });
               }
             }
           } catch(e) { console.error('send to designer failed', e); }
