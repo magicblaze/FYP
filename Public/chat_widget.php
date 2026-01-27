@@ -10,13 +10,13 @@ $uid = $logged ? (int) ($_SESSION['user'][$roleRaw . 'id'] ?? $_SESSION['user'][
 // Normalize role to match DB ENUM: 'Contractors' needs capital C, others lowercase
 $role = $roleRaw;
 if ($role === 'contractor' || $role === 'contractors') $role = 'Contractors';
-// Centralized paths (use absolute project paths so pages don't need to set these)
-$CHAT_API_PATH = '/FYP/Public/ChatApi.php?action=';
-$CHAT_JS_SRC = '/FYP/Public/Chatfunction.js';
-// Suggestions API path (resolve relative to app root)
+// Dynamically resolve app root to support any project path (not just /FYP/)
 $scriptPath = $_SERVER['SCRIPT_NAME'] ?? '';
 $parts = explode('/', ltrim($scriptPath, '/'));
 $APP_ROOT = isset($parts[0]) && $parts[0] !== '' ? '/' . $parts[0] : '';
+// Centralized paths (use dynamic app root so pages work in any project location)
+$CHAT_API_PATH = $APP_ROOT . '/Public/ChatApi.php?action=';
+$CHAT_JS_SRC = $APP_ROOT . '/Public/Chatfunction.js';
 $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
 ?>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
