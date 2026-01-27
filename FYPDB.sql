@@ -47,6 +47,7 @@ DROP TABLE IF EXISTS `UserLike`;
 DROP TABLE IF EXISTS `OrderMaterial`;
 DROP TABLE IF EXISTS `Comment_material`;
 DROP TABLE IF EXISTS `DesignMaterial`;
+DROP TABLE IF EXISTS `workerallocation`;
 
 -- Client table
 CREATE TABLE `Client` (
@@ -464,6 +465,25 @@ CREATE TABLE `MessageRead` (
   CONSTRAINT `fk_messageread_member` FOREIGN KEY (`ChatRoomMemberid`) REFERENCES `ChatRoomMember` (`ChatRoomMemberid`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- create workerallocation table
+CREATE TABLE `workerallocation` (
+    `allocation_id` INT PRIMARY KEY AUTO_INCREMENT,
+    `orderid` INT NOT NULL,
+    `workerid` INT NOT NULL,
+    `managerid` INT NOT NULL,
+    `allocation_date` DATETIME NOT NULL,
+    `estimated_completion` DATE NOT NULL,
+    `estimated_hours` DECIMAL(5,1) NOT NULL,
+    `actual_hours` DECIMAL(5,1),
+    `actual_completion` DATE,
+    `notes` TEXT,
+    `status` ENUM('Assigned', 'In Progress', 'Completed', 'Cancelled') DEFAULT 'Assigned',
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (`orderid`) REFERENCES `Order`(`orderid`) ON DELETE CASCADE,
+    FOREIGN KEY (`workerid`) REFERENCES `worker`(`workerid`) ON DELETE CASCADE,
+    FOREIGN KEY (`managerid`) REFERENCES `Manager`(`managerid`) ON DELETE CASCADE
+);
+
 -- Seed read status: for each message add rows for members of that chatroom
 -- Message 1 (room 2): manager (memberid 1) is sender -> read, designer (memberid 2) unread
 -- Message 2 (room 2): designer (memberid 2) is sender -> read, manager (memberid 1) unread
@@ -558,25 +578,6 @@ ALTER TABLE `Message`
 ALTER TABLE `worker` 
 ADD COLUMN IF NOT EXISTS `work_hours_per_week` DECIMAL(5,1) DEFAULT 40.0,
 ADD COLUMN IF NOT EXISTS `available_hours_this_week` DECIMAL(5,1) DEFAULT 40.0;
-
--- create workerallocation table
-CREATE TABLE IF NOT EXISTS `workerallocation` (
-    `allocation_id` INT PRIMARY KEY AUTO_INCREMENT,
-    `orderid` INT NOT NULL,
-    `workerid` INT NOT NULL,
-    `managerid` INT NOT NULL,
-    `allocation_date` DATETIME NOT NULL,
-    `estimated_completion` DATE NOT NULL,
-    `estimated_hours` DECIMAL(5,1) NOT NULL,
-    `actual_hours` DECIMAL(5,1),
-    `actual_completion` DATE,
-    `notes` TEXT,
-    `status` ENUM('Assigned', 'In Progress', 'Completed', 'Cancelled') DEFAULT 'Assigned',
-    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (`orderid`) REFERENCES `Order`(`orderid`) ON DELETE CASCADE,
-    FOREIGN KEY (`workerid`) REFERENCES `worker`(`workerid`) ON DELETE CASCADE,
-    FOREIGN KEY (`managerid`) REFERENCES `Manager`(`managerid`) ON DELETE CASCADE
-);
 
 DELIMITER $$
 CREATE PROCEDURE IF NOT EXISTS `ResetWeeklyHours`()
