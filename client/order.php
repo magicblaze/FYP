@@ -176,23 +176,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    // 驗證必填字段
+    // Validate required fields (check updated values, not just profile)
     if (empty($clientData['floor_plan'])) {
-        $error = 'Please upload a floor plan in your profile before placing an order.';
+        $error = 'Please upload a floor plan before placing an order.';
     } elseif ($budget <= 0) {
         $error = 'Budget must be greater than 0.';
-    } elseif (empty($paymentMethodData) || empty($paymentMethodData['method'])) {
-        $error = 'Please set a payment method in your profile before placing an order.';
-    }
-
-    // Require Gross Floor Area
-    if (empty($error) && ($gfa <= 0)) {
+    } elseif ($budget < (float) $design['expect_price']) {
+        $error = 'Budget cannot be lower than the design cost (HK$' . number_format((float) $design['expect_price'], 0) . '). Please adjust your budget.';
+    } elseif ($gfa <= 0) {
         $error = 'Please provide Gross Floor Area (m²) for this order.';
-    }
-
-    // Validate budget cannot be lower than design cost
-    if (!$error && $budget < (float) $design['expect_price']) {
-        $error = 'Budget cannot be lower than the design cost (HK$' . number_format((float) $design['expect_price'], 0) . ').';
+    } elseif (empty($paymentMethodData) || empty($paymentMethodData['method'])) {
+        $error = 'Please select a payment method before placing an order.';
+    } else {
+        // Validate payment method details based on selected method
+        $pm = $paymentMethodData['method'] ?? '';
+        if ($pm === 'alipay_hk') {
+            if (empty($paymentMethodData['alipay_hk_email']) && empty($paymentMethodData['alipay_hk_phone'])) {
+                $error = 'Please provide AlipayHK email or phone number.';
+            }
+        } elseif ($pm === 'paypal') {
+            if (empty($paymentMethodData['paypal_email'])) {
+                $error = 'Please provide PayPal email address.';
+            }
+        } elseif ($pm === 'fps') {
+            if (empty($paymentMethodData['fps_id'])) {
+                $error = 'Please provide FPS ID.';
+            }
+        }
     }
 
     // Parse references (comma-separated design ids) and compute references total
@@ -984,6 +994,15 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
             if (budgetSaveBtn) {
                 budgetSaveBtn.addEventListener('click', function () {
                     const val = parseFloat(budgetInput.value) || 0;
+                    const designCost = <?= json_encode((float) $design['expect_price']) ?>;
+                    if (val <= 0) {
+                        alert('Budget must be greater than 0.');
+                        return;
+                    }
+                    if (val < designCost) {
+                        alert('Budget cannot be lower than the design cost (HK$' + designCost.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ",") + ').');
+                        return;
+                    }
                     budgetHidden.value = val;
                     budgetDisplayText.textContent = 'HK$' + val.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
                     budgetEdit.style.display = 'none';
@@ -1110,6 +1129,10 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
             if (gfaSaveBtn) {
                 gfaSaveBtn.addEventListener('click', function () {
                     const val = parseFloat(gfaInput.value) || 0;
+                    if (val <= 0) {
+                        alert('Gross Floor Area must be greater than 0.');
+                        return;
+                    }
                     gfaHidden.value = val;
                     gfaDisplayText.innerHTML = val > 0 ? val.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",") + ' m²' : '<span class="text-muted">Not provided</span>';
                     gfaEdit.style.display = 'none';
@@ -1163,6 +1186,32 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                 paymentSaveBtn.addEventListener('click', function () {
                     const sel = Array.from(paymentEditRadios).find(r => r.checked);
                     const method = sel ? sel.value : '';
+                    if (!method) {
+                        alert('Please select a payment method.');
+                        return;
+                    }
+                    // Validate method-specific required fields
+                    if (method === 'alipay_hk') {
+                        const email = document.getElementById('alipayHKEmail') ? document.getElementById('alipayHKEmail').value.trim() : '';
+                        const phone = document.getElementById('alipayHKPhone') ? document.getElementById('alipayHKPhone').value.trim() : '';
+                        if (!email && !phone) {
+                            alert('Please provide AlipayHK email or phone number.');
+                            return;
+                        }
+                    } else if (method === 'paypal') {
+                        const email = document.getElementById('paypalEmail') ? document.getElementById('paypalEmail').value.trim() : '';
+                        if (!email) {
+                            alert('Please provide PayPal email address.');
+                            return;
+                        }
+                    } else if (method === 'fps') {
+                        const fpsId = document.getElementById('fpsId') ? document.getElementById('fpsId').value.trim() : '';
+                        if (!fpsId) {
+                            alert('Please provide FPS ID.');
+                            return;
+                        }
+                    }
+                    
                     paymentMethodHidden.value = method;
                     // copy detail fields into hidden inputs
                     const alipayEmail = document.getElementById('alipayHKEmail') ? document.getElementById('alipayHKEmail').value : '';
@@ -1179,7 +1228,7 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                     const summaryEl = paymentDisplay.querySelector('.payment-method-label');
                     if (summaryEl) {
                         let text = 'Current: Not set';
-                        if (method === 'alipay_hk') text = 'Current: AlipayHK - ' + (alipayEmail || '');
+                        if (method === 'alipay_hk') text = 'Current: AlipayHK' + (alipayEmail ? ' - ' + alipayEmail : (alipayPhone ? ' - ' + alipayPhone : ''));
                         else if (method === 'paypal') text = 'Current: PayPal - ' + (paypalEmail || '');
                         else if (method === 'fps') text = 'Current: FPS - ' + (fpsId || '');
                         summaryEl.innerHTML = text;
@@ -1214,6 +1263,24 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                         if (document.getElementById('fpsName')) document.getElementById('fps_name_hidden').value = document.getElementById('fpsName').value || '';
                     }
 
+                    // Validate budget
+                    const budgetVal = parseFloat(budgetHidden.value) || 0;
+                    const designCost = <?= json_encode((float) $design['expect_price']) ?>;
+                    if (budgetVal <= 0) {
+                        e.preventDefault();
+                        try { orderForm.dataset.hasValidationError = '1'; } catch (ex) { /* ignore */ }
+                        alert('Budget must be greater than 0. Please set your budget.');
+                        if (budgetView) budgetView.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        return false;
+                    }
+                    if (budgetVal < designCost) {
+                        e.preventDefault();
+                        try { orderForm.dataset.hasValidationError = '1'; } catch (ex) { /* ignore */ }
+                        alert('Budget cannot be lower than the design cost (HK$' + designCost.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ",") + '). Please adjust your budget.');
+                        if (budgetView) budgetView.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        return false;
+                    }
+
                     // Validate Gross Floor Area is provided
                     try {
                         const gfaVal = (gfaHidden && gfaHidden.value) ? parseFloat(gfaHidden.value) : 0;
@@ -1230,6 +1297,17 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                         }
                     } catch (ex) {
                         // fall through — allow server to validate
+                    }
+
+                    // Validate payment method
+                    const pmVal = paymentMethodHidden ? paymentMethodHidden.value : '';
+                    if (!pmVal) {
+                        e.preventDefault();
+                        try { orderForm.dataset.hasValidationError = '1'; } catch (ex) { /* ignore */ }
+                        alert('Please select a payment method before placing the order.');
+                        if (paymentDisplay) paymentDisplay.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        showPaymentEdit(true);
+                        return false;
                     }
                 }, true);
             }
@@ -1304,7 +1382,7 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
         <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="likedProductsModalLabel">Select Liked Products</h5>
+                    <h5 class="modal-title" id="likedProductsModalLabel">Select reference</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
@@ -1335,6 +1413,10 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                     const j = await res.json();
                     likedProducts = (j && j.liked_products) ? j.liked_products : [];
                     likedGrid.innerHTML = '';
+                    if (likedProducts.length === 0) {
+                        likedGrid.innerHTML = '<div class="col-12 text-center py-5"><div class="text-muted"><i class="bi bi-heart" style="font-size: 3rem; opacity: 0.3;"></i><p class="mt-3 mb-1">No liked products yet</p><p class="small text-muted">Like some products to add them as references</p></div></div>';
+                        return;
+                    }
                     likedProducts.forEach(p => {
                         const col = document.createElement('div'); col.className = 'col-6 col-md-4';
                         col.innerHTML = `
@@ -1350,7 +1432,7 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                         `;
                         likedGrid.appendChild(col);
                     });
-                } catch (e) { likedGrid.innerHTML = '<div class="text-muted">Failed to load liked products.</div>'; }
+                } catch (e) { likedGrid.innerHTML = '<div class="col-12 text-center py-4"><div class="text-muted">Failed to load liked products.</div></div>'; }
             }
 
             function parseProductHidden() {

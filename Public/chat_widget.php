@@ -10,13 +10,66 @@ $uid = $logged ? (int) ($_SESSION['user'][$roleRaw . 'id'] ?? $_SESSION['user'][
 // Normalize role to match DB ENUM: 'Contractors' needs capital C, others lowercase
 $role = $roleRaw;
 if ($role === 'contractor' || $role === 'contractors') $role = 'Contractors';
-// Centralized paths (use absolute project paths so pages don't need to set these)
-$CHAT_API_PATH = '/FYP/Public/ChatApi.php?action=';
-$CHAT_JS_SRC = '/FYP/Public/Chatfunction.js';
-// Suggestions API path (resolve relative to app root)
-$scriptPath = $_SERVER['SCRIPT_NAME'] ?? '';
-$parts = explode('/', ltrim($scriptPath, '/'));
-$APP_ROOT = isset($parts[0]) && $parts[0] !== '' ? '/' . $parts[0] : '';
+
+// Dynamically resolve app root to support any project path deployment
+// Extract app root from SCRIPT_NAME or REQUEST_URI (e.g., /FYP/public/... → /FYP)
+function getAppRoot() {
+  $scriptPath = $_SERVER['SCRIPT_NAME'] ?? '';
+  if (empty($scriptPath) && !empty($_SERVER['REQUEST_URI'])) {
+    $scriptPath = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+  }
+  
+  if (empty($scriptPath)) {
+    // Fallback: assume /FYP as default
+    return '/FYP';
+  }
+  
+  $parts = explode('/', ltrim($scriptPath, '/'));
+  // First part is the app root (e.g., 'FYP' from /FYP/public/chat_widget.php)
+  $appRoot = (isset($parts[0]) && $parts[0] !== '') ? '/' . $parts[0] : '';
+  return !empty($appRoot) ? $appRoot : '/FYP';
+}
+
+// Fetch current user's name from database based on role and ID
+function getUserNameFromDB($role, $uid) {
+  global $pdo;
+  if (!$uid || !$role || !$pdo) return null;
+  
+  try {
+    // Map role to table and column
+    $tables = [
+      'client' => ['table' => 'Client', 'idcol' => 'clientid', 'namecol' => 'cname'],
+      'designer' => ['table' => 'Designer', 'idcol' => 'designerid', 'namecol' => 'dname'],
+      'manager' => ['table' => 'Manager', 'idcol' => 'managerid', 'namecol' => 'mname'],
+      'Contractors' => ['table' => 'Contractors', 'idcol' => 'contractorid', 'namecol' => 'cname'],
+      'contractor' => ['table' => 'Contractors', 'idcol' => 'contractorid', 'namecol' => 'cname'],
+      'supplier' => ['table' => 'Supplier', 'idcol' => 'supplierid', 'namecol' => 'sname']
+    ];
+    
+    $roleKey = strtolower($role);
+    if (!isset($tables[$roleKey])) return null;
+    
+    $cfg = $tables[$roleKey];
+    $stmt = $pdo->prepare("SELECT {$cfg['namecol']} FROM {$cfg['table']} WHERE {$cfg['idcol']}=? LIMIT 1");
+    $stmt->execute([(int)$uid]);
+    $name = $stmt->fetchColumn();
+    return $name ?: null;
+  } catch (Exception $e) {
+    return null;
+  }
+}
+
+// Ensure database connection is available
+if (!isset($pdo) || $pdo === null) {
+  require_once __DIR__ . '/../config.php';
+}
+
+$userName = $logged && $uid ? getUserNameFromDB($role, $uid) : null;
+
+$APP_ROOT = getAppRoot();
+// Centralized paths (dynamically resolved so they work in any deployment)
+$CHAT_API_PATH = $APP_ROOT . '/Public/ChatApi.php?action=';
+$CHAT_JS_SRC = $APP_ROOT . '/Public/Chatfunction.js';
 $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
 ?>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
@@ -783,8 +836,10 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
         const empty = document.createElement('div'); empty.style.padding='10px'; empty.style.color='#999'; empty.textContent='No users available'; chooserList.appendChild(empty);
       }
     } catch (e) {
-      status.textContent = 'Failed to load suggestions';
-      console.error(e);
+      status.textContent = 'Failed to load suggestions. Please check your connection and try again.';
+      console.error('fetchSuggestions error:', e);
+      // Show a user-friendly message in the list
+      chooserList.innerHTML = '<div style="padding:20px;text-align:center;color:#999;"><i class="bi bi-exclamation-triangle" style="font-size:2rem;display:block;margin-bottom:10px;"></i><p>Unable to load users</p><p class="small">Please check your internet connection and try again.</p></div>';
     }
   }
 
@@ -923,13 +978,27 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
         return;
       }
       console.warn('No room ID extracted from response:', jr);
-      alert('Unable to open chat with that user.');
-    } catch (e) { console.error(e); alert('Failed to open chat.'); }
+      alert('Unable to open chat with that user. Please try again or contact support if the issue persists.');
+    } catch (e) { 
+      console.error('openChatWith error:', e); 
+      const errorMsg = e && e.message ? e.message : 'Unknown error';
+      alert('Failed to open chat: ' + errorMsg + '. Please check your internet connection and try again.');
+    }
   }
 })();
 </script>
 <!-- Initialize chat widget. Chatfunction and API paths are centralized here -->
 <script src="<?= htmlspecialchars($CHAT_JS_SRC) ?>"></script>
+<!-- Set global chatApiBase for handleChat() on all pages that include this widget -->
+<script>
+  (function(){
+    try {
+      if (typeof window.chatApiBase === 'undefined') {
+        window.chatApiBase = <?= json_encode($CHAT_API_PATH) ?>;
+      }
+    } catch (e) { console.warn('Failed to set window.chatApiBase', e); }
+  })();
+</script>
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
 <script>
   document.addEventListener('DOMContentLoaded', function(){
@@ -1024,7 +1093,7 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
     try {
       if (typeof initApp === 'function') {
         window.chatApps = window.chatApps || {};
-        window.chatApps['chatwidget'] = initApp({ apiPath: <?= json_encode($CHAT_API_PATH) ?>, userType: <?= json_encode($role) ?>, userId: <?= json_encode($uid) ?>, userName: <?= json_encode($_SESSION['user']['name'] ?? '') ?>, rootId: 'chatwidget', items: [] });
+        window.chatApps['chatwidget'] = initApp({ apiPath: <?= json_encode($CHAT_API_PATH) ?>, userType: <?= json_encode($role) ?>, userId: <?= json_encode($uid) ?>, userName: <?= json_encode($userName ?? $_SESSION['user']['name'] ?? '') ?>, rootId: 'chatwidget', items: [] });
       }
     } catch(e) { console.error('chatwidget initApp failed', e); }
     <?php endif; ?>

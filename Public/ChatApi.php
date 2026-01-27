@@ -87,7 +87,8 @@ function normalize_member_type($t) {
   return $t ?: null;
 }
 
-$action = $_GET['action'] ?? '';
+$data = json_decode(file_get_contents('php://input'), true) ?: ($_POST ?: $_GET);
+$action = $data['action'] ?? $_GET['action'] ?? '';
 
 try {
   // Block unauthenticated users from using chat endpoints
@@ -97,8 +98,8 @@ try {
   }
   switch ($action) {
   case 'listRooms':
-    $user_type = normalize_member_type($_GET['user_type'] ?? null);
-    $user_id = isset($_GET['user_id']) ? (int)$_GET['user_id'] : 0;
+    $user_type = normalize_member_type($data['user_type'] ?? null);
+    $user_id = isset($data['user_id']) ? (int)$data['user_id'] : 0;
     if ($user_type && $user_id > 0) {
       $stmt = $pdo->prepare("SELECT cr.* FROM ChatRoom cr JOIN ChatRoomMember m ON m.ChatRoomid=cr.ChatRoomid WHERE m.member_type=? AND m.memberid=? ORDER BY cr.ChatRoomid DESC");
       $stmt->execute([$user_type, $user_id]);
@@ -163,15 +164,15 @@ try {
     break;
 
   case 'getMembers':
-    $roomId = (int)($_GET['room'] ?? 0);
+    $roomId = (int)($data['room'] ?? 0);
     $stmt = $pdo->prepare("SELECT * FROM ChatRoomMember WHERE ChatRoomid=?");
     $stmt->execute([$roomId]);
     send_json($stmt->fetchAll());
     break;
 
   case 'getMessages':
-    $roomId = (int)($_GET['room'] ?? 0);
-    $since = isset($_GET['since']) ? (int)$_GET['since'] : 0;
+    $roomId = (int)($data['room'] ?? 0);
+    $since = isset($data['since']) ? (int)$data['since'] : 0;
     // Fetch messages for room; if `since` provided, filter in PHP to support different DB schemas
     $stmt = $pdo->prepare("SELECT * FROM Message WHERE ChatRoomid=? ORDER BY timestamp ASC");
     $stmt->execute([$roomId]);
@@ -706,11 +707,11 @@ try {
     break;
 
   case 'getTyping':
-    $room = (int)($_GET['room'] ?? 0);
+    $room = (int)($data['room'] ?? 0);
     $file = __DIR__ . '/tmp/typing_room_' . $room . '.json';
     if (!file_exists($file)) { send_json(['typing'=>false]); break; }
-    $data = json_decode(@file_get_contents($file), true) ?: null;
-    if (!$data) { send_json(['typing'=>false]); break; }
+    $fileData = json_decode(@file_get_contents($file), true) ?: null;
+    if (!$fileData) { send_json(['typing'=>false]); break; }
     // Consider typing active for 6 seconds
     $active = (time() - (int)($data['ts'] ?? 0)) < 6;
     send_json(['typing'=>$active, 'sender'=>$data['sender_type'] ?? null, 'sender_id'=>$data['sender_id'] ?? null]);
@@ -718,7 +719,6 @@ try {
 
   case 'markRead':
     // Mark messages in a room as read for a particular member (create missing MessageRead rows)
-    $data = json_decode(file_get_contents('php://input'), true) ?: $_POST;
     $room = isset($data['room']) ? (int)$data['room'] : 0;
     $member_type = $data['user_type'] ?? ($data['member_type'] ?? null);
     $member_id = isset($data['user_id']) ? (int)$data['user_id'] : (isset($data['member_id']) ? (int)$data['member_id'] : 0);
@@ -770,8 +770,8 @@ try {
 
   case 'getTotalUnread':
     // Return sum of unread messages across all rooms for a given user (uses last_opened when available)
-    $user_type = $_GET['user_type'] ?? null;
-    $user_id = isset($_GET['user_id']) ? (int)$_GET['user_id'] : 0;
+    $user_type = $data['user_type'] ?? null;
+    $user_id = isset($data['user_id']) ? (int)$data['user_id'] : 0;
     if (!$user_type || $user_id <= 0) {
       send_json(['ok'=>false,'error'=>'missing_fields'], 400);
       break;
