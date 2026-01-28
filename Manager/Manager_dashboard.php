@@ -71,13 +71,13 @@ if (!$orders_result) {
 // Get statistics
 $stats_sql = "SELECT 
                 COUNT(DISTINCT o.orderid) as total_orders,
-                COUNT(DISTINCT CASE WHEN o.ostatus = 'Pending' THEN o.orderid END) as pending_orders,
-                COUNT(DISTINCT CASE WHEN o.ostatus = 'Designing' THEN o.orderid END) as designing_orders,
-                COUNT(DISTINCT CASE WHEN o.ostatus = 'Completed' THEN o.orderid END) as completed_orders,
-                COUNT(DISTINCT CASE WHEN o.ostatus = 'Rejected' THEN o.orderid END) as rejected_orders,
+                COUNT(DISTINCT CASE WHEN o.ostatus = 'waiting confirm' THEN o.orderid END) as pending_orders,
+                COUNT(DISTINCT CASE WHEN o.ostatus = 'designing' THEN o.orderid END) as designing_orders,
+                COUNT(DISTINCT CASE WHEN o.ostatus = 'complete' THEN o.orderid END) as completed_orders,
+                COUNT(DISTINCT CASE WHEN o.ostatus = 'reject' THEN o.orderid END) as rejected_orders,
                 COUNT(DISTINCT CASE WHEN d.designerid IS NOT NULL THEN o.orderid END) as assigned_orders,
                 COUNT(DISTINCT CASE WHEN d.designerid IS NULL THEN o.orderid END) as unassigned_orders,
-                SUM(CASE WHEN o.ostatus IN ('Pending', 'Designing') THEN o.budget ELSE 0 END) as active_budget,
+                SUM(CASE WHEN o.ostatus IN ('waiting confirm', 'designing') THEN o.budget ELSE 0 END) as active_budget,
                 COUNT(DISTINCT des.designerid) as total_designers
                FROM `Order` o
                LEFT JOIN `Design` d ON o.designid = d.designid

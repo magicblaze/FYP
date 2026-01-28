@@ -265,7 +265,7 @@ if(isset($_POST['action']) && $_POST['action'] == 'add_product_to_order') {
         LEFT JOIN `Client` c ON o.clientid = c.clientid
         LEFT JOIN `Design` d ON o.designid = d.designid
         LEFT JOIN `Schedule` s ON o.orderid = s.orderid
-        WHERE o.ostatus = 'Designing'
+        WHERE o.ostatus = 'designing'
         AND EXISTS (SELECT 1 FROM `Design` d2 
                    JOIN `Designer` des ON d2.designerid = des.designerid 
                    WHERE d2.designid = o.designid AND des.managerid = ?)

@@ -119,9 +119,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             if ($result) {
                 $message = "Schedule updated successfully!";
                 
-                // 更新订单状态为 Designing（如果还是 Pending）
-                if (strtolower($order['ostatus']) == 'pending') {
-                    $status_sql = "UPDATE `Order` SET ostatus = 'Designing' WHERE orderid = ?";
+                // 更新订单状态为 designing（如果还是 waiting confirm）
+                if (strtolower($order['ostatus']) == 'waiting confirm') {
+                    $status_sql = "UPDATE `Order` SET ostatus = 'designing' WHERE orderid = ?";
                     $status_stmt = mysqli_prepare($mysqli, $status_sql);
                     mysqli_stmt_bind_param($status_stmt, "i", $orderid);
                     mysqli_stmt_execute($status_stmt);
@@ -196,7 +196,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                 <?php
                                 $status_class = 'status-pending';
                                 $status = strtolower($order['ostatus']);
-                                if ($status == 'completed') {
+                                if ($status == 'complete' || $status == 'completed') {
                                     $status_class = 'status-completed';
                                 } elseif ($status == 'designing') {
                                     $status_class = 'status-designing';

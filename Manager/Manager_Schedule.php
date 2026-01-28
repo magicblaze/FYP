@@ -15,36 +15,43 @@ $user_name = $user['name'];
 // 获取搜索参数
 $search = isset($_GET['search']) ? mysqli_real_escape_string($mysqli, $_GET['search']) : '';
 $status_filter = isset($_GET['status']) ? $_GET['status'] : '';
+    switch(strtolower($status)) {
+        case 'delivered':
+        case 'completed':
+        case 'complete':
+            return 'bg-success';
+        case 'shipped':
+        case 'manufacturing':
+        case 'waiting review':
+            return 'bg-info';
+        case 'processing':
+        case 'designing':
+        case 'drafting proposal':
+            return 'bg-primary';
+        case 'pending':
+        case 'waiting confirm':
+            return 'bg-warning';
+        case 'cancelled':
+        case 'reject':
+            return 'bg-danger';
+        case 'waiting payment':
+            return 'bg-dark';
+        default:
+            return 'bg-secondary';
+    }
 
-// 构建查询条件 - 修复：使用设计师关联逻辑代替OrderDelivery
-$where_conditions = array(
-    "(o.ostatus = 'Designing' OR o.ostatus = 'Completed')",
-    "EXISTS (SELECT 1 FROM `Design` d 
-             JOIN `Designer` des ON d.designerid = des.designerid 
-             WHERE d.designid = o.designid AND des.managerid = $user_id)"
-);
 
-if(!empty($search)) {
-    $search_conditions = array();
-    $search_conditions[] = "o.orderid LIKE '%$search%'";
-    $search_conditions[] = "c.cname LIKE '%$search%'";
-    $search_conditions[] = "c.cemail LIKE '%$search%'";
-    $search_conditions[] = "o.Requirements LIKE '%$search%'";
-    $search_conditions[] = "d.tag LIKE '%$search%'";
-    $where_conditions[] = "(" . implode(" OR ", $search_conditions) . ")";
-}
-
-if(!empty($status_filter)) {
+    if(!empty($status_filter)) {
     if($status_filter == 'designing') {
-        $where_conditions[] = "o.ostatus = 'Designing'";
+        $where_conditions[] = "o.ostatus = 'designing'";
     } elseif($status_filter == 'completed') {
-        $where_conditions[] = "o.ostatus = 'Completed'";
+        $where_conditions[] = "o.ostatus = 'complete'";
     } elseif($status_filter == 'today') {
         $where_conditions[] = "DATE(s.OrderFinishDate) = CURDATE()";
     } elseif($status_filter == 'overdue') {
-        $where_conditions[] = "s.OrderFinishDate < NOW() AND o.ostatus = 'Designing'";
+        $where_conditions[] = "s.OrderFinishDate < NOW() AND o.ostatus = 'designing'";
     } elseif($status_filter == 'upcoming') {
-        $where_conditions[] = "s.OrderFinishDate > NOW() AND o.ostatus = 'Designing'";
+        $where_conditions[] = "s.OrderFinishDate > NOW() AND o.ostatus = 'designing'";
     }
 }
 
@@ -71,18 +78,18 @@ if(!$result) {
 
 // 统计查询 - 修复：使用相同的设计师关联逻辑
 $stats_sql = "SELECT 
-                COUNT(*) as total_scheduled,
-                SUM(CASE WHEN o.ostatus = 'Designing' THEN 1 ELSE 0 END) as total_designing,
-                SUM(CASE WHEN o.ostatus = 'Completed' THEN 1 ELSE 0 END) as total_completed,
-                SUM(CASE WHEN s.OrderFinishDate < NOW() AND o.ostatus = 'Designing' THEN 1 ELSE 0 END) as total_overdue,
-                SUM(CASE WHEN DATE(s.OrderFinishDate) = CURDATE() THEN 1 ELSE 0 END) as total_today
-              FROM `Order` o
-              LEFT JOIN `Schedule` s ON o.orderid = s.orderid
-              LEFT JOIN `Design` d ON o.designid = d.designid
-              WHERE (o.ostatus = 'Designing' OR o.ostatus = 'Completed')
-              AND EXISTS (SELECT 1 FROM `Design` d2 
-                         JOIN `Designer` des ON d2.designerid = des.designerid 
-                         WHERE d2.designid = o.designid AND des.managerid = $user_id)";
+                                COUNT(*) as total_scheduled,
+                                SUM(CASE WHEN o.ostatus = 'designing' THEN 1 ELSE 0 END) as total_designing,
+                                SUM(CASE WHEN o.ostatus = 'complete' THEN 1 ELSE 0 END) as total_completed,
+                                SUM(CASE WHEN s.OrderFinishDate < NOW() AND o.ostatus = 'designing' THEN 1 ELSE 0 END) as total_overdue,
+                                SUM(CASE WHEN DATE(s.OrderFinishDate) = CURDATE() THEN 1 ELSE 0 END) as total_today
+                            FROM `Order` o
+                            LEFT JOIN `Schedule` s ON o.orderid = s.orderid
+                            LEFT JOIN `Design` d ON o.designid = d.designid
+                            WHERE (o.ostatus = 'designing' OR o.ostatus = 'complete')
+                            AND EXISTS (SELECT 1 FROM `Design` d2 
+                                                 JOIN `Designer` des ON d2.designerid = des.designerid 
+                                                 WHERE d2.designid = o.designid AND des.managerid = $user_id)";
 $stats_result = mysqli_query($mysqli, $stats_sql);
 $stats = mysqli_fetch_assoc($stats_result);
 
@@ -91,7 +98,7 @@ $weekly_completed_sql = "SELECT COUNT(*) as weekly_completed
                         FROM `Order` o
                         LEFT JOIN `Schedule` s ON o.orderid = s.orderid
                         LEFT JOIN `Design` d ON o.designid = d.designid
-                        WHERE o.ostatus = 'Completed' 
+                        WHERE o.ostatus = 'complete' 
                         AND YEARWEEK(s.OrderFinishDate, 1) = YEARWEEK(CURDATE(), 1)
                         AND EXISTS (SELECT 1 FROM `Design` d2 
                                    JOIN `Designer` des ON d2.designerid = des.designerid 
@@ -356,7 +363,7 @@ $weekly_stats = mysqli_fetch_assoc($weekly_result);
                         $order_finish_date = $row['OrderFinishDate'];
                         $design_finish_date = $row['DesignFinishDate'];
                         
-                        if($row['ostatus'] == 'Completed') {
+                        if(strtolower($row['ostatus']) == 'complete' || strtolower($row['ostatus']) == 'completed') {
                             $countdown_class = 'countdown-upcoming';
                             $countdown_text = 'Completed';
                         } elseif(!empty($order_finish_date) && $order_finish_date != '0000-00-00') {
@@ -385,7 +392,7 @@ $weekly_stats = mysqli_fetch_assoc($weekly_result);
                             </div>
                         </td>
                         <td>
-                            <span class="status-badge <?php echo strtolower($row["ostatus"]) == 'completed' ? 'status-completed' : 'status-designing'; ?>">
+                            <span class="status-badge <?php echo in_array(strtolower($row["ostatus"]), ['completed','complete']) ? 'status-completed' : 'status-designing'; ?>">
                                 <?php echo htmlspecialchars($row["ostatus"]); ?>
                             </span>
                         </td>

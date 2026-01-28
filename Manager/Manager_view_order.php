@@ -144,15 +144,15 @@ if(isset($_GET['id'])) {
                         <p class="mb-0">
                             <?php 
                             $status_class = '';
-                            switch($order['ostatus']) {
-                                case 'Completed': $status_class = 'status-completed'; break;
-                                case 'Designing': $status_class = 'status-designing'; break;
-                                case 'Pending': $status_class = 'status-pending'; break;
+                            switch(strtolower($order['ostatus'] ?? '')) {
+                                case 'complete': $status_class = 'status-completed'; break;
+                                case 'designing': $status_class = 'status-designing'; break;
+                                case 'waiting confirm': $status_class = 'status-pending'; break;
                                 default: $status_class = 'status-pending';
                             }
                             ?>
                             <span class="status-badge <?php echo $status_class; ?>">
-                                <?php echo htmlspecialchars($order['ostatus'] ?? 'Pending'); ?>
+                                <?php echo htmlspecialchars($order['ostatus'] ?? 'waiting confirm'); ?>
                             </span>
                         </p>
                     </div>

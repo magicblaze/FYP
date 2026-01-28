@@ -57,7 +57,7 @@ $sql = "
     WHERE sch.managerid = ?  -- 排程表中经理ID
     AND des.managerid = ?    -- 设计师表中的经理ID（权限检查）
     AND sch.orderid IS NOT NULL
-    AND LOWER(o.ostatus) NOT IN ('pending', 'cancelled')
+    AND LOWER(o.ostatus) NOT IN ('waiting confirm', 'cancelled')
     " . ($order_id > 0 ? " AND o.orderid = ?" : "") . "
     ORDER BY sch.OrderFinishDate ASC, sch.DesignFinishDate ASC
 ";
@@ -138,7 +138,7 @@ $unscheduled_sql = "
     LEFT JOIN `Schedule` sch ON o.orderid = sch.orderid
     WHERE des.managerid = ?  -- 设计师表中的经理ID（权限检查）
     AND sch.orderid IS NULL
-    AND LOWER(o.ostatus) NOT IN ('pending', 'cancelled')
+    AND LOWER(o.ostatus) NOT IN ('waiting confirm', 'cancelled')
     " . ($order_id > 0 ? " AND o.orderid = ?" : "") . "
     ORDER BY o.odate DESC
     LIMIT 6
@@ -160,6 +160,7 @@ $unscheduled_stmt->close();
 function getStatusBadgeClass($status) {
     $status = strtolower(trim($status));
     switch($status) {
+        case 'complete':
         case 'completed':
             return 'bg-success';
         case 'designing':
@@ -167,9 +168,11 @@ function getStatusBadgeClass($status) {
         case 'inprogress':
             return 'bg-primary';
         case 'pending':
+        case 'waiting confirm':
             return 'bg-warning';
         case 'cancelled':
         case 'rejected':
+        case 'reject':
             return 'bg-danger';
         default:
             return 'bg-secondary';
@@ -238,7 +241,7 @@ $month_name = date('F', mktime(0, 0, 0, $current_month, 1));
 // 统计数据
 $total_orders = count(array_unique(array_column($schedules, 'orderid')));
 $completed_orders = count(array_filter($schedules, function($s) {
-    return strtolower($s['OrderStatus']) === 'completed';
+    return in_array(strtolower($s['OrderStatus']), ['completed','complete']);
 }));
 $designing_orders = count(array_filter($schedules, function($s) {
     return strtolower($s['OrderStatus']) === 'designing';

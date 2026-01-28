@@ -64,9 +64,9 @@ $stats_sql = "SELECT
                 COUNT(DISTINCT o.orderid) as total_orders,
                 SUM(c.budget) as total_budget,
                 AVG(c.budget) as avg_budget,
-                SUM(CASE WHEN o.ostatus = 'Pending' THEN 1 ELSE 0 END) as pending_count,
-                SUM(CASE WHEN o.ostatus = 'Designing' THEN 1 ELSE 0 END) as designing_count,
-                SUM(CASE WHEN o.ostatus = 'Completed' THEN 1 ELSE 0 END) as completed_count
+                SUM(CASE WHEN o.ostatus = 'waiting confirm' THEN 1 ELSE 0 END) as pending_count,
+                SUM(CASE WHEN o.ostatus = 'designing' THEN 1 ELSE 0 END) as designing_count,
+                SUM(CASE WHEN o.ostatus = 'complete' THEN 1 ELSE 0 END) as completed_count
                FROM `Order` o
               LEFT JOIN `Client` c ON o.clientid = c.clientid
               LEFT JOIN `Design` d ON o.designid = d.designid
@@ -118,7 +118,7 @@ $stats = mysqli_fetch_assoc($stats_result);
                         <i class="fas fa-list me-1"></i>All Orders
                     </a>
                     <a href="?status=Pending"
-                        class="btn btn-sm <?php echo $status_filter == 'Pending' ? 'btn-warning' : 'btn-outline-warning'; ?>">
+                        class="btn btn-sm <?php echo $status_filter == 'waiting confirm' ? 'btn-warning' : 'btn-outline-warning'; ?>">
                         <i class="fas fa-hourglass-half me-1"></i>Pending
                     </a>
                     <a href="?status=Designing"

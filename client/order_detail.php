@@ -459,7 +459,7 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—
                             }
                             ?>
                             <span class="status-badge <?= $statusClass ?>">
-                                <?= htmlspecialchars($order['ostatus'] ?? 'Pending') ?>
+                                <?= htmlspecialchars($order['ostatus'] ?? 'waiting confirm') ?>
                             </span>
                         </span>
                     </div>

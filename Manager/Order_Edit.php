@@ -82,9 +82,9 @@ $design_price = isset($order["design_price"]) ? floatval($order["design_price"])
 $final_total_cost = $design_price + $total_fees;
 
 // Determine workflow state
-$order_status = $order['ostatus'] ?? 'Pending';
-$show_edit_cards = ($order_status !== 'Pending' && !empty($order['designid']));
-$show_confirm_reject = ($order_status === 'Pending');
+$order_status = $order['ostatus'] ?? 'waiting confirm';
+$show_edit_cards = ($order_status !== 'waiting confirm' && !empty($order['designid']));
+$show_confirm_reject = ($order_status === 'waiting confirm');
 $error_msg = null;
 
 $edit_status = isset($_GET['edit']) && $_GET['edit'] == 'status';
@@ -180,7 +180,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     $design_id = mysqli_insert_id($mysqli);
 
                     // Update order with new design
-                    $update_order_sql = "UPDATE `Order` SET designid = ?, ostatus = 'Designing' WHERE orderid = ?";
+                    $update_order_sql = "UPDATE `Order` SET designid = ?, ostatus = 'designing' WHERE orderid = ?";
                     $update_order_stmt = mysqli_prepare($mysqli, $update_order_sql);
                     mysqli_stmt_bind_param($update_order_stmt, "ii", $design_id, $orderid);
 
@@ -199,7 +199,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             } else {
                 // Design exists, just update order
                 $design = mysqli_fetch_assoc($design_check_result);
-                $update_order_sql = "UPDATE `Order` SET designid = ?, ostatus = 'Designing' WHERE orderid = ?";
+                $update_order_sql = "UPDATE `Order` SET designid = ?, ostatus = 'designing' WHERE orderid = ?";
                 $update_order_stmt = mysqli_prepare($mysqli, $update_order_sql);
                 mysqli_stmt_bind_param($update_order_stmt, "ii", $design['designid'], $orderid);
 
@@ -441,7 +441,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                 <label class="fw-bold text-muted small">Status</label>
                                 <p class="mb-0">
                                     <?php
-                                    $status = $order["ostatus"] ?? 'Pending';
+                                    $status = $order["ostatus"] ?? 'waiting confirm';
                                     $status_class = '';
                                     switch ($status) {
                                         case 'Completed':

@@ -235,7 +235,7 @@ $orders = $stmt->get_result();
                                 </span>
                             </div>
                             <span class="order-status <?= $statusClass ?>">
-                                <?= htmlspecialchars($order['ostatus'] ?? 'Pending') ?>
+                                <?= htmlspecialchars($order['ostatus'] ?? 'waiting confirm') ?>
                             </span>
                         </div>
                         <div class="order-body">

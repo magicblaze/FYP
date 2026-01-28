@@ -22,7 +22,7 @@ $sql = "SELECT DISTINCT o.orderid, o.odate, o.Requirements, o.ostatus,
         LEFT JOIN `Design` d ON o.designid = d.designid
         INNER JOIN `Designer` des ON d.designerid = des.designerid AND des.managerid = ?
         LEFT JOIN `Schedule` s ON o.orderid = s.orderid
-        WHERE (o.ostatus = 'Completed' OR o.ostatus = 'completed')
+        WHERE (o.ostatus = 'complete' OR o.ostatus = 'complete')
         ORDER BY s.OrderFinishDate DESC";
 
 $stmt = mysqli_prepare($mysqli, $sql);
@@ -98,7 +98,7 @@ $result = mysqli_stmt_get_result($stmt);
                            FROM `Order` o
                            LEFT JOIN `Client` c ON o.clientid = c.clientid
                            LEFT JOIN `OrderDelivery` op ON o.orderid = op.orderid
-                           WHERE (o.ostatus = 'Completed' OR o.ostatus = 'completed')
+                           WHERE (o.ostatus = 'complete' OR o.ostatus = 'complete')
                            AND op.managerid = ?";
             $budget_stmt = mysqli_prepare($mysqli, $budget_sql);
             mysqli_stmt_bind_param($budget_stmt, "i", $user_id);

@@ -54,7 +54,7 @@ if (!$order) {
 }
 
 // Check if order is actually completed
-if (strtolower($order['ostatus']) !== 'completed') {
+if (strtolower($order['ostatus']) !== 'complete' && strtolower($order['ostatus']) !== 'completed') {
     header('Location: Manager_MyOrder_Completed.php?error=not_completed');
     exit();
 }

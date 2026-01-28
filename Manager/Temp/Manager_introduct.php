@@ -137,6 +137,7 @@ $manager_info = mysqli_fetch_assoc($manager_result);
                                            FROM OrderProduct op 
                                            JOIN `Order` o ON op.orderid = o.orderid
                                            WHERE op.managerid = ? AND o.ostatus = 'Pending'";
+                                           WHERE op.managerid = ? AND o.ostatus = 'waiting confirm'";
                             $pending_stmt = mysqli_prepare($mysqli, $pending_sql);
                             mysqli_stmt_bind_param($pending_stmt, "i", $user_id);
                             mysqli_stmt_execute($pending_stmt);
@@ -159,7 +160,7 @@ $manager_info = mysqli_fetch_assoc($manager_result);
                             $completed_sql = "SELECT COUNT(DISTINCT op.orderid) as count 
                                              FROM OrderProduct op 
                                              JOIN `Order` o ON op.orderid = o.orderid
-                                             WHERE op.managerid = ? AND o.ostatus = 'Completed'";
+                                             WHERE op.managerid = ? AND o.ostatus = 'complete'";
                             $completed_stmt = mysqli_prepare($mysqli, $completed_sql);
                             mysqli_stmt_bind_param($completed_stmt, "i", $user_id);
                             mysqli_stmt_execute($completed_stmt);

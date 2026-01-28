@@ -43,7 +43,7 @@ $search = isset($_GET['search']) ? mysqli_real_escape_string($mysqli, $_GET['sea
 
 // Build query conditions - 修复：使用设计师关联代替OrderDelivery
 $where_conditions = array(
-    "(o.ostatus = 'Pending' OR o.ostatus = 'pending')",
+    "(o.ostatus = 'waiting confirm' OR o.ostatus = 'waiting confirm')",
     "EXISTS (SELECT 1 FROM `Design` d 
              JOIN `Designer` des ON d.designerid = des.designerid 
              WHERE d.designid = o.designid AND des.managerid = $user_id)"
@@ -83,7 +83,7 @@ $stats_sql = "SELECT
               FROM `Order` o
               LEFT JOIN `Client` c ON o.clientid = c.clientid
               LEFT JOIN `Design` d ON o.designid = d.designid
-              WHERE (o.ostatus = 'Pending' OR o.ostatus = 'pending')
+              WHERE (o.ostatus = 'waiting confirm' OR o.ostatus = 'waiting confirm')
               AND EXISTS (SELECT 1 FROM `Design` d2 
                          JOIN `Designer` des ON d2.designerid = des.designerid 
                          WHERE d2.designid = o.designid AND des.managerid = $user_id)";
@@ -253,7 +253,7 @@ $stats = mysqli_fetch_assoc($stats_result);
                         </td>
                         <td>
                             <span class="status-badge status-pending">
-                                <i class="fas fa-hourglass-half me-1"></i><?php echo htmlspecialchars($row["ostatus"] ?? 'Pending'); ?>
+                                <i class="fas fa-hourglass-half me-1"></i><?php echo htmlspecialchars($row["ostatus"] ?? 'waiting confirm'); ?>
                             </span>
                         </td>
                         <td>

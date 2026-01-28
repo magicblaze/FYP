@@ -57,7 +57,7 @@ if (!$order) {
 
 // Check if order status is Designing
 if (strtolower($order['ostatus']) !== 'designing') {
-    $error = "Only orders with 'Designing' status can be marked as complete.";
+    $error = "Only orders with 'designing' status can be marked as complete.";
     $redirect = "Manager_view_order.php?id=$orderid";
 }
 
@@ -67,8 +67,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && empty($error)) {
     mysqli_begin_transaction($mysqli);
     
     try {
-        // Update order status to Completed
-        $update_order_sql = "UPDATE `Order` SET ostatus = 'Completed' WHERE orderid = ?";
+        // Update order status to complete
+        $update_order_sql = "UPDATE `Order` SET ostatus = 'complete' WHERE orderid = ?";
         $update_order_stmt = mysqli_prepare($mysqli, $update_order_sql);
         mysqli_stmt_bind_param($update_order_stmt, "i", $orderid);
         

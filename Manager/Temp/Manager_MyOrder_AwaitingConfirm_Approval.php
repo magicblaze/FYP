@@ -171,9 +171,9 @@ function sendApprovalEmail($order, $status, $manager_reply, $additional_notes, $
     }
     
     $message .= "\nNEXT STEPS\n";
-    if($status == 'Designing') {
+    if($status == 'designing') {
         $message .= "Your order has been approved and is now in the designing phase. Our design team will contact you shortly.\n";
-    } elseif($status == 'Cancelled') {
+    } elseif($status == 'reject') {
         $message .= "Your order has been cancelled. If you have any questions, please contact our customer service.\n";
     }
     
@@ -302,8 +302,8 @@ function sendApprovalEmail($order, $status, $manager_reply, $additional_notes, $
                         </label>
                         <select name="status" id="status" class="form-control" required onchange="updateStatusDescription()">
                             <option value="">Select Status</option>
-                            <option value="Designing">Designing - Approve and proceed to design phase</option>
-                            <option value="Cancelled">Cancelled - Reject/Cancel this order</option>
+                            <option value="designing">Designing - Approve and proceed to design phase</option>
+                            <option value="reject">Cancelled - Reject/Cancel this order</option>
                         </select>
                         <small id="status-description" class="text-muted"></small>
                     </div>
@@ -375,10 +375,10 @@ function sendApprovalEmail($order, $status, $manager_reply, $additional_notes, $
         const statusSelect = document.getElementById('status');
         const description = document.getElementById('status-description');
         
-        if(statusSelect.value === 'Designing') {
+        if(statusSelect.value === 'designing') {
             description.innerHTML = '<i class="fas fa-check-circle me-1" style="color: #27ae60;"></i>Order will proceed to design phase. Client will be notified.';
             description.className = 'text-success mt-2 d-block';
-        } else if(statusSelect.value === 'Cancelled') {
+        } else if(statusSelect.value === 'reject') {
             description.innerHTML = '<i class="fas fa-times-circle me-1" style="color: #e74c3c;"></i>Order will be cancelled. Client will be notified.';
             description.className = 'text-danger mt-2 d-block';
         } else {

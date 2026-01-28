@@ -36,7 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     $design_id = mysqli_insert_id($mysqli);
                     
                     // Update order with the new design
-                    $update_order_sql = "UPDATE `Order` SET designid = $design_id, ostatus = 'Designing' WHERE orderid = $order_id";
+                    $update_order_sql = "UPDATE `Order` SET designid = $design_id, ostatus = 'designing' WHERE orderid = $order_id";
                     if (mysqli_query($mysqli, $update_order_sql)) {
                         // Create schedule record
                         $schedule_sql = "INSERT INTO Schedule (orderid, DesignFinishDate) 
@@ -51,7 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 // Design already exists, just update the designer
                 $update_design_sql = "UPDATE Design SET designerid = $designer_id WHERE designid = " . $order_info['designid'];
                 if (mysqli_query($mysqli, $update_design_sql)) {
-                    $update_order_sql = "UPDATE `Order` SET ostatus = 'Designing' WHERE orderid = $order_id";
+                    $update_order_sql = "UPDATE `Order` SET ostatus = 'designing' WHERE orderid = $order_id";
                     mysqli_query($mysqli, $update_order_sql);
                     
                     echo json_encode(['success' => true, 'message' => 'Designer assigned successfully']);
@@ -66,7 +66,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
 // Get search and filter parameters
 $search = isset($_GET['search']) ? mysqli_real_escape_string($mysqli, $_GET['search']) : '';
-$status_filter = isset($_GET['status']) ? $_GET['status'] : 'Pending';
+$status_filter = isset($_GET['status']) ? $_GET['status'] : 'waiting confirm';
 
 // Build where conditions
 $where_conditions = array();
@@ -112,7 +112,7 @@ while ($designer = mysqli_fetch_assoc($designers_result)) {
 $stats_sql = "SELECT 
                 COUNT(DISTINCT o.orderid) as pending_assignment,
                 COUNT(DISTINCT CASE WHEN o.designid IS NOT NULL AND d.designerid IS NOT NULL THEN o.orderid END) as assigned,
-                COUNT(DISTINCT CASE WHEN o.ostatus = 'Designing' THEN o.orderid END) as in_progress
+                COUNT(DISTINCT CASE WHEN o.ostatus = 'designing' THEN o.orderid END) as in_progress
                FROM `Order` o
                LEFT JOIN `Design` d ON o.designid = d.designid
                WHERE (o.designid IS NULL OR d.designerid IS NULL)";
@@ -217,8 +217,8 @@ $stats = mysqli_fetch_assoc($stats_result);
                         <form method="get" class="input-group">
                             <select class="form-select" name="status" onchange="this.form.submit();">
                                 <option value="all" <?php echo $status_filter === 'all' ? 'selected' : ''; ?>>All Status</option>
-                                <option value="Pending" <?php echo $status_filter === 'Pending' ? 'selected' : ''; ?>>Pending</option>
-                                <option value="Designing" <?php echo $status_filter === 'Designing' ? 'selected' : ''; ?>>Designing</option>
+                                <option value="waiting confirm" <?php echo $status_filter === 'waiting confirm' ? 'selected' : ''; ?>>Pending</option>
+                                <option value="designing" <?php echo $status_filter === 'designing' ? 'selected' : ''; ?>>Designing</option>
                             </select>
                         </form>
                     </div>
@@ -245,7 +245,7 @@ $stats = mysqli_fetch_assoc($stats_result);
                                                 <i class="fas fa-file-contract me-1"></i>Order #<?php echo $order['orderid']; ?>
                                             </h6>
                                             <span class="badge <?php echo $order['designerid'] ? 'bg-success' : 'bg-warning'; ?>">
-                                                <?php echo $order['ostatus'] ?? 'Pending'; ?>
+                                                <?php echo $order['ostatus'] ?? 'waiting confirm'; ?>
                                             </span>
                                         </div>
                                         
