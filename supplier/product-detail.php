@@ -626,5 +626,14 @@ function getColorDisplayName($colorInput) {
 
     // 页面加载时初始化 - 不需要修改图片，因为 PHP 已经设置了正确的图片路径
     </script>
+        <!-- ==================== Chat Widget Integration ==================== -->
+    <?php
+    if (isset($_SESSION['user'])) {
+        include __DIR__ . '/../Public/chat_widget.php';
+    }
+    ?>
+
+    <!-- Chatfunction and initialization moved into Public/chat_widget.php -->
+    <!-- ==================== End Chat Widget Integration ==================== -->
 </body>
 </html>

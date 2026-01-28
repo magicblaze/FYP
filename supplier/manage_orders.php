@@ -551,5 +551,14 @@ $availableStatuses = ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelle
             });
         }
     </script>
+        <!-- ==================== Chat Widget Integration ==================== -->
+    <?php
+    if (isset($_SESSION['user'])) {
+        include __DIR__ . '/../Public/chat_widget.php';
+    }
+    ?>
+
+    <!-- Chatfunction and initialization moved into Public/chat_widget.php -->
+    <!-- ==================== End Chat Widget Integration ==================== -->
 </body>
 </html>

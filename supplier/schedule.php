@@ -828,7 +828,15 @@ $month_name = date('F', mktime(0, 0, 0, $current_month, 1));
             </div>
         <?php endif; ?>
     <?php endforeach; ?>
+    <!-- ==================== Chat Widget Integration ==================== -->
+    <?php
+    if (isset($_SESSION['user'])) {
+        include __DIR__ . '/../Public/chat_widget.php';
+    }
+    ?>
 
+    <!-- Chatfunction and initialization moved into Public/chat_widget.php -->
+    <!-- ==================== End Chat Widget Integration ==================== -->
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
