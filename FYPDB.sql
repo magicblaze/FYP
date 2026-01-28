@@ -256,19 +256,20 @@ CREATE TABLE `OrderReference` (
   `designid` INT DEFAULT NULL,
   `added_by_type` VARCHAR(50) DEFAULT NULL,
   `added_by_id` INT DEFAULT NULL,
-   `note` TEXT DEFAULT NULL,
+  `note` TEXT DEFAULT NULL,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `status` varchar(255) DEFAULT NULL,
+  `price` DECIMAL(10, 2) DEFAULT NULL,
   KEY `orderid_idx` (`orderid`),
   KEY `productid_idx` (`productid`),
   KEY `designid_idx` (`designid`),
   CONSTRAINT `fk_or_orderid` FOREIGN KEY (`orderid`) REFERENCES `Order` (`orderid`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-INSERT INTO `OrderReference` (`orderid`, `productid`, `added_by_type`, `added_by_id`) VALUES
-(1, 1, 'client', 1), 
-(1, 2, 'client', 1), 
-(2, 3, 'client', 2), 
-(2, 4, 'client', 2); 
+INSERT INTO `OrderReference` (`orderid`, `productid`, `added_by_type`, `added_by_id`, `status`, `price`) VALUES
+(1, 1, 'client', 1, 'waiting confirm', 2000.00), 
+(1, 2, 'client', 1, 'confirmed', 800.00), 
+(2, 3, 'client', 2, 'waiting delivery', 200.00), 
+(2, 4, 'client', 2, 'completed', 800.00);
 
 -- Table to store additional fees for each order
 CREATE TABLE `AdditionalFee` (
@@ -340,19 +341,21 @@ CREATE TABLE `OrderDelivery` (
   `status` varchar(255) NOT NULL,
   `managerid` int NOT NULL,
   `color` varchar(100) DEFAULT NULL,
+  `rid` INT NOT NULL,
   PRIMARY KEY (`orderdeliveryid`),
   KEY `productid_OrderDelivery_idx` (`productid`),
   KEY `orderid_OrderDelivery_idx` (`orderid`),
   KEY `managerid_OrderDelivery_idx` (`managerid`),
   CONSTRAINT `fk_OrderDelivery_materialid` FOREIGN KEY (`productid`) REFERENCES `Product` (`productid`),
   CONSTRAINT `fk_OrderDelivery_orderid` FOREIGN KEY (`orderid`) REFERENCES `Order` (`orderid`),
-  CONSTRAINT `fk_OrderDelivery_managerid` FOREIGN KEY (`managerid`) REFERENCES `Manager` (`managerid`)
+  CONSTRAINT `fk_OrderDelivery_managerid` FOREIGN KEY (`managerid`) REFERENCES `Manager` (`managerid`),
+  CONSTRAINT `fk_OrderDelivery_reference` FOREIGN KEY (`rid`) REFERENCES `OrderReference`(`id`) 
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 INSERT INTO `OrderDelivery`
-(`orderdeliveryid`, `productid`, `quantity`, `orderid`, `deliverydate`,`status`, `managerid`, `color`) VALUES
-(1, 1, 10, 1, '2026-01-13', 'Pending', 1, 'Grey'),
-(2, 2, 20, 1, '2026-01-23', 'Shipped', 1, 'Brown');
+(`orderdeliveryid`, `productid`, `quantity`, `orderid`, `deliverydate`,`status`, `managerid`, `color`,`rid`) VALUES
+(1, 1, 10, 1, '2026-01-13', 'Pending', 1, 'Grey',1),
+(2, 2, 20, 1, '2026-01-23', 'Shipped', 1, 'Brown',2);
 
 -- Order_Contractors table
 CREATE TABLE `Order_Contractors` (
@@ -573,8 +576,8 @@ INSERT INTO `MessageRead` (`messagereadid`, `messageid`, `ChatRoomMemberid`, `is
 INSERT INTO `Order` (`orderid`, `odate`, `clientid`, `Requirements`,`designid`,`ostatus`,`designedPicture`) VALUES
 (3, '2025-07-01 09:00:00', 1, 'Need quick remodel', 1, 'Pending', NULL);
 
-INSERT INTO `OrderDelivery` (`orderdeliveryid`, `productid`, `quantity`, `orderid`, `deliverydate`, `status`, `managerid`, `color`) VALUES
-(3, 3, 50, 3, '2026-01-13', 'Pending', 1, 'White');
+INSERT INTO `OrderDelivery` (`orderdeliveryid`, `productid`, `quantity`, `orderid`, `deliverydate`, `status`, `managerid`, `color`,`rid`) VALUES
+(3, 3, 50, 3, '2026-01-13', 'Pending', 1, 'White',1);
 
 INSERT INTO `Order_Contractors` (`order_Contractorid`, `contractorid`, `orderid`, `managerid`) VALUES
 (3, 1, 3, 1);
