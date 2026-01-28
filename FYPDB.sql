@@ -254,6 +254,7 @@ CREATE TABLE `OrderReference` (
   `designid` INT DEFAULT NULL,
   `added_by_type` VARCHAR(50) DEFAULT NULL,
   `added_by_id` INT DEFAULT NULL,
+   `note` TEXT DEFAULT NULL,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   KEY `orderid_idx` (`orderid`),
   KEY `productid_idx` (`productid`),
@@ -272,6 +273,7 @@ CREATE TABLE `DesignReference` (
   `designid` INT NOT NULL,
   `productid` INT NOT NULL,
   `added_by_designerid` INT DEFAULT NULL,
+  `note` TEXT,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   KEY `designid_idx` (`designid`),
   KEY `productid_idx` (`productid`),
@@ -285,6 +287,7 @@ CREATE TABLE `UserLike` (
   `user_id` INT NOT NULL,
   `item_type` VARCHAR(16) NOT NULL,
   `item_id` INT NOT NULL,
+   `note` TEXT DEFAULT NULL,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY `ux_user_item` (`user_type`, `user_id`, `item_type`, `item_id`),
   KEY `item_idx` (`item_type`, `item_id`)
