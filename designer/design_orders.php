@@ -87,6 +87,24 @@ if ($orderId > 0) {
 }
 $orders = [];
 
+// Product list for reference selection
+$productMap = [];
+$productOptionsHtml = '';
+$prodRes = $mysqli->query("SELECT productid, pname, category FROM Product ORDER BY pname");
+if ($prodRes) {
+    while ($prod = $prodRes->fetch_assoc()) {
+        $pid = (int) $prod['productid'];
+        $pname = $prod['pname'] ?? '';
+        $pcat = $prod['category'] ?? '';
+        $productMap[$pid] = $pname;
+        $label = $pname;
+        if (!empty($pcat)) {
+            $label .= ' (' . $pcat . ')';
+        }
+        $productOptionsHtml .= '<option value="' . $pid . '">' . htmlspecialchars($label) . '</option>';
+    }
+}
+
 while ($row = $result->fetch_assoc()) {
     // Get first design image from DesignImage table
     $imgSql = "SELECT image_filename FROM DesignImage WHERE designid = ? ORDER BY image_order ASC, imageid ASC LIMIT 1";
@@ -115,9 +133,16 @@ while ($row = $result->fetch_assoc()) {
     $picStmt->close();
 
     $row['pictures'] = $pictures;
-    // Get order references (if table exists)
+    // Get order references (with images)
     $row['references'] = [];
-    $refSql = "SELECT id, designid, messageid, note, added_by_type, added_by_id, created_at FROM OrderReference WHERE orderid = ? ORDER BY created_at ASC";
+    $refSql = "
+        SELECT r.*, 
+               (SELECT image FROM ProductColorImage WHERE productid = r.productid LIMIT 1) as product_image,
+               (SELECT image_filename FROM DesignImage WHERE designid = r.designid ORDER BY image_order ASC LIMIT 1) as design_image
+        FROM OrderReference r 
+        WHERE r.orderid = ? 
+        ORDER BY r.created_at ASC
+    ";
     $refStmt = $mysqli->prepare($refSql);
     if ($refStmt) {
         $refStmt->bind_param('i', $row['orderid']);
@@ -142,7 +167,7 @@ $stmt->close();
 
 <head>
     <meta charset="UTF-8">
-    <title>Design Orders - HappyDesign</title>
+    <title>Orders - HappyDesign</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="../css/supplier_style.css">
@@ -253,6 +278,47 @@ $stmt->close();
 
         .order-info-value {
             color: #212529;
+        }
+
+        .order-title-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.25rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 1px solid #e9ecef;
+            gap: 1rem;
+        }
+
+        .status-pill {
+            display: inline-block;
+            padding: 0.25rem 0.6rem;
+            border-radius: 999px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            background: #fdebd0;
+            color: #b9770e;
+        }
+
+        .action-bar {
+            position: sticky;
+            bottom: 0;
+            background: #fff;
+            padding: 0.75rem 0.5rem;
+            border-top: 1px solid #e9ecef;
+            box-shadow: 0 -6px 16px rgba(0, 0, 0, 0.04);
+            border-radius: 0 0 10px 10px;
+        }
+
+        .section-title {
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 0.5rem;
+        }
+
+        .muted-hint {
+            color: #6c757d;
+            font-size: 0.85rem;
         }
 
         .no-orders {
@@ -396,6 +462,275 @@ $stmt->close();
             border-radius: 6px;
             margin-bottom: 1rem;
         }
+
+        .edit-mode-toggle {
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+
+        .edit-mode-toggle.off {
+            background: #3498db;
+            color: white;
+        }
+
+        .edit-mode-toggle.off:hover {
+            background: #2980b9;
+        }
+
+        .edit-mode-toggle.save {
+            background: #27ae60;
+            color: white;
+        }
+
+        .edit-mode-toggle.save:hover {
+            background: #219150;
+        }
+
+        .edit-mode-toggle.cancel {
+            background: #e74c3c;
+            color: white;
+        }
+
+        .edit-mode-toggle.cancel:hover {
+            background: #c0392b;
+        }
+
+        .upload-section-hidden {
+            display: none;
+        }
+
+        .order-header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 1rem;
+            gap: 1rem;
+        }
+
+        .design-items-info {
+            background: #e3f2fd;
+            border-left: 4px solid #3498db;
+            padding: 1rem;
+            border-radius: 6px;
+            margin-bottom: 1rem;
+            font-size: 0.95rem;
+            flex: 1;
+        }
+
+        .design-items-info-title {
+            font-weight: 600;
+            color: #1976d2;
+            margin-bottom: 0.5rem;
+        }
+
+        .design-items-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 0.75rem;
+        }
+
+        .design-item-badge {
+            background: #bbdefb;
+            padding: 0.5rem 0.75rem;
+            border-radius: 4px;
+            color: #0d47a1;
+            font-weight: 500;
+        }
+
+        .reference-item {
+            padding: 0.75rem;
+            border: 1px solid #ffe8a6;
+            border-radius: 6px;
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            transition: all 0.2s;
+        }
+
+        .reference-item:hover {
+            background: #fffbf0;
+        }
+
+        .reference-thumbnail {
+            flex: 0 0 64px;
+        }
+
+        .reference-content {
+            flex: 1;
+        }
+
+        .reference-actions {
+            flex: 0 0 auto;
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .reference-actions button {
+            padding: 4px 8px;
+            font-size: 0.8rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .ref-delete-btn {
+            background: #e74c3c;
+            color: white;
+        }
+
+        .ref-delete-btn:hover {
+            background: #c0392b;
+        }
+
+        .add-reference-form {
+            background: #f8f9fa;
+            padding: 1rem;
+            border-radius: 6px;
+            margin-top: 1rem;
+            display: none;
+        }
+
+        .add-reference-form.active {
+            display: block;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: #333;
+        }
+
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            font-size: 0.95rem;
+            font-family: inherit;
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .form-actions {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: flex-end;
+        }
+
+        .form-actions button {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .btn-primary-custom {
+            background: #3498db;
+            color: white;
+        }
+
+        .btn-primary-custom:hover {
+            background: #2980b9;
+        }
+
+        .btn-secondary-custom {
+            background: #95a5a6;
+            color: white;
+        }
+
+        .btn-secondary-custom:hover {
+            background: #7f8c8d;
+        }
+
+        .liked-modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1055;
+        }
+
+        .liked-modal-backdrop.show {
+            display: flex;
+        }
+
+        .liked-modal {
+            background: #fff;
+            border-radius: 10px;
+            width: min(900px, 92vw);
+            max-height: 80vh;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .liked-modal-header {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid #dee2e6;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .liked-modal-body {
+            padding: 1rem;
+            overflow: auto;
+        }
+
+        .liked-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 0.75rem;
+        }
+
+        .liked-card {
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 0.5rem;
+            background: #fff;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .liked-thumb {
+            width: 100%;
+            height: 110px;
+            border-radius: 6px;
+            background: #f1f3f5;
+            background-size: cover;
+            background-position: center;
+        }
+
+        .liked-title {
+            font-weight: 600;
+            font-size: 0.95rem;
+            color: #212529;
+        }
+
+        .liked-meta {
+            font-size: 0.85rem;
+            color: #6c757d;
+        }
     </style>
 </head>
 
@@ -405,7 +740,7 @@ $stmt->close();
     <!-- Dashboard Content -->
     <main class="container-lg mt-4">
         <div class="mt-5 mb-4 text-center">
-            <h2>Order detail</h2>
+            <h2>Proposal Drafter</h2>
             <p class="mb-0"></p>
         </div>
 
@@ -413,85 +748,107 @@ $stmt->close();
 
             <?php foreach ($orders as $order): ?>
                 <div class="order-card">
-                    <!-- Order Header with Image and Main Info -->
-                    <div class="order-header">
-                        <!-- Design Image -->
+                    <!-- Order Title and Status (Main Focus) -->
+                    <div class="order-title-bar">
                         <div>
-                            <?php if (!empty($order['design_image'])): ?>
-                                <img src="../uploads/designs/<?= htmlspecialchars($order['design_image']) ?>"
-                                    alt="Design #<?= $order['designid'] ?>" class="order-image">
-                            <?php else: ?>
-                                <div class="order-image d-flex align-items-center justify-content-center">
-                                    <i class="fas fa-image text-muted" style="font-size: 2rem;"></i>
-                                </div>
-                            <?php endif; ?>
-                        </div>
-
-                        <!-- Order Main Info -->
-                        <div class="order-main-info">
-                            <div class="order-title">Order #<?= $order['orderid'] ?></div>
-                            <div class="order-price">HK$<?= number_format($order['budget']) ?> Budget</div>
-                            <div class="order-id">Design: <a
-                                    href="../design_detail.php?designid=<?= (int) $order['designid'] ?>" target="_blank"
-                                    rel="noopener"><?= htmlspecialchars($order['designName'] ?? ('Design #' . $order['designid'])) ?></a>
+                            <h3 style="margin: 0; color: #2c3e50;">Order #<?= $order['orderid'] ?></h3>
+                            <div style="font-size: 1.1rem; color: #3498db; font-weight: 600; margin-top: 0.25rem;">
+                                Status: <span id="status_<?= $order['orderid'] ?>" class="status-pill"><?= htmlspecialchars($order['ostatus']) ?></span>
                             </div>
-                            <div id="status_<?= $order['orderid'] ?>" style="margin-top:6px"><strong>Status:</strong>
-                                <?= htmlspecialchars($order['ostatus']) ?></div>
+                        </div>
+                        <div>
+                            <?php 
+                                $status = strtolower(trim($order['ostatus'] ?? ''));
+                                // Allow edit only if not yet reviewing/complete
+                                $canEdit = in_array($status, ['waiting confirm', 'designing']);
+                            ?>
+
+                            <?php if ($canEdit): ?>
+                                <button class="edit-mode-toggle off" id="editBtn_<?= $order['orderid'] ?>" onclick="toggleEditMode(<?= $order['orderid'] ?>)">
+                                    <i class="fas fa-edit me-1"></i>Edit
+                                </button>
+                                <button class="edit-mode-toggle save" id="saveBtn_<?= $order['orderid'] ?>" onclick="saveEditMode(<?= $order['orderid'] ?>)" style="display:none;">
+                                    <i class="fas fa-save me-1"></i>Save
+                                </button>
+                                <button class="edit-mode-toggle cancel" id="cancelBtn_<?= $order['orderid'] ?>" onclick="toggleEditMode(<?= $order['orderid'] ?>)" style="display:none;">
+                                    <i class="fas fa-times me-1"></i>Cancel
+                                </button>
+                            <?php endif; ?>
                         </div>
                     </div>
 
-                    <!-- Order Details -->
-                    <div class="order-details">
+                    <!-- Client Information (Who the order is for) -->
+                    <div class="order-info" style="background: #e8f8f5; border-left: 4px solid #16a085; margin-bottom: 1rem;">
+                        <div style="display: flex; gap: 2rem;">
+                            <div style="flex: 1;">
+                                <div class="order-info-item">
+                                    <span class="order-info-label"><i class="fas fa-user me-1"></i>Client:</span>
+                                    <span class="order-info-value"><?= htmlspecialchars($order['cname']) ?></span>
+                                </div>
+                                <div class="order-info-item">
+                                    <span class="order-info-label"><i class="fas fa-envelope me-1"></i>Email:</span>
+                                    <span class="order-info-value"><?= htmlspecialchars($order['cemail']) ?></span>
+                                </div>
+                            </div>
+                            <div style="flex: 1;">
+                                <div class="order-info-item">
+                                    <span class="order-info-label"><i class="fas fa-map-marker-alt me-1"></i>Address:</span>
+                                    <span class="order-info-value"><?= htmlspecialchars($order['address'] ?? 'N/A') ?></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Order Details (Key Information) -->
+                    <div class="order-details" style="margin-bottom: 1rem;">
                         <div class="detail-item">
-                            <div class="detail-label">Order Date</div>
+                            <div class="detail-label"><i class="fas fa-calendar me-1"></i>Order Date</div>
                             <div class="detail-value"><?= date('M d, Y H:i', strtotime($order['odate'])) ?></div>
                         </div>
                         <div class="detail-item">
-                            <div class="detail-label">Budget</div>
+                            <div class="detail-label"><i class="fas fa-money-bill-wave me-1"></i>Budget</div>
                             <div class="detail-value">HK$<?= number_format($order['budget']) ?></div>
                         </div>
                         <div class="detail-item">
-                            <div class="detail-label">Expected Price</div>
+                            <div class="detail-label"><i class="fas fa-tag me-1"></i>Expected Price</div>
                             <div class="detail-value">HK$<?= number_format($order['expect_price']) ?></div>
                         </div>
                         <div class="detail-item">
-                            <div class="detail-label">Gross Floor Area</div>
+                            <div class="detail-label"><i class="fas fa-ruler-combined me-1"></i>Floor Area</div>
                             <div class="detail-value"><?= isset($order['gross_floor_area']) && $order['gross_floor_area'] > 0 ? htmlspecialchars(number_format((float)$order['gross_floor_area'],2)) . ' m²' : '&mdash;' ?></div>
-                        </div>
-                        <div class="detail-item">
-                            <div class="detail-label">Tags</div>
-                            <div class="detail-value">
-                                <small><?= htmlspecialchars(substr($order['tag'], 0, 50)) ?></small>
-                            </div>
                         </div>
                     </div>
 
-                    <!-- Floor Plan Section -->
-                    <?php if (!empty($order['Floor_Plan'])): ?>
-                        <div class="order-info" style="background-color: #e3f2fd; border-left: 4px solid #3498db;">
-                            <div class="order-info-item">
-                                <div class="detail-label">Floor Plan</div>
-                                <img src="../<?= htmlspecialchars($order['Floor_Plan']) ?>" alt="Floor Plan"
-                                    title="Preview floor plan" class="ms-2"
-                                    style="width:72px;height:72px;object-fit:cover;border-radius:6px;cursor:pointer;border:2px solid #e3f2fd;"
-                                    onclick="event.stopPropagation(); openFloorPlanPreview('../<?= htmlspecialchars($order['Floor_Plan']) ?>')" />
-                            </div>
-                        </div>
-                    <?php endif; ?>
-
                     <!-- Requirements Section -->
                     <?php if (!empty($order['Requirements'])): ?>
-                        <div class="order-info" style="background-color: #f3e5f5; border-left: 4px solid #9c27b0;">
+                        <div class="order-info" style="background-color: #f3e5f5; border-left: 4px solid #9c27b0; margin-bottom: 1rem;">
                             <div class="order-info-item">
-                                <span class="order-info-label"><i class="fas fa-list me-1"></i>Requirements:</span>
-                                <span class="order-info-value"><?= htmlspecialchars($order['Requirements']) ?></span>
+                                <span class="order-info-label"><i class="fas fa-list me-1"></i>Customer Requirements:</span>
+                            </div>
+                            <div style="margin-top: 0.5rem; padding: 0.75rem; background: white; border-radius: 4px; color: #212529;">
+                                <?= htmlspecialchars($order['Requirements']) ?>
                             </div>
                         </div>
                     <?php endif; ?>
 
-                    <!-- Designed Picture Section -->
-                    <div class="designed-picture-section">
-                        <h6 class="mb-3"><i class="fas fa-image me-2"></i>Designed Pictures</h6>
+                    <!-- Floor Plan Section -->
+                    <?php if (!empty($order['Floor_Plan'])): ?>
+                        <div class="order-info" style="background-color: #e3f2fd; border-left: 4px solid #3498db; margin-bottom: 1rem;">
+                            <div class="order-info-item">
+                                <span class="order-info-label"><i class="fas fa-map me-1"></i>Floor Plan</span>
+                            </div>
+                            <?php $floorPlanSrc = '../' . ltrim($order['Floor_Plan'], '/'); ?>
+                            <img src="<?= htmlspecialchars($floorPlanSrc) ?>" alt="Floor Plan"
+                                title="Click to preview floor plan" class="ms-2"
+                                style="width:100px;height:100px;object-fit:cover;border-radius:6px;cursor:pointer;border:2px solid #e3f2fd; margin-top: 0.5rem;"
+                                onclick="event.stopPropagation(); openFloorPlanPreview(<?= htmlspecialchars(json_encode($floorPlanSrc), ENT_QUOTES, 'UTF-8') ?>)" />
+                        </div>
+                    <?php endif; ?>
+
+                    <!-- Design picture Section -->
+                    <div class="designed-picture-section" style="margin-top: 1.5rem;">
+                        <h6 class="mb-2 section-title"><i class="fas fa-file-alt me-2"></i>Design Picture</h6>
+                        <div class="muted-hint mb-3">Upload images or PDF files for client review.</div>
 
                         <?php if (!empty($order['pictures'])): ?>
                             <div class="picture-gallery">
@@ -518,7 +875,7 @@ $stmt->close();
                                 <?php endforeach; ?>
                             </div>
                         <?php else: ?>
-                            <p class="text-muted mb-3">No designed pictures uploaded yet.</p>
+                            <p class="text-muted mb-3">No design proposals uploaded yet.</p>
                         <?php endif; ?>
 
                         <!-- Upload Area -->
@@ -545,24 +902,17 @@ $stmt->close();
                                         approved. No further uploads are allowed.</p>
                                 </div>
                             <?php elseif ($hasPendingPicture): ?>
-                                <div
-                                    style="background: #fff3cd; border: 2px dashed #ffc107; border-radius: 8px; padding: 2rem; text-align: center;">
-                                    <i class="fas fa-hourglass-half"
-                                        style="font-size: 2rem; color: #ffc107; margin-bottom: 0.5rem; display: block;"></i>
-                                    <strong style="color: #856404;">Waiting for Client Response</strong>
-                                    <p class="text-muted mb-0" style="font-size: 0.9rem; color: #856404;">You can upload a new
-                                        picture if the client rejects the current one.</p>
-                                </div>
+                                <?php /* Pending picture exists - hide old message */ ?>
                             <?php else: ?>
-                                <div id="uploadContainer_<?= $order['orderid'] ?>">
+                                <div id="uploadContainer_<?= $order['orderid'] ?>" class="upload-section-hidden">
                                     <label class="upload-area" id="uploadArea_<?= $order['orderid'] ?>">
                                         <div>
                                             <i class="fas fa-cloud-upload-alt"
                                                 style="font-size: 2rem; color: #3498db; margin-bottom: 0.5rem; display: block;"></i>
                                             <strong>Click to upload or drag & drop</strong>
-                                            <p class="text-muted mb-0" style="font-size: 0.9rem;">JPG, PNG, GIF, WebP (Max 10MB)</p>
+                                            <p class="text-muted mb-0" style="font-size: 0.9rem;">JPG, PNG, GIF, WebP, PDF (Max 10MB)</p>
                                         </div>
-                                        <input type="file" id="fileInput_<?= $order['orderid'] ?>" accept="image/*"
+                                        <input type="file" id="fileInput_<?= $order['orderid'] ?>" accept="image/*,.pdf"
                                             style="display: none;"
                                             onchange="previewPicture(<?= $order['orderid'] ?>, this.files[0])">
                                     </label>
@@ -572,16 +922,7 @@ $stmt->close();
                                                 <strong>Preview:</strong>
                                             </p>
                                             <img id="previewImg_<?= $order['orderid'] ?>" class="preview-image">
-                                            <div style="display: flex; gap: 0.5rem;">
-                                                <button type="button" class="btn btn-success btn-sm"
-                                                    onclick="submitPicture(<?= $order['orderid'] ?>, this)">
-                                                    <i class="fas fa-check me-1"></i>Submit Picture
-                                                </button>
-                                                <button type="button" class="btn btn-secondary btn-sm"
-                                                    onclick="cancelPreview(<?= $order['orderid'] ?>)">
-                                                    <i class="fas fa-times me-1"></i>Cancel
-                                                </button>
-                                            </div>
+                                            <div class="text-muted small">The proposal will be uploaded when you click Save.</div>
                                         </div>
                                     </div>
                                 </div>
@@ -591,11 +932,24 @@ $stmt->close();
 
                     <?php if (!empty($order['references'])): ?>
                         <div class="order-info" style="background:#fff7e6;border-left:4px solid #ffc107;margin-top:1rem">
-                            <div class="order-info-item"><strong>References</strong></div>
+                            <div class="order-info-item" style="display: flex; justify-content: space-between; align-items: center;">
+                                <strong><i class="fas fa-link me-2"></i>References (<?= count($order['references']) ?>)</strong>
+                                <button class="btn btn-sm btn-warning" id="refAddBtn_<?= $order['orderid'] ?>" onclick="toggleReferenceEdit(<?= $order['orderid'] ?>, true)" style="display: none;">
+                                    <i class="fas fa-plus me-1"></i>Add Reference
+                                </button>
+                            </div>
                             <div style="margin-top:0.5rem">
                                 <?php foreach ($order['references'] as $ref):
                                     $refName = null; $refImg = null; $refLink = null;
-                                    if (!empty($ref['designid'])) {
+                                    if (!empty($ref['productid'])) {
+                                        $pid = (int)$ref['productid'];
+                                        $refName = $productMap[$pid] ?? ('Product #' . $pid);
+                                        $refLink = '../product_detail.php?id=' . $pid;
+                                        // Use pre-fetched image
+                                    if (!empty($ref['product_image'])) {
+                                        $refImg = '../uploads/products/' . $ref['product_image']; 
+                                    }
+                                    } elseif (!empty($ref['designid'])) {
                                         $did = (int)$ref['designid'];
                                         // fetch design name
                                         $dstmt = $mysqli->prepare('SELECT designName FROM Design WHERE designid = ? LIMIT 1');
@@ -606,14 +960,9 @@ $stmt->close();
                                             if ($drow = $dres->fetch_assoc()) $refName = $drow['designName'];
                                             $dstmt->close();
                                         }
-                                        // fetch primary image
-                                        $imst = $mysqli->prepare('SELECT image_filename FROM DesignImage WHERE designid = ? ORDER BY image_order ASC LIMIT 1');
-                                        if ($imst) {
-                                            $imst->bind_param('i', $did);
-                                            $imst->execute();
-                                            $imr = $imst->get_result();
-                                            if ($ir = $imr->fetch_assoc()) $refImg = $ir['image_filename'];
-                                            $imst->close();
+                                        // Use pre-fetched image
+                                        if (!empty($ref['design_image'])) {
+                                            $refImg = '../uploads/designs/' . $ref['design_image'];
                                         }
                                         $refLink = '../design_detail.php?designid=' . $did;
                                     } elseif (!empty($ref['messageid'])) {
@@ -681,18 +1030,25 @@ $stmt->close();
                                         }
                                     }
                                 ?>
-                                    <div
-                                        style="padding:0.5rem;border:1px solid #ffe8a6;border-radius:6px;margin-bottom:0.5rem;display:flex;align-items:center;gap:8px">
-                                        <div style="flex:0 0 72px;">
+                                    <div class="reference-item">
+                                        <div class="reference-thumbnail">
                                             <?php if (!empty($refImg)): 
-                                                $imgSrc = strpos($refImg, '/') === 0 ? ('..' . $refImg) : ('../uploads/designs/' . ltrim($refImg, '/'));
+                                                if (strpos($refImg, '..') === 0) {
+                                                    $imgSrc = $refImg;
+                                                } elseif (strpos($refImg, 'uploads/') === 0) {
+                                                    $imgSrc = '../' . $refImg;
+                                                } elseif (strpos($refImg, '/') === 0) {
+                                                    $imgSrc = '..' . $refImg;
+                                                } else {
+                                                    $imgSrc = '../uploads/designs/' . $refImg;
+                                                }
                                             ?>
                                                 <img src="<?= htmlspecialchars($imgSrc) ?>" alt="ref" style="width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid #ddd" />
                                             <?php else: ?>
-                                                <div style="width:64px;height:64px;border-radius:6px;background:#f1f3f5;display:flex;align-items:center;justify-content:center;color:#666;border:1px solid #eee">REF</div>
+                                                <div style="width:64px;height:64px;border-radius:6px;background:#f1f3f5;display:flex;align-items:center;justify-content:center;color:#666;border:1px solid #eee;font-size:0.8rem;">REF</div>
                                             <?php endif; ?>
                                         </div>
-                                        <div style="flex:1">
+                                        <div class="reference-content">
                                             <?php if (!empty($refLink) && !empty($refName)): ?>
                                                 <a href="<?= htmlspecialchars($refLink) ?>" target="_blank" rel="noopener" style="text-decoration:none;color:#333;font-weight:600"><?= htmlspecialchars($refName) ?></a>
                                             <?php elseif (!empty($ref['designid'])): ?>
@@ -705,34 +1061,102 @@ $stmt->close();
                                             <div class="small text-muted">Added: <?= htmlspecialchars($ref['created_at'] ?? '') ?></div>
                                             <?php if (!empty($ref['note'])): ?><div class="small text-muted mt-1">Note: <?= htmlspecialchars(substr($ref['note'],0,120)) ?></div><?php endif; ?>
                                         </div>
+                                        <div class="reference-actions ref-actions" data-order="<?= $order['orderid'] ?>" style="display: none;">
+                                            <button class="ref-delete-btn" onclick="deleteReference(<?= $order['orderid'] ?>, <?= (int)$ref['id'] ?>)">
+                                                <i class="fas fa-trash"></i> Delete
+                                            </button>
+                                        </div>
                                     </div>
                                 <?php endforeach; ?>
+                            </div>
+                            
+                            <!-- Add Reference Form -->
+                            <div class="add-reference-form" id="addRefForm_<?= $order['orderid'] ?>">
+                                <h6 style="margin-bottom: 1rem;"><i class="fas fa-plus-circle me-2"></i>Add New Reference</h6>
+                                <div class="form-group">
+                                    <label>Material / Product</label>
+                                    <select id="refProductId_<?= $order['orderid'] ?>">
+                                        <option value="">-- Select a product --</option>
+                                        <?= $productOptionsHtml ?>
+                                    </select>
+                                    <div style="margin-top:0.5rem;">
+                                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="openLikedModal(<?= $order['orderid'] ?>)">
+                                            <i class="fas fa-thumbs-up me-1"></i>Pick from liked items
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label>Note (optional)</label>
+                                    <textarea id="refNote_<?= $order['orderid'] ?>" placeholder="Add a note for this reference..."></textarea>
+                                </div>
+                                <div class="form-actions">
+                                    <button class="btn-primary-custom" onclick="queueReference(<?= $order['orderid'] ?>)">Add Reference</button>
+                                </div>
+                                <div id="pendingRefs_<?= $order['orderid'] ?>" class="mt-2"></div>
+                            </div>
+                        </div>
+                    <?php else: ?>
+                        <div class="order-info" style="background:#e8f5e9;border-left:4px solid #4caf50;margin-top:1rem">
+                            <div class="order-info-item" style="display: flex; justify-content: space-between; align-items: center;">
+                                <strong><i class="fas fa-link me-2"></i>References</strong>
+                                <button class="btn btn-sm btn-success" id="refAddBtn_<?= $order['orderid'] ?>" onclick="toggleReferenceEdit(<?= $order['orderid'] ?>, true)" style="display: none;">
+                                    <i class="fas fa-plus me-1"></i>Add Reference
+                                </button>
+                            </div>
+                            <div style="margin-top:0.5rem; color: #558b2f;">
+                                <i class="fas fa-info-circle me-2"></i>No references yet. Click "Add Reference" to add one.
+                            </div>
+                            
+                            <!-- Add Reference Form -->
+                            <div class="add-reference-form" id="addRefForm_<?= $order['orderid'] ?>">
+                                <h6 style="margin-bottom: 1rem;"><i class="fas fa-plus-circle me-2"></i>Add New Reference</h6>
+                                <div class="form-group">
+                                    <label>Material / Product</label>
+                                    <select id="refProductId_<?= $order['orderid'] ?>">
+                                        <option value="">-- Select a product --</option>
+                                        <?= $productOptionsHtml ?>
+                                    </select>
+                                    <div style="margin-top:0.5rem;">
+                                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="openLikedModal(<?= $order['orderid'] ?>)">
+                                            <i class="fas fa-thumbs-up me-1"></i>Pick from liked items
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label>Note (optional)</label>
+                                    <textarea id="refNote_<?= $order['orderid'] ?>" placeholder="Add a note for this reference..."></textarea>
+                                </div>
+                                <div class="form-actions">
+                                    <button class="btn-primary-custom" onclick="queueReference(<?= $order['orderid'] ?>)">Add Reference</button>
+                                </div>
+                                <div id="pendingRefs_<?= $order['orderid'] ?>" class="mt-2"></div>
                             </div>
                         </div>
                     <?php endif; ?>
 
-                    <!-- Client Information -->
-                    <div class="order-info">
-                        <div class="order-info-item">
-                            <span class="order-info-label">Client:</span>
-                            <span class="order-info-value"><?= htmlspecialchars($order['cname']) ?></span>
+                    <!-- Action Buttons -->
+                    <div id="actions_<?= $order['orderid'] ?>" class="action-bar" style="margin-top:1.5rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.75rem;">
+                        <div>
+                            <?php 
+                                $status = strtolower(trim($order['ostatus'] ?? ''));
+                                $canSubmit = in_array($status, ['designing']);
+                                $hasPictures = !empty($order['pictures']);
+                                $hasReferences = !empty($order['references']);
+                                $disableSubmit = !$hasPictures || !$hasReferences;
+                            ?>
+                            <?php if ($canSubmit): ?>
+                                <button class="btn <?php echo $disableSubmit ? 'btn-secondary' : 'btn-primary'; ?>" onclick="updateOrder(<?= $order['orderid'] ?>,'submit_proposal', this)" <?php if ($disableSubmit): ?>disabled title="Add at least one proposal and one reference before submitting."<?php endif; ?>>
+                                    <i class="fas fa-paper-plane me-1"></i>Submit Proposal
+                                </button>
+                            <?php endif; ?>
                         </div>
-                        <div class="order-info-item">
-                            <span class="order-info-label">Email:</span>
-                            <span class="order-info-value"><?= htmlspecialchars($order['cemail']) ?></span>
-                        </div>
-                        <div class="order-info-item">
-                            <span class="order-info-label">Address:</span>
-                            <span class="order-info-value"><?= htmlspecialchars($order['address'] ?? 'N/A') ?></span>
-                        </div>
-                    </div>
-
-                    <div id="actions_<?= $order['orderid'] ?>" style="margin-top:8px">
                         <?php if (strtolower(trim($order['ostatus'] ?? '')) === 'waiting confirm'): ?>
-                            <button class="btn btn-sm btn-success"
-                                onclick="updateOrder(<?= $order['orderid'] ?>,'confirm', this)">Confirm</button>
-                            <button class="btn btn-sm btn-danger ms-1"
-                                onclick="updateOrder(<?= $order['orderid'] ?>,'reject', this)">Reject</button>
+                            <div>
+                                <button class="btn btn-sm btn-success"
+                                    onclick="updateOrder(<?= $order['orderid'] ?>,'confirm', this)"><i class="fas fa-check me-1"></i>Confirm Order</button>
+                                <button class="btn btn-sm btn-danger ms-2"
+                                    onclick="updateOrder(<?= $order['orderid'] ?>,'reject', this)"><i class="fas fa-times me-1"></i>Reject Order</button>
+                            </div>
                         <?php endif; ?>
                     </div>
                 </div>
@@ -778,10 +1202,104 @@ $stmt->close();
         </div>
     </div>
 
+    <!-- Liked Items Modal -->
+    <div id="likedModal" class="liked-modal-backdrop" aria-hidden="true">
+        <div class="liked-modal" role="dialog" aria-label="Liked items">
+            <div class="liked-modal-header">
+                <strong><i class="fas fa-thumbs-up me-2"></i>Liked Materials / Products</strong>
+                <button type="button" class="btn btn-sm btn-light" onclick="closeLikedModal()">Close</button>
+            </div>
+            <div class="liked-modal-body">
+                <div id="likedModalStatus" class="small text-muted mb-2">Loading...</div>
+                <div id="likedModalGrid" class="liked-grid"></div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
     <script>
+        // Edit mode state tracker
+        const editModes = {};
+
+        function toggleEditMode(orderId) {
+            const editBtn = document.getElementById('editBtn_' + orderId);
+            const saveBtn = document.getElementById('saveBtn_' + orderId);
+            const cancelBtn = document.getElementById('cancelBtn_' + orderId);
+            const uploadContainer = document.getElementById('uploadContainer_' + orderId);
+            const refAddBtn = document.getElementById('refAddBtn_' + orderId);
+            const refActionBtns = document.querySelectorAll('.ref-actions[data-order="' + orderId + '"]');
+
+            if (!editBtn || !saveBtn) return;
+
+            editModes[orderId] = !editModes[orderId];
+
+            if (editModes[orderId]) {
+                editBtn.style.display = 'none';
+                saveBtn.style.display = 'inline-block';
+                if (cancelBtn) cancelBtn.style.display = 'inline-block';
+                if (uploadContainer) uploadContainer.classList.remove('upload-section-hidden');
+                if (refAddBtn) refAddBtn.style.display = 'inline-block';
+                refActionBtns.forEach(el => el.style.display = 'flex');
+            } else {
+                editBtn.style.display = 'inline-block';
+                saveBtn.style.display = 'none';
+                if (cancelBtn) cancelBtn.style.display = 'none';
+                if (uploadContainer) uploadContainer.classList.add('upload-section-hidden');
+                if (refAddBtn) refAddBtn.style.display = 'none';
+                refActionBtns.forEach(el => el.style.display = 'none');
+                cancelPreview(orderId);
+                toggleReferenceEdit(orderId, false);
+            }
+        }
+
+        async function saveEditMode(orderId) {
+            const previewSection = document.getElementById('previewSection_' + orderId);
+            const refForm = document.getElementById('addRefForm_' + orderId);
+            const productSelect = document.getElementById('refProductId_' + orderId);
+            const hasPendingUpload = !!selectedFiles[orderId];
+            const isPreviewVisible = previewSection && previewSection.style.display !== 'none';
+            const isRefFormActive = refForm && refForm.classList.contains('active');
+            const hasSelectedProduct = productSelect && productSelect.value;
+            const pending = pendingReferences[orderId] || [];
+
+            let attemptMade = false;
+            let successCount = 0;
+
+            if (hasPendingUpload && isPreviewVisible) {
+                attemptMade = true;
+                const res = await submitPicture(orderId, document.querySelector('#previewSection_' + orderId + ' button'), false);
+                if (res) successCount++;
+            }
+
+            if (pending.length) {
+                attemptMade = true;
+                for (const ref of pending) {
+                    const res = await addReference(orderId, false, ref.productId, ref.note);
+                    if (res) successCount++;
+                }
+            } else if (isRefFormActive && hasSelectedProduct) {
+                attemptMade = true;
+                const res = await addReference(orderId, false);
+                if (res) successCount++;
+            }
+
+            if (successCount > 0) {
+                location.reload();
+                return;
+            }
+
+            if (!attemptMade) {
+                alert('Please upload a picture or add a reference before saving.');
+                return;
+            }
+            
+            // If we are here, we attempted but failed (errors already alerted).
+            // Do NOT toggle edit mode. Stay in edit mode so user can retry.
+        }
+
         let selectedFiles = {};
+        let pendingReferences = {};
 
         // Handle drag and drop for all upload areas
         document.querySelectorAll('[id^="uploadArea_"]').forEach(area => {
@@ -809,19 +1327,24 @@ $stmt->close();
                 }
             });
 
-            area.addEventListener('click', function () {
-                const orderId = this.id.replace('uploadArea_', '');
-                document.getElementById('fileInput_' + orderId).click();
+            // Prevent default label click behavior - the hidden file input will handle it via onchange
+            area.addEventListener('click', function (e) {
+                // Prevent event from bubbling if click is on the label itself
+                if (e.target === this) {
+                    e.preventDefault();
+                    const orderId = this.id.replace('uploadArea_', '');
+                    document.getElementById('fileInput_' + orderId).click();
+                }
             });
         });
 
         function previewPicture(orderId, file) {
             if (!file) return;
 
-            // Validate file type
-            const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+            // Validate file type (images and PDF)
+            const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'];
             if (!allowedTypes.includes(file.type)) {
-                alert('Please upload a valid image file (JPG, PNG, GIF, WebP)');
+                alert('Please upload a valid file (JPG, PNG, GIF, WebP, or PDF)');
                 return;
             }
 
@@ -837,7 +1360,23 @@ $stmt->close();
             // Create preview
             const reader = new FileReader();
             reader.onload = function (e) {
-                document.getElementById('previewImg_' + orderId).src = e.target.result;
+                // Handle PDF preview differently
+                if (file.type === 'application/pdf') {
+                    document.getElementById('previewImg_' + orderId).style.display = 'none';
+                    let pdfPreview = document.getElementById('pdfPreview_' + orderId);
+                    if (!pdfPreview) {
+                        pdfPreview = document.createElement('div');
+                        pdfPreview.id = 'pdfPreview_' + orderId;
+                        pdfPreview.style.cssText = 'background: #f0f0f0; padding: 2rem; text-align: center; border-radius: 6px; margin-bottom: 1rem;';
+                        document.getElementById('previewSection_' + orderId).insertBefore(pdfPreview, document.querySelector('#previewSection_' + orderId + ' p'));
+                    }
+                    pdfPreview.innerHTML = '<i class="fas fa-file-pdf" style="font-size: 3rem; color: #e74c3c; margin-bottom: 1rem; display: block;"></i><strong>PDF File Selected</strong><p style="margin: 0.5rem 0 0 0; color: #6c757d; font-size: 0.9rem;">' + file.name + '</p>';
+                } else {
+                    let pdfPreview = document.getElementById('pdfPreview_' + orderId);
+                    if (pdfPreview) pdfPreview.remove();
+                    document.getElementById('previewImg_' + orderId).src = e.target.result;
+                    document.getElementById('previewImg_' + orderId).style.display = 'block';
+                }
                 document.getElementById('uploadArea_' + orderId).style.display = 'none';
                 document.getElementById('previewSection_' + orderId).style.display = 'block';
             };
@@ -846,16 +1385,25 @@ $stmt->close();
 
         function cancelPreview(orderId) {
             delete selectedFiles[orderId];
-            document.getElementById('uploadArea_' + orderId).style.display = 'block';
-            document.getElementById('previewSection_' + orderId).style.display = 'none';
-            document.getElementById('fileInput_' + orderId).value = '';
+            const uploadArea = document.getElementById('uploadArea_' + orderId);
+            const previewSection = document.getElementById('previewSection_' + orderId);
+            const fileInput = document.getElementById('fileInput_' + orderId);
+            if (uploadArea) uploadArea.style.display = 'block';
+            if (previewSection) previewSection.style.display = 'none';
+            if (fileInput) fileInput.value = '';
+            // Clear PDF preview if exists
+            let pdfPreview = document.getElementById('pdfPreview_' + orderId);
+            if (pdfPreview) pdfPreview.remove();
+            // Clear image preview
+            const previewImg = document.getElementById('previewImg_' + orderId);
+            if (previewImg) previewImg.style.display = 'block';
         }
 
-        function submitPicture(orderId, btn) {
+        function submitPicture(orderId, btn, shouldReload = true) {
             const file = selectedFiles[orderId];
             if (!file) {
                 alert('No file selected');
-                return;
+                return Promise.resolve(false);
             }
 
             const formData = new FormData();
@@ -869,30 +1417,34 @@ $stmt->close();
                 submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Submitting...';
             }
 
-            fetch('upload_designed_picture.php', {
+            return fetch('upload_designed_picture.php', {
                 method: 'POST',
                 body: formData
             })
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        alert('Picture submitted successfully!');
-                        location.reload();
+                        if (shouldReload) {
+                            alert('Picture submitted successfully!');
+                            location.reload();
+                        }
+                        return true;
                     } else {
-                        alert('Error: ' + (data.message || 'Failed to submit picture'));
+                        alert('Error: ' + (data.message || 'Failed to submit'));
                         if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = originalText; }
+                        return false;
                     }
                 })
                 .catch(error => {
                     console.error('Error:', error);
                     alert('An error occurred: ' + (error.message || error));
                     if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = originalText; }
+                    return false;
                 });
         }
 
         function viewPicture(pictureId, filename) {
-            document.getElementById('pictureImg').src = '../uploads/designed_Picture/' + filename;
-            new bootstrap.Modal(document.getElementById('pictureModal')).show();
+            window.open('../uploads/designed_Picture/' + filename, '_blank');
         }
         function openFloorPlanPreview(src) {
             try {
@@ -901,11 +1453,198 @@ $stmt->close();
                 new bootstrap.Modal(document.getElementById('floorPlanModal')).show();
             } catch (e) { console.error(e); window.open(src, '_blank'); }
         }
+
+        // Reference management functions
+        function toggleReferenceEdit(orderId, show) {
+            const form = document.getElementById('addRefForm_' + orderId);
+            if (!form) return;
+            if (show) {
+                form.classList.add('active');
+            } else {
+                form.classList.remove('active');
+                // Clear form
+                const productSelect = document.getElementById('refProductId_' + orderId);
+                if (productSelect) productSelect.value = '';
+                document.getElementById('refNote_' + orderId).value = '';
+            }
+        }
+
+        function addReference(orderId, shouldReload = true, productIdOverride = null, noteOverride = null) {
+            const productId = (productIdOverride !== null)
+                ? String(productIdOverride).trim()
+                : document.getElementById('refProductId_' + orderId).value.trim();
+            const note = (noteOverride !== null)
+                ? String(noteOverride).trim()
+                : document.getElementById('refNote_' + orderId).value.trim();
+
+            if (!productId) {
+                alert('Please select a material or product');
+                return Promise.resolve(false);
+            }
+
+            return fetch('manage_reference.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'add',
+                    orderid: orderId,
+                    productid: productId ? parseInt(productId) : null,
+                    note: note
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    if (shouldReload) {
+                        alert('Reference added successfully');
+                        location.reload();
+                    }
+                    return true;
+                } else {
+                    alert('Error: ' + (data.message || 'Failed to add reference'));
+                    return false;
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                alert('Request failed: ' + err.message);
+                return false;
+            });
+        }
+
+        function queueReference(orderId) {
+            const select = document.getElementById('refProductId_' + orderId);
+            const noteInput = document.getElementById('refNote_' + orderId);
+            const pendingBox = document.getElementById('pendingRefs_' + orderId);
+            if (!select || !pendingBox) return;
+
+            const productId = select.value.trim();
+            const note = noteInput ? noteInput.value.trim() : '';
+            if (!productId) {
+                alert('Please select a material or product');
+                return;
+            }
+
+            if (!pendingReferences[orderId]) pendingReferences[orderId] = [];
+            const option = select.options[select.selectedIndex];
+            pendingReferences[orderId].push({ productId, note, label: option ? option.textContent : 'Product' });
+
+            if (pendingBox) {
+                const item = document.createElement('div');
+                item.className = 'small text-muted';
+                item.textContent = `Pending: ${option ? option.textContent : productId}${note ? ' — ' + note : ''}`;
+                pendingBox.appendChild(item);
+            }
+
+            select.value = '';
+            if (noteInput) noteInput.value = '';
+        }
+
+        function deleteReference(orderId, refId) {
+            if (!confirm('Are you sure you want to delete this reference?')) return;
+
+            fetch('manage_reference.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'delete',
+                    refid: refId,
+                    orderid: orderId
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Reference deleted successfully');
+                    location.reload();
+                } else {
+                    alert('Error: ' + (data.message || 'Failed to delete reference'));
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                alert('Request failed: ' + err.message);
+            });
+        }
+
+        let likedModalOrderId = null;
+
+        function openLikedModal(orderId) {
+            likedModalOrderId = orderId;
+            const modal = document.getElementById('likedModal');
+            if (!modal) return;
+            modal.classList.add('show');
+            modal.setAttribute('aria-hidden', 'false');
+            loadLikedProducts();
+        }
+
+        function closeLikedModal() {
+            const modal = document.getElementById('likedModal');
+            if (!modal) return;
+            modal.classList.remove('show');
+            modal.setAttribute('aria-hidden', 'true');
+        }
+
+        async function loadLikedProducts() {
+            const status = document.getElementById('likedModalStatus');
+            const grid = document.getElementById('likedModalGrid');
+            if (!status || !grid) return;
+            status.textContent = 'Loading...';
+            grid.innerHTML = '';
+            try {
+                const res = await fetch('../Public/get_chat_suggestions.php');
+                const data = await res.json();
+                if (data && data.error) {
+                    status.textContent = (data.error === 'not_logged_in') ? 'Please log in to see your liked items.' : ('Error: ' + data.error);
+                    return;
+                }
+                const likedProducts = (data && data.liked_products) ? data.liked_products : [];
+                if (!likedProducts.length) {
+                    status.textContent = 'No liked products found.';
+                    return;
+                }
+                status.textContent = 'Click a card to select.';
+                likedProducts.forEach(p => {
+                    const card = document.createElement('div');
+                    card.className = 'liked-card';
+                    const thumb = document.createElement('div');
+                    thumb.className = 'liked-thumb';
+                    if (p.image) thumb.style.backgroundImage = 'url(' + p.image + ')';
+                    const title = document.createElement('div');
+                    title.className = 'liked-title';
+                    title.textContent = p.title || p.pname || 'Product';
+                    const meta = document.createElement('div');
+                    meta.className = 'liked-meta';
+                    meta.textContent = p.category ? ('Category: ' + p.category) : 'Liked product';
+                    const btn = document.createElement('button');
+                    btn.className = 'btn btn-sm btn-outline-primary';
+                    btn.textContent = 'Select';
+                    btn.addEventListener('click', () => {
+                        if (!likedModalOrderId) return;
+                        const select = document.getElementById('refProductId_' + likedModalOrderId);
+                        if (select) {
+                            select.value = p.id || p.productid || p.productId || '';
+                        }
+                        closeLikedModal();
+                    });
+                    card.appendChild(thumb);
+                    card.appendChild(title);
+                    card.appendChild(meta);
+                    card.appendChild(btn);
+                    grid.appendChild(card);
+                });
+            } catch (e) {
+                console.error(e);
+                status.textContent = 'Failed to load liked items.';
+            }
+        }
     </script>
     <script>
         async function updateOrder(orderId, action, btn) {
-            const verb = (action === 'reject') ? 'reject' : 'confirm';
-            if (!confirm('Are you sure to ' + verb + ' this order? The change cannot be undone.')) return;
+            let verb = action;
+            if (action === 'submit_proposal') verb = 'submit proposal for';
+            
+            if (!confirm('Are you sure you want to ' + verb + ' this order? The change cannot be undone.')) return;
             try {
                 btn.disabled = true;
                 const res = await fetch('update_order_status.php', {
@@ -915,10 +1654,8 @@ $stmt->close();
                 });
                 const j = await res.json();
                 if (j && j.success) {
-                    const statusEl = document.getElementById('status_' + orderId);
-                    const actionsEl = document.getElementById('actions_' + orderId);
-                    if (statusEl) statusEl.innerHTML = '<strong>Status:</strong> ' + (j.status || (action === 'confirm' ? 'Confirmed' : 'Rejected'));
-                    if (actionsEl) Array.from(actionsEl.querySelectorAll('button')).forEach(b => b.remove());
+                    alert('Order status updated successfully.');
+                    location.reload();
                 } else {
                     alert('Error: ' + (j && j.message ? j.message : 'Unknown'));
                     btn.disabled = false;

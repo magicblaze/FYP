@@ -233,7 +233,7 @@ CREATE TABLE `Order` (
   `gross_floor_area` decimal(10,2) DEFAULT NULL,
   `Requirements` varchar(255) DEFAULT NULL,
   `designid` int NOT NULL,
-  `ostatus` ENUM('waiting confirm', 'designing', 'drafting proposal', 'waiting review', 'waiting payment', 'complete', 'reject') DEFAULT 'waiting confirm',
+  `ostatus` ENUM('waiting confirm', 'designing', 'reviewing design proposal', 'drafting proposal', 'waiting review', 'waiting payment', 'complete', 'reject') DEFAULT 'waiting confirm',
   `designedPicture` VARCHAR(500) DEFAULT NULL,
   PRIMARY KEY (`orderid`),
   KEY `clientid_pk_idx` (`clientid`),

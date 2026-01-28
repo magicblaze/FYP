@@ -22,13 +22,21 @@ try {
     }
     $orderId = (int)$data['orderid'];
     $action = strtolower(trim($data['action']));
-    $map = ['confirm'=>'Confirmed','reject'=>'Rejected'];
-    if (!isset($map[$action])) {
+    
+    $newStatus = null;
+    if ($action === 'confirm') {
+        $newStatus = 'designing';
+    } elseif ($action === 'reject') {
+        $newStatus = 'reject';
+    } elseif ($action === 'submit_proposal') {
+        $newStatus = 'reviewing design proposal';
+    }
+
+    if (!$newStatus) {
         http_response_code(400);
         echo json_encode(['success'=>false,'message'=>'Invalid action']);
         exit;
     }
-    $newStatus = $map[$action];
     $designerId = (int)($_SESSION['user']['designerid'] ?? 0);
 
     // verify ownership: order belongs to a design by this designer

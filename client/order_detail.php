@@ -11,14 +11,14 @@ if (empty($_SESSION['user'])) {
     exit;
 }
 
-$clientId = (int)($_SESSION['user']['clientid'] ?? 0);
+$clientId = (int) ($_SESSION['user']['clientid'] ?? 0);
 if ($clientId <= 0) {
     http_response_code(403);
     die('Invalid session.');
 }
 
 // Get order ID from URL
-$orderId = (int)($_GET['orderid'] ?? 0);
+$orderId = (int) ($_GET['orderid'] ?? 0);
 if ($orderId <= 0) {
     // Gracefully handle requests without a valid order id (for example URLs like ?designerid=null)
     // Redirect users to the order history page instead of returning a 400 error.
@@ -47,7 +47,7 @@ if ($orderResult->num_rows === 0) {
 
 $order = $orderResult->fetch_assoc();
 // expose gross floor area
-$gfaDisplay = isset($order['gross_floor_area']) ? (float)$order['gross_floor_area'] : 0.0;
+$gfaDisplay = isset($order['gross_floor_area']) ? (float) $order['gross_floor_area'] : 0.0;
 
 // Fetch client details
 $clientStmt = $mysqli->prepare("SELECT cname, ctel, cemail, address FROM Client WHERE clientid = ?");
@@ -56,7 +56,7 @@ $clientStmt->execute();
 $clientData = $clientStmt->get_result()->fetch_assoc();
 
 // Expose designer id for this order (used when opening chat by designer)
-$designerIdForOrder = isset($order['designerid']) ? (int)$order['designerid'] : 0;
+$designerIdForOrder = isset($order['designerid']) ? (int) $order['designerid'] : 0;
 
 // Determine whether to show the order chat popup (only once per session per order)
 $showOrderChat = false;
@@ -68,14 +68,14 @@ if (empty($_SESSION['shown_order_chat'][$orderId])) {
     // Look for the order-type message inserted when the order was created
     $msgQ = $mysqli->prepare("SELECT ChatRoomid, Messageid FROM Message WHERE message_type='order' AND content = ? AND sender_type='client' ORDER BY Messageid DESC LIMIT 1");
     if ($msgQ) {
-        $orderStr = (string)$orderId;
+        $orderStr = (string) $orderId;
         $msgQ->bind_param('s', $orderStr);
         $msgQ->execute();
         $mres = $msgQ->get_result();
         if ($mres && $mres->num_rows > 0) {
             $row = $mres->fetch_assoc();
             $showOrderChat = true;
-            $showOrderChatRoomId = (int)$row['ChatRoomid'];
+            $showOrderChatRoomId = (int) $row['ChatRoomid'];
             // mark as shown so this popup appears only once per session per order
             $_SESSION['shown_order_chat'][$orderId] = time();
         }
@@ -133,10 +133,21 @@ $schedules = $scheduleStmt->get_result();
 
 $referencesSql = "SELECT r.id AS orderreferenceid, r.productid, r.designid, r.added_by_type, r.added_by_id, r.created_at,
                p.pname, IFNULL(p.price, 0) as product_price,
-               d.designName as design_name, IFNULL(d.expect_price, 0) as design_price
+               d.designName as design_name, IFNULL(d.expect_price, 0) as design_price,
+               pci.product_image, di.design_image
            FROM OrderReference r
            LEFT JOIN Product p ON r.productid = p.productid
            LEFT JOIN Design d ON r.designid = d.designid
+           LEFT JOIN (
+               SELECT productid, MIN(image) AS product_image
+               FROM ProductColorImage
+               GROUP BY productid
+           ) pci ON r.productid = pci.productid
+           LEFT JOIN (
+               SELECT designid, MIN(image_filename) AS design_image
+               FROM DesignImage
+               GROUP BY designid
+           ) di ON r.designid = di.designid
            WHERE r.orderid = ?
            ORDER BY r.created_at ASC";
 $referencesStmt = $mysqli->prepare($referencesSql);
@@ -160,10 +171,11 @@ $products->data_seek(0);
 
 // Format display variables
 $budgetDisplay = $order['budget'] ?? 0;
-$phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—';
+$phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : '—';
 ?>
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -175,11 +187,12 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—
         .order-detail-container {
             background: #fff;
             border-radius: 15px;
-            box-shadow: 0 8px 30px rgba(0,0,0,0.1);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
             padding: 2rem;
             margin: 1rem auto;
             max-width: 1400px;
         }
+
         .page-title {
             color: #2c3e50;
             font-weight: 600;
@@ -187,6 +200,7 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—
             padding-bottom: 0.75rem;
             border-bottom: 2px solid #3498db;
         }
+
         .back-link {
             display: inline-block;
             margin-bottom: 1rem;
@@ -195,10 +209,12 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—
             font-weight: 500;
             transition: color 0.3s ease;
         }
+
         .back-link:hover {
             color: #2980b9;
             text-decoration: underline;
         }
+
         .section-title {
             color: #2c3e50;
             font-weight: 600;
@@ -207,6 +223,7 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—
             padding-bottom: 0.5rem;
             border-bottom: 2px solid #ecf0f1;
         }
+
         .info-card {
             background: #f8f9fa;
             border-radius: 10px;
@@ -214,6 +231,7 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—
             margin-bottom: 1rem;
             border-left: 4px solid #3498db;
         }
+
         .info-row {
             display: flex;
             justify-content: space-between;
@@ -221,19 +239,23 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—
             padding: 0.75rem 0;
             border-bottom: 1px solid #ecf0f1;
         }
+
         .info-row:last-child {
             border-bottom: none;
         }
+
         .info-label {
             font-weight: 600;
             color: #2c3e50;
             min-width: 150px;
         }
+
         .info-value {
             color: #555;
             text-align: right;
             flex: 1;
         }
+
         .status-badge {
             padding: 0.35rem 0.75rem;
             border-radius: 20px;
@@ -241,44 +263,64 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—
             font-weight: 600;
             display: inline-block;
         }
+
         .status-designing {
             background-color: #fff3cd;
             color: #856404;
         }
+
         .status-completed {
             background-color: #d4edda;
             color: #155724;
         }
+
         .status-cancelled {
             background-color: #f8d7da;
             color: #721c24;
         }
+
         .status-pending {
             background-color: #cce5ff;
             color: #004085;
         }
-        .product-table, .contractor-table, .schedule-table {
+
+        .product-table,
+        .contractor-table,
+        .schedule-table {
             width: 100%;
             border-collapse: collapse;
             margin-bottom: 1rem;
         }
-        .product-table thead, .contractor-table thead, .schedule-table thead {
+
+        .product-table thead,
+        .contractor-table thead,
+        .schedule-table thead {
             background-color: #f8f9fa;
             border-bottom: 2px solid #ecf0f1;
         }
-        .product-table th, .contractor-table th, .schedule-table th {
+
+        .product-table th,
+        .contractor-table th,
+        .schedule-table th {
             padding: 0.75rem;
             text-align: left;
             font-weight: 600;
             color: #2c3e50;
         }
-        .product-table td, .contractor-table td, .schedule-table td {
+
+        .product-table td,
+        .contractor-table td,
+        .schedule-table td {
             padding: 0.75rem;
             border-bottom: 1px solid #ecf0f1;
         }
-        .product-table tbody tr:hover, .contractor-table tbody tr:hover, .schedule-table tbody tr:hover {
+
+        .product-table tbody tr:hover,
+        .contractor-table tbody tr:hover,
+        .schedule-table tbody tr:hover {
             background-color: #f8f9fa;
         }
+
         .manager-badge {
             display: inline-block;
             background-color: #e8f4f8;
@@ -288,6 +330,7 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—
             font-size: 0.85rem;
             font-weight: 500;
         }
+
         .empty-message {
             text-align: center;
             padding: 2rem;
@@ -295,38 +338,45 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—
             background-color: #f8f9fa;
             border-radius: 10px;
         }
+
         .empty-message i {
             font-size: 2rem;
             margin-bottom: 0.5rem;
             color: #bdc3c7;
         }
-       .price-highlight {
+
+        .price-highlight {
             color: #27ae60;
             font-weight: 700;
             font-size: 1.1rem;
         }
+
         .design-image-container {
             text-align: center;
             margin-bottom: 1rem;
         }
+
         .design-image {
             max-width: 300px;
             max-height: 300px;
             border-radius: 10px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
         }
+
         .grid-2 {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 1.5rem;
             margin-bottom: 1.5rem;
         }
+
         .designed-picture-gallery {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
             gap: 1rem;
             margin-bottom: 1.5rem;
         }
+
         .picture-card {
             border: 2px solid #dee2e6;
             border-radius: 8px;
@@ -334,19 +384,23 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—
             background: white;
             transition: all 0.3s;
         }
+
         .picture-card:hover {
             border-color: #3498db;
             box-shadow: 0 4px 12px rgba(52, 152, 219, 0.2);
         }
+
         .picture-image {
             width: 100%;
             height: 200px;
             object-fit: cover;
             cursor: pointer;
         }
+
         .picture-info {
             padding: 1rem;
         }
+
         .picture-status {
             display: inline-block;
             padding: 0.25rem 0.75rem;
@@ -356,20 +410,13 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—
             color: white;
             margin-bottom: 0.5rem;
         }
-        .status-pending {
-            background-color: #f39c12;
-        }
-        .status-approved {
-            background-color: #27ae60;
-        }
-        .status-rejected {
-            background-color: #e74c3c;
-        }
+
         .picture-actions {
             display: flex;
             gap: 0.5rem;
             margin-top: 0.75rem;
         }
+
         .picture-actions button {
             flex: 1;
             padding: 0.5rem;
@@ -379,20 +426,25 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—
             cursor: pointer;
             transition: all 0.3s;
         }
+
         .btn-approve {
             background-color: #27ae60;
             color: white;
         }
+
         .btn-approve:hover {
             background-color: #229954;
         }
+
         .btn-reject {
             background-color: #e74c3c;
             color: white;
         }
+
         .btn-reject:hover {
             background-color: #c0392b;
         }
+
         .rejection-reason {
             background-color: #ffe8e8;
             border-left: 4px solid #e74c3c;
@@ -402,14 +454,17 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—
             font-size: 0.9rem;
             color: #c0392b;
         }
+
         @media (max-width: 768px) {
             .grid-2 {
                 grid-template-columns: 1fr;
             }
+
             .info-row {
                 flex-direction: column;
                 align-items: flex-start;
             }
+
             .info-value {
                 text-align: left;
                 margin-top: 0.5rem;
@@ -417,6 +472,7 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—
         }
     </style>
 </head>
+
 <body>
     <?php include_once __DIR__ . '/../includes/header.php'; ?>
 
@@ -427,7 +483,7 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—
             </a>
 
             <h1 class="page-title">
-                <i class="fas fa-receipt me-2"></i>Order #<?= (int)$order['orderid'] ?> Details
+                <i class="fas fa-receipt me-2"></i>Order #<?= (int) $order['orderid'] ?> Details
             </h1>
 
             <!-- Order Overview Section -->
@@ -438,7 +494,7 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—
                 <div class="info-card">
                     <div class="info-row">
                         <span class="info-label">Order ID:</span>
-                        <span class="info-value">#<?= (int)$order['orderid'] ?></span>
+                        <span class="info-value">#<?= (int) $order['orderid'] ?></span>
                     </div>
                     <div class="info-row">
                         <span class="info-label">Order Date:</span>
@@ -465,11 +521,13 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—
                     </div>
                     <div class="info-row">
                         <span class="info-label">Budget:</span>
-                        <span class="info-value price-highlight">$<?= number_format((float)$order['budget'], 2) ?></span>
+                        <span
+                            class="info-value price-highlight">$<?= number_format((float) $order['budget'], 2) ?></span>
                     </div>
                     <div class="info-row">
                         <span class="info-label">Gross Floor Area:</span>
-                        <span class="info-value"><?= $gfaDisplay > 0 ? htmlspecialchars(number_format((float)$gfaDisplay, 2)) . ' m²' : '&mdash;' ?></span>
+                        <span
+                            class="info-value"><?= $gfaDisplay > 0 ? htmlspecialchars(number_format((float) $gfaDisplay, 2)) . ' m²' : '&mdash;' ?></span>
                     </div>
                 </div>
 
@@ -480,7 +538,8 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—
                     </div>
                     <div class="info-row">
                         <span class="info-label">Design Price:</span>
-                        <span class="info-value price-highlight">$<?= number_format((float)$order['expect_price'], 2) ?></span>
+                        <span
+                            class="info-value price-highlight">$<?= number_format((float) $order['expect_price'], 2) ?></span>
                     </div>
                     <div class="info-row">
                         <span class="info-label">Design Tags:</span>
@@ -505,18 +564,25 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—
                 <div class="designed-picture-gallery">
                     <?php while ($picture = $pictures->fetch_assoc()): ?>
                         <div class="picture-card">
-                            <img src="../uploads/designed_Picture/<?= htmlspecialchars($picture['filename']) ?>" alt="Designed Picture" class="picture-image" onclick="viewPicture('<?= htmlspecialchars($picture['filename']) ?>')">
+                            <img src="../uploads/designed_Picture/<?= htmlspecialchars($picture['filename']) ?>"
+                                alt="Designed Picture" class="picture-image"
+                                onclick="viewPicture('<?= htmlspecialchars($picture['filename']) ?>')">
                             <div class="picture-info">
-                                <div class="picture-status status-<?= $picture['status'] ?>"><?= ucfirst($picture['status']) ?></div>
-                                <div style="font-size: 0.85rem; color: #7f8c8d; margin-bottom: 0.5rem;"><?= date('M d, Y H:i', strtotime($picture['upload_date'])) ?></div>
+                                <div class="picture-status status-<?= $picture['status'] ?>"><?= ucfirst($picture['status']) ?>
+                                </div>
+                                <div style="font-size: 0.85rem; color: #7f8c8d; margin-bottom: 0.5rem;">
+                                    <?= date('M d, Y H:i', strtotime($picture['upload_date'])) ?></div>
                                 <?php if ($picture['status'] === 'pending'): ?>
                                     <div class="picture-actions">
-                                        <button class="btn-approve" onclick="approvePicture(<?= $picture['pictureid'] ?>)"><i class="fas fa-check me-1"></i>Approve</button>
-                                        <button class="btn-reject" onclick="openRejectModal(<?= $picture['pictureid'] ?>)"><i class="fas fa-times me-1"></i>Reject</button>
+                                        <button class="btn-approve" onclick="approvePicture(<?= $picture['pictureid'] ?>)"><i
+                                                class="fas fa-check me-1"></i>Approve</button>
+                                        <button class="btn-reject" onclick="openRejectModal(<?= $picture['pictureid'] ?>)"><i
+                                                class="fas fa-times me-1"></i>Reject</button>
                                     </div>
                                 <?php endif; ?>
                                 <?php if ($picture['status'] === 'rejected' && !empty($picture['rejection_reason'])): ?>
-                                    <div class="rejection-reason"><strong>Reason:</strong> <?= htmlspecialchars($picture['rejection_reason']) ?></div>
+                                    <div class="rejection-reason"><strong>Reason:</strong>
+                                        <?= htmlspecialchars($picture['rejection_reason']) ?></div>
                                 <?php endif; ?>
                             </div>
                         </div>
@@ -529,63 +595,104 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—
                 </div>
             <?php endif; ?>
 
+            <?php if (strtolower(trim($order['ostatus'] ?? '')) === 'waiting payment'): ?>
+                <div class="info-card" style="border-left:4px solid #27ae60;">
+                    <div class="info-row" style="border-bottom:none;">
+                        <span class="info-label"><i class="fas fa-check-circle me-2"></i>Proposal Confirmed</span>
+                        <span class="info-value">
+                            <a href="profile.php" class="btn btn-success btn-sm">
+                                <i class="fas fa-paper-plane me-1"></i>Submit
+                            </a>
+                        </span>
+                    </div>
+                    <div class="small text-muted" style="margin-top:0.5rem;">Manager confirmed your proposal. Please submit
+                        your payment method in your profile, then proceed.</div>
+                </div>
+            <?php endif; ?>
+
             <!-- Requirements Section -->
             <?php if (!empty($order['Requirements'])): ?>
-            <div class="section-title">
-                <i class="fas fa-clipboard-list me-2"></i>Requirements
-            </div>
-            <div class="info-card">
-                <p class="mb-0"><?= htmlspecialchars($order['Requirements']) ?></p>
-            </div>
+                <div class="section-title">
+                    <i class="fas fa-clipboard-list me-2"></i>Requirements
+                </div>
+                <div class="info-card">
+                    <p class="mb-0"><?= htmlspecialchars($order['Requirements']) ?></p>
+                </div>
             <?php endif; ?>
 
             <!-- References Section -->
             <?php if ($references->num_rows > 0): ?>
-            <div class="section-title">
-                <i class="fas fa-link me-2"></i>Product References
-            </div>
-            <div class="info-card">
-                <?php 
-                $referencesTotal = 0;
-                while ($ref = $references->fetch_assoc()): 
-                    // product reference
-                    if (!empty($ref['productid']) && !empty($ref['pname'])): 
-                        $price = (float)($ref['product_price'] ?? 0);
-                        $referencesTotal += $price;
-                ?>
-                    <div class="info-row">
-                        <div class="info-label">
-                            <i class="fas fa-box me-2"></i><?= htmlspecialchars($ref['pname']) ?>
-                        </div>
-                        <div class="info-value">
-                            <span class="price-highlight">$<?= number_format($price, 2) ?></span>
-                        </div>
-                    </div>
-                <?php 
-                    // design reference
-                    elseif (!empty($ref['designid']) && !empty($ref['design_name'])):
-                        $dprice = (float)($ref['design_price'] ?? 0);
-                        $referencesTotal += $dprice;
-                ?>
-                    <div class="info-row">
-                        <div class="info-label">
-                            <i class="fas fa-image me-2"></i><?= htmlspecialchars($ref['design_name']) ?> (Design Reference)
-                        </div>
-                        <div class="info-value">
-                            <span class="price-highlight">$<?= number_format($dprice, 2) ?></span>
-                        </div>
-                    </div>
-                <?php
-                    endif;
-                endwhile; 
-                ?>
-                <?php if ($referencesTotal > 0): ?>
-                <div class="info-row" style="border-top: 2px solid #3498db; margin-top: 0.5rem; padding-top: 0.75rem;">
-                    <span class="info-label"><strong>References Total:</strong></span>
-                    <span class="info-value price-highlight"><strong>$<?= number_format($referencesTotal, 2) ?></strong></span>
+                <div class="section-title">
+                    <i class="fas fa-link me-2"></i>Product References
                 </div>
-                <?php endif; ?>
-            </div>
+                <div class="info-card">
+                    <?php
+                    $referencesTotal = 0;
+                    while ($ref = $references->fetch_assoc()):
+                        // product reference
+                        if (!empty($ref['productid']) && !empty($ref['pname'])):
+                            $price = (float) ($ref['product_price'] ?? 0);
+                            $referencesTotal += $price;
+                            ?>
+                            <div class="info-row">
+                                <div class="info-label" style="display:flex;align-items:center;gap:8px;">
+                                    <?php
+                                    $pimg = $ref['product_image'] ?? '';
+                                    if (!empty($pimg)) {
+                                        $pimgSrc = $pimg;
+                                        if (!preg_match('#^https?://#i', $pimgSrc)) {
+                                            $pimgSrc = ($pimgSrc[0] === '/') ? ('..' . $pimgSrc) : ('../' . ltrim($pimgSrc, '/'));
+                                        }
+                                        echo '<img src="' . htmlspecialchars($pimgSrc) . '" alt="product" style="width:36px;height:36px;object-fit:cover;border-radius:6px;border:1px solid #ddd;" />';
+                                    } else {
+                                        echo '<div style="width:36px;height:36px;border-radius:6px;background:#f1f3f5;border:1px solid #ddd;display:flex;align-items:center;justify-content:center;font-size:0.7rem;color:#888;">IMG</div>';
+                                    }
+                                    ?>
+                                    <span><i class="fas fa-box me-2"></i><?= htmlspecialchars($ref['pname']) ?></span>
+                                </div>
+                                <div class="info-value">
+                                    <span class="price-highlight">$<?= number_format($price, 2) ?></span>
+                                </div>
+                            </div>
+                        <?php
+                            // design reference
+                        elseif (!empty($ref['designid']) && !empty($ref['design_name'])):
+                            $dprice = (float) ($ref['design_price'] ?? 0);
+                            $referencesTotal += $dprice;
+                            ?>
+                            <div class="info-row">
+                                <div class="info-label" style="display:flex;align-items:center;gap:8px;">
+                                    <?php
+                                    $dimg = $ref['design_image'] ?? '';
+                                    if (!empty($dimg)) {
+                                        $dimgSrc = $dimg;
+                                        if (!preg_match('#^https?://#i', $dimgSrc)) {
+                                            $dimgSrc = ($dimgSrc[0] === '/') ? ('..' . $dimgSrc) : ('../uploads/designs/' . ltrim($dimgSrc, '/'));
+                                        }
+                                        echo '<img src="' . htmlspecialchars($dimgSrc) . '" alt="design" style="width:36px;height:36px;object-fit:cover;border-radius:6px;border:1px solid #ddd;" />';
+                                    } else {
+                                        echo '<div style="width:36px;height:36px;border-radius:6px;background:#f1f3f5;border:1px solid #ddd;display:flex;align-items:center;justify-content:center;font-size:0.7rem;color:#888;">IMG</div>';
+                                    }
+                                    ?>
+                                    <span><i class="fas fa-image me-2"></i><?= htmlspecialchars($ref['design_name']) ?> (Design
+                                        Reference)</span>
+                                </div>
+                                <div class="info-value">
+                                    <span class="price-highlight">$<?= number_format($dprice, 2) ?></span>
+                                </div>
+                            </div>
+                            <?php
+                        endif;
+                    endwhile;
+                    ?>
+                    <?php if ($referencesTotal > 0): ?>
+                        <div class="info-row" style="border-top: 2px solid #3498db; margin-top: 0.5rem; padding-top: 0.75rem;">
+                            <span class="info-label"><strong>References Total:</strong></span>
+                            <span
+                                class="info-value price-highlight"><strong>$<?= number_format($referencesTotal, 2) ?></strong></span>
+                        </div>
+                    <?php endif; ?>
+                </div>
             <?php endif; ?>
 
             <!-- Products/Materials Section -->
@@ -612,50 +719,53 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—
                                 <td>
                                     <strong><?= htmlspecialchars($product['pname']) ?></strong>
                                     <?php if (!empty($product['description'])): ?>
-                                        <br><small class="text-muted"><?= htmlspecialchars(substr($product['description'], 0, 60)) ?></small>
+                                        <br><small
+                                            class="text-muted"><?= htmlspecialchars(substr($product['description'], 0, 60)) ?></small>
                                     <?php endif; ?>
                                 </td>
                                 <td>
                                     <?php
-                                        $colorName = $product['color'] ?? 'N/A';
-                                        $colorHex = match(strtolower($colorName)) {
-                                            'red' => '#FF0000',
-                                            'blue' => '#0000FF',
-                                            'green' => '#008000',
-                                            'yellow' => '#FFFF00',
-                                            'black' => '#000000',
-                                            'white' => '#FFFFFF',
-                                            'grey' => '#808080',
-                                            'gray' => '#808080',
-                                            'orange' => '#FFA500',
-                                            'purple' => '#800080',
-                                            'pink' => '#FFC0CB',
-                                            'brown' => '#A52A2A',
-                                            'beige' => '#F5F5DC',
-                                            'navy' => '#000080',
-                                            'silver' => '#C0C0C0',
-                                            'gold' => '#FFD700',
-                                            'cyan' => '#00FFFF',
-                                            'magenta' => '#FF00FF',
-                                            default => '#CCCCCC'
-                                        };
+                                    $colorName = $product['color'] ?? 'N/A';
+                                    $colorHex = match (strtolower($colorName)) {
+                                        'red' => '#FF0000',
+                                        'blue' => '#0000FF',
+                                        'green' => '#008000',
+                                        'yellow' => '#FFFF00',
+                                        'black' => '#000000',
+                                        'white' => '#FFFFFF',
+                                        'grey' => '#808080',
+                                        'gray' => '#808080',
+                                        'orange' => '#FFA500',
+                                        'purple' => '#800080',
+                                        'pink' => '#FFC0CB',
+                                        'brown' => '#A52A2A',
+                                        'beige' => '#F5F5DC',
+                                        'navy' => '#000080',
+                                        'silver' => '#C0C0C0',
+                                        'gold' => '#FFD700',
+                                        'cyan' => '#00FFFF',
+                                        'magenta' => '#FF00FF',
+                                        default => '#CCCCCC'
+                                    };
                                     ?>
-                                    <div style="display: inline-block; width: 30px; height: 30px; background-color: <?= $colorHex ?>; border: 1px solid #999; border-radius: 4px; title='<?= htmlspecialchars($colorName) ?>'" title="<?= htmlspecialchars($colorName) ?>"></div>
+                                    <div style="display: inline-block; width: 30px; height: 30px; background-color: <?= $colorHex ?>; border: 1px solid #999; border-radius: 4px; title='<?= htmlspecialchars($colorName) ?>'"
+                                        title="<?= htmlspecialchars($colorName) ?>"></div>
                                 </td>
                                 <td><?= htmlspecialchars($product['category']) ?></td>
-                                <td class="price-highlight">$<?= number_format((float)$product['price'], 2) ?></td>
-                                <td><?= (int)$product['quantity'] ?></td>
-                                <td class="price-highlight">$<?= number_format((float)$product['price'] * $product['quantity'], 2) ?></td>
+                                <td class="price-highlight">$<?= number_format((float) $product['price'], 2) ?></td>
+                                <td><?= (int) $product['quantity'] ?></td>
+                                <td class="price-highlight">
+                                    $<?= number_format((float) $product['price'] * $product['quantity'], 2) ?></td>
                                 <td>
                                     <?php
-                                        $status = $product['status'] ?? 'Pending';
-                                        $statusClass = match($status) {
-                                            'Completed' => 'badge bg-success',
-                                            'In Progress' => 'badge bg-info',
-                                            'Pending' => 'badge bg-warning',
-                                            'Cancelled' => 'badge bg-danger',
-                                            default => 'badge bg-secondary'
-                                        };
+                                    $status = $product['status'] ?? 'Pending';
+                                    $statusClass = match ($status) {
+                                        'Completed' => 'badge bg-success',
+                                        'In Progress' => 'badge bg-info',
+                                        'Pending' => 'badge bg-warning',
+                                        'Cancelled' => 'badge bg-danger',
+                                        default => 'badge bg-secondary'
+                                    };
                                     ?>
                                     <span class="<?= $statusClass ?>"><?= htmlspecialchars($status) ?></span>
                                 </td>
@@ -744,7 +854,8 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—
             <div class="info-card">
                 <div class="info-row">
                     <span class="info-label">Design Cost:</span>
-                    <span class="info-value price-highlight">$<?= number_format((float)$order['expect_price'], 2) ?></span>
+                    <span
+                        class="info-value price-highlight">$<?= number_format((float) $order['expect_price'], 2) ?></span>
                 </div>
                 <div class="info-row">
                     <span class="info-label">Products/Materials:</span>
@@ -752,12 +863,12 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—
                 </div>
                 <div class="info-row">
                     <span class="info-label">Budget Allocated:</span>
-                    <span class="info-value price-highlight">$<?= number_format((float)$order['budget'], 2) ?></span>
+                    <span class="info-value price-highlight">$<?= number_format((float) $order['budget'], 2) ?></span>
                 </div>
                 <div class="info-row">
                     <span class="info-label">Remaining Budget:</span>
                     <span class="info-value price-highlight">
-                        $<?= number_format((float)$order['budget'] - $order['expect_price'] - $productTotal, 2) ?>
+                        $<?= number_format((float) $order['budget'] - $order['expect_price'] - $productTotal, 2) ?>
                     </span>
                 </div>
             </div>
@@ -791,19 +902,19 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—
                     method: 'POST',
                     body: formData
                 })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        alert(data.message);
-                        location.reload();
-                    } else {
-                        alert('Error: ' + data.message);
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    alert('An error occurred while approving the picture.');
-                });
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            alert(data.message);
+                            location.reload();
+                        } else {
+                            alert('Error: ' + data.message);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('An error occurred while approving the picture.');
+                    });
             }
         }
 
@@ -854,22 +965,22 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—
                 method: 'POST',
                 body: formData
             })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert(data.message);
-                    location.reload();
-                } else {
-                    alert('Error: ' + data.message);
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('An error occurred while rejecting the picture.');
-            });
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert(data.message);
+                        location.reload();
+                    } else {
+                        alert('Error: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('An error occurred while rejecting the picture.');
+                });
         }
 
-        window.onclick = function(event) {
+        window.onclick = function (event) {
             const modal = document.getElementById('rejectModal');
             if (modal && event.target === modal) {
                 closeRejectModal();
@@ -877,47 +988,48 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string)$clientData['ctel'] : '—
         }
     </script>
 </body>
+
 </html>
 
 <?php include __DIR__ . '/../Public/chat_widget.php'; ?>
 <?php if (!empty($showOrderChat) && !empty($showOrderChatRoomId)): ?>
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    // attempt to open chat widget and select room for the order
-    var roomId = <?= json_encode($showOrderChatRoomId) ?>;
-    var designerId = <?= json_encode($designerIdForOrder) ?>;
-    function openOrderRoom() {
-        try {
-            // If we have a roomId, try to open it. Otherwise call the chat API with the designer id.
-            var apps = window.chatApps || {};
-            var keys = Object.keys(apps || {});
-            if (roomId) {
-                if (keys.length > 0) {
-                    var app = apps[keys[0]];
-                    if (app && typeof app.openRoom === 'function') {
-                        try { app.openRoom(roomId).catch(function(){/* ignore */}); } catch (e) { /* ignore */ }
-                    } else if (app && typeof app.selectAgent === 'function') {
-                        try { app.selectAgent({ ChatRoomid: roomId, id: roomId }); } catch (e) { /* ignore */ }
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // attempt to open chat widget and select room for the order
+            var roomId = <?= json_encode($showOrderChatRoomId) ?>;
+            var designerId = <?= json_encode($designerIdForOrder) ?>;
+            function openOrderRoom() {
+                try {
+                    // If we have a roomId, try to open it. Otherwise call the chat API with the designer id.
+                    var apps = window.chatApps || {};
+                    var keys = Object.keys(apps || {});
+                    if (roomId) {
+                        if (keys.length > 0) {
+                            var app = apps[keys[0]];
+                            if (app && typeof app.openRoom === 'function') {
+                                try { app.openRoom(roomId).catch(function () {/* ignore */ }); } catch (e) { /* ignore */ }
+                            } else if (app && typeof app.selectAgent === 'function') {
+                                try { app.selectAgent({ ChatRoomid: roomId, id: roomId }); } catch (e) { /* ignore */ }
+                            }
+                        } else if (typeof window.handleChat === 'function') {
+                            try { window.handleChat(null, { room: roomId }); } catch (e) { /* ignore */ }
+                        }
+                    } else if (designerId) {
+                        // fallback: open/create room using designer id
+                        if (typeof window.handleChat === 'function') {
+                            try { window.handleChat(designerId); } catch (e) { /* ignore */ }
+                        }
                     }
-                } else if (typeof window.handleChat === 'function') {
-                    try { window.handleChat(null, { room: roomId }); } catch (e) { /* ignore */ }
-                }
-            } else if (designerId) {
-                // fallback: open/create room using designer id
-                if (typeof window.handleChat === 'function') {
-                    try { window.handleChat(designerId); } catch (e) { /* ignore */ }
+                    // ensure widget panel is opened if available
+                    if (typeof window.chatWidgetOpenPanel === 'function') {
+                        try { window.chatWidgetOpenPanel(); } catch (e) { /* ignore */ }
+                    }
+                } catch (err) {
+                    console.error('openOrderRoom error', err);
                 }
             }
-            // ensure widget panel is opened if available
-            if (typeof window.chatWidgetOpenPanel === 'function') {
-                try { window.chatWidgetOpenPanel(); } catch (e) { /* ignore */ }
-            }
-        } catch (err) {
-            console.error('openOrderRoom error', err);
-        }
-    }
-    // Wait briefly to allow the widget to initialize
-    setTimeout(openOrderRoom, 700);
-});
-</script>
+            // Wait briefly to allow the widget to initialize
+            setTimeout(openOrderRoom, 700);
+        });
+    </script>
 <?php endif; ?>

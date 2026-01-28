@@ -47,6 +47,9 @@ $order = mysqli_fetch_assoc($result);
 $ref_sql = "SELECT 
                 orr.id, 
                 orr.productid,
+                orr.status,
+                orr.price,
+                orr.note,
                 p.pname, 
                 p.price as product_price, 
                 p.category,
@@ -77,6 +80,14 @@ while ($fee_row = mysqli_fetch_assoc($fees_result)) {
     $total_fees += floatval($fee_row['amount']);
 }
 
+// Fetch latest designed picture
+$pic_sql = "SELECT filename, pictureid FROM `DesignedPicture` WHERE orderid = ? ORDER BY upload_date DESC LIMIT 1";
+$pic_stmt = mysqli_prepare($mysqli, $pic_sql);
+mysqli_stmt_bind_param($pic_stmt, "i", $orderid);
+mysqli_stmt_execute($pic_stmt);
+$pic_result = mysqli_stmt_get_result($pic_stmt);
+$latest_picture = mysqli_fetch_assoc($pic_result);
+
 // Calculate final total cost
 $design_price = isset($order["design_price"]) ? floatval($order["design_price"]) : 0;
 $final_total_cost = $design_price + $total_fees;
@@ -92,6 +103,7 @@ $edit_order = isset($_GET['edit']) && $_GET['edit'] == 'order';
 $edit_requirements = isset($_GET['edit']) && $_GET['edit'] == 'requirements';
 $edit_designer = isset($_GET['edit']) && $_GET['edit'] == 'designer';
 $edit_cost = isset($_GET['edit']) && $_GET['edit'] == 'cost';
+$edit_reference = isset($_GET['edit']) && $_GET['edit'] == 'reference';
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (isset($_POST['update_status'])) {
@@ -243,8 +255,48 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         exit();
     }
 
+    if (isset($_POST['update_reference_status'])) {
+        if (isset($_POST['ref']) && is_array($_POST['ref'])) {
+            foreach ($_POST['ref'] as $refId => $payload) {
+                $rid = (int)$refId;
+                $newPrice = isset($payload['price']) ? (float)$payload['price'] : null;
+                $update_ref_sql = "UPDATE `OrderReference` SET price = ?, status = 'waiting confirm' WHERE id = ? AND orderid = ?";
+                $update_ref_stmt = mysqli_prepare($mysqli, $update_ref_sql);
+                mysqli_stmt_bind_param($update_ref_stmt, "dii", $newPrice, $rid, $orderid);
+                mysqli_stmt_execute($update_ref_stmt);
+                mysqli_stmt_close($update_ref_stmt);
+            }
+        }
+        header("Location: Order_Edit.php?id=" . $orderid);
+        exit();
+    }
+
+    if (isset($_POST['confirm_proposal'])) {
+        $confirm_status = 'waiting review';
+        $update_confirm_sql = "UPDATE `Order` SET ostatus = ? WHERE orderid = ?";
+        $confirm_stmt = mysqli_prepare($mysqli, $update_confirm_sql);
+        mysqli_stmt_bind_param($confirm_stmt, "si", $confirm_status, $orderid);
+        if (mysqli_stmt_execute($confirm_stmt)) {
+            header("Location: Order_Edit.php?id=" . $orderid . "&msg=proposal_confirmed");
+            exit();
+        }
+        mysqli_stmt_close($confirm_stmt);
+    }
+
+    if (isset($_POST['reject_proposal'])) {
+        $reject_status = 'drafting proposal';
+        $update_reject_sql = "UPDATE `Order` SET ostatus = ? WHERE orderid = ?";
+        $reject_stmt = mysqli_prepare($mysqli, $update_reject_sql);
+        mysqli_stmt_bind_param($reject_stmt, "si", $reject_status, $orderid);
+        if (mysqli_stmt_execute($reject_stmt)) {
+            header("Location: Order_Edit.php?id=" . $orderid . "&msg=proposal_rejected");
+            exit();
+        }
+        mysqli_stmt_close($reject_stmt);
+    }
+
     if (isset($_POST['confirm_order'])) {
-        $confirm_status = 'Confirmed';
+        $confirm_status = 'designing';
         $update_confirm_sql = "UPDATE `Order` SET ostatus = ? WHERE orderid = ?";
         $confirm_stmt = mysqli_prepare($mysqli, $update_confirm_sql);
         mysqli_stmt_bind_param($confirm_stmt, "si", $confirm_status, $orderid);
@@ -258,7 +310,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
     if (isset($_POST['reject_order'])) {
         $reject_reason = mysqli_real_escape_string($mysqli, $_POST['reject_reason'] ?? '');
-        $reject_status = 'Rejected';
+        $reject_status = 'reject';
 
         // Update order status and reason
         $update_reject_sql = "UPDATE `Order` SET ostatus = ?, Requirements = ? WHERE orderid = ?";
@@ -441,17 +493,24 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                 <label class="fw-bold text-muted small">Status</label>
                                 <p class="mb-0">
                                     <?php
-                                    $status = $order["ostatus"] ?? 'waiting confirm';
+                                    $status = strtolower($order["ostatus"] ?? 'waiting confirm');
                                     $status_class = '';
                                     switch ($status) {
-                                        case 'Completed':
+                                        case 'complete':
                                             $status_class = 'bg-success';
                                             break;
-                                        case 'Designing':
+                                        case 'designing':
+                                        case 'drafting proposal':
+                                        case 'reviewing design proposal':
                                             $status_class = 'bg-info';
                                             break;
-                                        case 'Pending':
+                                        case 'waiting confirm':
+                                        case 'waiting review':
+                                        case 'waiting payment':
                                             $status_class = 'bg-warning';
+                                            break;
+                                        case 'reject':
+                                            $status_class = 'bg-danger';
                                             break;
                                         default:
                                             $status_class = 'bg-secondary';
@@ -508,6 +567,105 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     </div>
                 </div>
             </div>
+
+            <!-- Product Reference Status Card -->
+            <?php if (!empty($references)): ?>
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="card h-100">
+                            <div class="card-header">
+                                <h5 class="card-title mb-0">
+                                    <i class="fas fa-tags me-2"></i>Product Reference Status
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                <!-- View Mode -->
+                                <div id="reference-view" class="<?php echo $edit_reference ? 'd-none' : ''; ?>">
+                                    <div class="table-responsive">
+                                        <table class="table table-sm align-middle">
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th>Product</th>
+                                                    <th>Category</th>
+                                                    <th>Status</th>
+                                                    <th>Requested Price</th>
+                                                    <th>Note</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <?php foreach ($references as $ref): 
+                                                    $refStatus = strtolower(trim($ref['status'] ?? 'pending'));
+                                                    $displayPrice = isset($ref['price']) && $ref['price'] !== null ? (float)$ref['price'] : (float)($ref['product_price'] ?? 0);
+                                                    $badgeClass = 'bg-secondary';
+                                                    if (in_array($refStatus, ['waiting confirm', 'pending'])) $badgeClass = 'bg-warning';
+                                                    if (in_array($refStatus, ['confirmed', 'approved'])) $badgeClass = 'bg-success';
+                                                    if (in_array($refStatus, ['rejected', 'reject'])) $badgeClass = 'bg-danger';
+                                                ?>
+                                                    <tr>
+                                                        <td><?php echo htmlspecialchars($ref['pname'] ?? ('Product #' . $ref['productid'])); ?></td>
+                                                        <td><?php echo htmlspecialchars($ref['category'] ?? '—'); ?></td>
+                                                        <td>
+                                                            <span class="badge <?php echo $badgeClass; ?>">
+                                                                <?php echo $refStatus === 'waiting confirm' ? 'Request Confirm' : htmlspecialchars($refStatus); ?>
+                                                            </span>
+                                                        </td>
+                                                        <td>HK$<?php echo number_format($displayPrice, 2); ?></td>
+                                                        <td><?php echo htmlspecialchars($ref['note'] ?? '—'); ?></td>
+                                                    </tr>
+                                                <?php endforeach; ?>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div class="mt-3">
+                                        <button type="button" class="btn btn-primary" onclick="toggleEdit('reference', true)">
+                                            <i class="fas fa-edit me-2"></i>Edit
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Edit Mode -->
+                                <div id="reference-edit" class="<?php echo $edit_reference ? '' : 'd-none'; ?>">
+                                    <form method="post">
+                                        <input type="hidden" name="update_reference_status" value="1">
+                                        <div class="table-responsive">
+                                            <table class="table table-sm align-middle">
+                                                <thead class="table-light">
+                                                    <tr>
+                                                        <th>Product</th>
+                                                        <th>Requested Price</th>
+                                                        <th>Note</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <?php foreach ($references as $ref): 
+                                                        $displayPrice = isset($ref['price']) && $ref['price'] !== null ? (float)$ref['price'] : (float)($ref['product_price'] ?? 0);
+                                                    ?>
+                                                        <tr>
+                                                            <td><?php echo htmlspecialchars($ref['pname'] ?? ('Product #' . $ref['productid'])); ?></td>
+                                                            <td>
+                                                                <input type="number" step="0.01" min="0" class="form-control form-control-sm" name="ref[<?php echo (int)$ref['id']; ?>][price]" value="<?php echo htmlspecialchars(number_format($displayPrice, 2, '.', '')); ?>">
+                                                            </td>
+                                                            <td><?php echo htmlspecialchars($ref['note'] ?? '—'); ?></td>
+                                                        </tr>
+                                                    <?php endforeach; ?>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        <div class="d-flex gap-2">
+                                            <button type="submit" class="btn btn-success flex-grow-1">
+                                                <i class="fas fa-save me-2"></i>Request Quotation
+                                            </button>
+                                            <button type="button" class="btn btn-secondary" onclick="toggleEdit('reference', false)">
+                                                <i class="fas fa-times me-2"></i>Cancel
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            <?php endif; ?>
 
             <!-- Assign Designer Section (Always Available) -->
             <div class="row mb-4">
@@ -569,7 +727,45 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
 
             <!-- Edit Sections -->
-            <div class="row" style="<?php echo $show_confirm_reject ? 'display: none;' : ''; ?>">
+            <?php 
+                $status = strtolower($order['ostatus'] ?? 'waiting confirm');
+                $isProposalConfirmed = !in_array($status, ['waiting confirm', 'designing', 'drafting proposal', 'reviewing design proposal', 'submit_proposal', 'reject']); 
+                // Only show these sections if status is at a stage where a proposal has likely been accepted/confirmed.
+                // Assuming 'waiting review' means Client Review, which implies manager approved it. 
+                // However, "Reviewing Design Proposal" means manager is reviewing.
+                // The prompt says "hide before confirmed by manager".
+                // Manager confirms it at "Reviewing Design Proposal" stage to move it forward?
+                // Or maybe the user means simply hide these if it's still in early stages.
+                
+                // Let's hide if in early stages:
+                $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'drafting proposal', 'reviewing design proposal', 'reject']);
+            ?>
+            <?php if ($status === 'reviewing design proposal'): ?>
+                <div class="row mb-4">
+                    <div class="col-12">
+                         <div class="card bg-light border-info">
+                             <div class="card-body text-center">
+                                 <h5 class="text-info"><i class="fas fa-search me-2"></i>Design Proposal Review</h5>
+                                 <p>The designer has submitted a proposal. Please review the design details.</p>
+                                 <div class="mt-3">
+                                     <?php if ($latest_picture): ?>
+                                         <button type="button" class="btn btn-primary me-2"
+                                             onclick="openProposalPreview('../uploads/designed_Picture/<?= htmlspecialchars($latest_picture['filename']) ?>')">
+                                             <i class="fas fa-file-image me-1"></i>Preview Design Proposal
+                                         </button>
+                                     <?php else: ?>
+                                         <button disabled class="btn btn-secondary me-2">
+                                             <i class="fas fa-exclamation-triangle me-1"></i>No Proposal File Found
+                                         </button>
+                                     <?php endif; ?>
+                                 </div>
+                             </div>
+                         </div>
+                    </div>
+                </div>
+            <?php endif; ?>
+
+            <div class="row" style="<?php echo ($show_confirm_reject || $hideEditCards) ? 'display: none;' : ''; ?>">
                 <!-- Update Status Section -->
                 <div class="col-lg-6 mb-4">
                     <div class="card h-100">
@@ -818,18 +1014,19 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                         <!-- Cost Summary -->
                                         <div class="mb-4 p-3 rounded border">
                                             <div class="row mb-2">
-                                                <div class="col-6">
-                                                    <small class="text-muted">Design Price:</small>
-                                                </div>
-                                                <div class="col-6 text-end">
-                                                    <strong>HK$<?php echo isset($order["design_price"]) && $order["design_price"] ? number_format($order["design_price"], 0) : '0'; ?></strong>
-                                                </div>
-                                            </div>
-                                            <div class="row">
-                                                <div class="col-6">
-                                                    <small class="text-muted">Additional Fees:</small>
-                                                </div>
-                                                <div class="col-6 text-end">
+                                                 <div class="mt-3">
+                                                     <?php if ($latest_picture): ?>
+                                                         <button type="button" class="btn btn-primary me-2"
+                                                             onclick="openProposalPreview('../uploads/designed_Picture/<?= htmlspecialchars($latest_picture['filename']) ?>')">
+                                                             <i class="fas fa-file-image me-1"></i>Preview Design Proposal
+                                                         </button>
+                                                     <?php else: ?>
+                                                         <button disabled class="btn btn-secondary me-2">
+                                                             <i class="fas fa-exclamation-triangle me-1"></i>No Proposal File Found
+                                                         </button>
+                                                     <?php endif; ?>
+                                     
+                                                     <!-- Confirm/Reject buttons are inside the preview modal -->
                                                     <strong class="text-info" id="preview_fees_text"
                                                         data-base="<?php echo $total_fees; ?>">HK$<?php echo number_format($total_fees, 0); ?></strong>
                                                 </div>
@@ -862,8 +1059,72 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     </div>
                 </div>
             </div>
+            
+            <!-- Proposal Preview Modal -->
+            <div class="modal fade" id="proposalPreviewModal" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog modal-xl modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title"><i class="fas fa-file-alt me-2"></i>Design Proposal Preview</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div id="proposalPreviewImageWrap" class="text-center" style="display:none;">
+                                <img id="proposalPreviewImage" src="" alt="Design Proposal" style="max-width:100%;max-height:70vh;border-radius:8px;" />
+                            </div>
+                            <div id="proposalPreviewPdfWrap" style="display:none;">
+                                <iframe id="proposalPreviewPdf" src="" style="width:100%;height:70vh;border:0;"></iframe>
+                            </div>
+                        </div>
+                        <div class="modal-footer d-flex justify-content-between">
+                            <div class="text-muted small">Confirm or reject after reviewing the proposal.</div>
+                            <div class="d-flex gap-2">
+                                <form method="post" class="m-0">
+                                    <input type="hidden" name="confirm_proposal" value="1">
+                                    <button type="submit" class="btn btn-success">
+                                        <i class="fas fa-check me-1"></i>Confirm Proposal
+                                    </button>
+                                </form>
+                                <form method="post" class="m-0">
+                                    <input type="hidden" name="reject_proposal" value="1">
+                                    <button type="submit" class="btn btn-danger">
+                                        <i class="fas fa-times me-1"></i>Reject Proposal
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
             <script>
+                function openProposalPreview(fileUrl) {
+                    const imgWrap = document.getElementById('proposalPreviewImageWrap');
+                    const pdfWrap = document.getElementById('proposalPreviewPdfWrap');
+                    const img = document.getElementById('proposalPreviewImage');
+                    const pdf = document.getElementById('proposalPreviewPdf');
+                    if (!imgWrap || !pdfWrap || !img || !pdf) return;
+
+                    const isPdf = fileUrl.toLowerCase().endsWith('.pdf');
+                    if (isPdf) {
+                        imgWrap.style.display = 'none';
+                        pdfWrap.style.display = 'block';
+                        pdf.src = fileUrl;
+                        img.src = '';
+                    } else {
+                        pdfWrap.style.display = 'none';
+                        imgWrap.style.display = 'block';
+                        img.src = fileUrl;
+                        pdf.src = '';
+                    }
+
+                    const modalEl = document.getElementById('proposalPreviewModal');
+                    if (modalEl) {
+                        const modal = new bootstrap.Modal(modalEl);
+                        modal.show();
+                    }
+                }
+
                 function toggleEdit(section, show) {
                     const view = document.getElementById(section + '-view');
                     const edit = document.getElementById(section + '-edit');

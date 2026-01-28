@@ -65,7 +65,7 @@ $stats_sql = "SELECT
                 SUM(c.budget) as total_budget,
                 AVG(c.budget) as avg_budget,
                 SUM(CASE WHEN o.ostatus = 'waiting confirm' THEN 1 ELSE 0 END) as pending_count,
-                SUM(CASE WHEN o.ostatus = 'designing' THEN 1 ELSE 0 END) as designing_count,
+                 SUM(CASE WHEN o.ostatus IN ('designing', 'drafting proposal', 'reviewing design proposal') THEN 1 ELSE 0 END) as designing_count,
                 SUM(CASE WHEN o.ostatus = 'complete' THEN 1 ELSE 0 END) as completed_count
                FROM `Order` o
               LEFT JOIN `Client` c ON o.clientid = c.clientid
@@ -112,27 +112,46 @@ $stats = mysqli_fetch_assoc($stats_result);
                         </a>
                     <?php endif; ?>
                 </form>
-                <div class="d-flex justify-content-start mt-3">
+                <div class="d-flex justify-content-start mt-3 flex-wrap gap-2">
                     <a href="?status=all"
                         class="btn btn-sm <?php echo $status_filter == 'all' ? 'btn-primary' : 'btn-outline-primary'; ?>">
-                        <i class="fas fa-list me-1"></i>All Orders
+                        <i class="fas fa-list me-1"></i>All
                     </a>
-                    <a href="?status=Pending"
+                    <a href="?status=waiting confirm"
                         class="btn btn-sm <?php echo $status_filter == 'waiting confirm' ? 'btn-warning' : 'btn-outline-warning'; ?>">
                         <i class="fas fa-hourglass-half me-1"></i>Pending
                     </a>
-                    <a href="?status=Designing"
-                        class="btn btn-sm <?php echo $status_filter == 'Designing' ? 'btn-info' : 'btn-outline-info'; ?>">
+                    <a href="?status=designing"
+                        class="btn btn-sm <?php echo $status_filter == 'designing' ? 'btn-info' : 'btn-outline-info'; ?>">
                         <i class="fas fa-pencil-alt me-1"></i>Designing
                     </a>
-                    <a href="?status=Completed"
-                        class="btn btn-sm <?php echo $status_filter == 'Completed' ? 'btn-success' : 'btn-outline-success'; ?>">
+                    <a href="?status=drafting proposal"
+                        class="btn btn-sm <?php echo $status_filter == 'drafting proposal' ? 'btn-primary' : 'btn-outline-primary'; ?>">
+                        <i class="fas fa-file-signature me-1"></i>Drafting
+                    </a>
+                    <a href="?status=reviewing design proposal"
+                        class="btn btn-sm <?php echo $status_filter == 'reviewing design proposal' ? 'btn-secondary' : 'btn-outline-secondary'; ?>">
+                        <i class="fas fa-search me-1"></i>Reviewing
+                    </a>
+                     <a href="?status=waiting review"
+                        class="btn btn-sm <?php echo $status_filter == 'waiting review' ? 'btn-info' : 'btn-outline-info'; ?>">
+                        <i class="fas fa-clipboard-check me-1"></i>Wait Review
+                    </a>
+                    <a href="?status=waiting payment"
+                        class="btn btn-sm <?php echo $status_filter == 'waiting payment' ? 'btn-warning' : 'btn-outline-warning'; ?>">
+                        <i class="fas fa-money-bill-wave me-1"></i>Wait Pay
+                    </a>
+                    <a href="?status=complete"
+                        class="btn btn-sm <?php echo $status_filter == 'complete' ? 'btn-success' : 'btn-outline-success'; ?>">
                         <i class="fas fa-check-circle me-1"></i>Completed
                     </a>
-                    <div class="ms-auto"> Total Orders:
-                        <?php echo $total_orders; ?>
-                        <button onclick="printPage()" class="btn btn-outline-primary ms-3">
-                            <i class="fas fa-print me-2"></i>Print
+                    <a href="?status=reject"
+                        class="btn btn-sm <?php echo $status_filter == 'reject' ? 'btn-danger' : 'btn-outline-danger'; ?>">
+                        <i class="fas fa-times-circle me-1"></i>Rejected
+                    </a>
+                    <div class="ms-auto"> Total: <?php echo $total_orders; ?>
+                        <button onclick="printPage()" class="btn btn-sm btn-outline-dark ms-2">
+                            <i class="fas fa-print"></i>
                         </button>
                     </div>
                 </div>
@@ -159,14 +178,21 @@ $stats = mysqli_fetch_assoc($stats_result);
                         // Determine status class
                         $status_class = '';
                         switch ($row["ostatus"]) {
-                            case 'Completed':
+                            case 'complete':
                                 $status_class = 'status-completed';
                                 break;
-                            case 'Designing':
+                            case 'designing':
+                            case 'drafting proposal':
+                            case 'reviewing design proposal':
                                 $status_class = 'status-designing';
                                 break;
-                            case 'Pending':
+                            case 'waiting confirm':
+                            case 'waiting review':
+                            case 'waiting payment':
                                 $status_class = 'status-pending';
+                                break;
+                            case 'reject':
+                                $status_class = 'bg-danger text-white'; // Fallback or add css
                                 break;
                             default:
                                 $status_class = 'status-pending';
