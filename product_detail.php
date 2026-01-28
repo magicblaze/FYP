@@ -469,7 +469,7 @@ function colorNameToHex($colorInput) {
                 </div>
 
                 <div class="product-meta">
-                    <div><i class="fas fa-store me-2"></i><strong>Supplier:</strong> <?= htmlspecialchars($product['sname']) ?></div>
+                    <div><i class="fas fa-store me-2"></i><strong>Contractors:</strong> <?= htmlspecialchars($product['sname']) ?></div>
                     <div><i class="fas fa-tag me-2"></i><strong>Category:</strong> <?= htmlspecialchars($product['category']) ?></div>
                 </div>
 
