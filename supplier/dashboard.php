@@ -383,7 +383,7 @@ $colorImageStmt->close();
                             <div class="col-md-6">
                                 <div class="form-section">
                                     <label class="form-label"><i class="fas fa-dollar-sign"></i> Price (HK$) *</label>
-                                    <input type="number" id="productPrice" name="price" class="form-control" min="1" required>
+                                    <input type="number" id="productPrice" name="price" class="form-control" min="1" step="100" required>
                                 </div>
                             </div>
                             <div class="col-md-6">

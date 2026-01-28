@@ -96,11 +96,8 @@ $stats = mysqli_fetch_assoc($stats_result);
         </div>
 
         <!-- Search Card -->
-        <div class="card mb-4">
+        <div class="container border rounded shadow-sm bg-white mb-4">
             <div class="card-body">
-                <h5 class="card-title mb-3">
-                    <i class="fas fa-search me-2"></i>Search Orders
-                </h5>
                 <form method="GET" action="" class="d-flex gap-2">
                     <input type="text" name="search" class="form-control"
                         placeholder="Search orders by ID, client name, or tags..."
@@ -115,145 +112,127 @@ $stats = mysqli_fetch_assoc($stats_result);
                         </a>
                     <?php endif; ?>
                 </form>
-
-
-                <!-- Status Filter Card -->
-                <div class="card-body">
-                    <div class="card-title mb-3">
-                        <i class="fas fa-filter me-2"></i>Filter
-                        <div class="d-flex flex-wrap gap-2">
-                            <a href="?status=all"
-                                class="btn btn-sm <?php echo $status_filter == 'all' ? 'btn-primary' : 'btn-outline-primary'; ?>">
-                                <i class="fas fa-list me-1"></i>All Orders
-                            </a>
-                            <a href="?status=Pending"
-                                class="btn btn-sm <?php echo $status_filter == 'Pending' ? 'btn-warning' : 'btn-outline-warning'; ?>">
-                                <i class="fas fa-hourglass-half me-1"></i>Pending
-                            </a>
-                            <a href="?status=Designing"
-                                class="btn btn-sm <?php echo $status_filter == 'Designing' ? 'btn-info' : 'btn-outline-info'; ?>">
-                                <i class="fas fa-pencil-alt me-1"></i>Designing
-                            </a>
-                            <a href="?status=Completed"
-                                class="btn btn-sm <?php echo $status_filter == 'Completed' ? 'btn-success' : 'btn-outline-success'; ?>">
-                                <i class="fas fa-check-circle me-1"></i>Completed
-                            </a>
-                        </div>
+                <div class="d-flex justify-content-start mt-3">
+                    <a href="?status=all"
+                        class="btn btn-sm <?php echo $status_filter == 'all' ? 'btn-primary' : 'btn-outline-primary'; ?>">
+                        <i class="fas fa-list me-1"></i>All Orders
+                    </a>
+                    <a href="?status=Pending"
+                        class="btn btn-sm <?php echo $status_filter == 'Pending' ? 'btn-warning' : 'btn-outline-warning'; ?>">
+                        <i class="fas fa-hourglass-half me-1"></i>Pending
+                    </a>
+                    <a href="?status=Designing"
+                        class="btn btn-sm <?php echo $status_filter == 'Designing' ? 'btn-info' : 'btn-outline-info'; ?>">
+                        <i class="fas fa-pencil-alt me-1"></i>Designing
+                    </a>
+                    <a href="?status=Completed"
+                        class="btn btn-sm <?php echo $status_filter == 'Completed' ? 'btn-success' : 'btn-outline-success'; ?>">
+                        <i class="fas fa-check-circle me-1"></i>Completed
+                    </a>
+                    <div class="ms-auto"> Total Orders:
+                        <?php echo $total_orders; ?>
+                        <button onclick="printPage()" class="btn btn-outline-primary ms-3">
+                            <i class="fas fa-print me-2"></i>Print
+                        </button>
                     </div>
                 </div>
             </div>
-            <div class="card-footer text-muted"> Total Orders:
-                <?php echo $total_orders; ?>
-                <button onclick="printPage()" class="btn btn-outline-primary">
-                    <i class="fas fa-print me-2"></i>Print
-                </button>
-            </div>
 
-
-            <!-- Orders Table -->
-            <div class="table-container">
-                <table class="table">
-                    <thead>
+        <!-- Orders Table -->
+        <div class="table-container">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th><i class="fas fa-hashtag me-2"></i>Order ID</th>
+                        <th><i class="fas fa-calendar me-2"></i>Order Date</th>
+                        <th><i class="fas fa-user me-2"></i>Client</th>
+                        <th><i class="fas fa-dollar-sign me-2"></i>Budget</th>
+                        <th><i class="fas fa-image me-2"></i>Design</th>
+                        <th><i class="fas fa-file-alt me-2"></i>Requirement</th>
+                        <th><i class="fas fa-info-circle me-2"></i>Status</th>
+                        <th><i class="fas fa-clock me-2"></i>Finish Date</th>
+                        <th><i class="fas fa-cogs me-2"></i>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php while ($row = mysqli_fetch_assoc($result)):
+                        // Determine status class
+                        $status_class = '';
+                        switch ($row["ostatus"]) {
+                            case 'Completed':
+                                $status_class = 'status-completed';
+                                break;
+                            case 'Designing':
+                                $status_class = 'status-designing';
+                                break;
+                            case 'Pending':
+                                $status_class = 'status-pending';
+                                break;
+                            default:
+                                $status_class = 'status-pending';
+                        }
+                        ?>
                         <tr>
-                            <th><i class="fas fa-hashtag me-2"></i>Order ID</th>
-                            <th><i class="fas fa-calendar me-2"></i>Order Date</th>
-                            <th><i class="fas fa-user me-2"></i>Client</th>
-                            <th><i class="fas fa-dollar-sign me-2"></i>Budget</th>
-                            <th><i class="fas fa-image me-2"></i>Design</th>
-                            <th><i class="fas fa-file-alt me-2"></i>Requirement</th>
-                            <th><i class="fas fa-info-circle me-2"></i>Status</th>
-                            <th><i class="fas fa-clock me-2"></i>Finish Date</th>
-                            <th><i class="fas fa-cogs me-2"></i>Actions</th>
+                            <td>
+                                <strong>#<?php echo htmlspecialchars($row["orderid"]); ?></strong>
+                            </td>
+                            <td><?php echo date('Y-m-d', strtotime($row["odate"])); ?></td>
+                            <td>
+                                <div>
+                                    <strong><?php echo htmlspecialchars($row["client_name"] ?? 'N/A'); ?></strong>
+                                    <br>
+                                    <small class="text-muted">ID:
+                                        <?php echo htmlspecialchars($row["clientid"] ?? 'N/A'); ?></small>
+                                </div>
+                            </td>
+                            <td>
+                                <strong class="text-success">$<?php echo number_format($row["budget"], 2); ?></strong>
+                            </td>
+                            <td>
+                                <div>
+                                    <small>Design #<?php echo htmlspecialchars($row["designid"] ?? 'N/A'); ?></small>
+                                    <br>
+                                    <small
+                                        class="text-muted">$<?php echo number_format($row["design_price"] ?? 0, 2); ?></small>
+                                </div>
+                            </td>
+                            <td>
+                                <small class="text-muted">
+                                    <?php echo htmlspecialchars(substr($row["Requirements"] ?? '', 0, 50)) . (strlen($row["Requirements"] ?? '') > 50 ? '...' : ''); ?>
+                                </small>
+                            </td>
+                            <td>
+                                <span class="status-badge <?php echo $status_class; ?>">
+                                    <?php echo htmlspecialchars($row["ostatus"]); ?>
+                                </span>
+                            </td>
+                            <td>
+                                <small>
+                                    <?php
+                                    if (isset($row["OrderFinishDate"]) && $row["OrderFinishDate"] != '0000-00-00 00:00:00') {
+                                        echo date('Y-m-d', strtotime($row["OrderFinishDate"]));
+                                    } else {
+                                        echo '<span class="text-muted">Not scheduled</span>';
+                                    }
+                                    ?>
+                                </small>
+                            </td>
+                            <td>
+                                <div class="btn-group">
+                                    <a href="Order_Edit.php?id=<?php echo $row["orderid"]; ?>"
+                                        class="btn btn-sm btn-primary">
+                                        <i class="fas fa-edit me-1"></i>Edit
+                                    </a>
+                                    <button onclick="viewOrder('<?php echo htmlspecialchars($row['orderid']); ?>')"
+                                        class="btn btn-sm btn-secondary">
+                                        <i class="fas fa-eye me-1"></i>View
+                                    </button>
+                                </div>
+                            </td>
                         </tr>
-                    </thead>
-                    <tbody>
-                        <?php while ($row = mysqli_fetch_assoc($result)):
-                            // Determine status class
-                            $status_class = '';
-                            switch ($row["ostatus"]) {
-                                case 'Completed':
-                                    $status_class = 'status-completed';
-                                    break;
-                                case 'Designing':
-                                    $status_class = 'status-designing';
-                                    break;
-                                case 'Pending':
-                                    $status_class = 'status-pending';
-                                    break;
-                                default:
-                                    $status_class = 'status-pending';
-                            }
-                            ?>
-                            <tr>
-                                <td>
-                                    <strong>#<?php echo htmlspecialchars($row["orderid"]); ?></strong>
-                                </td>
-                                <td><?php echo date('Y-m-d', strtotime($row["odate"])); ?></td>
-                                <td>
-                                    <div>
-                                        <strong><?php echo htmlspecialchars($row["client_name"] ?? 'N/A'); ?></strong>
-                                        <br>
-                                        <small class="text-muted">ID:
-                                            <?php echo htmlspecialchars($row["clientid"] ?? 'N/A'); ?></small>
-                                    </div>
-                                </td>
-                                <td>
-                                    <strong class="text-success">$<?php echo number_format($row["budget"], 2); ?></strong>
-                                </td>
-                                <td>
-                                    <div>
-                                        <small>Design #<?php echo htmlspecialchars($row["designid"] ?? 'N/A'); ?></small>
-                                        <br>
-                                        <small
-                                            class="text-muted">$<?php echo number_format($row["design_price"] ?? 0, 2); ?></small>
-                                    </div>
-                                </td>
-                                <td>
-                                    <small class="text-muted">
-                                        <?php echo htmlspecialchars(substr($row["Requirements"] ?? '', 0, 50)) . (strlen($row["Requirements"] ?? '') > 50 ? '...' : ''); ?>
-                                    </small>
-                                </td>
-                                <td>
-                                    <span class="status-badge <?php echo $status_class; ?>">
-                                        <?php echo htmlspecialchars($row["ostatus"]); ?>
-                                    </span>
-                                </td>
-                                <td>
-                                    <small>
-                                        <?php
-                                        if (isset($row["OrderFinishDate"]) && $row["OrderFinishDate"] != '0000-00-00 00:00:00') {
-                                            echo date('Y-m-d', strtotime($row["OrderFinishDate"]));
-                                        } else {
-                                            echo '<span class="text-muted">Not scheduled</span>';
-                                        }
-                                        ?>
-                                    </small>
-                                </td>
-                                <td>
-                                    <div class="btn-group">
-                                        <a href="Order_Edit.php?id=<?php echo $row["orderid"]; ?>"
-                                            class="btn btn-sm btn-primary">
-                                            <i class="fas fa-edit me-1"></i>Edit
-                                        </a>
-                                        <button onclick="viewOrder('<?php echo htmlspecialchars($row['orderid']); ?>')"
-                                            class="btn btn-sm btn-secondary">
-                                            <i class="fas fa-eye me-1"></i>View
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                        <?php endwhile; ?>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- Action Buttons -->
-        <div class="d-flex justify-content-between align-items-center mt-4">
-            <a href="Manager_MyOrder.php" class="btn btn-secondary">
-                <i class="fas fa-arrow-left me-2"></i>Back to Orders Manager
-            </a>
-            <small class="text-muted">Last updated: <?php echo date('Y-m-d H:i:s'); ?></small>
+                    <?php endwhile; ?>
+                </tbody>
+            </table>
         </div>
     </main>
 

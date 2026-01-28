@@ -260,7 +260,7 @@ $logoPath = ($role === 'supplier' && $id == 1) ? "../uploads/company/companylogo
                 <div class="mb-3"><label class="form-label small fw-bold">Phone Number</label><input type="text" name="tel" class="form-control" value="<?= htmlspecialchars($userData['tel']) ?>"></div>
                 <?php if ($role === 'client'): ?>
                     <div class="mb-3"><label class="form-label small fw-bold">Address</label><input type="text" name="address" class="form-control" value="<?= htmlspecialchars($userData['address']) ?>"></div>
-                    <div class="mb-3"><label class="form-label small fw-bold">Budget (HKD)</label><input type="number" name="budget" class="form-control" value="<?= htmlspecialchars($userData['budget']) ?>"></div>
+                    <div class="mb-3"><label class="form-label small fw-bold">Budget (HKD)</label><input type="number" name="budget" class="form-control" step="1000" value="<?= htmlspecialchars($userData['budget']) ?>"></div>
                 <?php endif; ?>
             </div>
             <div class="modal-footer"><button type="submit" class="btn btn-primary">Save Changes</button></div>

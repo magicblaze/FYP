@@ -81,7 +81,8 @@ $baseUrl = $scheme . '://' . $host . $appRoot;
             </ul>
           </li>
         <?php elseif ($role === 'manager'): ?>
-          <li class="nav-item"><a class="nav-link" href="<?= $baseUrl ?>/Manager/Manager_MyOrder.php">Orders</a></li>
+          <li class="nav-item"><a class="nav-link" href="<?= $baseUrl ?>/Manager/Manager_Dashboard.php">Orders</a></li>
+          <li class="nav-item"><a class="nav-link" href="<?= $baseUrl ?>/Manager/Order_Management.php">Orders</a></li>
           <li class="nav-item"><a class="nav-link" href="<?= $baseUrl ?>/Manager/Manager_Schedule.php">Schedule</a></li>
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle" href="#" id="browseDropdownManager" role="button"

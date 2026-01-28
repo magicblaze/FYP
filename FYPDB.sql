@@ -28,6 +28,7 @@ DROP TABLE IF EXISTS `Designer`;
 DROP TABLE IF EXISTS `Supplier`;
 DROP TABLE IF EXISTS `Material`;
 DROP TABLE IF EXISTS `Order`;
+DROP TABLE IF EXISTS `AdditionalFee`;
 DROP TABLE IF EXISTS `OrderDelivery`;
 DROP TABLE IF EXISTS `Order_Contractors`;
 DROP TABLE IF EXISTS `Design`;
@@ -268,6 +269,18 @@ INSERT INTO `OrderReference` (`orderid`, `productid`, `added_by_type`, `added_by
 (1, 2, 'client', 1), 
 (2, 3, 'client', 2), 
 (2, 4, 'client', 2); 
+
+-- Table to store additional fees for each order
+CREATE TABLE `AdditionalFee` (
+  `fee_id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `orderid` INT NOT NULL,
+  `fee_name` VARCHAR(255) NOT NULL,
+  `amount` DECIMAL(10, 2) NOT NULL,
+  `description` TEXT,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  KEY `orderid_idx` (`orderid`),
+  CONSTRAINT `fk_af_orderid` FOREIGN KEY (`orderid`) REFERENCES `Order` (`orderid`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE `DesignReference` (
   `id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,

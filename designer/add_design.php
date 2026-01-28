@@ -337,7 +337,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     <div class="form-section">
                                         <label class="form-label"><i class="fas fa-dollar-sign"></i> Expected Price
                                             (HK$) *</label>
-                                        <input type="number" name="expect_price" class="form-control" min="1" required>
+                                        <input type="number" name="expect_price" class="form-control" min="1" step="1000" required>
                                     </div>
                                 </div>
                             </div>
