@@ -77,6 +77,16 @@ while ($fee_row = mysqli_fetch_assoc($fees_result)) {
     $total_fees += floatval($fee_row['amount']);
 }
 
+// Calculate final total cost
+$design_price = isset($order["design_price"]) ? floatval($order["design_price"]) : 0;
+$final_total_cost = $design_price + $total_fees;
+
+// Determine workflow state
+$order_status = $order['ostatus'] ?? 'Pending';
+$show_edit_cards = ($order_status !== 'Pending' && !empty($order['designid']));
+$show_confirm_reject = ($order_status === 'Pending');
+$error_msg = null;
+
 $edit_status = isset($_GET['edit']) && $_GET['edit'] == 'status';
 $edit_order = isset($_GET['edit']) && $_GET['edit'] == 'order';
 $edit_requirements = isset($_GET['edit']) && $_GET['edit'] == 'requirements';
@@ -201,45 +211,66 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
     }
 
-    if (isset($_POST['add_fee'])) {
-        $fee_name = mysqli_real_escape_string($mysqli, $_POST['fee_name'] ?? '');
-        $amount = floatval($_POST['amount'] ?? 0);
-        $description = mysqli_real_escape_string($mysqli, $_POST['description'] ?? '');
-
-        if (!empty($fee_name) && $amount > 0) {
+    if (isset($_POST['save_cost_changes'])) {
+        // 1. Handle Batch Fees if present
+        if (isset($_POST['new_fees']) && is_array($_POST['new_fees'])) {
             $add_fee_sql = "INSERT INTO `AdditionalFee` (orderid, fee_name, amount, description) VALUES (?, ?, ?, ?)";
             $add_fee_stmt = mysqli_prepare($mysqli, $add_fee_sql);
-            mysqli_stmt_bind_param($add_fee_stmt, "isds", $orderid, $fee_name, $amount, $description);
-            
-            if (mysqli_stmt_execute($add_fee_stmt)) {
-                header("Location: Order_Edit.php?id=" . $orderid);
-                exit();
+
+            foreach ($_POST['new_fees'] as $fee) {
+                $fee_name = mysqli_real_escape_string($mysqli, $fee['name'] ?? '');
+                $amount = floatval($fee['amount'] ?? 0);
+                $description = mysqli_real_escape_string($mysqli, $fee['description'] ?? '');
+
+                if (!empty($fee_name) && $amount > 0) {
+                    mysqli_stmt_bind_param($add_fee_stmt, "isds", $orderid, $fee_name, $amount, $description);
+                    mysqli_stmt_execute($add_fee_stmt);
+                }
             }
+            mysqli_stmt_close($add_fee_stmt);
         }
-    }
 
-    if (isset($_POST['delete_fee'])) {
-        $fee_id = intval($_POST['fee_id']);
-        $delete_fee_sql = "DELETE FROM `AdditionalFee` WHERE fee_id = ? AND orderid = ?";
-        $delete_fee_stmt = mysqli_prepare($mysqli, $delete_fee_sql);
-        mysqli_stmt_bind_param($delete_fee_stmt, "ii", $fee_id, $orderid);
-        
-        if (mysqli_stmt_execute($delete_fee_stmt)) {
-            header("Location: Order_Edit.php?id=" . $orderid);
-            exit();
-        }
-    }
-
-    if (isset($_POST['update_cost'])) {
+        // 2. Handle Total Cost Update
         $new_cost = floatval($_POST['total_cost']);
         $update_cost_sql = "UPDATE `Order` SET cost = ? WHERE orderid = ?";
         $update_cost_stmt = mysqli_prepare($mysqli, $update_cost_sql);
         mysqli_stmt_bind_param($update_cost_stmt, "di", $new_cost, $orderid);
-        
-        if (mysqli_stmt_execute($update_cost_stmt)) {
-            header("Location: Order_Edit.php?id=" . $orderid);
+        mysqli_stmt_execute($update_cost_stmt);
+        mysqli_stmt_close($update_cost_stmt);
+
+        // Redirect after saving both
+        header("Location: Order_Edit.php?id=" . $orderid);
+        exit();
+    }
+
+    if (isset($_POST['confirm_order'])) {
+        $confirm_status = 'Confirmed';
+        $update_confirm_sql = "UPDATE `Order` SET ostatus = ? WHERE orderid = ?";
+        $confirm_stmt = mysqli_prepare($mysqli, $update_confirm_sql);
+        mysqli_stmt_bind_param($confirm_stmt, "si", $confirm_status, $orderid);
+
+        if (mysqli_stmt_execute($confirm_stmt)) {
+            header("Location: Order_Edit.php?id=" . $orderid . "&msg=confirmed");
             exit();
         }
+        mysqli_stmt_close($confirm_stmt);
+    }
+
+    if (isset($_POST['reject_order'])) {
+        $reject_reason = mysqli_real_escape_string($mysqli, $_POST['reject_reason'] ?? '');
+        $reject_status = 'Rejected';
+
+        // Update order status and reason
+        $update_reject_sql = "UPDATE `Order` SET ostatus = ?, Requirements = ? WHERE orderid = ?";
+        $reject_stmt = mysqli_prepare($mysqli, $update_reject_sql);
+        $reject_note = "REJECTED - Reason: " . $reject_reason;
+        mysqli_stmt_bind_param($reject_stmt, "ssi", $reject_status, $reject_note, $orderid);
+
+        if (mysqli_stmt_execute($reject_stmt)) {
+            header("Location: Order_Edit.php?id=" . $orderid . "&msg=rejected");
+            exit();
+        }
+        mysqli_stmt_close($reject_stmt);
     }
 }
 ?>
@@ -263,16 +294,26 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <div class="container mb-5">
         <!-- Page Title -->
         <div class="page-title">
-            <i class="fas fa-edit me-2"></i>Edit Order #<?php echo htmlspecialchars($order["orderid"] ?? 'N/A'); ?>
+            <i class="fas fa-edit me-2"></i>Proposal Drafter
         </div>
 
         <?php if ($order): ?>
+
+            <!-- Workflow Status Banner -->
+            <div class="alert <?php echo $show_confirm_reject ? 'alert-warning' : 'alert-info'; ?> mb-4" role="alert">
+                <i class="fas <?php echo $show_confirm_reject ? 'fa-hourglass-half' : 'fa-pencil-alt'; ?> me-2"></i>
+                <?php if ($show_confirm_reject): ?>
+                    <strong>Pending Confirmation:</strong> Please review the details, assign a designer, then confirm or reject this order.
+                <?php else: ?>
+                    <strong>In Progress:</strong> This order has been confirmed. You can now update schedules, requirements, costs, and monitor the design process.
+                <?php endif; ?>
+            </div>
 
             <!-- Customer Detail Card -->
             <div class="row mb-4">
                 <div class="col-lg-4 mb-3 mb-lg-0">
                     <div class="card h-100">
-                        <div class="card-header bg-primary text-white">
+                        <div class="card-header">
                             <h5 class="card-title mb-0">
                                 <i class="fas fa-user me-2"></i>Customer Detail
                             </h5>
@@ -315,7 +356,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 <!-- Design Detail Card -->
                 <div class="col-lg-4 mb-3 mb-lg-0">
                     <div class="card h-100">
-                        <div class="card-header bg-info text-white">
+                        <div class="card-header">
                             <h5 class="card-title mb-0">
                                 <i class="fas fa-pencil-alt me-2"></i>Design Detail
                             </h5>
@@ -335,7 +376,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                             <div class="mb-3">
                                 <label class="fw-bold text-muted small">Expected Price</label>
                                 <p class="mb-0"><strong
-                                        class="text-info">HK$<?php echo number_format($order["design_price"] ?? 0, 2); ?></strong>
+                                        class="text-info">HK$<?php echo number_format($order["design_price"] ?? 0, 0); ?></strong>
                                 </p>
                             </div>
                             <hr>
@@ -345,6 +386,35 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                         class="text-muted"><?php echo htmlspecialchars($order["design_tag"] ?? 'N/A'); ?></small>
                                 </p>
                             </div>
+                            <!-- Design References Card -->
+                            <?php if (!empty($references)): ?>
+                                <hr>
+                                <div class="fw-bold text-muted small mb-2">Product References</div>
+                                <?php
+                                $grouped_refs = [];
+                                foreach ($references as $ref) {
+                                    $grouped_refs[$ref['category']][] = $ref;
+                                }
+                                foreach ($grouped_refs as $category => $items):
+                                    ?>
+                                    <div class="mb-3">
+                                        <div class="mb-1"><span
+                                                class="badge bg-secondary"><?php echo htmlspecialchars($category); ?></span></div>
+                                        <ul class="list-unstyled ps-2 mb-0 border-start border-2 border-light">
+                                            <?php foreach ($items as $ref): ?>
+                                                <li class="d-flex justify-content-between align-items-center mb-1 ps-2">
+                                                    <small class="text-truncate" style="max-width: 60%;"
+                                                        title="<?php echo htmlspecialchars($ref['pname']); ?>">
+                                                        <?php echo htmlspecialchars($ref['pname']); ?>
+                                                    </small>
+                                                    <small
+                                                        class="text-success fw-bold">HK$<?php echo number_format($ref['product_price'], 0); ?></small>
+                                                </li>
+                                            <?php endforeach; ?>
+                                        </ul>
+                                    </div>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
                         </div>
                     </div>
                 </div>
@@ -352,7 +422,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 <!-- Order Detail Card -->
                 <div class="col-lg-4 mb-3 mb-lg-0">
                     <div class="card h-100">
-                        <div class="card-header bg-success text-white">
+                        <div class="card-header">
                             <h5 class="card-title mb-0">
                                 <i class="fas fa-clipboard me-2"></i>Order Detail
                             </h5>
@@ -424,417 +494,40 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                             <hr>
                             <div class="mb-0">
                                 <label class="fw-bold text-muted small">Design Price</label>
-                                <p class="mb-2"><strong>HK$<?php echo isset($order["design_price"]) && $order["design_price"] ? number_format($order["design_price"], 2) : '0.00'; ?></strong></p>
+                                <p class="mb-2">
+                                    <strong>HK$<?php echo isset($order["design_price"]) && $order["design_price"] ? number_format($order["design_price"], 0) : '0'; ?></strong>
+                                </p>
                                 <label class="fw-bold text-muted small">Additional Fees</label>
-                                <p class="mb-2"><strong>HK$<?php echo number_format($total_fees, 2); ?></strong></p>
+                                <p class="mb-2"><strong>HK$<?php echo number_format($total_fees, 0); ?></strong></p>
                                 <label class="fw-bold text-muted small">Total Cost</label>
-                                <p class="mb-0"><strong class="text-danger fs-5">HK$<?php echo isset($order["cost"]) && $order["cost"] ? number_format($order["cost"], 2) : '0.00'; ?></strong></p>
+                                <p class="mb-0"><strong
+                                        class="text-danger fs-5">HK$<?php echo number_format($final_total_cost, 0); ?></strong>
+                                </p>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
-            <!-- Design References Card -->
-            <?php if (!empty($references)): ?>
-                <div class="card mb-4">
-                    <div class="card-header bg-light">
-                        <h5 class="card-title mb-0">
-                            <i class="fas fa-link me-2"></i>Product References
-                        </h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="table-responsive">
-                            <table class="table table-hover mb-0">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th style="color: black; width: 25%; text-align: left;">Product Name</th>
-                                        <th style="color: black; width: 15%; text-align: left;">Category</th>
-                                        <th style="color: black; width: 15%; text-align: left;">Price</th>
-                                        <th style="color: black; width: 45%; text-align: left;">Description</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <?php foreach ($references as $ref): ?>
-                                        <tr>
-                                            <td style="width: 25%; text-align: left;"><?php echo htmlspecialchars($ref['pname']); ?>
-                                            </td>
-                                            <td style="width: 15%; text-align: left;"><span
-                                                    class="badge bg-secondary"><?php echo htmlspecialchars($ref['category']); ?></span>
-                                            </td>
-                                            <td style="width: 15%; text-align: left;"><strong
-                                                    class="text-success">$<?php echo number_format($ref['product_price'], 2); ?></strong>
-                                            </td>
-                                            <td style="width: 45%; text-align: left;">
-                                                <small><?php echo htmlspecialchars($ref['product_description'] ?? 'N/A'); ?></small>
-                                            </td>
-                                        </tr>
-                                    <?php endforeach; ?>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            <?php endif; ?>
 
-            <!-- Edit Sections -->
-            <div class="row">
-                <!-- Update Status Section -->
-                <div class="col-lg-6 mb-4">
+            <!-- Assign Designer Section (Always Available) -->
+            <div class="row mb-4">
+                <div class="col-lg-6">
                     <div class="card h-100">
                         <div class="card-header bg-light">
                             <h5 class="card-title mb-0">
-                                <i class="fas fa-tasks me-2"></i>Update Status & Dates
+                                <i class="fas fa-user-tie me-2"></i>Reassign Designer
                             </h5>
                         </div>
                         <div class="card-body">
-                            <?php if (!$edit_status): ?>
-                                <form method="get">
-                                    <input type="hidden" name="id" value="<?php echo $orderid; ?>">
-                                    <input type="hidden" name="edit" value="status">
-                                    <button type="submit" class="btn btn-primary w-100">
-                                        <i class="fas fa-edit me-2"></i>Edit
-                                    </button>
-                                </form>
-                            <?php else: ?>
-                                <form method="post">
-                                    <input type="hidden" name="update_status" value="1">
-                                    <div class="mb-3">
-                                        <label class="form-label fw-bold">Status</label>
-                                        <div>
-                                            <span class="status-badge status-pending">
-                                                <?php echo htmlspecialchars($order["ostatus"] ?? 'Pending'); ?>
-                                            </span>
-                                        </div>
-                                    </div>
-                                    <div class="mb-3">
-                                        <label class="form-label fw-bold">New Status</label>
-                                        <select name="ostatus" class="form-select" required>
-                                            <option value="Pending" <?php echo (($order["ostatus"] ?? 'Pending') == 'Pending') ? 'selected' : ''; ?>>
-                                                <i class="fas fa-hourglass-half"></i> Pending
-                                            </option>
-                                            <option value="Designing" <?php echo (($order["ostatus"] ?? '') == 'Designing') ? 'selected' : ''; ?>>
-                                                <i class="fas fa-pencil-alt"></i> Designing
-                                            </option>
-                                            <option value="Completed" <?php echo (($order["ostatus"] ?? '') == 'Completed') ? 'selected' : ''; ?>>
-                                                <i class="fas fa-check-circle"></i> Completed
-                                            </option>
-                                            <option value="Cancelled" <?php echo (($order["ostatus"] ?? '') == 'Cancelled') ? 'selected' : ''; ?>>
-                                                <i class="fas fa-times-circle"></i> Cancelled
-                                            </option>
-                                        </select>
-                                    </div>
-                                    <div class="mb-3">
-                                        <label class="form-label fw-bold">Order Finish Date</label>
-                                        <input type="datetime-local" name="OrderFinishDate" class="form-control" value="<?php echo isset($order['OrderFinishDate']) && $order['OrderFinishDate'] != '0000-00-00 00:00:00'
-                                            ? date('Y-m-d\TH:i', strtotime($order['OrderFinishDate']))
-                                            : date('Y-m-d\TH:i', strtotime('+7 days')); ?>">
-                                    </div>
-                                    <div class="mb-3">
-                                        <label class="form-label fw-bold">Design Finish Date</label>
-                                        <input type="datetime-local" name="DesignFinishDate" class="form-control" value="<?php echo isset($order['DesignFinishDate']) && $order['DesignFinishDate'] != '0000-00-00 00:00:00'
-                                            ? date('Y-m-d\TH:i', strtotime($order['DesignFinishDate']))
-                                            : date('Y-m-d\TH:i', strtotime('+3 days')); ?>">
-                                    </div>
-                                    <div class="d-flex gap-2">
-                                        <button type="submit" class="btn btn-success flex-grow-1">
-                                            <i class="fas fa-save me-2"></i>Save Changes
-                                        </button>
-                                        <a href="Order_Edit.php?id=<?php echo $orderid; ?>" class="btn btn-secondary">
-                                            <i class="fas fa-times me-2"></i>Cancel
-                                        </a>
-                                    </div>
-                                </form>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-                </div>
+                            <!-- View Mode -->
+                            <div id="designer-view" class="<?php echo $edit_designer ? 'd-none' : ''; ?>">
+                                <button type="button" class="btn btn-primary w-100" onclick="toggleEdit('designer', true)">
+                                    <i class="fas fa-edit me-2"></i><?php echo isset($current_designer) && $current_designer ? 'Change Designer' : 'Reassign Designer'; ?>
+                                </button>
+                            </div>
 
-                <!-- Update Order Information Section -->
-                <div class="col-lg-6 mb-4">
-                    <div class="card h-100">
-                        <div class="card-header bg-light">
-                            <h5 class="card-title mb-0">
-                                <i class="fas fa-pencil-alt me-2"></i>Update design references
-                            </h5>
-                        </div>
-                        <div class="card-body">
-                            <?php if (!$edit_order): ?>
-                                <form method="get">
-                                    <input type="hidden" name="id" value="<?php echo $orderid; ?>">
-                                    <input type="hidden" name="edit" value="order">
-                                    <button type="submit" class="btn btn-primary w-100">
-                                        <i class="fas fa-edit me-2"></i>Edit
-                                    </button>
-                                </form>
-                            <?php else: ?>
-                                <form method="post">
-                                    <input type="hidden" name="update_order" value="1">
-
-                                    <div class="mb-3">
-                                        <label class="form-label fw-bold">Design</label>
-                                        <select name="designid" class="form-select" required>
-                                            <?php
-                                            $design_stmt = mysqli_prepare($mysqli, "SELECT designid, expect_price as price, tag FROM Design ORDER BY designid");
-                                            mysqli_stmt_execute($design_stmt);
-                                            $design_result = mysqli_stmt_get_result($design_stmt);
-                                            while ($design = mysqli_fetch_assoc($design_result)) {
-                                                $selected = ($design['designid'] == $order['designid']) ? 'selected' : '';
-                                                echo '<option value="' . $design['designid'] . '" ' . $selected . '>' .
-                                                    'Design #' . $design['designid'] . ' - $' . number_format($design['price'], 2) .
-                                                    ' (' . htmlspecialchars(substr($design['tag'], 0, 30)) . '...)' . '</option>';
-                                            }
-                                            mysqli_free_result($design_result);
-                                            mysqli_stmt_close($design_stmt);
-                                            ?>
-                                        </select>
-                                    </div>
-                                    <div class="d-flex gap-2">
-                                        <button type="submit" class="btn btn-success flex-grow-1">
-                                            <i class="fas fa-save me-2"></i>Save Changes
-                                        </button>
-                                        <a href="Order_Edit.php?id=<?php echo $orderid; ?>" class="btn btn-secondary">
-                                            <i class="fas fa-times me-2"></i>Cancel
-                                        </a>
-                                    </div>
-                                </form>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Update Requirements Section -->
-                <div class="col-lg-6 mb-4">
-                    <div class="card h-100">
-                        <div class="card-header bg-light">
-                            <h5 class="card-title mb-0">
-                                <i class="fas fa-clipboard-list me-2"></i>Update Requirements
-                            </h5>
-                        </div>
-                        <div class="card-body">
-                            <?php if (!$edit_requirements): ?>
-                                <form method="get">
-                                    <input type="hidden" name="id" value="<?php echo $orderid; ?>">
-                                    <input type="hidden" name="edit" value="requirements">
-                                    <button type="submit" class="btn btn-primary w-100">
-                                        <i class="fas fa-edit me-2"></i>Update Requirements
-                                    </button>
-                                </form>
-                            <?php else: ?>
-                                <form method="post">
-                                    <input type="hidden" name="update_requirements" value="1">
-                                    <div class="mb-3">
-                                        <label class="form-label fw-bold">Requirements</label>
-                                        <textarea name="Requirements" class="form-control" rows="6"
-                                            required><?php echo htmlspecialchars($order['Requirements'] ?? ''); ?></textarea>
-                                    </div>
-                                    <div class="d-flex gap-2">
-                                        <button type="submit" class="btn btn-success flex-grow-1">
-                                            <i class="fas fa-save me-2"></i>Save Changes
-                                        </button>
-                                        <a href="Order_Edit.php?id=<?php echo $orderid; ?>" class="btn btn-secondary">
-                                            <i class="fas fa-times me-2"></i>Cancel
-                                        </a>
-                                    </div>
-                                </form>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Edit Cost Section -->
-                <div class="col-lg-6 mb-4">
-                    <div class="card h-100">
-                        <div class="card-header bg-light">
-                            <h5 class="card-title mb-0">
-                                <i class="fas fa-dollar-sign me-2"></i>Edit Cost & Fees
-                            </h5>
-                        </div>
-                        <div class="card-body">
-                            <?php if (!$edit_cost): ?>
-                                <form method="get">
-                                    <input type="hidden" name="id" value="<?php echo $orderid; ?>">
-                                    <input type="hidden" name="edit" value="cost">
-                                    <button type="submit" class="btn btn-primary w-100">
-                                        <i class="fas fa-edit me-2"></i>Edit 
-                                    </button>
-                                </form>
-                            <?php else: ?>
-                                <?php 
-                                    $design_price = floatval($order["design_price"] ?? 0);
-                                    $calculated_total = $design_price + $total_fees;
-                                ?>
-                                <!-- Cost Summary with Auto-Calculation -->
-                                <div class="mb-4 p-3 bg-light rounded border-start border-warning border-4">
-                                    <div class="row mb-3">
-                                        <div class="col-6">
-                                            <small class="text-muted d-block mb-1"><strong>Design Price</strong></small>
-                                            <div class="fs-6">HK$<span id="designPriceDisplay"><?php echo number_format($design_price, 2); ?></span></div>
-                                        </div>
-                                        <div class="col-6">
-                                            <small class="text-muted d-block mb-1"><strong>Additional Fees</strong></small>
-                                            <div class="fs-6 text-info">HK$<span id="feesTotalDisplay"><?php echo number_format($total_fees, 2); ?></span></div>
-                                        </div>
-                                    </div>
-                                    <hr class="my-2">
-                                    <div class="row">
-                                        <div class="col-6">
-                                            <small class="text-muted d-block mb-1"><strong>Calculated Total</strong></small>
-                                        </div>
-                                        <div class="col-6 text-end">
-                                            <span class="fs-5 fw-bold text-success">HK$<span id="calculatedTotal"><?php echo number_format($calculated_total, 2); ?></span></span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Additional Fees Detailed List -->
-                                <div class="mb-4">
-                                    <label class="fw-bold mb-2 d-flex align-items-center">
-                                        <i class="fas fa-list me-2"></i>Fee Breakdown
-                                        <?php if (!empty($fees)): ?>
-                                            <span class="badge bg-info ms-auto"><?php echo count($fees); ?> fee(s)</span>
-                                        <?php endif; ?>
-                                    </label>
-                                    
-                                    <?php if (!empty($fees)): ?>
-                                        <div class="table-responsive">
-                                            <table class="table table-sm table-bordered table-hover mb-3">
-                                                <thead class="table-light">
-                                                    <tr>
-                                                        <th width="35%">Fee Name</th>
-                                                        <th width="30%">Amount</th>
-                                                        <th width="35%">Description</th>
-                                                        <th width="10%" class="text-center">Action</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    <?php foreach ($fees as $fee): ?>
-                                                        <tr>
-                                                            <td>
-                                                                <strong class="text-dark"><?php echo htmlspecialchars($fee['fee_name']); ?></strong><br>
-                                                                <small class="text-muted"><?php echo date('M d, Y', strtotime($fee['created_at'])); ?></small>
-                                                            </td>
-                                                            <td>
-                                                                <strong class="text-success">HK$<?php echo number_format($fee['amount'], 2); ?></strong>
-                                                            </td>
-                                                            <td>
-                                                                <?php if ($fee['description']): ?>
-                                                                    <small class="text-muted"><?php echo htmlspecialchars($fee['description']); ?></small>
-                                                                <?php else: ?>
-                                                                    <small class="text-muted fst-italic">No description</small>
-                                                                <?php endif; ?>
-                                                            </td>
-                                                            <td class="text-center">
-                                                                <form method="post" style="display: inline;">
-                                                                    <input type="hidden" name="delete_fee" value="1">
-                                                                    <input type="hidden" name="fee_id" value="<?php echo $fee['fee_id']; ?>">
-                                                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete fee" onclick="return confirm('Delete this fee? Amount: HK$<?php echo number_format($fee['amount'], 2); ?>');">
-                                                                        <i class="fas fa-trash-alt"></i>
-                                                                    </button>
-                                                                </form>
-                                                            </td>
-                                                        </tr>
-                                                    <?php endforeach; ?>
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    <?php else: ?>
-                                        <div class="alert alert-info mb-3">
-                                            <i class="fas fa-info-circle me-2"></i>No additional fees added yet.
-                                        </div>
-                                    <?php endif; ?>
-                                </div>
-
-                                <!-- Add New Fee Form -->
-                                <div class="card mb-4 border-success">
-                                    <div class="card-header bg-light border-success">
-                                        <h6 class="card-title mb-0 text-success">
-                                            <i class="fas fa-plus-circle me-2"></i>Add New Fee
-                                        </h6>
-                                    </div>
-                                    <div class="card-body">
-                                        <form method="post" id="addFeeForm">
-                                            <input type="hidden" name="add_fee" value="1">
-                                            <div class="mb-2">
-                                                <label class="form-label small fw-bold">Fee Name <span class="text-danger">*</span></label>
-                                                <input type="text" name="fee_name" class="form-control form-control-sm" placeholder="e.g., Installation, Consultation, Revision" required>
-                                                <small class="text-muted">Give this fee a descriptive name</small>
-                                            </div>
-                                            <div class="mb-2">
-                                                <label class="form-label small fw-bold">Amount (HK$) <span class="text-danger">*</span></label>
-                                                <input type="number" name="amount" class="form-control form-control-sm" placeholder="0.00" step="0.01" min="0" required>
-                                                <small class="text-muted">Enter the fee amount</small>
-                                            </div>
-                                            <div class="mb-3">
-                                                <label class="form-label small fw-bold">Description</label>
-                                                <input type="text" name="description" class="form-control form-control-sm" placeholder="e.g., Additional design revisions requested by client" maxlength="255">
-                                                <small class="text-muted">Optional: Explain why this fee was added</small>
-                                            </div>
-                                            <button type="submit" class="btn btn-sm btn-success w-100">
-                                                <i class="fas fa-plus me-1"></i>Add Fee
-                                            </button>
-                                        </form>
-                                    </div>
-                                </div>
-
-                                <!-- Update Total Cost Form -->
-                                <form method="post" id="updateCostForm">
-                                    <input type="hidden" name="update_cost" value="1">
-                                    <div class="card border-danger">
-                                        <div class="card-header bg-light border-danger">
-                                            <h6 class="card-title mb-0 text-danger">
-                                                <i class="fas fa-calculator me-2"></i>Final Total Cost
-                                            </h6>
-                                        </div>
-                                        <div class="card-body">
-                                            <div class="mb-3">
-                                                <small class="d-block text-muted mb-2">
-                                                    Calculated from: Design Price (HK$<?php echo number_format($design_price, 2); ?>) + Additional Fees (HK$<?php echo number_format($total_fees, 2); ?>)
-                                                </small>
-                                                <div class="input-group">
-                                                    <span class="input-group-text">HK$</span>
-                                                    <input type="number" name="total_cost" id="totalCostInput" class="form-control form-control-lg fw-bold" 
-                                                           value="<?php echo number_format($calculated_total, 2); ?>"
-                                                           step="0.01" min="0" required>
-                                                </div>
-                                                <small class="text-muted d-block mt-2">
-                                                    <i class="fas fa-lightbulb me-1"></i>Value auto-calculates but you can override if needed
-                                                </small>
-                                            </div>
-                                            <div class="d-flex gap-2 mt-3">
-                                                <button type="submit" class="btn btn-danger flex-grow-1 fw-bold">
-                                                    <i class="fas fa-save me-2"></i>Save Total Cost
-                                                </button>
-                                                <a href="Order_Edit.php?id=<?php echo $orderid; ?>" class="btn btn-secondary">
-                                                    <i class="fas fa-times me-2"></i>Cancel
-                                                </a>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </form>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Assign Designer Section -->
-                <div class="col-lg-6 mb-4">
-                    <div class="card h-100">
-                        <div class="card-header bg-light">
-                            <h5 class="card-title mb-0">
-                                <i class="fas fa-user-tie me-2"></i>Assign Designer
-                            </h5>
-                        </div>
-                        <div class="card-body">
-                            <?php if (!$edit_designer): ?>
-                                <form method="get">
-                                    <input type="hidden" name="id" value="<?php echo $orderid; ?>">
-                                    <input type="hidden" name="edit" value="designer">
-                                    <button type="submit" class="btn btn-primary w-100">
-                                        <i
-                                            class="fas fa-edit me-2"></i><?php echo isset($current_designer) && $current_designer ? 'Change Designer' : 'Assign Designer'; ?>
-                                    </button>
-                                </form>
-                            <?php else: ?>
+                            <!-- Edit Mode -->
+                            <div id="designer-edit" class="<?php echo $edit_designer ? '' : 'd-none'; ?>">
                                 <form method="post">
                                     <input type="hidden" name="assign_designer" value="1">
                                     <div class="mb-3">
@@ -863,58 +556,523 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                         <button type="submit" class="btn btn-success flex-grow-1">
                                             <i class="fas fa-check me-2"></i>Assign
                                         </button>
-                                        <a href="Order_Edit.php?id=<?php echo $orderid; ?>" class="btn btn-secondary">
+                                        <button type="button" class="btn btn-secondary" onclick="toggleEdit('designer', false)">
                                             <i class="fas fa-times me-2"></i>Cancel
-                                        </a>
+                                        </button>
                                     </div>
                                 </form>
-                            <?php endif; ?>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-        <?php else: ?>
-            <div class="alert alert-danger" role="alert">
-                <i class="fas fa-exclamation-circle me-2"></i>
-                <strong>Order not found.</strong>
-                <p class="mb-0">The requested order does not exist or has been removed.</p>
-            </div>
-        <?php endif; ?>
 
-        <!-- Action Buttons -->
-        <div class="d-flex justify-content-between align-items-center mt-4">
-            <a href="Order_Management.php" class="btn btn-secondary">
-                <i class="fas fa-arrow-left me-2"></i>Back to Order List
-            </a>
+            <!-- Edit Sections -->
+            <div class="row" style="<?php echo $show_confirm_reject ? 'display: none;' : ''; ?>">
+                <!-- Update Status Section -->
+                <div class="col-lg-6 mb-4">
+                    <div class="card h-100">
+                        <div class="card-header bg-light">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-tasks me-2"></i>Update Schedule
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <!-- View Mode -->
+                            <div id="status-view" class="<?php echo $edit_status ? 'd-none' : ''; ?>">
+                                <button type="button" class="btn btn-primary w-100" onclick="toggleEdit('status', true)">
+                                    <i class="fas fa-edit me-2"></i>Update Schedule
+                                </button>
+                            </div>
+
+                            <!-- Edit Mode -->
+                            <div id="status-edit" class="<?php echo $edit_status ? '' : 'd-none'; ?>">
+                                <form method="post">
+                                    <input type="hidden" name="update_status" value="1">
+                                    <div class="mb-3">
+                                        <label class="form-label fw-bold">Order Finish Date</label>
+                                        <input type="datetime-local" name="OrderFinishDate" class="form-control" value="<?php echo isset($order['OrderFinishDate']) && $order['OrderFinishDate'] != '0000-00-00 00:00:00'
+                                            ? date('Y-m-d\TH:i', strtotime($order['OrderFinishDate']))
+                                            : date('Y-m-d\TH:i', strtotime('+7 days')); ?>">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label fw-bold">Design Finish Date</label>
+                                        <input type="datetime-local" name="DesignFinishDate" class="form-control" value="<?php echo isset($order['DesignFinishDate']) && $order['DesignFinishDate'] != '0000-00-00 00:00:00'
+                                            ? date('Y-m-d\TH:i', strtotime($order['DesignFinishDate']))
+                                            : date('Y-m-d\TH:i', strtotime('+3 days')); ?>">
+                                    </div>
+                                    <div class="d-flex gap-2">
+                                        <button type="submit" class="btn btn-success flex-grow-1">
+                                            <i class="fas fa-save me-2"></i>Save Changes
+                                        </button>
+                                        <button type="button" class="btn btn-secondary"
+                                            onclick="toggleEdit('status', false)">
+                                            <i class="fas fa-times me-2"></i>Cancel
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Update Order Information Section -->
+                <div class="col-lg-6 mb-4">
+                    <div class="card h-100">
+                        <div class="card-header bg-light">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-pencil-alt me-2"></i>Update design references
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <!-- View Mode -->
+                            <div id="order-view" class="<?php echo $edit_order ? 'd-none' : ''; ?>">
+                                <button type="button" class="btn btn-primary w-100" onclick="toggleEdit('order', true)">
+                                    <i class="fas fa-edit me-2"></i>Update
+                                </button>
+                            </div>
+
+                            <!-- Edit Mode -->
+                            <div id="order-edit" class="<?php echo $edit_order ? '' : 'd-none'; ?>">
+                                <form method="post">
+                                    <input type="hidden" name="update_order" value="1">
+
+                                    <div class="mb-3">
+                                        <label class="form-label fw-bold">Design</label>
+                                        <select name="designid" class="form-select" required>
+                                            <?php
+                                            $design_stmt = mysqli_prepare($mysqli, "SELECT designid, expect_price as price, tag FROM Design ORDER BY designid");
+                                            mysqli_stmt_execute($design_stmt);
+                                            $design_result = mysqli_stmt_get_result($design_stmt);
+                                            while ($design = mysqli_fetch_assoc($design_result)) {
+                                                $selected = ($design['designid'] == $order['designid']) ? 'selected' : '';
+                                                echo '<option value="' . $design['designid'] . '" ' . $selected . '>' .
+                                                    'Design #' . $design['designid'] . ' - $' . number_format($design['price'], 2) .
+                                                    ' (' . htmlspecialchars(substr($design['tag'], 0, 30)) . '...)' . '</option>';
+                                            }
+                                            mysqli_free_result($design_result);
+                                            mysqli_stmt_close($design_stmt);
+                                            ?>
+                                        </select>
+                                    </div>
+                                    <div class="d-flex gap-2">
+                                        <button type="submit" class="btn btn-success flex-grow-1">
+                                            <i class="fas fa-save me-2"></i>Save Changes
+                                        </button>
+                                        <button type="button" class="btn btn-secondary"
+                                            onclick="toggleEdit('order', false)">
+                                            <i class="fas fa-times me-2"></i>Cancel
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Update Requirements Section -->
+                <div class="col-lg-6 mb-4">
+                    <div class="card h-100">
+                        <div class="card-header bg-light">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-clipboard-list me-2"></i>Update Requirements
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <!-- View Mode -->
+                            <div id="requirements-view" class="<?php echo $edit_requirements ? 'd-none' : ''; ?>">
+                                <button type="button" class="btn btn-primary w-100"
+                                    onclick="toggleEdit('requirements', true)">
+                                    <i class="fas fa-edit me-2"></i>Update Requirements
+                                </button>
+                            </div>
+
+                            <!-- Edit Mode -->
+                            <div id="requirements-edit" class="<?php echo $edit_requirements ? '' : 'd-none'; ?>">
+                                <form method="post">
+                                    <input type="hidden" name="update_requirements" value="1">
+                                    <div class="mb-3">
+                                        <label class="form-label fw-bold">Requirements</label>
+                                        <textarea name="Requirements" class="form-control" rows="6"
+                                            required><?php echo htmlspecialchars($order['Requirements'] ?? ''); ?></textarea>
+                                    </div>
+                                    <div class="d-flex gap-2">
+                                        <button type="submit" class="btn btn-success flex-grow-1">
+                                            <i class="fas fa-save me-2"></i>Save Changes
+                                        </button>
+                                        <button type="button" class="btn btn-secondary"
+                                            onclick="toggleEdit('requirements', false)">
+                                            <i class="fas fa-times me-2"></i>Cancel
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Edit Cost Section -->
+                <div class="col-lg-6 mb-4">
+                    <div class="card h-100">
+                        <div class="card-header bg-light">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-dollar-sign me-2"></i>Edit Cost & Fees
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <!-- View Mode -->
+                            <div id="cost-view" class="<?php echo $edit_cost ? 'd-none' : ''; ?>">
+                                <button type="button" class="btn btn-primary w-100" onclick="toggleEdit('cost', true)">
+                                    <i class="fas fa-edit me-2"></i>Edit
+                                </button>
+                            </div>
+
+                            <!-- Edit Mode -->
+                            <div id="cost-edit" class="<?php echo $edit_cost ? '' : 'd-none'; ?>">
+                                <!-- Additional Fees List -->
+                                <div class="mb-4">
+                                    <label class="fw-bold mb-2">Additional Fees Detail</label>
+                                    <div class="table-responsive">
+                                        <table class="table table-sm table-hover mb-0">
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th>Fee Name</th>
+                                                    <th>Amount</th>
+                                                    <th style="width: 60px;">Action</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="fee_list_body">
+                                                <?php if (!empty($fees)): ?>
+                                                    <?php foreach ($fees as $fee): ?>
+                                                        <tr>
+                                                            <td>
+                                                                <small><?php echo htmlspecialchars($fee['fee_name']); ?></small>
+                                                                <?php if ($fee['description']): ?>
+                                                                    <br><small
+                                                                        class="text-muted"><?php echo htmlspecialchars($fee['description']); ?></small>
+                                                                <?php endif; ?>
+                                                            </td>
+                                                            <td><small><strong>HK$<?php echo number_format($fee['amount'], 0); ?></strong></small>
+                                                            </td>
+                                                            <td>
+                                                                <form method="post" style="display: inline;">
+                                                                    <input type="hidden" name="delete_fee" value="1">
+                                                                    <input type="hidden" name="fee_id"
+                                                                        value="<?php echo $fee['fee_id']; ?>">
+                                                                    <button type="submit" class="btn btn-sm btn-outline-danger"
+                                                                        onclick="return confirm('Delete this fee?');">
+                                                                        <i class="fas fa-trash"></i>
+                                                                    </button>
+                                                                </form>
+                                                            </td>
+                                                        </tr>
+                                                    <?php endforeach; ?>
+                                                <?php else: ?>
+                                                    <tr id="no_fees_row">
+                                                        <td colspan="3" class="text-center text-muted small">No additional fees
+                                                            recorded.</td>
+                                                    </tr>
+                                                <?php endif; ?>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                <!-- Combined Cost Edit Form -->
+                                <form method="post" id="cost-edit-form">
+                                    <input type="hidden" name="save_cost_changes" value="1">
+
+                                    <!-- Add New Fee Interface -->
+                                    <div class="mb-4">
+                                        <div class="card p-3 bg-light border">
+                                            <div class="row g-2 mb-2 align-items-end">
+                                                <div class="col-md-4">
+                                                    <label class="small text-muted">Name</label>
+                                                    <input type="text" id="new_fee_name"
+                                                        class="form-control form-control-sm" placeholder="e.g. Rush Fee">
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <label class="small text-muted">Amount</label>
+                                                    <input type="number" id="new_fee_amount"
+                                                        class="form-control form-control-sm" placeholder="0.00" min="0"
+                                                        step="0.01">
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <label class="small text-muted">Description</label>
+                                                    <input type="text" id="new_fee_desc"
+                                                        class="form-control form-control-sm" placeholder="Optional">
+                                                </div>
+                                                <div class="col-md-2">
+                                                    <button type="button" class="btn btn-sm btn-primary w-100"
+                                                        onclick="addFeeToList()">
+                                                        <i class="fas fa-plus"></i> Add
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Update Total Cost Input -->
+                                    <div class="mb-3">
+                                        <!-- Cost Summary -->
+                                        <div class="mb-4 p-3 rounded border">
+                                            <div class="row mb-2">
+                                                <div class="col-6">
+                                                    <small class="text-muted">Design Price:</small>
+                                                </div>
+                                                <div class="col-6 text-end">
+                                                    <strong>HK$<?php echo isset($order["design_price"]) && $order["design_price"] ? number_format($order["design_price"], 0) : '0'; ?></strong>
+                                                </div>
+                                            </div>
+                                            <div class="row">
+                                                <div class="col-6">
+                                                    <small class="text-muted">Additional Fees:</small>
+                                                </div>
+                                                <div class="col-6 text-end">
+                                                    <strong class="text-info" id="preview_fees_text"
+                                                        data-base="<?php echo $total_fees; ?>">HK$<?php echo number_format($total_fees, 0); ?></strong>
+                                                </div>
+                                            </div>
+                                            <hr class="my-2">
+                                            <div class="row">
+                                                <div class="col-6">
+                                                    <small class="text-muted">Total Cost:</small>
+                                                </div>
+                                                <div class="col-6 text-end">
+                                                    <strong class="text-danger fs-5" id="preview_total_text"
+                                                        data-design="<?php echo $order["design_price"] ?? 0; ?>">HK$<?php echo number_format($final_total_cost, 0); ?></strong>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="d-flex gap-2">
+                                            <button type="submit" class="btn btn-success flex-grow-1">
+                                                <i class="fas fa-check me-2"></i>Save
+                                            </button>
+                                            <button type="button" class="btn btn-secondary"
+                                                onclick="toggleEdit('cost', false)">
+                                                <i class="fas fa-times me-2"></i>Cancel
+                                            </button>
+                                        </div>
+                                    </div>
+                            </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <script>
+                function toggleEdit(section, show) {
+                    const view = document.getElementById(section + '-view');
+                    const edit = document.getElementById(section + '-edit');
+                    if (show) {
+                        view.classList.add('d-none');
+                        edit.classList.remove('d-none');
+                    } else {
+                        view.classList.remove('d-none');
+                        edit.classList.add('d-none');
+                        // Optional: Clear URL param if present
+                        const url = new URL(window.location);
+                        if (url.searchParams.has('edit')) {
+                            url.searchParams.delete('edit');
+                            window.history.pushState({}, '', url);
+                        }
+                    }
+                }
+
+                // Legacy support for cost edit if needed, or alias it
+                function toggleCostEdit(show) {
+                    toggleEdit('cost', show);
+                }
+
+                let feeIndex = 0;
+                function addFeeToList() {
+                    const nameInput = document.getElementById('new_fee_name');
+                    const amountInput = document.getElementById('new_fee_amount');
+                    const descInput = document.getElementById('new_fee_desc');
+                    const name = nameInput.value.trim();
+                    const amount = parseFloat(amountInput.value);
+                    const desc = descInput.value.trim();
+
+                    if (!name || isNaN(amount) || amount <= 0) {
+                        alert('Please enter a valid name and amount.');
+                        return;
+                    }
+
+                    // Remove "No fees" message if it exists
+                    const noFeesRow = document.getElementById('no_fees_row');
+                    if (noFeesRow) noFeesRow.remove();
+
+                    const tbody = document.getElementById('fee_list_body');
+                    const row = document.createElement('tr');
+                    row.id = 'fee-row-' + feeIndex;
+                    row.className = 'table-success'; // Highlight new rows
+                    row.innerHTML = `
+                        <td>
+                            <small>${name} <span class="badge bg-success ms-1">Not saved</span></small>
+                            ${desc ? '<br><small class="text-muted">' + desc + '</small>' : ''}
+                            <input type="hidden" name="new_fees[${feeIndex}][name]" value="${name}" form="cost-edit-form">
+                            <input type="hidden" name="new_fees[${feeIndex}][description]" value="${desc}" form="cost-edit-form">
+                        </td>
+                        <td>
+                            <small><strong>HK$${amount.toFixed(2)}</strong></small>
+                            <input type="hidden" name="new_fees[${feeIndex}][amount]" value="${amount}" form="cost-edit-form">
+                        </td>
+                        <td>
+                            <button type="button" class="btn btn-sm btn-link text-danger p-0" onclick="removeFeeFromList(${feeIndex})">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+
+                    // clear inputs
+                    nameInput.value = '';
+                    amountInput.value = '';
+                    descInput.value = '';
+                    nameInput.focus();
+
+                    feeIndex++;
+                    updatePricePreview();
+                }
+
+                function removeFeeFromList(index) {
+                    const row = document.getElementById('fee-row-' + index);
+                    if (row) row.remove();
+
+                    const tbody = document.getElementById('fee_list_body');
+                    if (tbody.children.length === 0) {
+                        const noRow = document.createElement('tr');
+                        noRow.id = 'no_fees_row';
+                        noRow.innerHTML = '<td colspan="3" class="text-center text-muted small">No additional fees recorded.</td>';
+                        tbody.appendChild(noRow);
+                    }
+                    updatePricePreview();
+                }
+
+                function updatePricePreview() {
+                    const feesText = document.getElementById('preview_fees_text');
+                    const totalText = document.getElementById('preview_total_text');
+                    const totalInput = document.getElementById('input_total_cost');
+
+                    if (!feesText || !totalText) return;
+
+                    const baseFees = parseFloat(feesText.getAttribute('data-base')) || 0;
+                    const designPrice = parseFloat(totalText.getAttribute('data-design')) || 0;
+
+                    // Sum new fees
+                    let newFeesTotal = 0;
+                    const newFeeInputs = document.querySelectorAll('input[name^="new_fees"][name$="[amount]"]');
+                    newFeeInputs.forEach(input => {
+                        newFeesTotal += parseFloat(input.value) || 0;
+                    });
+
+                    const currentTotalFees = baseFees + newFeesTotal;
+                    const finalTotal = designPrice + currentTotalFees;
+
+                    // Update display
+                    feesText.textContent = 'HK$' + currentTotalFees.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+                    totalText.textContent = 'HK$' + finalTotal.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+
+                    // Update input if it exists
+                    if (totalInput) {
+                        totalInput.value = finalTotal.toFixed(2);
+                    }
+                }
+
+                function showRejectModal() {
+                    const rejectModal = new bootstrap.Modal(document.getElementById('rejectModal'));
+                    rejectModal.show();
+                }
+            </script>
+
+            <!-- Confirm/Reject Order Section -->
+            <div class="row mt-4" style="<?php echo !$show_confirm_reject ? 'display: none;' : ''; ?>">
+                <div class="col-lg-12">
+                    <div class="card border-warning">
+                        <div class="card-header bg-warning bg-opacity-10">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-check-circle me-2"></i>Order Action
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <?php if ($error_msg): ?>
+                                <div class="alert alert-danger mb-3" role="alert">
+                                    <i class="fas fa-exclamation-circle me-2"></i><?php echo $error_msg; ?>
+                                </div>
+                            <?php endif; ?>
+                            <p class="text-muted mb-3">Please review all details and assign a designer. Then confirm or reject the order.</p>
+                            
+                            <div class="row">
+                                <div class="col-md-6 mb-2">
+                                    <form method="post" style="display: inline;">
+                                        <input type="hidden" name="confirm_order" value="1">
+                                        <button type="submit" class="btn btn-success w-100" onclick="return confirm('Confirm this order?');">
+                                            <i class="fas fa-check-circle me-2"></i>Confirm Order
+                                        </button>
+                                    </form>
+                                </div>
+                                <div class="col-md-6 mb-2">
+                                    <button type="button" class="btn btn-danger w-100" onclick="showRejectModal()">
+                                        <i class="fas fa-times-circle me-2"></i>Reject Order
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        <!-- Reject Modal -->
+        <div class="modal fade" id="rejectModal" tabindex="-1" aria-labelledby="rejectModalLabel" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header bg-danger bg-opacity-10">
+                        <h5 class="modal-title" id="rejectModalLabel">
+                            <i class="fas fa-times-circle me-2"></i>Reject Order
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <form method="post">
+                        <div class="modal-body">
+                            <input type="hidden" name="reject_order" value="1">
+                            <div class="mb-3">
+                                <label for="reject_reason" class="form-label fw-bold">Reason for Rejection</label>
+                                <textarea id="reject_reason" name="reject_reason" class="form-control" rows="4"
+                                    placeholder="Enter reason for rejecting this order..." required></textarea>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-danger"
+                                onclick="return confirm('Are you sure you want to reject this order?');">
+                                <i class="fas fa-times-circle me-2"></i>Reject
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
         </div>
+
+    <?php else: ?>
+        <div class="alert alert-danger" role="alert">
+            <i class="fas fa-exclamation-circle me-2"></i>
+            <strong>Order not found.</strong>
+            <p class="mb-0">The requested order does not exist or has been removed.</p>
+        </div>
+    <?php endif; ?>
+
+    <!-- Action Buttons -->
+    <div class="d-flex justify-content-between align-items-center mt-4">
+        <a href="Order_Management.php" class="btn btn-secondary">
+            <i class="fas fa-arrow-left me-2"></i>Back to Order List
+        </a>
+    </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
-
-    <!-- Auto-calculate total cost when fees change -->
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const designPrice = <?php echo json_encode($design_price); ?>;
-            const totalCostInput = document.getElementById('totalCostInput');
-            
-            if (totalCostInput) {
-                // Auto-calculate when form is submitted (fees will be recalculated on page reload)
-                const updateCostForm = document.getElementById('updateCostForm');
-                if (updateCostForm) {
-                    updateCostForm.addEventListener('submit', function() {
-                        // Total will be recalculated from DB on next load
-                    });
-                }
-                
-                // Listen for input changes to show real-time calculation
-                totalCostInput.addEventListener('input', function() {
-                    const value = parseFloat(this.value) || 0;
-                    // Value can be manually edited or will auto-calculate on save
-                });
-            }
-        });
-    </script>
 
     <!-- Include chat widget -->
     <?php include __DIR__ . '/../Public/chat_widget.php'; ?>
