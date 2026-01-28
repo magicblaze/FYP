@@ -29,7 +29,7 @@ $stmt = $mysqli->prepare($sql);
 $stmt->bind_param("i", $designerId);
 $stmt->execute();
 $result = $stmt->get_result();
-$res = $stmt->get_result();
+
 ?>
 <!doctype html>
 <html lang="en">

@@ -140,7 +140,11 @@ $commentStmt->close();
 
 // Load product references for this design
 $productRefs = [];
-$refSql = "SELECT r.*, COALESCE(p.productName, p.name, NULL) AS product_name FROM DesignReference r LEFT JOIN Product p ON p.productid = r.productid WHERE r.designid = ? ORDER BY r.created_at DESC";
+$refSql = "SELECT r.*, p.pname AS product_name 
+           FROM DesignReference r 
+           LEFT JOIN Product p ON p.productid = r.productid 
+           WHERE r.designid = ? 
+           ORDER BY r.created_at DESC";
 $refStmt = $mysqli->prepare($refSql);
 if ($refStmt) {
     $refStmt->bind_param('i', $designid);
