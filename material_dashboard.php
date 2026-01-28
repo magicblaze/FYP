@@ -288,10 +288,10 @@ if (!$material_result)
                         <div class="filter-group">
                             <label>Price Range (HK$)</label>
                             <div class="price-inputs">
-                                <input type="number" name="min_price" class="form-control" placeholder="Min"
+                                <input type="number" name="min_price" class="form-control" placeholder="Min" step="1000"
                                     value="<?= $min_price > 0 ? $min_price : '' ?>" min="0">
                                 <span class="price-separator">-</span>
-                                <input type="number" name="max_price" class="form-control" placeholder="Max"
+                                <input type="number" name="max_price" class="form-control" placeholder="Max" step="1000"
                                     value="<?= $max_price < 999999 ? $max_price : '' ?>" min="0">
                             </div>
                         </div>

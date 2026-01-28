@@ -28,6 +28,7 @@ DROP TABLE IF EXISTS `Designer`;
 DROP TABLE IF EXISTS `Supplier`;
 DROP TABLE IF EXISTS `Material`;
 DROP TABLE IF EXISTS `Order`;
+DROP TABLE IF EXISTS `AdditionalFee`;
 DROP TABLE IF EXISTS `OrderDelivery`;
 DROP TABLE IF EXISTS `Order_Contractors`;
 DROP TABLE IF EXISTS `Design`;
@@ -129,6 +130,7 @@ CREATE TABLE `Designer` (
   `dtel` int DEFAULT NULL,
   `demail` varchar(255) DEFAULT NULL,
   `dpassword` varchar(255) NOT NULL,
+  `status` ENUM('Available', 'Busy') NOT NULL DEFAULT 'Available',
   `managerid` int DEFAULT NULL,
   `remember_token` VARCHAR(64) DEFAULT NULL,
   PRIMARY KEY (`designerid`),
@@ -136,9 +138,9 @@ CREATE TABLE `Designer` (
   CONSTRAINT `managerid_Designer_fk` FOREIGN KEY (`managerid`) REFERENCES `Manager` (`managerid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-INSERT INTO `Designer` (`designerid`,`dname`,`dtel`,`demail`,`dpassword`,`managerid`,`remember_token`) VALUES
-(1, 'John Wong', 12345678, '123@gmail.com', 'designer12345',1, NULL),
-(2, 'Billy Chan', 11002234, 'abcdd@gmail.com', '123456',2, NULL);
+INSERT INTO `Designer` (`designerid`,`dname`,`dtel`,`demail`,`dpassword`,`status`,`managerid`,`remember_token`) VALUES
+(1, 'John Wong', 12345678, '123@gmail.com', 'designer12345', 'Available', 1, NULL),
+(2, 'Billy Chan', 11002234, 'abcdd@gmail.com', '123456', 'Busy', 2, NULL);
 
 -- Supplier table
 CREATE TABLE `Supplier` (
@@ -267,6 +269,18 @@ INSERT INTO `OrderReference` (`orderid`, `productid`, `added_by_type`, `added_by
 (1, 2, 'client', 1), 
 (2, 3, 'client', 2), 
 (2, 4, 'client', 2); 
+
+-- Table to store additional fees for each order
+CREATE TABLE `AdditionalFee` (
+  `fee_id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `orderid` INT NOT NULL,
+  `fee_name` VARCHAR(255) NOT NULL,
+  `amount` DECIMAL(10, 2) NOT NULL,
+  `description` TEXT,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  KEY `orderid_idx` (`orderid`),
+  CONSTRAINT `fk_af_orderid` FOREIGN KEY (`orderid`) REFERENCES `Order` (`orderid`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE `DesignReference` (
   `id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,

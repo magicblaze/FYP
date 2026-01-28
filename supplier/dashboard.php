@@ -259,7 +259,7 @@ $colorImageStmt->close();
                 <li class="nav-item me-2">
                     <a class="nav-link text-muted fw-bold" href="../includes/profile.php">
                         <i class="fas fa-user-shield me-1"></i>Hello <?= htmlspecialchars($supplierName) ?>
-                        <span class="badge bg-secondary ms-1">Supplier</span>
+                        
                     </a>
                 </li>
                 <li class="nav-item">
@@ -383,7 +383,7 @@ $colorImageStmt->close();
                             <div class="col-md-6">
                                 <div class="form-section">
                                     <label class="form-label"><i class="fas fa-dollar-sign"></i> Price (HK$) *</label>
-                                    <input type="number" id="productPrice" name="price" class="form-control" min="1" required>
+                                    <input type="number" id="productPrice" name="price" class="form-control" min="1" step="100" required>
                                 </div>
                             </div>
                             <div class="col-md-6">

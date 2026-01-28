@@ -69,7 +69,7 @@ $stmt->execute();
 $result = $stmt->get_result();
 
 // 獲取所有設計師用於過濾下拉菜單
-$designer_sql = "SELECT designerid, dname FROM Designer ORDER BY dname ASC";
+$designer_sql = "SELECT designerid, dname, status FROM Designer ORDER BY dname ASC";
 $designer_result = $mysqli->query($designer_sql);
 if (!$designer_result)
     die('Query error: ' . $mysqli->error);
@@ -260,10 +260,10 @@ if (!$designer_result)
                         <div class="filter-group">
                             <label>Price Range (HK$)</label>
                             <div class="price-inputs">
-                                <input type="number" name="min_price" class="form-control" placeholder="Min"
+                                <input type="number" name="min_price" class="form-control" placeholder="Min" step="1000"
                                     value="<?= $min_price > 0 ? $min_price : '' ?>" min="0">
                                 <span class="price-separator">-</span>
-                                <input type="number" name="max_price" class="form-control" placeholder="Max"
+                                <input type="number" name="max_price" class="form-control" placeholder="Max" step="1000"
                                     value="<?= $max_price < 999999 ? $max_price : '' ?>" min="0">
                             </div>
                         </div>
