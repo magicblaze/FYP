@@ -259,7 +259,7 @@ $colorImageStmt->close();
                 <li class="nav-item me-2">
                     <a class="nav-link text-muted fw-bold" href="../includes/profile.php">
                         <i class="fas fa-user-shield me-1"></i>Hello <?= htmlspecialchars($supplierName) ?>
-                        <span class="badge bg-secondary ms-1">Supplier</span>
+                        
                     </a>
                 </li>
                 <li class="nav-item">
