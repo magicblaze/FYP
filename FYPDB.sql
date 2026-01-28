@@ -129,6 +129,7 @@ CREATE TABLE `Designer` (
   `dtel` int DEFAULT NULL,
   `demail` varchar(255) DEFAULT NULL,
   `dpassword` varchar(255) NOT NULL,
+  `status` ENUM('Available', 'Busy') NOT NULL DEFAULT 'Available',
   `managerid` int DEFAULT NULL,
   `remember_token` VARCHAR(64) DEFAULT NULL,
   PRIMARY KEY (`designerid`),
@@ -136,9 +137,9 @@ CREATE TABLE `Designer` (
   CONSTRAINT `managerid_Designer_fk` FOREIGN KEY (`managerid`) REFERENCES `Manager` (`managerid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-INSERT INTO `Designer` (`designerid`,`dname`,`dtel`,`demail`,`dpassword`,`managerid`,`remember_token`) VALUES
-(1, 'John Wong', 12345678, '123@gmail.com', 'designer12345',1, NULL),
-(2, 'Billy Chan', 11002234, 'abcdd@gmail.com', '123456',2, NULL);
+INSERT INTO `Designer` (`designerid`,`dname`,`dtel`,`demail`,`dpassword`,`status`,`managerid`,`remember_token`) VALUES
+(1, 'John Wong', 12345678, '123@gmail.com', 'designer12345', 'Available', 1, NULL),
+(2, 'Billy Chan', 11002234, 'abcdd@gmail.com', '123456', 'Busy', 2, NULL);
 
 -- Supplier table
 CREATE TABLE `Supplier` (

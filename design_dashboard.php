@@ -69,7 +69,7 @@ $stmt->execute();
 $result = $stmt->get_result();
 
 // 獲取所有設計師用於過濾下拉菜單
-$designer_sql = "SELECT designerid, dname FROM Designer ORDER BY dname ASC";
+$designer_sql = "SELECT designerid, dname, status FROM Designer ORDER BY dname ASC";
 $designer_result = $mysqli->query($designer_sql);
 if (!$designer_result)
     die('Query error: ' . $mysqli->error);

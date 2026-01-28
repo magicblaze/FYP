@@ -24,7 +24,7 @@ if ($role === 'client') {
 } elseif ($role === 'manager') {
     $res = $mysqli->query("SELECT mname AS name, mtel AS tel, memail AS email FROM Manager WHERE managerid = $id");
 } elseif ($role === 'designer') {
-    $res = $mysqli->query("SELECT dname AS name, dtel AS tel, demail AS email FROM Designer WHERE designerid = $id");
+    $res = $mysqli->query("SELECT dname AS name, dtel AS tel, demail AS email, status FROM Designer WHERE designerid = $id");
 } elseif ($role === 'supplier') {
     $res = $mysqli->query("SELECT sname AS name, stel AS tel, semail AS email FROM Supplier WHERE supplierid = $id");
 }

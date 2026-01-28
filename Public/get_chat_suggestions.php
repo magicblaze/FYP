@@ -165,7 +165,7 @@ if (count($desExclude)) {
 if ($role === 'designer') {
   $desWhere .= ' AND designerid != ' . (int)$uid;
 }
-$qdes = "SELECT designerid AS id, dname AS name, 'designer' AS role FROM Designer $desWhere ORDER BY RAND() LIMIT $othersLimit";
+$qdes = "SELECT designerid AS id, dname AS name, status, 'designer' AS role FROM Designer $desWhere ORDER BY RAND() LIMIT $othersLimit";
 if ($r = $mysqli->query($qdes)) {
   while ($row = $r->fetch_assoc()) {
     $others[] = ['id'=> (int)$row['id'], 'name'=>$row['name'] ?? '', 'role'=>$row['role'], 'avatar'=>''];

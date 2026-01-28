@@ -9,7 +9,7 @@ session_start();
 $designid = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 if ($designid <= 0) { http_response_code(404); die('Design not found.'); }
 
-$dsql = "SELECT d.*, des.dname, des.demail, des.dtel
+$dsql = "SELECT d.*, des.dname, des.demail, des.dtel, des.status
          FROM Design d
          JOIN Designer des ON d.designerid = des.designerid
          WHERE d.designid = ?";
