@@ -98,7 +98,7 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
                 mysqli_stmt_close($i_stmt);
             }
             
-            header("Location: Manager_MyOrder_TotalOrder.php");
+            header("Location: Order_Management.php");
             exit();
         }
     }
@@ -122,7 +122,7 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
         mysqli_stmt_bind_param($update_order_stmt, "siidi", $requirements, $clientid, $designid, $cost, $orderid);
         
         if(mysqli_stmt_execute($update_order_stmt)) {
-            header("Location: Manager_MyOrder_TotalOrder.php");
+            header("Location: Order_Management.php");
             exit();
         }
     }
@@ -332,7 +332,7 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
                                     <button type="submit" class="btn btn-success flex-grow-1">
                                         <i class="fas fa-save me-2"></i>Save Changes
                                     </button>
-                                    <a href="Manager_MyOrder_TotalOrder_Edit.php?id=<?php echo $orderid; ?>" class="btn btn-secondary">
+                                    <a href="Order_Management_Edit.php?id=<?php echo $orderid; ?>" class="btn btn-secondary">
                                         <i class="fas fa-times me-2"></i>Cancel
                                     </a>
                                 </div>
@@ -419,7 +419,7 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
                                     <button type="submit" class="btn btn-success flex-grow-1">
                                         <i class="fas fa-save me-2"></i>Save Changes
                                     </button>
-                                    <a href="Manager_MyOrder_TotalOrder_Edit.php?id=<?php echo $orderid; ?>" class="btn btn-secondary">
+                                    <a href="Order_Management_Edit.php?id=<?php echo $orderid; ?>" class="btn btn-secondary">
                                         <i class="fas fa-times me-2"></i>Cancel
                                     </a>
                                 </div>
@@ -440,7 +440,7 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
 
         <!-- Action Buttons -->
         <div class="d-flex justify-content-between align-items-center mt-4">
-            <a href="Manager_MyOrder_TotalOrder.php" class="btn btn-secondary">
+            <a href="Order_Management.php" class="btn btn-secondary">
                 <i class="fas fa-arrow-left me-2"></i>Back to Order List
             </a>
         </div>

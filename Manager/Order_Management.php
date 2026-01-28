@@ -304,7 +304,7 @@ $stats = mysqli_fetch_assoc($stats_result);
                         </td>
                         <td>
                             <div class="btn-group">
-                                <a href="Manager_MyOrder_TotalOrder_Edit.php?id=<?php echo $row["orderid"]; ?>" 
+                                <a href="Order_Management_Edit.php?id=<?php echo $row["orderid"]; ?>" 
                                    class="btn btn-sm btn-primary">
                                     <i class="fas fa-edit me-1"></i>Edit
                                 </a>

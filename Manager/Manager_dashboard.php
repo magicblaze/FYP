@@ -351,7 +351,7 @@ $status_colors = array(
                                                    class="btn btn-outline-primary" title="View Details">
                                                     <i class="fas fa-eye"></i>
                                                 </a>
-                                                <a href="Manager_MyOrder_TotalOrder.php?orderid=<?php echo $order['orderid']; ?>" 
+                                                <a href="Order_Management.php?orderid=<?php echo $order['orderid']; ?>" 
                                                    class="btn btn-outline-info" title="Manage">
                                                     <i class="fas fa-edit"></i>
                                                 </a>

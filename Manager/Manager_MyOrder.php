@@ -40,7 +40,7 @@ $user_name = $user['name'];
                     <i class="fas fa-tasks me-2"></i>Select an Order Category
                 </h5>
                 <div class="btn-group">
-                    <button class="btn btn-primary" onclick="location.href='Manager_MyOrder_TotalOrder.php'">
+                    <button class="btn btn-primary" onclick="location.href='Order_Management.php'">
                         <i class="fas fa-list me-2"></i>Total Order
                     </button>
                     <button class="btn btn-warning" onclick="location.href='Manager_MyOrder_AwaitingConfirm.php'">

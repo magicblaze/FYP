@@ -16,7 +16,7 @@ if (isset($_GET["orderid"])){
     $orderid = isset($_GET["orderid"]) ? intval($_GET["orderid"]) : 0;
     
     if($orderid <= 0) {
-        header("Location: Manager_MyOrder_TotalOrder.php?msg=invalidid");
+        header("Location: Order_Management.php?msg=invalidid");
         exit();
     }
     
@@ -31,7 +31,7 @@ if (isset($_GET["orderid"])){
     $manager_check = mysqli_fetch_assoc($check_result);
     
     if ($manager_check['count'] == 0) {
-        header("Location: Manager_MyOrder_TotalOrder.php?msg=nopermission");
+        header("Location: Order_Management.php?msg=nopermission");
         exit();
     }
     
@@ -40,7 +40,7 @@ if (isset($_GET["orderid"])){
     $check_order_result = mysqli_query($mysqli, $check_order_sql);
     
     if(mysqli_num_rows($check_order_result) == 0) {
-        header("Location: Manager_MyOrder_TotalOrder.php?msg=notfound");
+        header("Location: Order_Management.php?msg=notfound");
         exit();
     }
     
@@ -92,21 +92,21 @@ if (isset($_GET["orderid"])){
         
         // Check if deletion was successful
         if(mysqli_affected_rows($mysqli) > 0){
-            header("Location: Manager_MyOrder_TotalOrder.php?msg=success");
+            header("Location: Order_Management.php?msg=success");
         } else {
-            header("Location: Manager_MyOrder_TotalOrder.php?msg=norows");
+            header("Location: Order_Management.php?msg=norows");
         }
         
     } catch (Exception $e) {
         // Rollback transaction
         mysqli_rollback($mysqli);
-        header("Location: Manager_MyOrder_TotalOrder.php?msg=error&error=" . urlencode($e->getMessage()));
+        header("Location: Order_Management.php?msg=error&error=" . urlencode($e->getMessage()));
     }
     
     mysqli_close($mysqli);
     exit();
 } else {
-    header("Location: Manager_MyOrder_TotalOrder.php?msg=noid");
+    header("Location: Order_Management.php?msg=noid");
     exit();
 }
 ?>
