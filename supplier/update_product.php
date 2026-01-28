@@ -2,6 +2,7 @@
 // ==============================
 // File: supplier/update_product.php
 // 处理产品编辑更新的后端脚本 - 主圖片自動關聯到第一個顏色 (改进版本)
+// 包含刪除顏色的邏輯
 // ==============================
 
 error_reporting(E_ALL);
@@ -98,6 +99,21 @@ try {
     $newColors = [];
     $firstColorImageName = null; // 用於存儲第一個顏色的圖片
     
+    // 首先，獲取現有的顏色
+    $existingColorsSql = "SELECT DISTINCT color, image FROM ProductColorImage WHERE productid = ?";
+    $existingColorsStmt = $mysqli->prepare($existingColorsSql);
+    $existingColors = [];
+    if ($existingColorsStmt) {
+        $existingColorsStmt->bind_param("i", $productId);
+        $existingColorsStmt->execute();
+        $existingColorsResult = $existingColorsStmt->get_result();
+        while ($row = $existingColorsResult->fetch_assoc()) {
+            $existingColors[$row['color']] = $row['image'];
+        }
+        $existingColorsStmt->close();
+    }
+    
+    // 處理新顏色
     if (!empty($colorsData) && is_array($colorsData)) {
         foreach ($colorsData as $idx => $colorData) {
             $color = isset($colorData['color']) ? trim($colorData['color']) : '';
@@ -154,8 +170,6 @@ try {
                     }
                     
                     // 插入新的颜色-图片映射
-                    // 注意：ProductColorImage 表没有 UNIQUE 约束，所以不能使用 ON DUPLICATE KEY
-                    // 旧记录已经删除，现在直接插入新记录
                     $insertSql = "INSERT INTO ProductColorImage (productid, color, image) VALUES (?, ?, ?)";
                     $insertStmt = $mysqli->prepare($insertSql);
                     if ($insertStmt) {
@@ -173,6 +187,38 @@ try {
                         $firstColorImageName = $colorImageName;
                     }
                 }
+            }
+        }
+        
+        // ========== 刪除被移除的顏色 ==========
+        $colorsToDelete = array_diff(array_keys($existingColors), $newColors);
+        foreach ($colorsToDelete as $colorToDelete) {
+            // 獲取要刪除的圖片
+            $getImageSql = "SELECT image FROM ProductColorImage WHERE productid = ? AND color = ?";
+            $getImageStmt = $mysqli->prepare($getImageSql);
+            if ($getImageStmt) {
+                $getImageStmt->bind_param("is", $productId, $colorToDelete);
+                $getImageStmt->execute();
+                $getImageResult = $getImageStmt->get_result();
+                if ($getImageResult->num_rows > 0) {
+                    $imageRow = $getImageResult->fetch_assoc();
+                    $imageToDelete = $uploadDir . $imageRow['image'];
+                    if (file_exists($imageToDelete)) {
+                        unlink($imageToDelete);
+                    }
+                }
+                $getImageStmt->close();
+            }
+            
+            // 刪除資料庫記錄
+            $deleteSql = "DELETE FROM ProductColorImage WHERE productid = ? AND color = ?";
+            $deleteStmt = $mysqli->prepare($deleteSql);
+            if ($deleteStmt) {
+                $deleteStmt->bind_param("is", $productId, $colorToDelete);
+                if (!$deleteStmt->execute()) {
+                    throw new Exception('Failed to delete color: ' . $deleteStmt->error);
+                }
+                $deleteStmt->close();
             }
         }
         
@@ -202,12 +248,12 @@ try {
     // ========== 数据库更新 ==========
     // 更新產品信息（不更新image欄位，因為Product表中沒有該欄位）
     // 主圖片自動關聯到第一個顏色的圖片，存儲在ProductColorImage表中
-    $updateSql = "UPDATE Product SET pname = ?, category = ?, price = ?, description = ?, `long` = ?, `wide` = ?, `tall` = ?, color = ?, material = ? WHERE productid = ? AND supplierid = ?";
+    $updateSql = "UPDATE Product SET pname = ?, category = ?, price = ?, description = ?, `long` = ?, `wide` = ?, `tall` = ?, material = ? WHERE productid = ? AND supplierid = ?";
     $updateStmt = $mysqli->prepare($updateSql);
     if (!$updateStmt) {
         throw new Exception('Prepare failed (update): ' . $mysqli->error);
     }
-    $updateStmt->bind_param("ssissssssii", $pname, $category, $price, $description, $long, $wide, $tall, $colorStr, $material, $productId, $supplierId);
+    $updateStmt->bind_param("ssisssssii", $pname, $category, $price, $description, $long, $wide, $tall, $material, $productId, $supplierId);
 
     if (!$updateStmt->execute()) {
         throw new Exception('Execute failed (update): ' . $updateStmt->error);

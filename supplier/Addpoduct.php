@@ -71,11 +71,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 		}
 
 			if ($pname && $price > 0 && $category && $imageName && !empty($colors) && $allColorsHaveImages) {
-				$stmt = $mysqli->prepare("INSERT INTO Product (pname, price, likes, category, description, `long`, `wide`, `tall`, color, material, supplierid) VALUES (?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)");
+					$stmt = $mysqli->prepare("INSERT INTO Product (pname, price, likes, category, description, `long`, `wide`, `tall`, material, supplierid) VALUES (?, ?, 0, ?, ?, ?, ?, ?, ?, ?)");
 			if (!$stmt) {
 				$error = 'Database error: ' . $mysqli->error;
 			} else {
-				$stmt->bind_param("sissssssss", $pname, $price, $category, $description, $long, $wide, $tall, $colorStr, $material, $supplierId);
+					$stmt->bind_param("sissssssi", $pname, $price, $category, $description, $long, $wide, $tall, $material, $supplierId);
 				if ($stmt->execute()) {
 					$productId = $mysqli->insert_id;
 					// Insert color-image mapping into ProductColorImage table

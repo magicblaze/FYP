@@ -24,7 +24,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $uploadDir = __DIR__ . '/../uploads/designs/';
 
     if (!is_dir($uploadDir)) {
-        mkdir($uploadDir, 0777, true);
+        @mkdir($uploadDir, 0777, true);
     }
 
     // Process design images
@@ -32,13 +32,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $imageCount = count($designImages['name']);
 
         for ($i = 0; $i < $imageCount; $i++) {
+            // Skip empty file names
+            if (empty($designImages['name'][$i])) {
+                continue;
+            }
+            
             if ($designImages['error'][$i] === UPLOAD_ERR_OK) {
                 $ext = pathinfo($designImages['name'][$i], PATHINFO_EXTENSION);
                 $allowedExts = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
 
                 if (in_array(strtolower($ext), $allowedExts)) {
                     $imageFileName = uniqid('design_', true) . '.' . $ext;
-                    if (move_uploaded_file($designImages['tmp_name'][$i], $uploadDir . $imageFileName)) {
+                    if (@move_uploaded_file($designImages['tmp_name'][$i], $uploadDir . $imageFileName)) {
                         $uploadedImages[] = $imageFileName;
                     }
                 }
@@ -56,78 +61,70 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif (empty($uploadedImages)) {
         $error = 'Please upload at least one design image.';
     } else {
-        // Insert design into database
-        $stmt = $mysqli->prepare("INSERT INTO Design (designName, design, expect_price, description, tag, likes, designerid) VALUES (?, ?, ?, ?, ?, 0, ?)");
+        // OPTIMIZED: Insert design WITHOUT the 'design' column
+        // The main image will be stored in DesignImage table with image_order = 1
+        $stmt = $mysqli->prepare("INSERT INTO Design (designName, expect_price, description, tag, likes, designerid) VALUES (?, ?, ?, ?, 0, ?)");
         if (!$stmt) {
             $error = 'Database error: ' . $mysqli->error;
         } else {
-            // Use the first image as the primary design image
-            $primaryImage = $uploadedImages[0];
-            $stmt->bind_param("ssissi", $design_name, $primaryImage, $expect_price, $description, $tag, $designerId);
+            $stmt->bind_param("sissi", $design_name, $expect_price, $description, $tag, $designerId);
 
             if ($stmt->execute()) {
-                        $designId = $stmt->insert_id;
-                        $stmt->close();
+                $designId = $stmt->insert_id;
+                $stmt->close();
 
-                        // If client provided a primary index, respect it
-                        $primaryIndex = isset($_POST['primary_index']) ? (int)$_POST['primary_index'] : 0;
-                        if ($primaryIndex < 0 || $primaryIndex >= count($uploadedImages)) $primaryIndex = 0;
-                
-                        // Use the selected primary image (will be overwritten below after inserting images)
-                        $primaryImage = $uploadedImages[$primaryIndex];
-
-                        // Insert all uploaded images into DesignImage table
-                        $imageStmt = $mysqli->prepare("INSERT INTO DesignImage (designid, image_filename, image_order) VALUES (?, ?, ?)");
+                // Insert all uploaded images into DesignImage table
+                // image_order = 1 for the first image (main image)
+                // image_order = 2, 3, ... for other images
+                $imageStmt = $mysqli->prepare("INSERT INTO DesignImage (designid, image_filename, image_order) VALUES (?, ?, ?)");
                 if ($imageStmt) {
                     $imageOrder = 1;
-                            foreach ($uploadedImages as $imageName) {
-                                $imageStmt->bind_param("isi", $designId, $imageName, $imageOrder);
-                                $imageStmt->execute();
-                                $imageOrder++;
-                            }
+                    foreach ($uploadedImages as $imageName) {
+                        $imageStmt->bind_param("isi", $designId, $imageName, $imageOrder);
+                        if (!$imageStmt->execute()) {
+                            $error = 'Error saving image: ' . $imageStmt->error;
+                            break;
+                        }
+                        $imageOrder++;
+                    }
                     $imageStmt->close();
 
-                    // Update Design table to set the chosen primary image as the main `design` field
-                    $upd = $mysqli->prepare("UPDATE Design SET design = ? WHERE designid = ?");
-                    if ($upd) {
-                        $upd->bind_param('si', $primaryImage, $designId);
-                        $upd->execute();
-                        $upd->close();
-                    }
+                    // Only set success if all images were saved
+                    if (empty($error)) {
+                        // Process references JSON if submitted
+                        if (!empty($_POST['references_json'])) {
+                            $refs = @json_decode($_POST['references_json'], true);
+                            if (is_array($refs) && count($refs) > 0) {
+                                // ensure table exists
+                                $createSql = "CREATE TABLE IF NOT EXISTS DesignReference (
+                                    id INT AUTO_INCREMENT PRIMARY KEY,
+                                    designid INT NOT NULL,
+                                    title VARCHAR(255) DEFAULT NULL,
+                                    url TEXT DEFAULT NULL,
+                                    added_by_type VARCHAR(50) DEFAULT NULL,
+                                    added_by_id INT DEFAULT NULL,
+                                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                                    INDEX(designid)
+                                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+                                $mysqli->query($createSql);
 
-                    // Process references JSON if submitted
-                    if (!empty($_POST['references_json'])) {
-                        $refs = @json_decode($_POST['references_json'], true);
-                        if (is_array($refs) && count($refs) > 0) {
-                            // ensure table exists
-                            $createSql = "CREATE TABLE IF NOT EXISTS DesignReference (
-                                id INT AUTO_INCREMENT PRIMARY KEY,
-                                designid INT NOT NULL,
-                                title VARCHAR(255) DEFAULT NULL,
-                                url TEXT DEFAULT NULL,
-                                added_by_type VARCHAR(50) DEFAULT NULL,
-                                added_by_id INT DEFAULT NULL,
-                                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                                INDEX(designid)
-                            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
-                            $mysqli->query($createSql);
-
-                            $ins = $mysqli->prepare("INSERT INTO DesignReference (designid, title, url, added_by_type, added_by_id) VALUES (?, ?, ?, ?, ?)");
-                            if ($ins) {
-                                foreach ($refs as $r) {
-                                    $title = isset($r['title']) ? trim($r['title']) : null;
-                                    $url = isset($r['url']) ? trim($r['url']) : null;
-                                    $atype = 'designer';
-                                    $aid = $designerId;
-                                    $ins->bind_param('isssi', $designId, $title, $url, $atype, $aid);
-                                    $ins->execute();
+                                $ins = $mysqli->prepare("INSERT INTO DesignReference (designid, title, url, added_by_type, added_by_id) VALUES (?, ?, ?, ?, ?)");
+                                if ($ins) {
+                                    foreach ($refs as $r) {
+                                        $title = isset($r['title']) ? trim($r['title']) : null;
+                                        $url = isset($r['url']) ? trim($r['url']) : null;
+                                        $atype = 'designer';
+                                        $aid = $designerId;
+                                        $ins->bind_param('isssi', $designId, $title, $url, $atype, $aid);
+                                        $ins->execute();
+                                    }
+                                    $ins->close();
                                 }
-                                $ins->close();
                             }
                         }
-                    }
 
-                    $success = true;
+                        $success = true;
+                    }
                 } else {
                     $error = 'Error saving image records: ' . $mysqli->error;
                 }
@@ -292,33 +289,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                             </div>
                         <?php endif; ?>
-                        <div class="row g-3 mb-2">
-                            <div class="col-md-12">
-                                <div class="form-section">
-                                    <label class="form-label"><i class="fas fa-images"></i> Image(s) for the design
-                                        *</label>
-                                    <div class="file-input-wrapper">
-                                        <label class="file-input-label" id="fileInputLabel">
-                                            <div>
-                                                <i class="fas fa-cloud-upload-alt"
-                                                    style="font-size: 2rem; color: #3498db; margin-bottom: 0.5rem; display: block;"></i>
-                                                <strong>Click to upload or drag & drop</strong>
-                                                <p class="text-muted mb-0" style="font-size: 0.9rem;">JPG, PNG, GIF,
-                                                    WebP (Max 10 images)</p>
-                                            </div>
-                                        </label>
-                                        <input type="file" name="design[]" id="designInput" class="form-control"
-                                            accept="image/*" multiple required>
+                        
+                        <!-- Form starts here and wraps the entire form including file input -->
+                        <form method="post" enctype="multipart/form-data" id="addDesignForm">
+                            <input type="hidden" name="references_json" id="referencesJson" value="">
+                            
+                            <div class="row g-3 mb-2">
+                                <div class="col-md-12">
+                                    <div class="form-section">
+                                        <label class="form-label"><i class="fas fa-images"></i> Image(s) for the design
+                                            *</label>
+                                        <div class="file-input-wrapper">
+                                            <label class="file-input-label" id="fileInputLabel">
+                                                <div>
+                                                    <i class="fas fa-cloud-upload-alt"
+                                                        style="font-size: 2rem; color: #3498db; margin-bottom: 0.5rem; display: block;"></i>
+                                                    <strong>Click to upload or drag & drop</strong>
+                                                    <p class="text-muted mb-0" style="font-size: 0.9rem;">JPG, PNG, GIF,
+                                                        WebP (Max 10 images)</p>
+                                                </div>
+                                            </label>
+                                            <input type="file" name="design[]" id="designInput" class="form-control"
+                                                accept="image/*" multiple required>
+                                        </div>
+                                        <div class="image-preview-container" id="imagePreviewContainer"></div>
+                                        <small class="text-muted d-block mt-2">Upload high-quality design images. The first
+                                            image will be used as the main design thumbnail.</small>
                                     </div>
-                                    <div class="image-preview-container" id="imagePreviewContainer"></div>
-                                    <small class="text-muted d-block mt-2">Upload high-quality design images. The first
-                                        image will be used as the main design thumbnail.</small>
                                 </div>
                             </div>
-                        </div>
-                        <form method="post" enctype="multipart/form-data" id="addDesignForm">
-                            <input type="hidden" name="primary_index" id="primaryIndex" value="0">
-                            <input type="hidden" name="references_json" id="referencesJson" value="">
+                            
                             <div class="row g-3 mb-2">
                                 <div class="col-md-12">
                                     <div class="form-section">
@@ -329,8 +329,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     </div>
                                 </div>
                             </div>
-
-
 
                             <div class="row g-3 mb-2">
                                 <div class="col-md-6">
@@ -398,107 +396,70 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
     </main>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
     <script>
-        const designInput = document.getElementById('designInput');
+        // File input handling
         const fileInputLabel = document.getElementById('fileInputLabel');
+        const designInput = document.getElementById('designInput');
         const imagePreviewContainer = document.getElementById('imagePreviewContainer');
-        let selectedFiles = [];
+        const addDesignForm = document.getElementById('addDesignForm');
 
-        // Handle file selection via input
-        designInput.addEventListener('change', function (e) {
-            selectedFiles = Array.from(this.files);
-            updatePreviews();
-        });
-
-        // Handle drag and drop
-        fileInputLabel.addEventListener('dragover', function (e) {
+        // Drag and drop
+        fileInputLabel.addEventListener('dragover', (e) => {
             e.preventDefault();
-            e.stopPropagation();
-            this.classList.add('dragover');
+            fileInputLabel.classList.add('dragover');
         });
 
-        fileInputLabel.addEventListener('dragleave', function (e) {
+        fileInputLabel.addEventListener('dragleave', () => {
+            fileInputLabel.classList.remove('dragover');
+        });
+
+        fileInputLabel.addEventListener('drop', (e) => {
             e.preventDefault();
-            e.stopPropagation();
-            this.classList.remove('dragover');
+            fileInputLabel.classList.remove('dragover');
+            designInput.files = e.dataTransfer.files;
+            updateImagePreviews();
         });
 
-        fileInputLabel.addEventListener('drop', function (e) {
-            e.preventDefault();
-            e.stopPropagation();
-            this.classList.remove('dragover');
-
-            const files = e.dataTransfer.files;
-            selectedFiles = Array.from(files);
-
-            // Update the file input
-            const dataTransfer = new DataTransfer();
-            selectedFiles.forEach(file => dataTransfer.items.add(file));
-            designInput.files = dataTransfer.files;
-
-            updatePreviews();
-        });
-
-        function updatePreviews() {
-            imagePreviewContainer.innerHTML = '';
-            
-            selectedFiles.forEach((file, index) => {
-                const reader = new FileReader();
-                reader.onload = function (e) {
-                    const previewItem = document.createElement('div');
-                    previewItem.className = 'image-preview-item';
-                    previewItem.innerHTML = `
-                        <img src="${e.target.result}" alt="Preview ${index + 1}">
-                        <button type="button" class="remove-btn" onclick="removeImage(${index})" title="Remove image">
-                            <i class="fas fa-times"></i>
-                        </button>
-                        <button type="button" class="btn btn-sm btn-light set-default" onclick="setPrimaryIndex(${index})" title="Set as primary" style="position:absolute;left:6px;bottom:6px;"> 
-                            <i class="fas fa-star" style="color: #f1c40f"></i>
-                        </button>
-                        <div class="default-badge" style="position:absolute;top:6px;left:6px;display:none;background:#3498db;color:#fff;padding:2px 6px;border-radius:4px;font-size:12px;">Primary</div>
-                    `;
-                    imagePreviewContainer.appendChild(previewItem);
-                    updateDefaultVisuals();
-                };
-                reader.readAsDataURL(file);
-            });
-            renderReferences();
-        }
-
-        function removeImage(index) {
-            selectedFiles.splice(index, 1);
-            const dataTransfer = new DataTransfer();
-            selectedFiles.forEach(file => dataTransfer.items.add(file));
-            designInput.files = dataTransfer.files;
-            updatePreviews();
-            // update primary index if needed
-            let p = parseInt(document.getElementById('primaryIndex').value || '0', 10);
-            if (isNaN(p)) p = 0;
-            if (index < p) p = p - 1;
-            else if (index === p) p = 0;
-            document.getElementById('primaryIndex').value = p;
-            updateDefaultVisuals();
-        }
-
-        // Click on label to trigger file input
-        fileInputLabel.addEventListener('click', function () {
+        // Click to upload
+        fileInputLabel.addEventListener('click', () => {
             designInput.click();
         });
 
-        function setPrimaryIndex(i) {
-            document.getElementById('primaryIndex').value = i;
-            updateDefaultVisuals();
+        designInput.addEventListener('change', updateImagePreviews);
+
+        function updateImagePreviews() {
+            imagePreviewContainer.innerHTML = '';
+            const files = designInput.files;
+
+            for (let i = 0; i < files.length && i < 10; i++) {
+                const file = files[i];
+                const reader = new FileReader();
+
+                reader.onload = function(e) {
+                    const div = document.createElement('div');
+                    div.className = 'image-preview-item';
+                    div.innerHTML = `
+                        <img src="${e.target.result}" alt="Preview">
+                        <button type="button" class="remove-btn" onclick="removeImagePreview(this)">×</button>
+                    `;
+                    imagePreviewContainer.appendChild(div);
+                };
+
+                reader.readAsDataURL(file);
+            }
         }
 
-        function updateDefaultVisuals() {
-            const items = imagePreviewContainer.querySelectorAll('.image-preview-item');
-            const p = parseInt(document.getElementById('primaryIndex').value || '0', 10) || 0;
-            items.forEach((it, idx) => {
-                const badge = it.querySelector('.default-badge');
-                if (badge) badge.style.display = (idx === p) ? 'block' : 'none';
-            });
+        function removeImagePreview(btn) {
+            btn.parentElement.remove();
         }
+
+        // Form submission
+        addDesignForm.addEventListener('submit', (e) => {
+            if (imagePreviewContainer.children.length === 0) {
+                e.preventDefault();
+                alert('Please upload at least one image');
+            }
+        });
 
         // References logic
         let references = [];

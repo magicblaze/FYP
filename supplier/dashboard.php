@@ -607,6 +607,7 @@ $colorImageStmt->close();
 
         /**
          * 加載產品數據到編輯表單
+         * FIXED: 從 ProductColorImage 表讀取顏色信息，而不是從 Product.color
          */
         function loadProductData(productData, colorImages) {
             document.getElementById('productId').value = productData.productid;
@@ -623,12 +624,12 @@ $colorImageStmt->close();
             // 保存颜色图片映射
             productColorImagesMap = colorImages || {};
             
-            // 加载颜色
+            // 加载颜色 - 從 ProductColorImage 表的顏色信息
             editSelectedColors = [];
-            if (productData.color) {
-                const colors = productData.color.split(',').map(c => c.trim()).filter(c => c);
-                colors.forEach(color => {
-                    const existingImage = productColorImagesMap[color] || null;
+            // 從 colorImages 對象獲取所有顏色（這些是從 ProductColorImage 表中讀取的）
+            if (colorImages && Object.keys(colorImages).length > 0) {
+                Object.keys(colorImages).forEach(color => {
+                    const existingImage = colorImages[color] || null;
                     editSelectedColors.push({
                         color: color,
                         imageFile: null,
@@ -692,6 +693,12 @@ $colorImageStmt->close();
             
             if (!form.checkValidity()) {
                 form.reportValidity();
+                return;
+            }
+            
+            // 驗證至少有一個顏色
+            if (editSelectedColors.length === 0) {
+                alert('Please add at least one color to the product.');
                 return;
             }
 
