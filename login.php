@@ -21,7 +21,7 @@ if (isset($_SESSION['user'])) {
             $dest = 'design_dashboard.php';
             break;
         case 'manager':
-            $dest = 'Manager/Manager_MyOrder.php';
+            $dest = 'Manager/Manager_dashboard.php';
             break;
         case 'contractor':
             $dest = 'design_dashboard.php';
