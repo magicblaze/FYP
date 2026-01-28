@@ -353,7 +353,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 								<div class="col-md-4">
 									<div class="form-section">
 										<label class="form-label"><i class="fas fa-dollar-sign"></i> Price (HK$) *</label>
-										<input type="number" name="price" class="form-control" min="1" required>
+										<input type="number" name="price" class="form-control" min="1" step="100" required>
 									</div>
 								</div>
 								<div class="col-md-4">

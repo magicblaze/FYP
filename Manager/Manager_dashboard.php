@@ -15,7 +15,7 @@ $user_name = $user['name'] ?? 'Manager';
 // Get search and filter parameters
 $search = isset($_GET['search']) ? mysqli_real_escape_string($mysqli, $_GET['search']) : '';
 $status_filter = isset($_GET['status']) ? $_GET['status'] : 'all';
-$page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+$page = isset($_GET['page']) ? (int) $_GET['page'] : 1;
 $limit = 10;
 $offset = ($page - 1) * $limit;
 
@@ -103,6 +103,7 @@ $status_colors = array(
 ?>
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -119,52 +120,65 @@ $status_colors = array(
             margin-bottom: 15px;
             transition: all 0.3s ease;
         }
+
         .stat-card:hover {
             transform: translateY(-5px);
             box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
         }
+
         .stat-number {
             font-size: 32px;
             font-weight: bold;
             margin-bottom: 5px;
         }
+
         .stat-label {
             font-size: 14px;
             opacity: 0.9;
         }
-        .stat-bg-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-        .stat-bg-success { background: linear-gradient(135deg, #56ab2f 0%, #a8edea 100%); }
-        .stat-bg-warning { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
-        .stat-bg-info { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
-        .stat-bg-danger { background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); }
-        
+
+        .stat-bg-primary,
+        .stat-bg-success,
+        .stat-bg-warning,
+        .stat-bg-info,
+        .stat-bg-danger {
+            background: white;
+        }
+
         .order-table {
             font-size: 0.95rem;
         }
+
         .order-table thead {
             background: #f8f9fa;
         }
+
         .order-table tbody tr {
             transition: all 0.3s ease;
         }
+
         .order-table tbody tr:hover {
             background: #f0f0f0;
         }
+
         .badge-custom {
             font-size: 0.85rem;
             padding: 6px 10px;
         }
+
         .no-data-message {
             text-align: center;
             padding: 40px;
             color: #999;
         }
+
         .pagination-custom {
             justify-content: center;
             margin-top: 20px;
         }
     </style>
 </head>
+
 <body>
     <?php include_once __DIR__ . '/../includes/header.php'; ?>
 
@@ -207,8 +221,10 @@ $status_colors = array(
                 </div>
             </div>
             <div class="col-lg-2 col-md-4 col-sm-6">
-                <div class="stat-card" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);">
-                    <div class="stat-number"><?php echo $designer_stats['available_designers']; ?>/<?php echo ($designer_stats['available_designers'] + $designer_stats['busy_designers']); ?></div>
+                <div class="stat-card">
+                    <div class="stat-number">
+                        <?php echo $designer_stats['available_designers']; ?>/<?php echo ($designer_stats['available_designers'] + $designer_stats['busy_designers']); ?>
+                    </div>
                     <div class="stat-label">Available Designers</div>
                 </div>
             </div>
@@ -251,9 +267,9 @@ $status_colors = array(
                 <div class="row">
                     <div class="col-md-8 mb-2 mb-md-0">
                         <form method="get" class="input-group">
-                            <input type="text" class="form-control" name="search" 
-                                   placeholder="Search order ID, client name, or requirements..." 
-                                   value="<?php echo htmlspecialchars($search); ?>">
+                            <input type="text" class="form-control" name="search"
+                                placeholder="Search order ID, client name, or requirements..."
+                                value="<?php echo htmlspecialchars($search); ?>">
                             <button class="btn btn-primary" type="submit">
                                 <i class="fas fa-search me-1"></i>Search
                             </button>
@@ -267,11 +283,16 @@ $status_colors = array(
                     <div class="col-md-4">
                         <form method="get" class="input-group">
                             <select class="form-select" name="status" onchange="this.form.submit();">
-                                <option value="all" <?php echo $status_filter === 'all' ? 'selected' : ''; ?>>All Status</option>
-                                <option value="Pending" <?php echo $status_filter === 'Pending' ? 'selected' : ''; ?>>Pending</option>
-                                <option value="Designing" <?php echo $status_filter === 'Designing' ? 'selected' : ''; ?>>Designing</option>
-                                <option value="Completed" <?php echo $status_filter === 'Completed' ? 'selected' : ''; ?>>Completed</option>
-                                <option value="Rejected" <?php echo $status_filter === 'Rejected' ? 'selected' : ''; ?>>Rejected</option>
+                                <option value="all" <?php echo $status_filter === 'all' ? 'selected' : ''; ?>>All Status
+                                </option>
+                                <option value="Pending" <?php echo $status_filter === 'Pending' ? 'selected' : ''; ?>>
+                                    Pending</option>
+                                <option value="Designing" <?php echo $status_filter === 'Designing' ? 'selected' : ''; ?>>
+                                    Designing</option>
+                                <option value="Completed" <?php echo $status_filter === 'Completed' ? 'selected' : ''; ?>>
+                                    Completed</option>
+                                <option value="Rejected" <?php echo $status_filter === 'Rejected' ? 'selected' : ''; ?>>
+                                    Rejected</option>
                             </select>
                         </form>
                     </div>
@@ -312,7 +333,8 @@ $status_colors = array(
                                             <div class="d-flex align-items-center">
                                                 <i class="fas fa-user-circle text-secondary me-2" style="font-size: 24px;"></i>
                                                 <div>
-                                                    <div><strong><?php echo htmlspecialchars($order['client_name']); ?></strong></div>
+                                                    <div><strong><?php echo htmlspecialchars($order['client_name']); ?></strong>
+                                                    </div>
                                                     <small class="text-muted">ID: <?php echo $order['clientid']; ?></small>
                                                 </div>
                                             </div>
@@ -324,10 +346,12 @@ $status_colors = array(
                                             <?php if ($order['designerid']): ?>
                                                 <div>
                                                     <span class="badge bg-success badge-custom">
-                                                        <i class="fas fa-check-circle me-1"></i><?php echo htmlspecialchars($order['designer_name']); ?>
+                                                        <i
+                                                            class="fas fa-check-circle me-1"></i><?php echo htmlspecialchars($order['designer_name']); ?>
                                                     </span>
                                                     <br>
-                                                    <small class="badge <?php echo $order['designer_status'] === 'Available' ? 'bg-info' : 'bg-secondary'; ?> mt-1">
+                                                    <small
+                                                        class="badge <?php echo $order['designer_status'] === 'Available' ? 'bg-info' : 'bg-secondary'; ?> mt-1">
                                                         <?php echo $order['designer_status'] === 'Available' ? '<i class="fas fa-circle me-1"></i>Available' : '<i class="fas fa-circle me-1"></i>Busy'; ?>
                                                     </small>
                                                 </div>
@@ -341,18 +365,19 @@ $status_colors = array(
                                             <strong>HK$<?php echo number_format($order['budget'], 2); ?></strong>
                                         </td>
                                         <td>
-                                            <span class="badge bg-<?php echo $status_colors[$order['ostatus']] ?? 'secondary'; ?> badge-custom">
+                                            <span
+                                                class="badge bg-<?php echo $status_colors[$order['ostatus']] ?? 'secondary'; ?> badge-custom">
                                                 <?php echo $order['ostatus']; ?>
                                             </span>
                                         </td>
                                         <td>
                                             <div class="btn-group btn-group-sm" role="group">
-                                                <a href="Manager_view_order.php?orderid=<?php echo $order['orderid']; ?>" 
-                                                   class="btn btn-outline-primary" title="View Details">
+                                                <a href="Manager_view_order.php?orderid=<?php echo $order['orderid']; ?>"
+                                                    class="btn btn-outline-primary" title="View Details">
                                                     <i class="fas fa-eye"></i>
                                                 </a>
-                                                <a href="Order_Management.php?orderid=<?php echo $order['orderid']; ?>" 
-                                                   class="btn btn-outline-info" title="Manage">
+                                                <a href="Order_Management.php?orderid=<?php echo $order['orderid']; ?>"
+                                                    class="btn btn-outline-info" title="Manage">
                                                     <i class="fas fa-edit"></i>
                                                 </a>
                                             </div>
@@ -369,7 +394,8 @@ $status_colors = array(
                             <ul class="pagination pagination-custom">
                                 <?php if ($page > 1): ?>
                                     <li class="page-item">
-                                        <a class="page-link" href="?page=1<?php echo !empty($search) ? '&search=' . urlencode($search) : ''; ?><?php echo $status_filter !== 'all' ? '&status=' . $status_filter : ''; ?>">
+                                        <a class="page-link"
+                                            href="?page=1<?php echo !empty($search) ? '&search=' . urlencode($search) : ''; ?><?php echo $status_filter !== 'all' ? '&status=' . $status_filter : ''; ?>">
                                             <i class="fas fa-chevron-left"></i> First
                                         </a>
                                     </li>
@@ -377,7 +403,8 @@ $status_colors = array(
 
                                 <?php for ($i = max(1, $page - 2); $i <= min($total_pages, $page + 2); $i++): ?>
                                     <li class="page-item <?php echo $i === $page ? 'active' : ''; ?>">
-                                        <a class="page-link" href="?page=<?php echo $i; ?><?php echo !empty($search) ? '&search=' . urlencode($search) : ''; ?><?php echo $status_filter !== 'all' ? '&status=' . $status_filter : ''; ?>">
+                                        <a class="page-link"
+                                            href="?page=<?php echo $i; ?><?php echo !empty($search) ? '&search=' . urlencode($search) : ''; ?><?php echo $status_filter !== 'all' ? '&status=' . $status_filter : ''; ?>">
                                             <?php echo $i; ?>
                                         </a>
                                     </li>
@@ -385,7 +412,8 @@ $status_colors = array(
 
                                 <?php if ($page < $total_pages): ?>
                                     <li class="page-item">
-                                        <a class="page-link" href="?page=<?php echo $total_pages; ?><?php echo !empty($search) ? '&search=' . urlencode($search) : ''; ?><?php echo $status_filter !== 'all' ? '&status=' . $status_filter : ''; ?>">
+                                        <a class="page-link"
+                                            href="?page=<?php echo $total_pages; ?><?php echo !empty($search) ? '&search=' . urlencode($search) : ''; ?><?php echo $status_filter !== 'all' ? '&status=' . $status_filter : ''; ?>">
                                             Last <i class="fas fa-chevron-right"></i>
                                         </a>
                                     </li>
@@ -395,7 +423,8 @@ $status_colors = array(
                     <?php endif; ?>
                 <?php else: ?>
                     <div class="no-data-message">
-                        <i class="fas fa-inbox" style="font-size: 48px; margin-bottom: 15px; display: block; opacity: 0.5;"></i>
+                        <i class="fas fa-inbox"
+                            style="font-size: 48px; margin-bottom: 15px; display: block; opacity: 0.5;"></i>
                         <p>No orders found</p>
                         <small class="text-muted">Try adjusting your search or filter criteria</small>
                     </div>
@@ -404,40 +433,17 @@ $status_colors = array(
         </div>
 
         <!-- Quick Action Links -->
-        <div class="row mt-4 mb-4">
-            <div class="col-md-4">
-                <div class="card text-center">
-                    <div class="card-body">
-                        <i class="fas fa-user-tie fa-2x text-primary mb-2"></i>
-                        <h6 class="card-title">Assign Designer</h6>
-                        <a href="Manager_AssignDesigner.php" class="btn btn-sm btn-primary">
-                            <i class="fas fa-arrow-right me-1"></i>Go to Assignment
-                        </a>
-                    </div>
+        <div class="col-md-4">
+            <div class="card text-center">
+                <div class="card-body">
+                    <i class="fas fa-calendar-alt fa-2x text-info mb-2"></i>
+                    <h6 class="card-title">Schedule</h6>
+                    <a href="Manager_Schedule.php" class="btn btn-sm btn-info">
+                        <i class="fas fa-arrow-right me-1"></i>View Schedule
+                    </a>
                 </div>
             </div>
-            <div class="col-md-4">
-                <div class="card text-center">
-                    <div class="card-body">
-                        <i class="fas fa-calendar-alt fa-2x text-info mb-2"></i>
-                        <h6 class="card-title">Schedule</h6>
-                        <a href="Manager_Schedule.php" class="btn btn-sm btn-info">
-                            <i class="fas fa-arrow-right me-1"></i>View Schedule
-                        </a>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="card text-center">
-                    <div class="card-body">
-                        <i class="fas fa-envelope fa-2x text-success mb-2"></i>
-                        <h6 class="card-title">Messages</h6>
-                        <a href="../Public/chat_widget.php" class="btn btn-sm btn-success">
-                            <i class="fas fa-arrow-right me-1"></i>Open Chat
-                        </a>
-                    </div>
-                </div>
-            </div>
+        </div>
         </div>
     </main>
 
@@ -446,4 +452,5 @@ $status_colors = array(
     <!-- Include chat widget -->
     <?php include __DIR__ . '/../Public/chat_widget.php'; ?>
 </body>
+
 </html>
