@@ -69,7 +69,7 @@ try {
     $checkStmt->close();
 
     // ========== 检查是否有订单关联该产品 ==========
-    $orderCheckSql = "SELECT COUNT(*) as order_count FROM OrderProduct WHERE productid = ?";
+    $orderCheckSql = "SELECT COUNT(*) as order_count FROM OrderDelivery WHERE productid = ?";
     $orderCheckStmt = $mysqli->prepare($orderCheckSql);
     if (!$orderCheckStmt) {
         throw new Exception('Prepare failed (order check): ' . $mysqli->error);
