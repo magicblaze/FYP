@@ -789,7 +789,7 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                                         title="Edit GFA"><i class="fas fa-pencil-alt"></i></button>
                                 </div>
                                 <div id="gfaEdit" style="display:none; margin-top:.5rem;">
-                                    <input type="number" step="1000" min="0" id="gfaInput" class="form-control"
+                                    <input type="number" step="0.01" min="0" id="gfaInput" class="form-control"
                                         value="<?= htmlspecialchars($initialGfa) ?>">
                                     <div class="mt-2">
                                         <button type="button" id="gfaSaveBtn"
