@@ -15,6 +15,9 @@ $user_name = $user['name'];
 // 获取搜索参数
 $search = isset($_GET['search']) ? mysqli_real_escape_string($mysqli, $_GET['search']) : '';
 $status_filter = isset($_GET['status']) ? $_GET['status'] : '';
+
+// 定义状态颜色函数
+function getStatusBadgeClass($status) {
     switch(strtolower($status)) {
         case 'delivered':
         case 'completed':
@@ -39,9 +42,14 @@ $status_filter = isset($_GET['status']) ? $_GET['status'] : '';
         default:
             return 'bg-secondary';
     }
+}
 
+$where_conditions = [];
+if(!empty($search)) {
+    $where_conditions[] = "(o.orderid LIKE '%$search%' OR c.cname LIKE '%$search%' OR d.designName LIKE '%$search%')";
+}
 
-    if(!empty($status_filter)) {
+if(!empty($status_filter)) {
     if($status_filter == 'designing') {
         $where_conditions[] = "o.ostatus = 'designing'";
     } elseif($status_filter == 'completed') {

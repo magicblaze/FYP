@@ -20,7 +20,7 @@ $supplierName = $_SESSION['user']['name'];
 // 获取该供应商的所有订单产品及其状态
 $sql = "
     SELECT 
-        op.orderproductid,
+        op.orderdeliveryid,
         op.productid,
         op.quantity,
         op.orderid,
@@ -35,14 +35,14 @@ $sql = "
         c.cemail,
         c.address,
         pci.image
-    FROM OrderProduct op
+    FROM OrderDelivery op
     JOIN Product p ON op.productid = p.productid
     JOIN `Order` o ON op.orderid = o.orderid
     JOIN Client c ON o.clientid = c.clientid
     LEFT JOIN ProductColorImage pci ON p.productid = pci.productid
     WHERE p.supplierid = ?
-    GROUP BY op.orderproductid
-    ORDER BY op.orderproductid DESC
+    GROUP BY op.orderdeliveryid
+    ORDER BY op.orderdeliveryid DESC
 ";
 
 $stmt = $mysqli->prepare($sql);
@@ -375,14 +375,14 @@ $availableStatuses = ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelle
                             <div class="detail-label">Delivery Date</div>
                             <div class="detail-value">
                                 <input type="date" class="form-control form-control-sm delivery-date-input" 
-                                       data-orderproductid="<?= $product['orderproductid'] ?>"
+                                       data-orderdeliveryid="<?= $product['orderdeliveryid'] ?>"
                                        value="<?= !empty($product['deliverydate']) ? date('Y-m-d', strtotime($product['deliverydate'])) : '' ?>"
                                        onchange="updateDeliveryDate(this)" style="max-width: 150px;">
                             </div>
                         </div>
                         <div class="detail-item">
-                            <div class="detail-label">OrderProduct ID</div>
-                            <div class="detail-value">#<?= $product['orderproductid'] ?></div>
+                            <div class="detail-label">OrderDelivery ID</div>
+                            <div class="detail-value">#<?= $product['orderdeliveryid'] ?></div>
                         </div>
                         <div class="detail-item">
                             <div class="detail-label">Order Date</div>
@@ -395,7 +395,7 @@ $availableStatuses = ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelle
                         <div>
                             <label class="form-label mb-2"><strong>Update Status:</strong></label>
                             <select class="form-select status-select status-dropdown" 
-                                    data-orderproductid="<?= $product['orderproductid'] ?>"
+                                    data-orderdeliveryid="<?= $product['orderdeliveryid'] ?>"
                                     onchange="updateStatus(this)">
                                 <option value="">-- Select Status --</option>
                                 <?php foreach ($availableStatuses as $status): ?>
@@ -452,7 +452,7 @@ $availableStatuses = ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelle
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         function updateDeliveryDate(inputElement) {
-            const orderProductId = inputElement.dataset.orderproductid;
+            const orderProductId = inputElement.dataset.orderdeliveryid;
             const newDeliveryDate = inputElement.value;
 
             if (!newDeliveryDate) {
@@ -468,7 +468,7 @@ $availableStatuses = ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelle
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    orderproductid: orderProductId,
+                    orderdeliveryid: orderProductId,
                     deliverydate: newDeliveryDate
                 })
             })
@@ -505,7 +505,7 @@ $availableStatuses = ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelle
         }
 
         function updateStatus(selectElement) {
-            const orderProductId = selectElement.dataset.orderproductid;
+            const orderProductId = selectElement.dataset.orderdeliveryid;
             const newStatus = selectElement.value;
 
             if (!newStatus) {
@@ -530,7 +530,7 @@ $availableStatuses = ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelle
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    orderproductid: orderProductId,
+                    orderdeliveryid: orderProductId,
                     status: newStatus
                 })
             })
