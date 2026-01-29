@@ -143,7 +143,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $dest = 'designer/designer_dashboard.php';
                     break;
                 case 'manager':
-                    $dest = 'Manager/Manager_MyOrder.php';
+                    $dest = 'Manager/Manager_dashboard.php';
                     break;
                 case 'contractor':
                     // Contractor default destination
