@@ -419,6 +419,21 @@ $stmt->close();
             background: #2980b9;
         }
 
+        .delete-picture-btn {
+            background: #e74c3c !important;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.3s;
+        }
+
+        .delete-picture-btn:hover {
+            background: #c0392b !important;
+        }
+
         .upload-area {
             border: 2px dashed #3498db;
             border-radius: 8px;
@@ -861,8 +876,14 @@ $stmt->close();
                                         </span>
                                         <div class="picture-actions">
                                             <button
-                                                onclick="viewPicture(<?= (int) $pic['pictureid'] ?>, <?= json_encode($pic['filename']) ?>)">
+                                                onclick="viewPicture(<?= (int) $pic['pictureid'] ?>, <?= htmlspecialchars(json_encode($pic['filename']), ENT_QUOTES, 'UTF-8') ?>)">
                                                 <i class="fas fa-eye"></i> View
+                                            </button>
+                                        </div>
+                                        <div class="picture-actions picture-delete-actions" data-order="<?= $order['orderid'] ?>" style="display: none;">
+                                            <button class="delete-picture-btn"
+                                                onclick="deletePicture(<?= (int) $pic['pictureid'] ?>, <?= $order['orderid'] ?>)">
+                                                <i class="fas fa-trash"></i> Delete
                                             </button>
                                         </div>
                                         <?php if ($pic['status'] === 'rejected'): ?>
@@ -1229,6 +1250,7 @@ $stmt->close();
             const uploadContainer = document.getElementById('uploadContainer_' + orderId);
             const refAddBtn = document.getElementById('refAddBtn_' + orderId);
             const refActionBtns = document.querySelectorAll('.ref-actions[data-order="' + orderId + '"]');
+            const pictureDeleteBtns = document.querySelectorAll('.picture-delete-actions[data-order="' + orderId + '"]');
 
             if (!editBtn || !saveBtn) return;
 
@@ -1241,6 +1263,7 @@ $stmt->close();
                 if (uploadContainer) uploadContainer.classList.remove('upload-section-hidden');
                 if (refAddBtn) refAddBtn.style.display = 'inline-block';
                 refActionBtns.forEach(el => el.style.display = 'flex');
+                pictureDeleteBtns.forEach(el => el.style.display = 'flex');
             } else {
                 editBtn.style.display = 'inline-block';
                 saveBtn.style.display = 'none';
@@ -1248,6 +1271,7 @@ $stmt->close();
                 if (uploadContainer) uploadContainer.classList.add('upload-section-hidden');
                 if (refAddBtn) refAddBtn.style.display = 'none';
                 refActionBtns.forEach(el => el.style.display = 'none');
+                pictureDeleteBtns.forEach(el => el.style.display = 'none');
                 cancelPreview(orderId);
                 toggleReferenceEdit(orderId, false);
             }
@@ -1445,6 +1469,118 @@ $stmt->close();
 
         function viewPicture(pictureId, filename) {
             window.open('../uploads/designed_Picture/' + filename, '_blank');
+        }
+
+        function deletePicture(pictureId, orderId) {
+            if (!confirm('Are you sure you want to delete this picture? This action cannot be undone.')) {
+                return;
+            }
+
+            fetch('delete_designed_picture.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pictureid: pictureId })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Remove the picture item from DOM
+                    const pictureItems = document.querySelectorAll('.picture-item');
+                    pictureItems.forEach(item => {
+                        const deleteBtn = item.querySelector('button[onclick*="deletePicture(' + pictureId + ',"]');
+                        if (deleteBtn) {
+                            item.remove();
+                        }
+                    });
+
+                    // Check if there are any pictures left in the gallery
+                    const gallery = document.querySelector('.picture-gallery');
+                    if (gallery && gallery.children.length === 0) {
+                        // Remove the gallery and show the "no pictures" message
+                        const parent = gallery.parentElement;
+                        gallery.remove();
+                        
+                        // Create and insert the "no pictures" message
+                        const noMsg = document.createElement('p');
+                        noMsg.className = 'text-muted mb-3';
+                        noMsg.textContent = 'No design proposals uploaded yet.';
+                        parent.insertBefore(noMsg, parent.querySelector('.mt-3'));
+                    }
+
+                    // Show upload container if in edit mode
+                    const uploadContainer = document.getElementById('uploadContainer_' + orderId);
+                    if (uploadContainer) {
+                        // Make sure it exists and is visible in edit mode
+                        if (editModes[orderId]) {
+                            uploadContainer.classList.remove('upload-section-hidden');
+                            uploadContainer.style.display = 'block';
+                        }
+                    } else {
+                        // If upload container doesn't exist, create it
+                        const uploadSection = document.querySelector('.designed-picture-section .mt-3');
+                        if (uploadSection && editModes[orderId]) {
+                            const newUploadContainer = document.createElement('div');
+                            newUploadContainer.id = 'uploadContainer_' + orderId;
+                            newUploadContainer.innerHTML = `
+                                <label class="upload-area" id="uploadArea_${orderId}">
+                                    <div>
+                                        <i class="fas fa-cloud-upload-alt" style="font-size: 2rem; color: #3498db; margin-bottom: 0.5rem; display: block;"></i>
+                                        <strong>Click to upload or drag & drop</strong>
+                                        <p class="text-muted mb-0" style="font-size: 0.9rem;">JPG, PNG, GIF, WebP, PDF (Max 10MB)</p>
+                                    </div>
+                                    <input type="file" id="fileInput_${orderId}" accept="image/*,.pdf" style="display: none;" onchange="previewPicture(${orderId}, this.files[0])">
+                                </label>
+                                <div id="previewSection_${orderId}" style="display: none;">
+                                    <div class="preview-section">
+                                        <p style="margin-bottom: 0.5rem; color: #6c757d; font-size: 0.9rem;"><strong>Preview:</strong></p>
+                                        <img id="previewImg_${orderId}" class="preview-image">
+                                        <div class="text-muted small">The proposal will be uploaded when you click Save.</div>
+                                    </div>
+                                </div>
+                            `;
+                            uploadSection.insertBefore(newUploadContainer, uploadSection.firstChild);
+                            
+                            // Re-attach drag and drop handlers
+                            const newUploadArea = document.getElementById('uploadArea_' + orderId);
+                            if (newUploadArea) {
+                                newUploadArea.addEventListener('dragover', function (e) {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    this.classList.add('dragover');
+                                });
+                                newUploadArea.addEventListener('dragleave', function (e) {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    this.classList.remove('dragover');
+                                });
+                                newUploadArea.addEventListener('drop', function (e) {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    this.classList.remove('dragover');
+                                    const files = e.dataTransfer.files;
+                                    if (files.length > 0) {
+                                        previewPicture(orderId, files[0]);
+                                    }
+                                });
+                                newUploadArea.addEventListener('click', function (e) {
+                                    if (e.target === this) {
+                                        e.preventDefault();
+                                        document.getElementById('fileInput_' + orderId).click();
+                                    }
+                                });
+                            }
+                        }
+                    }
+
+                    alert('Picture deleted successfully! You can now upload a new picture.');
+                } else {
+                    alert('Error: ' + (data.message || 'Failed to delete picture'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred: ' + (error.message || error));
+            });
         }
         function openFloorPlanPreview(src) {
             try {

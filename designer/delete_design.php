@@ -88,17 +88,18 @@ try {
         throw new Exception('This design has ' . $orderCount . ' related ' . $orderText . ' and cannot be deleted.');
     }
 
-    // Delete design image file
-    $getImageSql = "SELECT design FROM Design WHERE designid = ?";
+    // Delete design image files from DesignImage table
+    $getImageSql = "SELECT image_filename FROM DesignImage WHERE designid = ?";
     $getImageStmt = $mysqli->prepare($getImageSql);
     if ($getImageStmt) {
         $getImageStmt->bind_param("i", $designId);
         $getImageStmt->execute();
         $getImageResult = $getImageStmt->get_result();
-        if ($getImageResult->num_rows > 0) {
-            $imageRow = $getImageResult->fetch_assoc();
-            if (!empty($imageRow['design'])) {
-                $imagePath = __DIR__ . '/../uploads/designs/' . $imageRow['design'];
+        
+        // Delete all image files associated with this design
+        while ($imageRow = $getImageResult->fetch_assoc()) {
+            if (!empty($imageRow['image_filename'])) {
+                $imagePath = __DIR__ . '/../uploads/designs/' . $imageRow['image_filename'];
                 if (file_exists($imagePath)) {
                     if (!unlink($imagePath)) {
                         error_log('Warning: Failed to delete image file: ' . $imagePath);
@@ -107,6 +108,16 @@ try {
             }
         }
         $getImageStmt->close();
+    }
+
+    // Delete DesignImage records (if not using CASCADE)
+    // Note: If foreign key has ON DELETE CASCADE, this is optional
+    $deleteImagesSql = "DELETE FROM DesignImage WHERE designid = ?";
+    $deleteImagesStmt = $mysqli->prepare($deleteImagesSql);
+    if ($deleteImagesStmt) {
+        $deleteImagesStmt->bind_param("i", $designId);
+        $deleteImagesStmt->execute();
+        $deleteImagesStmt->close();
     }
 
     // Delete design from database
