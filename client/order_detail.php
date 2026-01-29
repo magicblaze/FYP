@@ -641,7 +641,7 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€
                                     if (!empty($pimg)) {
                                         $pimgSrc = $pimg;
                                         if (!preg_match('#^https?://#i', $pimgSrc)) {
-                                            $pimgSrc = ($pimgSrc[0] === '/') ? ('..' . $pimgSrc) : ('../' . ltrim($pimgSrc, '/'));
+                                            $pimgSrc = ($pimgSrc[0] === '/') ? ('..' . $pimgSrc) : ('../uploads/products/' . ltrim($pimgSrc, '/'));
                                         }
                                         echo '<img src="' . htmlspecialchars($pimgSrc) . '" alt="product" style="width:36px;height:36px;object-fit:cover;border-radius:6px;border:1px solid #ddd;" />';
                                     } else {
