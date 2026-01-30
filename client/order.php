@@ -41,7 +41,9 @@ $clientData = $clientStmt->get_result()->fetch_assoc();
 $success = '';
 $error = '';
 $references_total = 0.0;
-$total_amount = (float) $design['expect_price'];
+// Default deposit (HK$)
+$deposit = 2000.00;
+$total_amount = (float) $design['expect_price'] + $deposit;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Support AJAX floor plan uploads: return JSON and exit
     if (!empty($_POST['ajax']) && $_POST['ajax'] === 'floor_upload') {
@@ -267,13 +269,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    // Calculate total (design + references + products)
-    $total_amount = (float) $design['expect_price'] + $references_total + $products_total;
+    // Deposit default (HK$)
+    $deposit = 2000.00;
+    // Calculate total (design + references + products + deposit)
+    $total_amount = (float) $design['expect_price'] + $references_total + $products_total + $deposit;
 
     if (!$error) {
-        // Persist per-order budget; cost and gross_floor_area left NULL until later updates
-        $stmt = $mysqli->prepare("INSERT INTO `Order` (odate, clientid, budget, cost, gross_floor_area, Requirements, designid, ostatus) VALUES (NOW(), ?, ?, NULL, ?, ?, ?, 'waiting confirm')");
-        $stmt->bind_param("iddsi", $clientId, $budget, $gfa, $requirements, $designid);
+        // Persist per-order budget and deposit; cost left NULL until later updates
+        $stmt = $mysqli->prepare("INSERT INTO `Order` (odate, clientid, budget, deposit, cost, gross_floor_area, Requirements, designid, ostatus) VALUES (NOW(), ?, ?, ?, NULL, ?, ?, ?, 'waiting confirm')");
+        $stmt->bind_param("idddsi", $clientId, $budget, $deposit, $gfa, $requirements, $designid);
         if ($stmt && $stmt->execute()) {
             $orderId = $stmt->insert_id;
             // If product references exist, insert them into OrderReference table so they persist with the order
@@ -636,6 +640,9 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                 <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
             <?php endif; ?>
 
+            <!-- Inline client-side validation alert (hidden until needed) -->
+            <div id="clientValidationAlert" class="alert alert-danger" style="display:none;"></div>
+
             <form id="orderForm" method="post" enctype="multipart/form-data">
                 <div class="row">
                     <div class="col-md-8">
@@ -832,6 +839,10 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                             <div class="summary-item">
                                 <span>Designer cost:</span>
                                 <span>HK$<?= number_format((float) $design['expect_price'], 0) ?></span>
+                            </div>
+                            <div class="summary-item">
+                                <span>Deposit (recorded):</span>
+                                <span>HK$<?= number_format((float) $deposit ?? 2000, 0) ?></span>
                             </div>
                             <div id="referenceList" class="mt-3"></div>
                             <div class="mt-4">
@@ -1239,6 +1250,16 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
 
             // Ensure hidden fields are updated before any submit (capture phase)
             const orderForm = document.getElementById('orderForm');
+            function showClientWarning(msg) {
+                const el = document.getElementById('clientValidationAlert');
+                if (el) {
+                    el.textContent = msg;
+                    el.style.display = 'block';
+                    try { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) { /* ignore */ }
+                } else {
+                    alert(msg);
+                }
+            }
             if (orderForm) {
                 // clear previous validation flag at submit start
                 orderForm.addEventListener('submit', function (e) {
@@ -1269,14 +1290,14 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                     if (budgetVal <= 0) {
                         e.preventDefault();
                         try { orderForm.dataset.hasValidationError = '1'; } catch (ex) { /* ignore */ }
-                        alert('Budget must be greater than 0. Please set your budget.');
+                        showClientWarning('Budget must be greater than 0. Please set your budget.');
                         if (budgetView) budgetView.scrollIntoView({ behavior: 'smooth', block: 'center' });
                         return false;
                     }
                     if (budgetVal < designCost) {
                         e.preventDefault();
                         try { orderForm.dataset.hasValidationError = '1'; } catch (ex) { /* ignore */ }
-                        alert('Budget cannot be lower than the design cost (HK$' + designCost.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ",") + '). Please adjust your budget.');
+                        showClientWarning('Budget cannot be lower than the design cost (HK$' + designCost.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ",") + '). Please adjust your budget.');
                         if (budgetView) budgetView.scrollIntoView({ behavior: 'smooth', block: 'center' });
                         return false;
                     }
@@ -1287,7 +1308,7 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                         if (!gfaVal || gfaVal <= 0) {
                             e.preventDefault();
                             try { orderForm.dataset.hasValidationError = '1'; } catch (ex) { /* ignore */ }
-                            alert('Please provide Gross Floor Area (m²) before placing the order.');
+                            showClientWarning('Please provide Gross Floor Area (m²) before placing the order.');
                             if (typeof gfaEdit !== 'undefined' && gfaEdit) {
                                 if (gfaView) gfaView.style.display = 'none';
                                 gfaEdit.style.display = 'block';
@@ -1304,7 +1325,7 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                     if (!pmVal) {
                         e.preventDefault();
                         try { orderForm.dataset.hasValidationError = '1'; } catch (ex) { /* ignore */ }
-                        alert('Please select a payment method before placing the order.');
+                        showClientWarning('Please select a payment method before placing the order.');
                         if (paymentDisplay) paymentDisplay.scrollIntoView({ behavior: 'smooth', block: 'center' });
                         showPaymentEdit(true);
                         return false;
@@ -1536,12 +1557,13 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
     <script>
         (function () {
             const designPrice = <?= json_encode((float) $design['expect_price']) ?>;
+            const deposit = <?= json_encode((float) ($deposit ?? 2000.0)) ?>;
             const refsInput = document.getElementById('references');
             const totalEl = document.getElementById('orderTotal');
             let debounceTimer = null;
 
             function setTotal(refsSum) {
-                const total = designPrice + (Number(refsSum) || 0);
+                const total = designPrice + (Number(refsSum) || 0) + deposit;
                 if (totalEl) totalEl.textContent = 'HK$' + total.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
             }
 

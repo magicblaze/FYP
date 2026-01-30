@@ -37,7 +37,7 @@ $result = $stmt->get_result();
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Designs Manager</title>
+  <title>Design Manager</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="stylesheet" href="../css/styles.css">
@@ -64,17 +64,16 @@ $result = $stmt->get_result();
   <?php include_once __DIR__ . '/../includes/header.php'; ?>
   <main class="container-lg mt-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
-      <h2 class="page-title">Designs Manager</h2>
+      <h2 class="page-title">Design Manager</h2>
     </div>
     <div class="card shadow-sm border-0">
       <div class="card-header bg-white d-flex justify-content-between">
-        <h5 class="p-1">Designs List</h5>
         <a href="add_design.php" class="btn btn-success">Add New Design</a>
       </div>
       <div class="card-body p-0">
         <div class="table-responsive">
           <table class="table table-hover align-middle mb-0 design-table">
-            <thead class="bg-light">
+            <thead class="table">
               <tr>
                 <th class="ps-4">Image</th>
                 <th>Design Name</th>
@@ -122,16 +121,9 @@ $result = $stmt->get_result();
                     </td>
                     <td class="text-end pe-4">
                       <a href="design-detail.php?id=<?= $row['designid'] ?>" class="btn btn-primary action-btn btn-sm"
-                        title="View"><i class="fas fa-eye"></i></a>
-                      <button class="btn btn-warning action-btn btn-sm text-white" title="Edit" data-bs-toggle="modal"
-                        data-bs-target="#editModal" data-designid="<?= $row['designid'] ?>"
-                        data-designname="<?= htmlspecialchars($row['designName'], ENT_QUOTES, 'UTF-8') ?>"
-                        data-price="<?= $row['expect_price'] ?>"
-                        data-tag="<?= htmlspecialchars($row['tag'], ENT_QUOTES, 'UTF-8') ?>"
-                        data-description="<?= htmlspecialchars($row['description'], ENT_QUOTES, 'UTF-8') ?>"
-                        onclick="loadDesignData(this)"><i class="fas fa-pen"></i></button>
+                        title="Show"><i class="fas fa-eye"></i>Show</a>             
                       <button class="btn btn-danger action-btn btn-sm" title="Delete"
-                        onclick="deleteDesign(<?= $row['designid'] ?>)"><i class="fas fa-trash"></i></button>
+                        onclick="deleteDesign(<?= $row['designid'] ?>)"><i class="fas fa-trash"></i>Remove</button>
                     </td>
                   </tr>
                 <?php endwhile; ?>

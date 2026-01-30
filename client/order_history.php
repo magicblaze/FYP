@@ -24,9 +24,9 @@ $clientStmt->execute();
 $clientData = $clientStmt->get_result()->fetch_assoc();
 
 // Fetch orders for the logged-in client
-$sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, 
-               d.designid, d.expect_price, d.tag, dz.dname,
-               c.budget
+$sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.deposit,
+         d.designid, d.expect_price, d.tag, dz.dname,
+         c.budget
         FROM `Order` o
         JOIN Design d ON o.designid = d.designid
         JOIN Designer dz ON d.designerid = dz.designerid
@@ -37,6 +37,18 @@ $stmt = $mysqli->prepare($sql);
 $stmt->bind_param("i", $clientId);
 $stmt->execute();
 $orders = $stmt->get_result();
+
+$flash_msg = '';
+$flash_class = '';
+if (!empty($_GET['msg'])) {
+    if ($_GET['msg'] === 'paid') {
+        $flash_msg = 'Payment successful — order marked as completed.';
+        $flash_class = 'alert alert-success';
+    } elseif ($_GET['msg'] === 'refund_requested') {
+        $flash_msg = 'Refund requested. We will process it shortly.';
+        $flash_class = 'alert alert-info';
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -224,6 +236,37 @@ $orders = $stmt->get_result();
                     $img_stmt->execute();
                     $img_result = $img_stmt->get_result()->fetch_assoc();
                     $img_filename = $img_result ? $img_result['image_filename'] : 'placeholder.jpg';
+
+                    // Compute aggregated cost: design price + references + additional fees
+                    $orderId = (int)$order['orderid'];
+                    $design_price = isset($order['expect_price']) ? (float)$order['expect_price'] : 0.0;
+
+                    // Sum additional fees
+                    $fees_total = 0.0;
+                    $fees_sql = "SELECT IFNULL(SUM(amount),0) as sum_fees FROM AdditionalFee WHERE orderid = ?";
+                    $fees_stmt = $mysqli->prepare($fees_sql);
+                    if ($fees_stmt) {
+                        $fees_stmt->bind_param("i", $orderId);
+                        $fees_stmt->execute();
+                        $fees_row = $fees_stmt->get_result()->fetch_assoc();
+                        $fees_total = isset($fees_row['sum_fees']) ? (float)$fees_row['sum_fees'] : 0.0;
+                        $fees_stmt->close();
+                    }
+
+                    // Sum product references (use reference price if set, otherwise product.price)
+                    $refs_total = 0.0;
+                    $refs_sql = "SELECT IFNULL(SUM(COALESCE(orr.price, p.price, 0)),0) as sum_refs FROM OrderReference orr LEFT JOIN Product p ON orr.productid = p.productid WHERE orr.orderid = ?";
+                    $refs_stmt = $mysqli->prepare($refs_sql);
+                    if ($refs_stmt) {
+                        $refs_stmt->bind_param("i", $orderId);
+                        $refs_stmt->execute();
+                        $refs_row = $refs_stmt->get_result()->fetch_assoc();
+                        $refs_total = isset($refs_row['sum_refs']) ? (float)$refs_row['sum_refs'] : 0.0;
+                        $refs_stmt->close();
+                    }
+
+                    $deposit = isset($order['deposit']) ? (float)$order['deposit'] : 0.0;
+                    $computed_cost = $design_price + $fees_total + $refs_total + $deposit;
                     ?>
                     <div class="order-card" onclick="window.location.href='order_detail.php?orderid=<?= (int)$order['orderid'] ?>'">
                         <div class="order-header">
@@ -255,8 +298,8 @@ $orders = $stmt->get_result();
 
                             </div>
                             <div class="order-price-info">
-                                <div class="price-label">Budget</div>
-                                <div class="price-value">$<?= number_format((float)$order['budget'], 2) ?></div>
+                                <div class="price-label">Cost</div>
+                                <div class="price-value">$<?= number_format($computed_cost, 2) ?></div>
                             </div>
                         </div>
                         <?php if (!empty($order['Requirements'])): ?>
@@ -265,10 +308,22 @@ $orders = $stmt->get_result();
                                 <?= htmlspecialchars($order['Requirements']) ?>
                             </div>
                         <?php endif; ?>
-                        <div style="margin-top: 0.75rem;">
-                            <a href="order_detail.php?orderid=<?= (int)$order['orderid'] ?>" class="view-details-btn" onclick="event.stopPropagation();">
-                                <i class="fas fa-arrow-right me-1"></i>View Details
+                        <div style="margin-top: 0.75rem; display:flex; gap:8px;">
+                            <!-- Primary view/proposal/details button -->
+                            <a href="Order_View.php?id=<?= (int)$order['orderid'] ?>" class="view-details-btn" onclick="event.stopPropagation();">
+                                <?php if ($statusLower === 'waiting client review'): ?>
+                                    <i class="fas fa-file-image me-1"></i>View Proposal
+                                <?php else: ?>
+                                    <i class="fas fa-arrow-right me-1"></i>View Details
+                                <?php endif; ?>
                             </a>
+
+                            <!-- Proceed to Payment button (separate) -->
+                            <?php if ($statusLower === 'waiting client payment'): ?>
+                                <a href="payment.php?orderid=<?= (int)$order['orderid'] ?>" class="view-details-btn" onclick="event.stopPropagation();">
+                                    <i class="fas fa-credit-card me-1"></i>Proceed to Payment
+                                </a>
+                            <?php endif; ?>
                         </div>
                     </div>
                 <?php endwhile; ?>
@@ -276,7 +331,7 @@ $orders = $stmt->get_result();
                 <div class="empty-orders">
                     <i class="fas fa-shopping-bag"></i>
                     <h3>No Orders Yet</h3>
-                    <p>You haven't placed any orders yet. Browse our designs and place your first order!</p>
+                    <p>You haven't placed any order yet. Browse our designs and place your first order!</p>
                     <a href="../design_dashboard.php" class="btn btn-primary mt-2">
                         <i class="fas fa-search me-2"></i>Browse Designs
                     </a>

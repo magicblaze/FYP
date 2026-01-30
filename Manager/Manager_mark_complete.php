@@ -44,7 +44,7 @@ $sql = "SELECT o.*, c.cname, c.cemail, c.ctel
         FROM `Order` o
         LEFT JOIN `Client` c ON o.clientid = c.clientid
         WHERE o.orderid = ?";
-        
+
 $stmt = mysqli_prepare($mysqli, $sql);
 mysqli_stmt_bind_param($stmt, "i", $orderid);
 mysqli_stmt_execute($stmt);
@@ -65,33 +65,33 @@ if (strtolower($order['ostatus']) !== 'designing') {
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && empty($error)) {
     // Start transaction
     mysqli_begin_transaction($mysqli);
-    
+
     try {
         // Update order status to complete
         $update_order_sql = "UPDATE `Order` SET ostatus = 'complete' WHERE orderid = ?";
         $update_order_stmt = mysqli_prepare($mysqli, $update_order_sql);
         mysqli_stmt_bind_param($update_order_stmt, "i", $orderid);
-        
+
         if (!mysqli_stmt_execute($update_order_stmt)) {
             throw new Exception("Failed to update order status.");
         }
-        
+
         // Update all related products status to Delivered
         $update_products_sql = "UPDATE `OrderProduct` SET status = 'Delivered' WHERE orderid = ? AND status != 'Delivered'";
         $update_products_stmt = mysqli_prepare($mysqli, $update_products_sql);
         mysqli_stmt_bind_param($update_products_stmt, "i", $orderid);
-        
+
         if (!mysqli_stmt_execute($update_products_stmt)) {
             throw new Exception("Failed to update product status.");
         }
-        
+
         // Commit transaction
         mysqli_commit($mysqli);
-        
+
         // Set success message and redirect
         $message = "Order #$orderid has been successfully marked as completed!";
         $redirect = "Manager_view_order.php?id=$orderid";
-        
+
     } catch (Exception $e) {
         // Rollback transaction
         mysqli_rollback($mysqli);
@@ -145,57 +145,74 @@ if (!empty($redirect) && empty($error)) {
                             </div>
                         </div>
                     </div>
-                    
-                    <div class="btn-group">
-                        <a href="<?php echo $redirect ?: 'Manager_Schedule.php'; ?>" class="btn btn-secondary">
-                            <i class="fas fa-arrow-left me-2"></i>Go Back
-                        </a>
-                    </div>
+
+                    <a href="<?php echo $redirect ?: 'Manager_Schedule.php'; ?>" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left me-2"></i>Go Back
+                    </a>
                 <?php else: ?>
                     <!-- Order Information -->
                     <h5 class="card-title mb-4">
                         <i class="fas fa-info-circle me-2"></i>Order Information
                     </h5>
-                    
+
                     <div style="background-color: #f8f9fa; border-radius: 10px; padding: 1.5rem; margin-bottom: 2rem;">
                         <div class="row mb-3">
                             <div class="col-md-6">
                                 <div style="margin-bottom: 1rem;">
-                                    <span style="font-weight: 600; color: #2c3e50; display: block; margin-bottom: 0.25rem;">Order ID:</span>
+                                    <span
+                                        style="font-weight: 600; color: #2c3e50; display: block; margin-bottom: 0.25rem;">Order
+                                        ID:</span>
                                     <span style="color: #495057;">#<?php echo $orderid; ?></span>
                                 </div>
                                 <div style="margin-bottom: 1rem;">
-                                    <span style="font-weight: 600; color: #2c3e50; display: block; margin-bottom: 0.25rem;">Client Name:</span>
-                                    <span style="color: #495057;"><?php echo htmlspecialchars($order['cname'] ?? 'N/A'); ?></span>
+                                    <span
+                                        style="font-weight: 600; color: #2c3e50; display: block; margin-bottom: 0.25rem;">Client
+                                        Name:</span>
+                                    <span
+                                        style="color: #495057;"><?php echo htmlspecialchars($order['cname'] ?? 'N/A'); ?></span>
                                 </div>
                                 <div style="margin-bottom: 1rem;">
-                                    <span style="font-weight: 600; color: #2c3e50; display: block; margin-bottom: 0.25rem;">Client Email:</span>
-                                    <span style="color: #495057;"><?php echo htmlspecialchars($order['cemail'] ?? 'N/A'); ?></span>
+                                    <span
+                                        style="font-weight: 600; color: #2c3e50; display: block; margin-bottom: 0.25rem;">Client
+                                        Email:</span>
+                                    <span
+                                        style="color: #495057;"><?php echo htmlspecialchars($order['cemail'] ?? 'N/A'); ?></span>
                                 </div>
                             </div>
                             <div class="col-md-6">
                                 <div style="margin-bottom: 1rem;">
-                                    <span style="font-weight: 600; color: #2c3e50; display: block; margin-bottom: 0.25rem;">Current Status:</span>
+                                    <span
+                                        style="font-weight: 600; color: #2c3e50; display: block; margin-bottom: 0.25rem;">Current
+                                        Status:</span>
                                     <span class="status-badge status-designing">
-                                        <i class="fas fa-pencil-alt me-1"></i><?php echo htmlspecialchars($order['ostatus']); ?>
+                                        <i
+                                            class="fas fa-pencil-alt me-1"></i><?php echo htmlspecialchars($order['ostatus']); ?>
                                     </span>
                                 </div>
                                 <div style="margin-bottom: 1rem;">
-                                    <span style="font-weight: 600; color: #2c3e50; display: block; margin-bottom: 0.25rem;">Client Phone:</span>
-                                    <span style="color: #495057;"><?php echo htmlspecialchars($order['ctel'] ?? 'N/A'); ?></span>
+                                    <span
+                                        style="font-weight: 600; color: #2c3e50; display: block; margin-bottom: 0.25rem;">Client
+                                        Phone:</span>
+                                    <span
+                                        style="color: #495057;"><?php echo htmlspecialchars($order['ctel'] ?? 'N/A'); ?></span>
                                 </div>
                                 <div style="margin-bottom: 1rem;">
-                                    <span style="font-weight: 600; color: #2c3e50; display: block; margin-bottom: 0.25rem;">Order Date:</span>
-                                    <span style="color: #495057;"><?php echo date('Y-m-d', strtotime($order['odate'])); ?></span>
+                                    <span
+                                        style="font-weight: 600; color: #2c3e50; display: block; margin-bottom: 0.25rem;">Order
+                                        Date:</span>
+                                    <span
+                                        style="color: #495057;"><?php echo date('Y-m-d', strtotime($order['odate'])); ?></span>
                                 </div>
                             </div>
                         </div>
                     </div>
 
                     <!-- Status Change Preview -->
-                    <div style="background-color: #f0f0f0; border-radius: 10px; padding: 1.5rem; margin-bottom: 2rem; text-align: center;">
+                    <div
+                        style="background-color: #f0f0f0; border-radius: 10px; padding: 1.5rem; margin-bottom: 2rem; text-align: center;">
                         <p style="color: #7f8c8d; margin-bottom: 1rem; font-size: 0.95rem;">Status will change from:</p>
-                        <div style="display: flex; align-items: center; justify-content: center; gap: 1rem; margin-bottom: 1rem;">
+                        <div
+                            style="display: flex; align-items: center; justify-content: center; gap: 1rem; margin-bottom: 1rem;">
                             <span class="status-badge status-designing">
                                 <i class="fas fa-pencil-alt me-1"></i>Designing
                             </span>
@@ -210,17 +227,16 @@ if (!empty($redirect) && empty($error)) {
                     <form method="POST" class="mb-4">
                         <div class="alert alert-info" role="alert">
                             <i class="fas fa-info-circle me-2"></i>
-                            <strong>Please confirm:</strong> Once you mark this order as complete, all related products will be marked as delivered.
+                            <strong>Please confirm:</strong> Once you mark this order as complete, all related products will
+                            be marked as delivered.
                         </div>
-                        
-                        <div class="btn-group">
-                            <button type="submit" class="btn btn-success">
-                                <i class="fas fa-check-circle me-2"></i>Confirm & Mark Complete
-                            </button>
-                            <a href="Manager_Schedule.php" class="btn btn-secondary">
-                                <i class="fas fa-times me-2"></i>Cancel
-                            </a>
-                        </div>
+
+                        <button type="submit" class="btn btn-success">
+                            <i class="fas fa-check-circle me-2"></i>Confirm & Mark Complete
+                        </button>
+                        <a href="Manager_Schedule.php" class="btn btn-secondary">
+                            <i class="fas fa-times me-2"></i>Cancel
+                        </a>
                     </form>
                 <?php endif; ?>
             </div>

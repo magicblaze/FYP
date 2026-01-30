@@ -44,6 +44,7 @@ $colorImageStmt->close();
 ?>
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <title>Supplier Dashboard - HappyDesign</title>
@@ -58,20 +59,38 @@ $colorImageStmt->close();
             margin-bottom: 2rem;
             border-radius: 0 0 15px 15px;
         }
+
         .stat-card {
             background: white;
             border-radius: 10px;
             padding: 1.5rem;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
             text-align: center;
             height: 100%;
         }
-        .stat-number { font-size: 2rem; font-weight: bold; color: #3498db; }
-        .product-table img {
-            width: 50px; height: 50px; object-fit: cover; border-radius: 5px;
+
+        .stat-number {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #3498db;
         }
-        .action-btn { width: 32px; height: 32px; padding: 0; line-height: 32px; border-radius: 50%; text-align: center; }
-        
+
+        .product-table img {
+            width: 50px;
+            height: 50px;
+            object-fit: cover;
+            border-radius: 5px;
+        }
+
+        .action-btn {
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            line-height: 32px;
+            border-radius: 50%;
+            text-align: center;
+        }
+
         /* 編輯彈出表單樣式 */
         .form-section {
             background: #f8fafd;
@@ -81,26 +100,31 @@ $colorImageStmt->close();
             margin-bottom: 1.25rem;
             transition: box-shadow 0.2s;
         }
+
         .form-section:hover {
             box-shadow: 0 4px 16px rgba(52, 152, 219, 0.13);
         }
+
         .form-section label {
             font-weight: 500;
         }
+
         .form-section input,
         .form-section textarea,
         .form-section select {
             background: #fff;
             border-radius: 8px;
         }
+
         .modal-header {
             background: linear-gradient(135deg, #2c3e50, #3498db);
             color: white;
         }
+
         .modal-header .btn-close {
             filter: brightness(0) invert(1);
         }
-        
+
         /* 颜色编辑样式 */
         .color-item {
             display: flex;
@@ -113,12 +137,12 @@ $colorImageStmt->close();
             margin-bottom: 0.75rem;
             transition: all 0.3s ease;
         }
-        
+
         .color-item:hover {
             border-color: #3498db;
             box-shadow: 0 2px 8px rgba(52, 152, 219, 0.1);
         }
-        
+
         .color-swatch {
             width: 50px;
             height: 50px;
@@ -127,21 +151,21 @@ $colorImageStmt->close();
             flex-shrink: 0;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
-        
+
         .color-info {
             flex: 1;
             display: flex;
             flex-direction: column;
             gap: 0.5rem;
         }
-        
+
         .color-code {
             font-family: monospace;
             font-weight: 600;
             color: #2c3e50;
             font-size: 0.9rem;
         }
-        
+
         .color-image-preview {
             width: 60px;
             height: 60px;
@@ -150,42 +174,42 @@ $colorImageStmt->close();
             border: 2px solid #ddd;
             flex-shrink: 0;
         }
-        
+
         .color-actions {
             display: flex;
             gap: 0.5rem;
             flex-shrink: 0;
         }
-        
+
         .btn-remove-color {
             padding: 0.5rem 0.75rem;
             font-size: 0.85rem;
         }
-        
+
         .color-list {
             max-height: 400px;
             overflow-y: auto;
             padding-right: 0.5rem;
         }
-        
+
         .color-list::-webkit-scrollbar {
             width: 8px;
         }
-        
+
         .color-list::-webkit-scrollbar-track {
             background: #f1f1f1;
             border-radius: 4px;
         }
-        
+
         .color-list::-webkit-scrollbar-thumb {
             background: #bbb;
             border-radius: 4px;
         }
-        
+
         .color-list::-webkit-scrollbar-thumb:hover {
             background: #888;
         }
-        
+
         .add-color-section {
             background: #f0f7ff;
             border: 2px dashed #3498db;
@@ -193,26 +217,26 @@ $colorImageStmt->close();
             padding: 1rem;
             margin-bottom: 1rem;
         }
-        
+
         .color-picker-group {
             display: flex;
             align-items: flex-end;
             gap: 1rem;
             flex-wrap: wrap;
         }
-        
+
         .color-picker-item {
             display: flex;
             flex-direction: column;
             gap: 0.5rem;
         }
-        
+
         .color-picker-item label {
             font-size: 0.9rem;
             font-weight: 600;
             margin-bottom: 0;
         }
-        
+
         .color-picker-item input[type="color"] {
             width: 80px;
             height: 50px;
@@ -220,12 +244,12 @@ $colorImageStmt->close();
             border-radius: 6px;
             cursor: pointer;
         }
-        
+
         .color-picker-item input[type="file"] {
             flex: 1;
             min-width: 200px;
         }
-        
+
         .empty-state {
             text-align: center;
             padding: 2rem;
@@ -234,7 +258,7 @@ $colorImageStmt->close();
             border-radius: 8px;
             border: 2px dashed #bdc3c7;
         }
-        
+
         .empty-state i {
             font-size: 2rem;
             margin-bottom: 0.5rem;
@@ -242,11 +266,13 @@ $colorImageStmt->close();
         }
     </style>
 </head>
+
 <body>
     <!-- Navbar -->
     <header class="bg-white shadow p-3 d-flex justify-content-between align-items-center">
         <div class="d-flex align-items-center gap-3">
-            <div class="h4 mb-0"><a href="dashboard.php" style="text-decoration: none; color: inherit;">HappyDesign</a></div>
+            <div class="h4 mb-0"><a href="dashboard.php" style="text-decoration: none; color: inherit;">HappyDesign</a>
+            </div>
             <nav>
                 <ul class="nav align-items-center gap-2">
                     <li class="nav-item"><a class="nav-link" href="dashboard.php">Dashboard</a></li>
@@ -259,7 +285,7 @@ $colorImageStmt->close();
                 <li class="nav-item me-2">
                     <a class="nav-link text-muted fw-bold" href="../includes/profile.php">
                         <i class="fas fa-user-shield me-1"></i>Hello <?= htmlspecialchars($supplierName) ?>
-                        
+
                     </a>
                 </li>
                 <li class="nav-item">
@@ -271,10 +297,7 @@ $colorImageStmt->close();
 
     <!-- Dashboard Content -->
     <div class="container mb-5">
-        <div class="dashboard-header text-center">
-            <h2>Product Management Console</h2>
-            <p class="mb-0">Manage your inventory and listings</p>
-        </div>
+        <h2 class="mt-3">Supplier Dashboard</h2>
 
         <div class="row g-4 mb-4">
             <div class="col-md-4">
@@ -285,8 +308,15 @@ $colorImageStmt->close();
             </div>
             <div class="col-md-4">
                 <div class="stat-card d-flex align-items-center justify-content-center flex-column">
+                    <a href="ConfirmProduct.php" class="btn btn-primary btn-lg w-100">
+                        Manage Quotes
+                    </a>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="stat-card d-flex align-items-center justify-content-center flex-column">
                     <a href="manage_orders.php" class="btn btn-primary btn-lg w-100">
-                        Manage Orders
+                        Manage Deliveries
                     </a>
                 </div>
             </div>
@@ -317,9 +347,9 @@ $colorImageStmt->close();
                         <tbody>
                             <?php if ($result->num_rows > 0): ?>
                                 <?php while ($row = $result->fetch_assoc()): ?>
-                                <tr>
-                                    <td class="ps-4">
-                                        <?php 
+                                    <tr>
+                                        <td class="ps-4">
+                                            <?php
                                             $productId = $row['productid'];
                                             $imageFile = $productFirstColorImages[$productId] ?? null;
                                             if ($imageFile) {
@@ -327,22 +357,31 @@ $colorImageStmt->close();
                                             } else {
                                                 echo '<img src="../uploads/products/placeholder.jpg" alt="No Image" style="width: 50px; height: 50px; object-fit: cover; border-radius: 5px;">';
                                             }
-                                        ?>
-                                    </td>
-                                    <td>
-                                        <div class="fw-bold"><?= htmlspecialchars($row['pname']) ?></div>
-                                        <small class="text-muted">ID: <?= $row['productid'] ?></small>
-                                    </td>
-                                    <td><span class="badge bg-info text-dark"><?= htmlspecialchars($row['category']) ?></span></td>
-                                    <td>
-                                        HK$<?= number_format($row['price']) ?>
-                                    </td>
-                                    <td class="text-end pe-4">
-                                        <a href="product-detail.php?id=<?= $row['productid'] ?>" class="btn btn-primary action-btn btn-sm" title="View"><i class="fas fa-eye"></i></a>
-                                        <button class="btn btn-warning action-btn btn-sm text-white" title="Edit" data-bs-toggle="modal" data-bs-target="#editModal" onclick="loadProductData(<?= htmlspecialchars(json_encode($row), ENT_QUOTES, 'UTF-8') ?>, <?= htmlspecialchars(json_encode($productColorImages[$row['productid']] ?? []), ENT_QUOTES, 'UTF-8') ?>)"><i class="fas fa-pen"></i></button>
-                                        <button class="btn btn-danger action-btn btn-sm" title="Delete" onclick="deleteProduct(<?= $row['productid'] ?>, <?= htmlspecialchars(json_encode($row['pname']), ENT_QUOTES, 'UTF-8') ?>)"><i class="fas fa-trash"></i></button>
-                                    </td>
-                                </tr>
+                                            ?>
+                                        </td>
+                                        <td>
+                                            <div class="fw-bold"><?= htmlspecialchars($row['pname']) ?></div>
+                                            <small class="text-muted">ID: <?= $row['productid'] ?></small>
+                                        </td>
+                                        <td><span
+                                                class="badge bg-info text-dark"><?= htmlspecialchars($row['category']) ?></span>
+                                        </td>
+                                        <td>
+                                            HK$<?= number_format($row['price']) ?>
+                                        </td>
+                                        <td class="text-end pe-4">
+                                            <a href="product-detail.php?id=<?= $row['productid'] ?>"
+                                                class="btn btn-primary action-btn btn-sm" title="View"><i
+                                                    class="fas fa-eye"></i></a>
+                                            <button class="btn btn-warning action-btn btn-sm text-white" title="Edit"
+                                                data-bs-toggle="modal" data-bs-target="#editModal"
+                                                onclick="loadProductData(<?= htmlspecialchars(json_encode($row), ENT_QUOTES, 'UTF-8') ?>, <?= htmlspecialchars(json_encode($productColorImages[$row['productid']] ?? []), ENT_QUOTES, 'UTF-8') ?>)"><i
+                                                    class="fas fa-pen"></i></button>
+                                            <button class="btn btn-danger action-btn btn-sm" title="Delete"
+                                                onclick="deleteProduct(<?= $row['productid'] ?>, <?= htmlspecialchars(json_encode($row['pname']), ENT_QUOTES, 'UTF-8') ?>)"><i
+                                                    class="fas fa-trash"></i></button>
+                                        </td>
+                                    </tr>
                                 <?php endwhile; ?>
                             <?php else: ?>
                                 <tr>
@@ -369,10 +408,10 @@ $colorImageStmt->close();
                 <div class="modal-body" style="max-height: 80vh; overflow-y: auto;">
                     <form id="editProductForm" enctype="multipart/form-data">
                         <input type="hidden" id="productId" name="productid">
-                        
+
                         <!-- 图片上传字段 -->
 
-                        
+
                         <div class="row g-3 mb-2">
                             <div class="col-md-6">
                                 <div class="form-section">
@@ -383,7 +422,8 @@ $colorImageStmt->close();
                             <div class="col-md-6">
                                 <div class="form-section">
                                     <label class="form-label"><i class="fas fa-dollar-sign"></i> Price (HK$) *</label>
-                                    <input type="number" id="productPrice" name="price" class="form-control" min="1" step="100" required>
+                                    <input type="number" id="productPrice" name="price" class="form-control" min="1"
+                                        step="100" required>
                                 </div>
                             </div>
                             <div class="col-md-6">
@@ -408,7 +448,8 @@ $colorImageStmt->close();
                             <div class="col-md-6">
                                 <div class="form-section">
                                     <label class="form-label"><i class="fas fa-align-left"></i> Description</label>
-                                    <textarea id="productDescription" name="description" class="form-control" rows="3"></textarea>
+                                    <textarea id="productDescription" name="description" class="form-control"
+                                        rows="3"></textarea>
                                 </div>
                             </div>
                             <div class="col-md-6">
@@ -416,13 +457,16 @@ $colorImageStmt->close();
                                     <label class="form-label"><i class="fas fa-ruler"></i> Size</label>
                                     <div class="row g-2">
                                         <div class="col-4">
-                                            <input type="text" id="productLong" name="long" class="form-control" placeholder="Length">
+                                            <input type="text" id="productLong" name="long" class="form-control"
+                                                placeholder="Length">
                                         </div>
                                         <div class="col-4">
-                                            <input type="text" id="productWide" name="wide" class="form-control" placeholder="Width">
+                                            <input type="text" id="productWide" name="wide" class="form-control"
+                                                placeholder="Width">
                                         </div>
                                         <div class="col-4">
-                                            <input type="text" id="productTall" name="tall" class="form-control" placeholder="Height">
+                                            <input type="text" id="productTall" name="tall" class="form-control"
+                                                placeholder="Height">
                                         </div>
                                     </div>
                                 </div>
@@ -434,17 +478,20 @@ $colorImageStmt->close();
                             <div class="col-md-12">
                                 <div class="form-section">
                                     <label class="form-label"><i class="fas fa-palette"></i> Colors & Images</label>
-                                    
+
                                     <!-- 添加颜色部分 -->
                                     <div class="add-color-section">
                                         <div class="color-picker-group">
                                             <div class="color-picker-item">
                                                 <label>Select Color</label>
-                                                <input type="color" id="edit-color-picker" class="form-control form-control-color" value="#C0392B" style="width:80px; height:50px;">
+                                                <input type="color" id="edit-color-picker"
+                                                    class="form-control form-control-color" value="#C0392B"
+                                                    style="width:80px; height:50px;">
                                             </div>
                                             <div class="color-picker-item">
                                                 <label>Upload Image</label>
-                                                <input type="file" id="edit-color-image" class="form-control" accept="image/*">
+                                                <input type="file" id="edit-color-image" class="form-control"
+                                                    accept="image/*">
                                             </div>
                                             <div class="color-picker-item">
                                                 <button type="button" class="btn btn-primary" id="edit-add-color-btn">
@@ -453,7 +500,7 @@ $colorImageStmt->close();
                                             </div>
                                         </div>
                                     </div>
-                                    
+
                                     <!-- 已有颜色列表 -->
                                     <div id="edit-color-list" class="color-list">
                                         <div class="empty-state">
@@ -461,7 +508,7 @@ $colorImageStmt->close();
                                             <p>No colors added yet</p>
                                         </div>
                                     </div>
-                                    
+
                                     <!-- 隐藏输入用于提交 -->
                                     <input type="hidden" id="edit-colors-data" name="colors_data" value="[]">
                                 </div>
@@ -470,7 +517,8 @@ $colorImageStmt->close();
                     </form>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="fas fa-times me-2"></i>Cancel</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i
+                            class="fas fa-times me-2"></i>Cancel</button>
                     <button type="button" class="btn btn-success" onclick="saveProductChanges()">
                         <i class="fas fa-check me-2"></i>Save Changes
                     </button>
@@ -497,7 +545,7 @@ $colorImageStmt->close();
          */
         function updateEditColorDisplay() {
             editColorList.innerHTML = '';
-            
+
             if (editSelectedColors.length === 0) {
                 editColorList.innerHTML = `
                     <div class="empty-state">
@@ -507,11 +555,11 @@ $colorImageStmt->close();
                 `;
                 return;
             }
-            
+
             editSelectedColors.forEach((item, idx) => {
                 const colorDiv = document.createElement('div');
                 colorDiv.className = 'color-item';
-                
+
                 let imagePreviewHtml = '';
                 if (item.imageFile) {
                     const imageUrl = URL.createObjectURL(item.imageFile);
@@ -521,7 +569,7 @@ $colorImageStmt->close();
                     const imageUrl = 'product_color_image.php?productid=' + item.productId + '&color=' + encodeURIComponent(item.color);
                     imagePreviewHtml = `<img src="${imageUrl}" alt="Color image" class="color-image-preview" onerror="this.style.display='none';">`;
                 }
-                
+
                 colorDiv.innerHTML = `
                     <div class="color-swatch" style="background-color: ${item.color};"></div>
                     <div class="color-info">
@@ -537,11 +585,11 @@ $colorImageStmt->close();
                 `;
                 editColorList.appendChild(colorDiv);
             });
-            
+
             // 更新隐藏输入
             updateEditColorsData();
         }
-        
+
         /**
          * 更新颜色数据JSON
          */
@@ -559,7 +607,7 @@ $colorImageStmt->close();
         /**
          * 移除颜色
          */
-        window.removeEditColor = function(idx) {
+        window.removeEditColor = function (idx) {
             editSelectedColors.splice(idx, 1);
             updateEditColorDisplay();
         }
@@ -567,16 +615,16 @@ $colorImageStmt->close();
         /**
          * 添加颜色
          */
-        editAddColorBtn.addEventListener('click', function() {
+        editAddColorBtn.addEventListener('click', function () {
             const color = editColorPicker.value;
             const imageFile = editColorImage.files[0] || null;
-            
+
             // 检查颜色是否已存在
             if (editSelectedColors.some(item => item.color.toLowerCase() === color.toLowerCase())) {
                 alert('This color has already been added!');
                 return;
             }
-            
+
             editSelectedColors.push({
                 color: color,
                 imageFile: imageFile,
@@ -584,11 +632,11 @@ $colorImageStmt->close();
                 isNew: true,
                 productId: document.getElementById('productId').value
             });
-            
+
             // 重置输入
             editColorPicker.value = '#C0392B';
             editColorImage.value = '';
-            
+
             updateEditColorDisplay();
         });
 
@@ -620,10 +668,10 @@ $colorImageStmt->close();
             document.getElementById('productTall').value = productData.tall || '';
             document.getElementById('productMaterial').value = productData.material || '';
 
-            
+
             // 保存颜色图片映射
             productColorImagesMap = colorImages || {};
-            
+
             // 加载颜色 - 從 ProductColorImage 表的顏色信息
             editSelectedColors = [];
             // 從 colorImages 對象獲取所有顏色（這些是從 ProductColorImage 表中讀取的）
@@ -639,7 +687,7 @@ $colorImageStmt->close();
                     });
                 });
             }
-            
+
             updateEditColorDisplay();
             toggleMaterialField();
         }
@@ -649,16 +697,16 @@ $colorImageStmt->close();
          */
         function deleteProduct(productId, productName) {
             const confirmDelete = confirm(`Are you sure you want to delete "${productName}"?\n\nThis action cannot be undone.`);
-            
+
             if (!confirmDelete) {
                 return;
             }
-            
+
             const deleteBtn = event.target.closest('button');
             const originalHTML = deleteBtn.innerHTML;
             deleteBtn.disabled = true;
             deleteBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-            
+
             fetch('delete_product.php', {
                 method: 'POST',
                 headers: {
@@ -666,23 +714,23 @@ $colorImageStmt->close();
                 },
                 body: JSON.stringify({ productid: productId })
             })
-            .then(response => response.json().then(data => ({ status: response.status, ok: response.ok, data: data })))
-            .then(result => {
-                if (result.ok && result.data.success) {
-                    alert('Product deleted successfully!');
-                    location.reload();
-                } else {
-                    alert('Error: ' + (result.data.message || 'Failed to delete product'));
+                .then(response => response.json().then(data => ({ status: response.status, ok: response.ok, data: data })))
+                .then(result => {
+                    if (result.ok && result.data.success) {
+                        alert('Product deleted successfully!');
+                        location.reload();
+                    } else {
+                        alert('Error: ' + (result.data.message || 'Failed to delete product'));
+                        deleteBtn.disabled = false;
+                        deleteBtn.innerHTML = originalHTML;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('An error occurred: ' + error.message);
                     deleteBtn.disabled = false;
                     deleteBtn.innerHTML = originalHTML;
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('An error occurred: ' + error.message);
-                deleteBtn.disabled = false;
-                deleteBtn.innerHTML = originalHTML;
-            });
+                });
         }
 
         /**
@@ -690,12 +738,12 @@ $colorImageStmt->close();
          */
         function saveProductChanges() {
             const form = document.getElementById('editProductForm');
-            
+
             if (!form.checkValidity()) {
                 form.reportValidity();
                 return;
             }
-            
+
             // 驗證至少有一個顏色
             if (editSelectedColors.length === 0) {
                 alert('Please add at least one color to the product.');
@@ -703,14 +751,14 @@ $colorImageStmt->close();
             }
 
             const formData = new FormData(form);
-            
+
             // 添加颜色图片文件
             editSelectedColors.forEach((item, idx) => {
                 if (item.imageFile) {
                     formData.append(`color_image_${idx}`, item.imageFile);
                 }
             });
-            
+
             // 顯示加載狀態
             const saveBtn = event.target;
             const originalText = saveBtn.innerHTML;
@@ -721,29 +769,29 @@ $colorImageStmt->close();
                 method: 'POST',
                 body: formData
             })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                return response.json();
-            })
-            .then(data => {
-                if (data.success) {
-                    alert('Product updated successfully!');
-                    bootstrap.Modal.getInstance(document.getElementById('editModal')).hide();
-                    location.reload();
-                } else {
-                    alert('Error: ' + (data.message || 'Failed to update product'));
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('An error occurred: ' + error.message);
-            })
-            .finally(() => {
-                saveBtn.disabled = false;
-                saveBtn.innerHTML = originalText;
-            });
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.success) {
+                        alert('Product updated successfully!');
+                        bootstrap.Modal.getInstance(document.getElementById('editModal')).hide();
+                        location.reload();
+                    } else {
+                        alert('Error: ' + (data.message || 'Failed to update product'));
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('An error occurred: ' + error.message);
+                })
+                .finally(() => {
+                    saveBtn.disabled = false;
+                    saveBtn.innerHTML = originalText;
+                });
         }
     </script>
 
@@ -757,4 +805,5 @@ $colorImageStmt->close();
     <!-- Chatfunction and initialization moved into Public/chat_widget.php -->
     <!-- ==================== End Chat Widget Integration ==================== -->
 </body>
+
 </html>

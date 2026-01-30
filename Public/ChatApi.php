@@ -260,7 +260,7 @@ try {
           $cid = null;
           if (!empty($r['content']) && is_string($r['content']) && preg_match('/^\d+$/', trim($r['content']))) $cid = (int)trim($r['content']);
           if ($cid) {
-            $ost = $pdo->prepare("SELECT o.orderid, o.odate, o.clientid, o.designid, o.ostatus, o.gross_floor_area, d.designName FROM `Order` o LEFT JOIN Design d ON o.designid = d.designid WHERE o.orderid = ? LIMIT 1");
+            $ost = $pdo->prepare("SELECT o.orderid, o.odate, o.clientid, o.designid, o.ostatus, o.gross_floor_area, o.deposit, d.designName FROM `Order` o LEFT JOIN Design d ON o.designid = d.designid WHERE o.orderid = ? LIMIT 1");
             $ost->execute([$cid]);
             $orow = $ost->fetch();
               if ($orow) {
@@ -270,7 +270,8 @@ try {
                 'designid' => isset($orow['designid']) ? (int)$orow['designid'] : null,
                 'title' => $orow['designName'] ?? '' ,
                 'status' => $orow['ostatus'] ?? null,
-                'gross_floor_area' => isset($orow['gross_floor_area']) ? (float)$orow['gross_floor_area'] : null
+                'gross_floor_area' => isset($orow['gross_floor_area']) ? (float)$orow['gross_floor_area'] : null,
+                'deposit' => isset($orow['deposit']) ? (float)$orow['deposit'] : null
               ];
               // attempt to fetch primary design image when available
               try {

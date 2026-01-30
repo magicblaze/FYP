@@ -89,8 +89,7 @@ $orderItems = $stmt->get_result();
 
 <div class="container mb-5">
     <div class="profile-header-card">
-        <h2 class="fw-bold mb-0 text-primary"><i class="fas fa-check-double me-2"></i>Product Price Agreement</h2>
-        <p class="text-muted mb-0">Review product references from designers and confirm your final price.</p>
+        <h2 class="fw-bold mb-0 text-primary">Quote list</h2>
     </div>
 
     <div class="content-section">
@@ -126,9 +125,9 @@ $orderItems = $stmt->get_result();
                 <div class="col-md-3 text-end">
                     <?php if($row['status'] === 'waiting confirm'): ?>
                         <button class="btn btn-primary btn-sm px-3" data-bs-toggle="modal" data-bs-target="#actionModal" 
-                                onclick='fillModal(<?= json_encode($row) ?>)'>Review & Decide</button>
+                                onclick='fillModal(<?= json_encode($row) ?>)'>Review</button>
                     <?php else: ?>
-                        <button class="btn btn-light btn-sm disabled">Handled</button>
+                        <button class="btn btn-light btn-sm disabled">Submitted</button>
                     <?php endif; ?>
                 </div>
             </div>
@@ -141,7 +140,7 @@ $orderItems = $stmt->get_result();
     <div class="modal-dialog">
         <form method="POST" class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Order Product Decision</h5>
+                <h5 class="modal-title">Quote Review</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
@@ -153,14 +152,12 @@ $orderItems = $stmt->get_result();
                 </div>
 
                 <div class="mb-4">
-                    <label class="form-label small fw-bold text-primary">Final Agreed Price (HK$)</label>
+                    <label class="form-label small fw-bold text-primary">Price (HK$)</label>
                     <input type="number" step="0.01" name="price" id="m_price" class="form-control form-control-lg border-primary" required>
-                    <div class="form-text">You can adjust the price here before confirming.</div>
                 </div>
 
                 <div class="alert alert-warning small">
-                    <i class="fas fa-exclamation-triangle me-1"></i> 
-                    Rejecting this will notify the manager to replace this product reference.
+                    <i class="fas fa-exclamation-triangle me-1"></i> Once you confirm or reject, this action cannot be undone.
                 </div>
             </div>
             <div class="modal-footer d-flex justify-content-between">
@@ -170,7 +167,7 @@ $orderItems = $stmt->get_result();
                 </button>
                 <!-- 确认按钮 -->
                 <button type="submit" name="action" value="confirm" class="btn btn-success px-5">
-                    <i class="fas fa-check me-1"></i> Confirm & Agree
+                    <i class="fas fa-check me-1"></i> Confirm
                 </button>
             </div>
         </form>

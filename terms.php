@@ -72,7 +72,7 @@ session_start();
 
         <div class="terms-section">
             <h4>10. Privacy</h4>
-            <p>We collect and use personal information in accordance with our Privacy Policy. Please review the Privacy Policy before placing orders.</p>
+            <p>We collect and use personal information in accordance with our Privacy Policy. Please review the Privacy Policy before placing order.</p>
         </div>
 
         <div class="terms-section">

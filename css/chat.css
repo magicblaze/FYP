@@ -2,9 +2,7 @@
   --chat-bg: #ffffff;
   --chat-muted: #6c757d;
   --chat-primary: #0b1b2b;
-  /* darker brand color */
   --chat-accent: #4690ff;
-  /* bootstrap primary */
   --chat-radius: 8px;
   --chat-gap: 8px;
   --chat-font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
@@ -164,13 +162,16 @@
 #chatwidget_attachPreviewColumn img.preview-img {
   cursor: pointer;
 }
+
 #chatwidget_attachPreviewColumn .file-badge-inline {
   margin-right: 8px;
 }
+
 #chatwidget_attachPreviewColumn .preview-grow {
   flex: 1 1 auto;
   min-width: 0;
 }
+
 #chatwidget_attachPreviewColumn .preview-remove {
   margin-left: auto;
   padding: 0 6px;
@@ -276,7 +277,7 @@
   border-radius: 50%;
   width: 56px;
   height: 56px;
-  background: rgba(255,255,255,0.7);
+  background: rgba(255, 255, 255, 0.7);
   color: #fff;
   border: none;
   box-shadow: 0 6px 18px rgba(11, 27, 43, 0.18);
@@ -400,7 +401,7 @@
 
   #chatwidget_panel .messages {
     min-height: 120px;
-    transition: padding-bottom 260ms cubic-bezier(.2,.9,.2,1);
+    transition: padding-bottom 260ms cubic-bezier(.2, .9, .2, 1);
   }
 
   #chatwidget_toggle {
@@ -417,8 +418,10 @@
     bottom: calc(100% + 8px) !important;
     margin-bottom: 0;
     width: auto;
-    z-index: 10080 !important; /* sit above composer overlay */
-    pointer-events: auto !important; /* make preview interactive */
+    z-index: 10080 !important;
+    /* sit above composer overlay */
+    pointer-events: auto !important;
+    /* make preview interactive */
     display: flex !important;
   }
 
@@ -441,9 +444,11 @@
     bottom: calc(100% + 8px) !important;
     margin-bottom: 0;
     width: auto;
-    z-index: 10080 !important; /* sit above composer overlay */
-    pointer-events: auto !important; /* make preview interactive */
-    display:flex !important;
+    z-index: 10080 !important;
+    /* sit above composer overlay */
+    pointer-events: auto !important;
+    /* make preview interactive */
+    display: flex !important;
   }
 
   #chatwidget_panel.preview-visible .messages {
@@ -479,7 +484,7 @@
   overflow: auto;
   padding: 6px;
   min-height: 0;
-  transition: padding-bottom 260ms cubic-bezier(.2,.9,.2,1);
+  transition: padding-bottom 260ms cubic-bezier(.2, .9, .2, 1);
 }
 
 #chatwidget_divider {
@@ -523,7 +528,7 @@
   padding: 8px 8px 12px 8px;
   z-index: 10060;
   overflow: visible;
-  transition: transform 220ms cubic-bezier(.2,.9,.2,1);
+  transition: transform 220ms cubic-bezier(.2, .9, .2, 1);
 }
 
 /* Expanding overlay that grows upward to cover the preview area when active.
@@ -538,9 +543,11 @@
   background: #ffffff;
   border-radius: 8px 8px 0 0;
   box-shadow: 0 -10px 18px rgba(11, 27, 43, 0.04);
-  transition: height 180ms cubic-bezier(.2,.9,.2,1);
-  z-index: 10055; /* sits above preview but below composer content */
-  pointer-events: none; /* allow clicks to reach the preview when overlay is visible */
+  transition: height 180ms cubic-bezier(.2, .9, .2, 1);
+  z-index: 10055;
+  /* sits above preview but below composer content */
+  pointer-events: none;
+  /* allow clicks to reach the preview when overlay is visible */
 }
 
 #chatwidget_panel.preview-visible .composer::before {
@@ -566,19 +573,22 @@
   position: absolute;
   inset: 0px;
   pointer-events: none;
-  z-index: 10095; /* raised above composer (10060) and composer::before (10055) */
+  z-index: 10095;
+  /* raised above composer (10060) and composer::before (10055) */
 }
 
 #chatwidget_panel .resizer .edge {
   position: absolute;
-  pointer-events: auto; /* allow dragging from these thin edge areas */
-  background: rgba(11,27,43,0.02);
+  pointer-events: auto;
+  /* allow dragging from these thin edge areas */
+  background: rgba(11, 27, 43, 0.02);
   transition: background 80ms ease;
-  z-index: 10096; /* ensure edges are above composer content */
+  z-index: 10096;
+  /* ensure edges are above composer content */
 }
 
 #chatwidget_panel .resizer .edge:hover {
-  background: rgba(11,27,43,0.045);
+  background: rgba(11, 27, 43, 0.045);
 }
 
 /* Right edge: thin vertical draggable strip */
@@ -637,7 +647,8 @@
 #chatwidget_attachPreviewColumn {
   box-sizing: border-box;
   padding: 12px 24px;
-  background: transparent; /* let composer provide the background */
+  background: transparent;
+  /* let composer provide the background */
   display: flex;
   flex-direction: row;
   gap: 12px;
@@ -645,8 +656,10 @@
   border-radius: 6px;
   border: none;
   box-shadow: none;
-  z-index: 10085; /* ensure the preview card paints above the composer overlay */
-  position: absolute; /* positioned by inline styles/JS relative to composer */
+  z-index: 10085;
+  /* ensure the preview card paints above the composer overlay */
+  position: absolute;
+  /* positioned by inline styles/JS relative to composer */
 }
 
 /* Force the preview to stick to the composer's left edge when attached
@@ -666,7 +679,7 @@
   background: #ffffff;
   border-radius: 8px 8px 0 0;
   box-shadow: 0 -10px 18px rgba(11, 27, 43, 0.04);
-  transition: height 180ms cubic-bezier(.2,.9,.2,1);
+  transition: height 180ms cubic-bezier(.2, .9, .2, 1);
   z-index: 10055;
   pointer-events: none;
 }
@@ -697,9 +710,10 @@
 #chatwidget_attachPreviewColumn.attached {
   transform: translateY(8px);
   opacity: 0;
-  transition: transform 280ms cubic-bezier(.2,.9,.2,1), opacity 200ms ease;
+  transition: transform 280ms cubic-bezier(.2, .9, .2, 1), opacity 200ms ease;
   will-change: transform, opacity;
 }
+
 #chatwidget_attachPreviewColumn.attached.visible {
   transform: translateY(0);
   opacity: 1;
@@ -731,7 +745,9 @@
   color: #6c757d;
 }
 
-#chatwidget_attachPreview_close:hover { color: #333; }
+#chatwidget_attachPreview_close:hover {
+  color: #333;
+}
 
 
 #chatwidget_attachPreviewColumn img {
@@ -763,6 +779,7 @@
   white-space: normal;
   vertical-align: top;
 }
+
 .message .bg-primary:has(.chat-attachment-img) .chat-attachment-img,
 .message .bg-white:has(.chat-attachment-img) .chat-attachment-img {
   display: block;
@@ -819,7 +836,8 @@
 #chatwidget_panel .bg-light a,
 .message .bg-white a,
 .message .bg-light a {
-  color: #0d6efd !important; /* Bootstrap blue */
+  color: #0d6efd !important;
+  /* Bootstrap blue */
   font-weight: 700 !important;
   text-decoration: underline;
 }
@@ -1108,5 +1126,246 @@
 .composer .btn:hover {
   transform: none !important;
   box-shadow: none !important;
-  background: rgba(70,144,255,0.06) !important;
+  background: rgba(70, 144, 255, 0.06) !important;
+}
+
+.my-likes-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+}
+
+.page-header {
+  margin-bottom: 2rem;
+  border-bottom: 2px solid #3498db;
+  padding-bottom: 1rem;
+}
+
+.page-header h1 {
+  color: #2c3e50;
+  font-weight: 700;
+  font-size: 2.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.page-header p {
+  color: #7f8c8d;
+  font-size: 1rem;
+  margin: 0;
+}
+
+.section-title {
+  color: #2c3e50;
+  font-weight: 600;
+  font-size: 1.5rem;
+  margin-top: 2rem;
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid #ecf0f1;
+}
+
+.section-title i {
+  color: #3498db;
+  margin-right: 0.5rem;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: #7f8c8d;
+}
+
+.empty-state i {
+  font-size: 4rem;
+  color: #bdc3c7;
+  margin-bottom: 1rem;
+}
+
+.empty-state h3 {
+  color: #2c3e50;
+  margin-bottom: 0.5rem;
+}
+
+.empty-state p {
+  margin-bottom: 1.5rem;
+}
+
+.empty-state a {
+  display: inline-block;
+  margin: 0 0.5rem;
+}
+
+/* Product/Design Grid */
+.likes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.like-card {
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.like-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 15px rgba(0, 0, 0, 0.15);
+}
+
+.like-card-image {
+  width: 100%;
+  height: 200px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 3rem;
+  position: relative;
+}
+
+.like-card-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.like-card-image.no-image {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.like-card-body {
+  padding: 1rem;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.like-card-title {
+  font-weight: 600;
+  color: #2c3e50;
+  margin-bottom: 0.5rem;
+  font-size: 1rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.like-card-meta {
+  color: #7f8c8d;
+  font-size: 0.85rem;
+  margin-bottom: 0.5rem;
+}
+
+.like-card-price {
+  color: #e74c3c;
+  font-weight: 700;
+  font-size: 1.2rem;
+  margin-bottom: 0.5rem;
+}
+
+.like-card-designer {
+  color: #3498db;
+  font-size: 0.85rem;
+  margin-bottom: 1rem;
+  flex-grow: 1;
+}
+
+.like-card-footer {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: auto;
+}
+
+.like-card-btn {
+  flex: 1;
+  padding: 0.5rem;
+  font-size: 0.85rem;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+}
+
+.like-card-btn.view {
+  background: #3498db;
+  color: white;
+}
+
+.like-card-btn.view:hover {
+  background: #2980b9;
+}
+
+.like-card-btn.remove {
+  background: #ecf0f1;
+  color: #e74c3c;
+}
+
+.like-card-btn.remove:hover {
+  background: #e74c3c;
+  color: white;
+}
+
+.stats-bar {
+  display: flex;
+  gap: 2rem;
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  background: #f8f9fa;
+  border-radius: 12px;
+  flex-wrap: wrap;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.stat-number {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #3498db;
+}
+
+.stat-label {
+  color: #7f8c8d;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 768px) {
+  .page-header h1 {
+    font-size: 1.8rem;
+  }
+
+  .likes-grid {
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1rem;
+  }
+
+  .stats-bar {
+    gap: 1rem;
+  }
+
+  .stat-number {
+    font-size: 1.2rem;
+  }
+
+  .stat-label {
+    font-size: 0.8rem;
+  }
 }

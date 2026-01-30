@@ -76,9 +76,8 @@ $res = $stmt->get_result();
     <div class="card">
       <div class="card-body p-0">
         <div class="table-responsive">
-        <h5 class="p-3">Orders List</h5>
           <table class="table table-hover mb-0 align-middle">
-            <thead class="table-light">
+            <thead class="table">
               <tr>
                 <th>Order ID</th>
                 <th>Design</th>

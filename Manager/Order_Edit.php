@@ -27,8 +27,8 @@ if ($order_check['count'] == 0) {
 }
 
 // Use prepared statement to prevent SQL injection - ADDED cost field
-$sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.cost,
-               c.clientid, c.cname as client_name, c.ctel, c.cemail, c.budget,
+$sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.cost, o.deposit,
+         c.clientid, c.cname as client_name, c.ctel, c.cemail, c.budget,
                d.designid, d.designName, d.expect_price as design_price, d.tag as design_tag,
                s.scheduleid, s.OrderFinishDate, s.DesignFinishDate
         FROM `Order` o
@@ -90,7 +90,16 @@ $latest_picture = mysqli_fetch_assoc($pic_result);
 
 // Calculate final total cost
 $design_price = isset($order["design_price"]) ? floatval($order["design_price"]) : 0;
-$final_total_cost = $design_price + $total_fees;
+$deposit = isset($order['deposit']) ? floatval($order['deposit']) : 2000.0;
+$references_total = 0.0;
+if (!empty($references)) {
+    foreach ($references as $r) {
+        $rprice = isset($r['price']) && $r['price'] !== null ? (float)$r['price'] : (float)($r['product_price'] ?? 0);
+        $references_total += $rprice;
+    }
+}
+
+$final_total_cost = $design_price + $total_fees + $references_total;
 
 // Determine workflow state
 $order_status = $order['ostatus'] ?? 'waiting confirm';
@@ -272,7 +281,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     }
 
     if (isset($_POST['confirm_proposal'])) {
-        $confirm_status = 'waiting review';
+        // After confirming a design proposal, move to drafting a 2nd proposal
+        $confirm_status = 'drafting 2nd proposal';
         $update_confirm_sql = "UPDATE `Order` SET ostatus = ? WHERE orderid = ?";
         $confirm_stmt = mysqli_prepare($mysqli, $update_confirm_sql);
         mysqli_stmt_bind_param($confirm_stmt, "si", $confirm_status, $orderid);
@@ -284,7 +294,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     }
 
     if (isset($_POST['reject_proposal'])) {
-        $reject_status = 'drafting proposal';
+        $reject_status = 'drafting 2nd proposal';
         $update_reject_sql = "UPDATE `Order` SET ostatus = ? WHERE orderid = ?";
         $reject_stmt = mysqli_prepare($mysqli, $update_reject_sql);
         mysqli_stmt_bind_param($reject_stmt, "si", $reject_status, $orderid);
@@ -293,6 +303,18 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             exit();
         }
         mysqli_stmt_close($reject_stmt);
+    }
+
+    if (isset($_POST['submit_second_proposal'])) {
+        $next_status = 'waiting client review';
+        $update_next_sql = "UPDATE `Order` SET ostatus = ? WHERE orderid = ?";
+        $next_stmt = mysqli_prepare($mysqli, $update_next_sql);
+        mysqli_stmt_bind_param($next_stmt, "si", $next_status, $orderid);
+        if (mysqli_stmt_execute($next_stmt)) {
+            header("Location: Order_Edit.php?id=" . $orderid . "&msg=second_proposal_submitted");
+            exit();
+        }
+        mysqli_stmt_close($next_stmt);
     }
 
     if (isset($_POST['confirm_order'])) {
@@ -500,12 +522,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                             $status_class = 'bg-success';
                                             break;
                                         case 'designing':
-                                        case 'drafting proposal':
+                                        case 'drafting 2nd proposal':
                                         case 'reviewing design proposal':
                                             $status_class = 'bg-info';
                                             break;
                                         case 'waiting confirm':
-                                        case 'waiting review':
+                                        case 'waiting client review':
                                         case 'waiting payment':
                                             $status_class = 'bg-warning';
                                             break;
@@ -552,122 +574,46 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                             </div>
                             <hr>
                             <div class="mb-0">
-                                <label class="fw-bold text-muted small">Design Price</label>
-                                <p class="mb-2">
-                                    <strong>HK$<?php echo isset($order["design_price"]) && $order["design_price"] ? number_format($order["design_price"], 0) : '0'; ?></strong>
-                                </p>
-                                <label class="fw-bold text-muted small">Additional Fees</label>
-                                <p class="mb-2"><strong>HK$<?php echo number_format($total_fees, 0); ?></strong></p>
+                                <label class="fw-bold text-muted small">Cost Breakdown</label>
+                                <div class="mb-2">
+                                    <ul class="list-unstyled mb-0">
+                                        <li class="d-flex justify-content-between">
+                                            <small class="text-muted">Design Price</small>
+                                            <strong>HK$<?php echo number_format($design_price, 2); ?></strong>
+                                        </li>
+                                        <?php if (!empty($references)): ?>
+                                            <li class="mt-2"><small class="text-muted">Product References</small></li>
+                                            <?php foreach ($references as $r):
+                                                $rprice = isset($r['price']) && $r['price'] !== null ? (float)$r['price'] : (float)($r['product_price'] ?? 0);
+                                            ?>
+                                                <li class="d-flex justify-content-between ps-3">
+                                                    <small><?php echo htmlspecialchars($r['pname'] ?? ('Product #' . $r['productid'])); ?></small>
+                                                    <small class="text-success">HK$<?php echo number_format($rprice, 2); ?></small>
+                                                </li>
+                                            <?php endforeach; ?>
+                                        <?php endif; ?>
+
+                                        <?php if (!empty($fees)): ?>
+                                            <li class="mt-2"><small class="text-muted">Additional Fees</small></li>
+                                            <?php foreach ($fees as $f): ?>
+                                                <li class="d-flex justify-content-between ps-3">
+                                                    <small><?php echo htmlspecialchars($f['fee_name']); ?></small>
+                                                    <small class="text-success">HK$<?php echo number_format((float)$f['amount'], 2); ?></small>
+                                                </li>
+                                            <?php endforeach; ?>
+                                        <?php endif; ?>
+                                    </ul>
+                                </div>
                                 <label class="fw-bold text-muted small">Total Cost</label>
-                                <p class="mb-0"><strong
-                                        class="text-danger fs-5">HK$<?php echo number_format($final_total_cost, 0); ?></strong>
-                                </p>
+                                <p class="mb-0"><strong class="text-danger fs-5">HK$<?php echo number_format($final_total_cost, 2); ?></strong></p>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Product Reference Status Card -->
-            <?php if (!empty($references)): ?>
-                <div class="row mb-4">
-                    <div class="col-12">
-                        <div class="card h-100">
-                            <div class="card-header">
-                                <h5 class="card-title mb-0">
-                                    <i class="fas fa-tags me-2"></i>Product Reference Status
-                                </h5>
-                            </div>
-                            <div class="card-body">
-                                <!-- View Mode -->
-                                <div id="reference-view" class="<?php echo $edit_reference ? 'd-none' : ''; ?>">
-                                    <div class="table-responsive">
-                                        <table class="table table-sm align-middle">
-                                            <thead class="table-light">
-                                                <tr>
-                                                    <th>Product</th>
-                                                    <th>Category</th>
-                                                    <th>Status</th>
-                                                    <th>Requested Price</th>
-                                                    <th>Note</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <?php foreach ($references as $ref): 
-                                                    $refStatus = strtolower(trim($ref['status'] ?? 'pending'));
-                                                    $displayPrice = isset($ref['price']) && $ref['price'] !== null ? (float)$ref['price'] : (float)($ref['product_price'] ?? 0);
-                                                    $badgeClass = 'bg-secondary';
-                                                    if (in_array($refStatus, ['waiting confirm', 'pending'])) $badgeClass = 'bg-warning';
-                                                    if (in_array($refStatus, ['confirmed', 'approved'])) $badgeClass = 'bg-success';
-                                                    if (in_array($refStatus, ['rejected', 'reject'])) $badgeClass = 'bg-danger';
-                                                ?>
-                                                    <tr>
-                                                        <td><?php echo htmlspecialchars($ref['pname'] ?? ('Product #' . $ref['productid'])); ?></td>
-                                                        <td><?php echo htmlspecialchars($ref['category'] ?? '—'); ?></td>
-                                                        <td>
-                                                            <span class="badge <?php echo $badgeClass; ?>">
-                                                                <?php echo $refStatus === 'waiting confirm' ? 'Request Confirm' : htmlspecialchars($refStatus); ?>
-                                                            </span>
-                                                        </td>
-                                                        <td>HK$<?php echo number_format($displayPrice, 2); ?></td>
-                                                        <td><?php echo htmlspecialchars($ref['note'] ?? '—'); ?></td>
-                                                    </tr>
-                                                <?php endforeach; ?>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                    <div class="mt-3">
-                                        <button type="button" class="btn btn-primary" onclick="toggleEdit('reference', true)">
-                                            <i class="fas fa-edit me-2"></i>Edit
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <!-- Edit Mode -->
-                                <div id="reference-edit" class="<?php echo $edit_reference ? '' : 'd-none'; ?>">
-                                    <form method="post">
-                                        <input type="hidden" name="update_reference_status" value="1">
-                                        <div class="table-responsive">
-                                            <table class="table table-sm align-middle">
-                                                <thead class="table-light">
-                                                    <tr>
-                                                        <th>Product</th>
-                                                        <th>Requested Price</th>
-                                                        <th>Note</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    <?php foreach ($references as $ref): 
-                                                        $displayPrice = isset($ref['price']) && $ref['price'] !== null ? (float)$ref['price'] : (float)($ref['product_price'] ?? 0);
-                                                    ?>
-                                                        <tr>
-                                                            <td><?php echo htmlspecialchars($ref['pname'] ?? ('Product #' . $ref['productid'])); ?></td>
-                                                            <td>
-                                                                <input type="number" step="0.01" min="0" class="form-control form-control-sm" name="ref[<?php echo (int)$ref['id']; ?>][price]" value="<?php echo htmlspecialchars(number_format($displayPrice, 2, '.', '')); ?>">
-                                                            </td>
-                                                            <td><?php echo htmlspecialchars($ref['note'] ?? '—'); ?></td>
-                                                        </tr>
-                                                    <?php endforeach; ?>
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                        <div class="d-flex gap-2">
-                                            <button type="submit" class="btn btn-success flex-grow-1">
-                                                <i class="fas fa-save me-2"></i>Request Quotation
-                                            </button>
-                                            <button type="button" class="btn btn-secondary" onclick="toggleEdit('reference', false)">
-                                                <i class="fas fa-times me-2"></i>Cancel
-                                            </button>
-                                        </div>
-                                    </form>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            <?php endif; ?>
-
-            <!-- Assign Designer Section (Always Available) -->
+            <?php if ($show_confirm_reject): ?>
+            <!-- Assign Designer Section (Only shown when waiting confirm) -->
             <div class="row mb-4">
                 <div class="col-lg-6">
                     <div class="card h-100">
@@ -724,21 +670,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     </div>
                 </div>
             </div>
+            <?php endif; ?>
 
 
             <!-- Edit Sections -->
             <?php 
                 $status = strtolower($order['ostatus'] ?? 'waiting confirm');
-                $isProposalConfirmed = !in_array($status, ['waiting confirm', 'designing', 'drafting proposal', 'reviewing design proposal', 'submit_proposal', 'reject']); 
-                // Only show these sections if status is at a stage where a proposal has likely been accepted/confirmed.
-                // Assuming 'waiting review' means Client Review, which implies manager approved it. 
-                // However, "Reviewing Design Proposal" means manager is reviewing.
-                // The prompt says "hide before confirmed by manager".
-                // Manager confirms it at "Reviewing Design Proposal" stage to move it forward?
-                // Or maybe the user means simply hide these if it's still in early stages.
-                
-                // Let's hide if in early stages:
-                $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'drafting proposal', 'reviewing design proposal', 'reject']);
+                $isProposalConfirmed = !in_array($status, ['waiting confirm', 'designing', 'drafting 2nd proposal', 'reviewing design proposal', 'submit_proposal', 'reject']); 
+                // Show edit cards when status is 'drafting 2nd proposal'
+                $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing design proposal','waiting client review', 'reject', 'waiting client payment','complete']);
             ?>
             <?php if ($status === 'reviewing design proposal'): ?>
                 <div class="row mb-4">
@@ -749,8 +689,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                  <p>The designer has submitted a proposal. Please review the design details.</p>
                                  <div class="mt-3">
                                      <?php if ($latest_picture): ?>
-                                         <button type="button" class="btn btn-primary me-2"
-                                             onclick="openProposalPreview('../uploads/designed_Picture/<?= htmlspecialchars($latest_picture['filename']) ?>')">
+                                            <button type="button" class="btn btn-primary me-2"
+                                                onclick="openProposalPreview('../uploads/designed_Picture/<?php echo htmlspecialchars($latest_picture['filename']); ?>')">
                                              <i class="fas fa-file-image me-1"></i>Preview Design Proposal
                                          </button>
                                      <?php else: ?>
@@ -931,7 +871,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                     <label class="fw-bold mb-2">Additional Fees Detail</label>
                                     <div class="table-responsive">
                                         <table class="table table-sm table-hover mb-0">
-                                            <thead class="table-light">
+                                            <thead class="table">
                                                 <tr>
                                                     <th>Fee Name</th>
                                                     <th>Amount</th>
@@ -939,6 +879,21 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                                 </tr>
                                             </thead>
                                             <tbody id="fee_list_body">
+                                                <?php if (!empty($references)): ?>
+                                                    <!-- Show referenced items (product/design refs) in the cost list -->
+                                                    <?php foreach ($references as $ref): 
+                                                        $refPrice = isset($ref['price']) && $ref['price'] !== null ? (float)$ref['price'] : (float)($ref['product_price'] ?? 0);
+                                                    ?>
+                                                        <tr>
+                                                            <td>
+                                                                <small><?php echo htmlspecialchars($ref['pname'] ?? ('Product #' . $ref['productid'])); ?></small>
+                                                            </td>
+                                                            <td><small><strong>HK$<?php echo number_format($refPrice, 0); ?></strong></small></td>
+                                                            <td></td>
+                                                        </tr>
+                                                    <?php endforeach; ?>
+                                                <?php endif; ?>
+
                                                 <?php if (!empty($fees)): ?>
                                                     <?php foreach ($fees as $fee): ?>
                                                         <tr>
@@ -1015,20 +970,22 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                         <div class="mb-4 p-3 rounded border">
                                             <div class="row mb-2">
                                                  <div class="mt-3">
-                                                     <?php if ($latest_picture): ?>
-                                                         <button type="button" class="btn btn-primary me-2"
-                                                             onclick="openProposalPreview('../uploads/designed_Picture/<?= htmlspecialchars($latest_picture['filename']) ?>')">
-                                                             <i class="fas fa-file-image me-1"></i>Preview Design Proposal
-                                                         </button>
-                                                     <?php else: ?>
-                                                         <button disabled class="btn btn-secondary me-2">
-                                                             <i class="fas fa-exclamation-triangle me-1"></i>No Proposal File Found
-                                                         </button>
+                                                     <?php if ($status === 'reviewing design proposal'): ?>
+                                                         <?php if ($latest_picture): ?>
+                                                            <button type="button" class="btn btn-primary me-2"
+                                                                onclick="openProposalPreview('../uploads/designed_Picture/<?php echo htmlspecialchars($latest_picture['filename']); ?>')">
+                                                                 <i class="fas fa-file-image me-1"></i>Preview Design Proposal
+                                                             </button>
+                                                         <?php else: ?>
+                                                             <button disabled class="btn btn-secondary me-2">
+                                                                 <i class="fas fa-exclamation-triangle me-1"></i>No Proposal File Found
+                                                             </button>
+                                                         <?php endif; ?>
                                                      <?php endif; ?>
                                      
                                                      <!-- Confirm/Reject buttons are inside the preview modal -->
                                                     <strong class="text-info" id="preview_fees_text"
-                                                        data-base="<?php echo $total_fees; ?>">HK$<?php echo number_format($total_fees, 0); ?></strong>
+                                                        data-base="<?php echo ($total_fees + $references_total); ?>">HK$<?php echo number_format(($total_fees + $references_total), 0); ?></strong>
                                                 </div>
                                             </div>
                                             <hr class="my-2">
@@ -1096,6 +1053,136 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     </div>
                 </div>
             </div>
+                        <?php if ($status === 'drafting 2nd proposal'): 
+                        
+                            // ensure all referenced products are confirmed before allowing submission
+                            $allRefsConfirmed = true;
+                            if (!empty($references)) {
+                                foreach ($references as $r) {
+                                    $rs = strtolower(trim($r['status'] ?? ''));
+                                    if (!in_array($rs, ['confirmed', 'approved'])) { $allRefsConfirmed = false; break; }
+                                }
+                            }
+                        ?>
+                        <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="card h-100">
+                            <div class="card-header">
+                                <h5 class="card-title mb-0">
+                                    <i class="fas fa-tags me-2"></i>Product Reference Status
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                <!-- View Mode -->
+                                <div id="reference-view" class="<?php echo $edit_reference ? 'd-none' : ''; ?>">
+                                    <div class="table-responsive">
+                                        <table class="table table-sm align-middle">
+                                            <thead class="table">
+                                                <tr>
+                                                    <th>Product</th>
+                                                    <th>Category</th>
+                                                    <th>Status</th>
+                                                    <th>Requested Price</th>
+                                                    <th>Note</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <?php foreach ($references as $ref): 
+                                                    $refStatus = strtolower(trim($ref['status'] ?? 'pending'));
+                                                    $displayPrice = isset($ref['price']) && $ref['price'] !== null ? (float)$ref['price'] : (float)($ref['product_price'] ?? 0);
+                                                    $badgeClass = 'bg-secondary';
+                                                    if (in_array($refStatus, ['waiting confirm', 'pending'])) $badgeClass = 'bg-warning';
+                                                    if (in_array($refStatus, ['confirmed', 'approved'])) $badgeClass = 'bg-success';
+                                                    if (in_array($refStatus, ['rejected', 'reject'])) $badgeClass = 'bg-danger';
+                                                ?>
+                                                    <tr>
+                                                        <td><?php echo htmlspecialchars($ref['pname'] ?? ('Product #' . $ref['productid'])); ?></td>
+                                                        <td><?php echo htmlspecialchars($ref['category'] ?? '—'); ?></td>
+                                                        <td>
+                                                            <span class="badge <?php echo $badgeClass; ?>">
+                                                                <?php echo $refStatus === 'waiting confirm' ? 'Request Confirm' : htmlspecialchars($refStatus); ?>
+                                                            </span>
+                                                        </td>
+                                                        <td>HK$<?php echo number_format($displayPrice, 2); ?></td>
+                                                        <td><?php echo htmlspecialchars($ref['note'] ?? '—'); ?></td>
+                                                    </tr>
+                                                <?php endforeach; ?>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div class="mt-3">
+                                        <button type="button" class="btn btn-primary" onclick="toggleEdit('reference', true)">
+                                            <i class="fas fa-edit me-2"></i>Edit
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Edit Mode -->
+                                <div id="reference-edit" class="<?php echo $edit_reference ? '' : 'd-none'; ?>">
+                                    <form method="post">
+                                        <input type="hidden" name="update_reference_status" value="1">
+                                        <div class="table-responsive">
+                                            <table class="table table-sm align-middle">
+                                                <thead class="table">
+                                                    <tr>
+                                                        <th>Product</th>
+                                                        <th>Requested Price</th>
+                                                        <th>Note</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <?php foreach ($references as $ref): 
+                                                        $displayPrice = isset($ref['price']) && $ref['price'] !== null ? (float)$ref['price'] : (float)($ref['product_price'] ?? 0);
+                                                    ?>
+                                                        <tr>
+                                                            <td><?php echo htmlspecialchars($ref['pname'] ?? ('Product #' . $ref['productid'])); ?></td>
+                                                            <td>
+                                                                <input type="number" step="0.01" min="0" class="form-control form-control-sm" name="ref[<?php echo (int)$ref['id']; ?>][price]" value="<?php echo htmlspecialchars(number_format($displayPrice, 2, '.', '')); ?>">
+                                                            </td>
+                                                            <td><?php echo htmlspecialchars($ref['note'] ?? '—'); ?></td>
+                                                        </tr>
+                                                    <?php endforeach; ?>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        <div class="d-flex gap-2">
+                                            <button type="submit" class="btn btn-success flex-grow-1">
+                                                <i class="fas fa-save me-2"></i>Request Quotation
+                                            </button>
+                                            <button type="button" class="btn btn-secondary" onclick="toggleEdit('reference', false)">
+                                                <i class="fas fa-times me-2"></i>Cancel
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                            <div class="row mb-4">
+                                <div class="col-12">
+                                    <div class="card border-primary">
+                                        <div class="card-body text-center">
+                                            <div class="mt-3">
+                                                <?php if ($allRefsConfirmed): ?>
+                                                    <form method="post" onsubmit="return confirm('Submit the 2nd proposal to the client for review?');">
+                                                        <input type="hidden" name="submit_second_proposal" value="1">
+                                                        <button type="submit" class="btn btn-primary">
+                                                            Submit 2nd Proposal for Client Review
+                                                        </button>
+                                                    </form>
+                                                <?php else: ?>
+                                                    <div class="alert alert-warning mb-0">
+                                                        <i class="fas fa-exclamation-triangle me-2"></i>
+                                                        Not all referenced products have been confirmed. Please confirm all product references before submitting the 2nd proposal.
+                                                    </div>
+                                                <?php endif; ?>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        <?php endif; ?>
 
             <script>
                 function openProposalPreview(fileUrl) {

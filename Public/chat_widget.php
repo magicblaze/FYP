@@ -1103,9 +1103,7 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
         const shareBtn = document.getElementById('chatwidget_share');
         if (!shareBtn) return;
         // Prefer server-provided payload when this file is included from a page
-        <?php if (isset($CHAT_SHARE) && is_array($CHAT_SHARE)): ?>
-        const payload = <?= json_encode($CHAT_SHARE) ?>;
-        <?php endif; ?>
+        const payload = <?= json_encode($CHAT_SHARE ?? null) ?>;
         shareBtn.style.display = '';
         if (!payload) { return; }
         try {

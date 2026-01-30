@@ -229,11 +229,12 @@ CREATE TABLE `Order` (
   `odate` datetime NOT NULL,
   `clientid` int NOT NULL,
   `budget` decimal(10,2) DEFAULT NULL,
+  `deposit` decimal(10,2) NOT NULL DEFAULT 2000.00,
   `cost` decimal(10,2) DEFAULT NULL,
   `gross_floor_area` decimal(10,2) DEFAULT NULL,
   `Requirements` varchar(255) DEFAULT NULL,
   `designid` int NOT NULL,
-  `ostatus` ENUM('waiting confirm', 'designing', 'reviewing design proposal', 'drafting proposal', 'waiting review', 'waiting payment', 'complete', 'reject') DEFAULT 'waiting confirm',
+  `ostatus` ENUM('waiting confirm', 'designing', 'reviewing design proposal', 'drafting 2nd proposal', 'waiting client review', 'waiting client payment', 'complete', 'reject') DEFAULT 'waiting confirm',
   `designedPicture` VARCHAR(500) DEFAULT NULL,
   PRIMARY KEY (`orderid`),
   KEY `clientid_pk_idx` (`clientid`),
@@ -243,9 +244,9 @@ CREATE TABLE `Order` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 INSERT INTO `Order`
-(`orderid`, `odate`, `clientid`, `budget`, `cost`, `gross_floor_area`, `Requirements`,`designid`,`ostatus`,`designedPicture`) VALUES
-(1, '2025-04-12 17:50:00', 1, NULL, NULL, NULL, 'abc',2,'designing',NULL),
-(2, '2025-05-10 12:00:00', 2, NULL, NULL, NULL, 'abc',1,'complete',NULL);
+(`orderid`, `odate`, `clientid`, `budget`, `deposit`, `cost`, `gross_floor_area`, `Requirements`,`designid`,`ostatus`,`designedPicture`) VALUES
+(1, '2025-04-12 17:50:00', 1, NULL, 2000.00, NULL, NULL, 'abc',2,'designing',NULL),
+(2, '2025-05-10 12:00:00', 2, NULL, 2000.00, NULL, NULL, 'abc',1,'complete',NULL);
 
 -- OrderReference table to store design references for each order
 CREATE TABLE `OrderReference` (
@@ -573,8 +574,8 @@ INSERT INTO `MessageRead` (`messagereadid`, `messageid`, `ChatRoomMemberid`, `is
 (10,4,6,0,NULL),
 (11,5,5,1,'2025-06-01 08:00:00');
 
-INSERT INTO `Order` (`orderid`, `odate`, `clientid`, `Requirements`,`designid`,`ostatus`,`designedPicture`) VALUES
-(3, '2025-07-01 09:00:00', 1, 'Need quick remodel', 1, 'waiting confirm', NULL);
+INSERT INTO `Order` (`orderid`, `odate`, `clientid`, `deposit`, `Requirements`,`designid`,`ostatus`,`designedPicture`) VALUES
+(3, '2025-07-01 09:00:00', 1, 2000.00, 'Need quick remodel', 1, 'waiting confirm', NULL);
 
 INSERT INTO `OrderDelivery` (`orderdeliveryid`, `productid`, `quantity`, `orderid`, `deliverydate`, `status`, `managerid`, `color`,`rid`) VALUES
 (3, 3, 50, 3, '2026-01-13', 'Pending', 1, 'White',1);

@@ -6,8 +6,11 @@
 require_once __DIR__ . '/../config.php';
 session_start();
 
-$designid = isset($_GET['id']) ? (int)$_GET['id'] : 0;
-if ($designid <= 0) { http_response_code(404); die('Design not found.'); }
+$designid = isset($_GET['id']) ? (int) $_GET['id'] : 0;
+if ($designid <= 0) {
+    http_response_code(404);
+    die('Design not found.');
+}
 
 $dsql = "SELECT d.*, des.dname, des.demail, des.dtel, des.status
          FROM Design d
@@ -17,26 +20,57 @@ $stmt = $mysqli->prepare($dsql);
 $stmt->bind_param("i", $designid);
 $stmt->execute();
 $design = $stmt->get_result()->fetch_assoc();
-if (!$design) { http_response_code(404); die('Design not found.'); }
+if (!$design) {
+    http_response_code(404);
+    die('Design not found.');
+}
 
 // Handle edit save (designer-only, must own the design)
 $saveErr = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['action']) && $_POST['action'] === 'save_edit')) {
     // require designer session and ownership
-    if (empty($_SESSION['user']) || ($_SESSION['user']['role'] ?? '') !== 'designer' || (int)($_SESSION['user']['designerid'] ?? 0) !== (int)$design['designerid']) {
+    if (empty($_SESSION['user']) || ($_SESSION['user']['role'] ?? '') !== 'designer' || (int) ($_SESSION['user']['designerid'] ?? 0) !== (int) $design['designerid']) {
         $saveErr = 'Permission denied.';
     } else {
-        $newName = trim((string)($_POST['designName'] ?? ''));
-        $newPrice = isset($_POST['expect_price']) ? (float)$_POST['expect_price'] : (float)$design['expect_price'];
-        $newDesc = trim((string)($_POST['description'] ?? ''));
-        $newTag = trim((string)($_POST['tag'] ?? ''));
+        $newName = trim((string) ($_POST['designName'] ?? ''));
+        $newPrice = isset($_POST['expect_price']) ? (float) $_POST['expect_price'] : (float) $design['expect_price'];
+        $newDesc = trim((string) ($_POST['description'] ?? ''));
+        $newTag = trim((string) ($_POST['tag'] ?? ''));
         $upd = $mysqli->prepare("UPDATE Design SET designName = ?, expect_price = ?, description = ?, tag = ? WHERE designid = ?");
         if ($upd) {
             $upd->bind_param('sdssi', $newName, $newPrice, $newDesc, $newTag, $designid);
             if ($upd->execute()) {
                 $upd->close();
-                // Redirect to GET to avoid resubmission and refresh displayed data
-                header('Location: ' . $_SERVER['REQUEST_URI']);
+                // If the edit form submitted references to add, insert them now so Save Changes is authoritative
+                if (!empty($_POST['add_refs']) && is_array($_POST['add_refs'])) {
+                    $designerId = (int) ($_SESSION['user']['designerid'] ?? 0);
+                    $ins = $mysqli->prepare("INSERT INTO DesignReference (designid, productid, note, added_by_designerid) VALUES (?, ?, ?, ?)");
+                    $chk = $mysqli->prepare("SELECT id FROM DesignReference WHERE designid = ? AND productid = ? LIMIT 1");
+                    if ($ins && $chk) {
+                        foreach ($_POST['add_refs'] as $rid) {
+                            $pid = (int) $rid;
+                            if ($pid <= 0)
+                                continue;
+                            // skip if already referenced
+                            $chk->bind_param('ii', $designid, $pid);
+                            $chk->execute();
+                            $chk->store_result();
+                            if ($chk->num_rows > 0) {
+                                $chk->free_result();
+                                continue;
+                            }
+                            $chk->free_result();
+                            $note = '';
+                            $ins->bind_param('iisi', $designid, $pid, $note, $designerId);
+                            $ins->execute();
+                        }
+                        $ins->close();
+                        $chk->close();
+                    }
+                }
+                // Redirect to GET to avoid resubmission and refresh displayed data (remove edit flag)
+                $base = strtok($_SERVER['REQUEST_URI'], '?');
+                header('Location: ' . $base . '?id=' . $designid);
                 exit;
             } else {
                 $saveErr = 'Failed to save changes: ' . $upd->error;
@@ -49,18 +83,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['action']) && $_POST[
 
 // Handle add/delete product reference (designer-owner only)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && in_array($_POST['action'], ['add_product_ref', 'delete_product_ref'], true)) {
-    if (empty($_SESSION['user']) || ($_SESSION['user']['role'] ?? '') !== 'designer' || (int)($_SESSION['user']['designerid'] ?? 0) !== (int)$design['designerid']) {
+    if (empty($_SESSION['user']) || ($_SESSION['user']['role'] ?? '') !== 'designer' || (int) ($_SESSION['user']['designerid'] ?? 0) !== (int) $design['designerid']) {
         $saveErr = 'Permission denied.';
     } else {
         if ($_POST['action'] === 'add_product_ref') {
-            $pid = isset($_POST['productid']) ? (int)$_POST['productid'] : 0;
-            $note = trim((string)($_POST['product_note'] ?? '')) ?: null;
+            $pid = isset($_POST['productid']) ? (int) $_POST['productid'] : 0;
+            $note = trim((string) ($_POST['product_note'] ?? '')) ?: null;
             if ($pid <= 0) {
                 $saveErr = 'Invalid product id.';
             } else {
                 $ins = $mysqli->prepare("INSERT INTO DesignReference (designid, productid, note, added_by_designerid) VALUES (?, ?, ?, ?)");
                 if ($ins) {
-                    $designerId = (int)($_SESSION['user']['designerid'] ?? 0);
+                    $designerId = (int) ($_SESSION['user']['designerid'] ?? 0);
                     $ins->bind_param('iiis', $designid, $pid, $note, $designerId);
                     // Note: bind_param with NULL string should be passed as nullable string; using 's' for note
                     // but variable types must match - use 'iiss' to be safe
@@ -69,10 +103,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && in_array
                     $ins = $mysqli->prepare("INSERT INTO DesignReference (designid, productid, note, added_by_designerid) VALUES (?, ?, ?, ?)");
                     if ($ins) {
                         $ins->bind_param('iisi', $designid, $pid, $note, $designerId);
-                        if ($ins->execute()) {
-                            $ins->close();
-                            header('Location: ' . $_SERVER['REQUEST_URI']);
-                            exit;
+                            if ($ins->execute()) {
+                                $ins->close();
+                                $base = strtok($_SERVER['REQUEST_URI'], '?');
+                                header('Location: ' . $base . '?id=' . $designid);
+                                exit;
                         } else {
                             $saveErr = 'Failed to add reference: ' . $ins->error;
                         }
@@ -84,17 +119,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && in_array
                 }
             }
         } elseif ($_POST['action'] === 'delete_product_ref') {
-            $refid = isset($_POST['refid']) ? (int)$_POST['refid'] : 0;
+            $refid = isset($_POST['refid']) ? (int) $_POST['refid'] : 0;
             if ($refid <= 0) {
                 $saveErr = 'Invalid reference id.';
             } else {
                 $del = $mysqli->prepare("DELETE FROM DesignReference WHERE id = ? AND designid = ?");
                 if ($del) {
                     $del->bind_param('ii', $refid, $designid);
-                    if ($del->execute()) {
-                        $del->close();
-                        header('Location: ' . $_SERVER['REQUEST_URI']);
-                        exit;
+                        if ($del->execute()) {
+                            $del->close();
+                            $base = strtok($_SERVER['REQUEST_URI'], '?');
+                            header('Location: ' . $base . '?id=' . $designid);
+                            exit;
                     } else {
                         $saveErr = 'Failed to delete reference: ' . $del->error;
                     }
@@ -161,6 +197,7 @@ $designerName = isset($_SESSION['user']['name']) ? $_SESSION['user']['name'] : '
 ?>
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -388,6 +425,9 @@ $designerName = isset($_SESSION['user']['name']) ? $_SESSION['user']['name'] : '
             border-bottom: 1px solid #ecf0f1;
         }
 
+        /* Hide remove buttons (preview mode). Shown when entering edit mode via JS. */
+        .ref-remove { display: none; }
+
         .likes-count {
             font-size: 1.1rem;
             color: #7f8c8d;
@@ -435,6 +475,7 @@ $designerName = isset($_SESSION['user']['name']) ? $_SESSION['user']['name'] : '
         }
     </style>
 </head>
+
 <body>
     <!-- Navbar -->
     <?php include_once __DIR__ . '/../includes/header.php'; ?>
@@ -442,32 +483,35 @@ $designerName = isset($_SESSION['user']['name']) ? $_SESSION['user']['name'] : '
     <main class="container-lg mt-4">
         <div class="design-detail-wrapper">
             <!-- Design Images Section -->
+            <?php if (empty($editMode)): ?>
             <div class="design-image-section">
                 <div class="design-carousel-wrapper">
                     <div class="design-carousel" id="designCarousel">
                         <?php foreach ($designImages as $index => $image): ?>
                             <div class="carousel-item <?= $index === 0 ? 'active' : '' ?>">
-                                <img src="<?= htmlspecialchars('../uploads/designs/' . $image['image_filename']) ?>" alt="Design Image <?= $index + 1 ?>">
+                                <img src="<?= htmlspecialchars('../uploads/designs/' . $image['image_filename']) ?>"
+                                    alt="Design Image <?= $index + 1 ?>">
                             </div>
                         <?php endforeach; ?>
 
                         <!-- Show navigation arrows only if multiple images -->
                         <?php if (count($designImages) > 1): ?>
-                        <div class="carousel-controls">
-                            <button class="carousel-btn" onclick="previousImage()" title="Previous image">
-                                <i class="fas fa-chevron-left"></i>
-                            </button>
-                            <button class="carousel-btn" onclick="nextImage()" title="Next image">
-                                <i class="fas fa-chevron-right"></i>
-                            </button>
-                        </div>
+                            <div class="carousel-controls">
+                                <button class="carousel-btn" onclick="previousImage()" title="Previous image">
+                                    <i class="fas fa-chevron-left"></i>
+                                </button>
+                                <button class="carousel-btn" onclick="nextImage()" title="Next image">
+                                    <i class="fas fa-chevron-right"></i>
+                                </button>
+                            </div>
                         <?php endif; ?>
 
                         <!-- Show indicators only if multiple images -->
                         <?php if (count($designImages) > 1): ?>
                             <div class="carousel-indicators">
                                 <?php foreach ($designImages as $index => $image): ?>
-                                    <div class="indicator <?= $index === 0 ? 'active' : '' ?>" onclick="goToImage(<?= $index ?>)" title="Image <?= $index + 1 ?>"></div>
+                                    <div class="indicator <?= $index === 0 ? 'active' : '' ?>"
+                                        onclick="goToImage(<?= $index ?>)" title="Image <?= $index + 1 ?>"></div>
                                 <?php endforeach; ?>
                             </div>
                         <?php endif; ?>
@@ -477,36 +521,48 @@ $designerName = isset($_SESSION['user']['name']) ? $_SESSION['user']['name'] : '
                         <div class="thumbnail-strip">
                             <?php foreach ($designImages as $index => $image): ?>
                                 <div class="thumbnail <?= $index === 0 ? 'active' : '' ?>" onclick="goToImage(<?= $index ?>)">
-                                    <img src="<?= htmlspecialchars('../uploads/designs/' . $image['image_filename']) ?>" alt="Thumbnail <?= $index + 1 ?>">
+                                    <img src="<?= htmlspecialchars('../uploads/designs/' . $image['image_filename']) ?>"
+                                        alt="Thumbnail <?= $index + 1 ?>">
                                 </div>
                             <?php endforeach; ?>
                         </div>
                     <?php endif; ?>
                 </div>
             </div>
+            <?php endif; ?>
 
             <div class="design-panel">
+
+                <?php
+                // Show edit controls only to the designer who owns this design
+                $isOwnerDesigner = !empty($_SESSION['user']) && (($_SESSION['user']['role'] ?? '') === 'designer') && ((int) ($_SESSION['user']['designerid'] ?? 0) === (int) $design['designerid']);
+                // Server-side edit mode flag (owner must request ?edit=1)
+                $editMode = $isOwnerDesigner && (isset($_GET['edit']) && $_GET['edit'] === '1');
+                ?>
+
+                <?php if (empty($editMode)): ?>
+                <div class="design-title"><?= htmlspecialchars($design['designName'] ?? 'Untitled Design') ?></div>
+                <div style="font-size: 0.9rem; color: #7f8c8d; margin-bottom: 1rem;">Design ID: <?= $designid ?></div>
+                <div class="design-price">HK$<?= number_format((float) ($design['expect_price'] ?? 0)) ?></div>
+
+                <!-- Design Stats -->
+                <div class="design-stats">
+                    <div class="likes-count">
+                        <i class="fas fa-heart text-danger"></i>
+                        <?= $design['likes'] ?? 0 ?>
+                    </div>
+                </div>
+
+                <?php if (empty($editMode)): ?>
                 <div class="back-button">
                     <button type="button" class="btn btn-light" onclick="history.back()" aria-label="Back">
                         ← Back
                     </button>
                 </div>
-
-                <?php
-                // Show edit controls only to the designer who owns this design
-                $isOwnerDesigner = !empty($_SESSION['user']) && (($_SESSION['user']['role'] ?? '') === 'designer') && ((int)($_SESSION['user']['designerid'] ?? 0) === (int)$design['designerid']);
-                if ($isOwnerDesigner): ?>
-                    <div class="mb-3">
-                        <button id="startEditBtn" type="button" class="btn btn-primary" onclick="showEditForm()">Start Edit</button>
-                    </div>
                 <?php endif; ?>
-
-                <div class="design-title"><?= htmlspecialchars($design['designName'] ?? 'Untitled Design') ?></div>
-                <div style="font-size: 0.9rem; color: #7f8c8d; margin-bottom: 1rem;">Design ID: <?= $designid ?></div>
-                <div class="design-price">HK$<?= number_format((float)($design['expect_price'] ?? 0)) ?></div>
-
+                <?php endif; ?>
                 <!-- Design Description -->
-                <?php if (!empty($design['description'])): ?>
+                <?php if (empty($editMode) && !empty($design['description'])): ?>
                 <div class="design-description">
                     <strong>Description:</strong><br>
                     <?= htmlspecialchars($design['description']) ?>
@@ -514,7 +570,7 @@ $designerName = isset($_SESSION['user']['name']) ? $_SESSION['user']['name'] : '
                 <?php endif; ?>
 
                 <!-- Design Tags -->
-                <?php if (!empty($design['tag'])): ?>
+                <?php if (empty($editMode) && !empty($design['tag'])): ?>
                 <div class="design-tags">
                     <strong>Tags:</strong><br>
                     <?php 
@@ -530,33 +586,40 @@ $designerName = isset($_SESSION['user']['name']) ? $_SESSION['user']['name'] : '
                     <div class="alert alert-danger mt-3"><?= htmlspecialchars($saveErr) ?></div>
                 <?php endif; ?>
 
-                <!-- Edit Form (hidden by default) -->
                 <?php if ($isOwnerDesigner): ?>
-                <div id="editFormWrapper" class="mt-3" style="display:none;">
-                    <form method="post" novalidate>
-                        <input type="hidden" name="action" value="save_edit">
-                        <div class="mb-3">
-                            <label class="form-label">Design Name</label>
-                            <input name="designName" class="form-control" value="<?= htmlspecialchars($design['designName'] ?? '') ?>">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Expected Price (HK$)</label>
-                            <input name="expect_price" type="number" step="0.01" class="form-control" value="<?= htmlspecialchars($design['expect_price'] ?? '') ?>">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Tags (comma separated)</label>
-                            <input name="tag" class="form-control" value="<?= htmlspecialchars($design['tag'] ?? '') ?>">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Description</label>
-                            <textarea name="description" class="form-control" rows="4"><?= htmlspecialchars($design['description'] ?? '') ?></textarea>
-                        </div>
-                        <div class="d-flex gap-2">
-                            <button type="submit" class="btn btn-success">Save Changes</button>
-                            <button type="button" class="btn btn-secondary" onclick="hideEditForm()">Cancel</button>
-                        </div>
-                    </form>
-                </div>
+                    <div id="editFormWrapper" class="mt-3" style="<?= !empty($editMode) ? 'display:block;' : 'display:none;' ?>">
+                        <form method="post" novalidate>
+                            <input type="hidden" name="action" value="save_edit">
+                            <div class="mb-3">
+                                <label class="form-label">Design Name</label>
+                                <input name="designName" class="form-control"
+                                    value="<?= htmlspecialchars($design['designName'] ?? '') ?>">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Expected Price (HK$)</label>
+                                <input name="expect_price" type="number" step="0.01" class="form-control"
+                                    value="<?= htmlspecialchars($design['expect_price'] ?? '') ?>">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Tags (comma separated)</label>
+                                <input name="tag" class="form-control"
+                                    value="<?= htmlspecialchars($design['tag'] ?? '') ?>">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Description</label>
+                                <textarea name="description" class="form-control"
+                                    rows="4"><?= htmlspecialchars($design['description'] ?? '') ?></textarea>
+                            </div>
+                            <div id="selectedLikesContainer" class="mb-3" style="display:none;">
+                                <label class="form-label">Items to add as references</label>
+                                <div id="selectedLikes" class="d-flex flex-wrap gap-2"></div>
+                            </div>
+                            <div class="d-flex gap-2">
+                                <button type="submit" class="btn btn-success">Save Changes</button>
+                                <button type="button" class="btn btn-secondary" onclick="hideEditForm()">Cancel</button>
+                            </div>
+                        </form>
+                    </div>
                 <?php endif; ?>
 
                 <!-- Product References -->
@@ -564,82 +627,67 @@ $designerName = isset($_SESSION['user']['name']) ? $_SESSION['user']['name'] : '
                     <h6>Product References</h6>
                     <?php if (count($productRefs) > 0): ?>
                         <ul class="list-group mb-2">
-                        <?php foreach ($productRefs as $ref): ?>
-                            <li class="list-group-item d-flex justify-content-between align-items-start">
-                                <div>
-                                    <strong><?= htmlspecialchars($ref['product_name'] ?? ('Product #' . ($ref['productid'] ?? ''))) ?></strong>
-                                    <?php if (!empty($ref['note'])): ?>
-                                        <div class="text-muted small"><?= htmlspecialchars($ref['note']) ?></div>
+                            <?php foreach ($productRefs as $ref): ?>
+                                <li class="list-group-item d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <strong><?= htmlspecialchars($ref['product_name'] ?? ('Product #' . ($ref['productid'] ?? ''))) ?></strong>
+                                        <?php if (!empty($ref['note'])): ?>
+                                            <div class="text-muted small"><?= htmlspecialchars($ref['note']) ?></div>
+                                        <?php endif; ?>
+                                        <div class="text-muted small">Added: <?= htmlspecialchars($ref['created_at'] ?? '') ?>
+                                        </div>
+                                    </div>
+                                    <?php if ($isOwnerDesigner && !empty($editMode)): ?>
+                                                        <form method="post" class="ref-remove" style="margin:0">
+                                            <input type="hidden" name="action" value="delete_product_ref">
+                                            <input type="hidden" name="refid" value="<?= (int) $ref['id'] ?>">
+                                            <button class="btn btn-sm btn-outline-danger" type="submit"
+                                                onclick="return confirm('Remove this reference?')">Remove</button>
+                                        </form>
                                     <?php endif; ?>
-                                    <div class="text-muted small">Added: <?= htmlspecialchars($ref['created_at'] ?? '') ?></div>
-                                </div>
-                                <?php if ($isOwnerDesigner): ?>
-                                    <form method="post" style="margin:0">
-                                        <input type="hidden" name="action" value="delete_product_ref">
-                                        <input type="hidden" name="refid" value="<?= (int)$ref['id'] ?>">
-                                        <button class="btn btn-sm btn-outline-danger" type="submit" onclick="return confirm('Remove this reference?')">Remove</button>
-                                    </form>
-                                <?php endif; ?>
-                            </li>
-                        <?php endforeach; ?>
+                                </li>
+                            <?php endforeach; ?>
                         </ul>
                     <?php else: ?>
                         <p class="text-muted">No product references yet.</p>
                     <?php endif; ?>
 
                     <?php if ($isOwnerDesigner): ?>
-                        <form method="post" class="row g-2 align-items-center">
-                            <input type="hidden" name="action" value="add_product_ref">
-                            <div class="col-auto">
-                                <label class="visually-hidden">Product ID</label>
-                                <input name="productid" class="form-control" placeholder="Product ID" required>
+                        <div class="d-flex gap-2">
+                            <form id="addProductRefForm" method="post" style="margin:0">
+                                <input type="hidden" name="action" value="add_product_ref">
+                                <input id="productid_input" type="hidden" name="productid" value="">
+                                <input id="product_note_input" type="hidden" name="product_note" value="">
+                            </form>
+                            <div>
+                                <button id="openLikedBtn" class="btn btn-sm btn-outline-secondary" <?= $editMode ? '' : 'style="display:none"' ?>>Add from liked items</button>
                             </div>
-                            <div class="col">
-                                <label class="visually-hidden">Note</label>
-                                <input name="product_note" class="form-control" placeholder="Optional note">
-                            </div>
-                            <div class="col-auto">
-                                <button class="btn btn-sm btn-primary" type="submit">Add Reference</button>
-                            </div>
-                        </form>
-                    <?php endif; ?>
-                </div>
-
-                <!-- Design Stats -->
-                <div class="design-stats">
-                    <div class="likes-count">
-                        <i class="fas fa-heart text-danger"></i>
-                        <span><?= $design['likes'] ?? 0 ?></span>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Comments Section -->
-        <div style="max-width: 1200px; margin: 2rem auto; padding: 0 1rem;">
-            <div class="card shadow-sm border-0">
-                <div class="card-header bg-white py-3">
-                    <h5 class="mb-0"><i class="fas fa-comments me-2"></i>Client Comments (<?= count($comments) ?>)</h5>
-                </div>
-                <div class="card-body">
-                    <?php if (count($comments) > 0): ?>
-                        <div style="max-height: 400px; overflow-y: auto;">
-                            <?php foreach ($comments as $comment): ?>
-                                <div style="border-bottom: 1px solid #ecf0f1; padding: 1rem 0; margin-bottom: 1rem;">
-                                    <strong style="color: #2c3e50;"><?= htmlspecialchars($comment['cname']) ?></strong>
-                                    <div style="color: #7f8c8d; font-size: 0.85rem; margin-bottom: 0.5rem;">
-                                        <?= date('M d, Y H:i', strtotime($comment['timestamp'])) ?>
-                                    </div>
-                                    <p style="color: #5a6c7d; margin: 0;"><?= htmlspecialchars($comment['content']) ?></p>
-                                </div>
-                            <?php endforeach; ?>
                         </div>
-                    <?php else: ?>
-                        <p class="text-muted text-center py-4">No comments yet. Be the first to comment!</p>
                     <?php endif; ?>
                 </div>
             </div>
         </div>
+        <?php if ($isOwnerDesigner): ?>
+            <!-- Liked items chooser (lightweight modal) -->
+            <div id="likedModal"
+                style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1050;align-items:center;justify-content:center;">
+                <div
+                    style="background:white;border-radius:8px;max-width:900px;width:95%;max-height:80vh;overflow:auto;padding:16px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                        <h5 style="margin:0">Choose liked items</h5>
+                        <button id="likedModalClose" class="btn btn-sm btn-outline-secondary">Close</button>
+                    </div>
+                    <div id="likedItemsList" class="row g-2">Loading...</div>
+                </div>
+            </div>
+            <div class="d-flex justify-content-center mb-3">
+                <?php if (empty($editMode)): ?>
+                    <a href="?id=<?= $designid ?>&edit=1" id="startEditBtn" class="btn btn-primary">Start Edit</a>
+                <?php else: ?>
+                    <a href="?id=<?= $designid ?>" class="btn btn-outline-secondary">Exit Edit</a>
+                <?php endif; ?>
+            </div>
+        <?php endif; ?>
     </main>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
@@ -678,7 +726,7 @@ $designerName = isset($_SESSION['user']['name']) ? $_SESSION['user']['name'] : '
         }
 
         // Keyboard navigation
-        document.addEventListener('keydown', function(event) {
+        document.addEventListener('keydown', function (event) {
             if (event.key === 'ArrowRight') nextImage();
             if (event.key === 'ArrowLeft') previousImage();
         });
@@ -689,6 +737,10 @@ $designerName = isset($_SESSION['user']['name']) ? $_SESSION['user']['name'] : '
             const startBtn = document.getElementById('startEditBtn');
             if (wrapper) wrapper.style.display = 'block';
             if (startBtn) startBtn.style.display = 'none';
+            // reveal liked-items button when in edit mode
+            try { const b = document.getElementById('openLikedBtn'); if (b) b.style.display = ''; } catch(e){}
+            // show delete/remove buttons for references
+            try { document.querySelectorAll('.ref-remove').forEach(function(el){ el.style.display = 'inline-block'; }); } catch(e){}
             window.scrollTo({ top: wrapper ? wrapper.offsetTop - 20 : 0, behavior: 'smooth' });
         }
 
@@ -697,7 +749,82 @@ $designerName = isset($_SESSION['user']['name']) ? $_SESSION['user']['name'] : '
             const startBtn = document.getElementById('startEditBtn');
             if (wrapper) wrapper.style.display = 'none';
             if (startBtn) startBtn.style.display = 'inline-block';
+            try { const b = document.getElementById('openLikedBtn'); if (b) b.style.display = 'none'; } catch(e){}
+            // hide delete/remove buttons when leaving edit mode
+            try { document.querySelectorAll('.ref-remove').forEach(function(el){ el.style.display = 'none'; }); } catch(e){}
         }
     </script>
+    <script>
+        // Liked items chooser logic
+        (function () {
+            const openBtn = document.getElementById('openLikedBtn');
+            const modal = document.getElementById('likedModal');
+            const closeBtn = document.getElementById('likedModalClose');
+            const list = document.getElementById('likedItemsList');
+            const addForm = document.getElementById('addProductRefForm');
+            const productIdInput = document.getElementById('productid_input');
+            const selectedLikesContainer = document.getElementById('selectedLikes');
+            const selectedLikesWrapper = document.getElementById('selectedLikesContainer');
+
+            function renderItems(items) {
+                if (!list) return;
+                list.innerHTML = '';
+                if (!items || !items.length) {
+                    list.innerHTML = '<div class="col-12 text-muted">No liked items found.</div>';
+                    return;
+                }
+                items.forEach(it => {
+                    const col = document.createElement('div'); col.className = 'col-6 col-md-4';
+                    const card = document.createElement('div'); card.className = 'card h-100';
+                    const b = document.createElement('div'); b.className = 'card-body d-flex flex-column';
+                    const title = document.createElement('div'); title.className = 'fw-bold mb-2'; title.textContent = it.title || it.pname || it.name || ('#' + (it.id || it.productid || it.item_id || ''));
+                    const img = document.createElement('div'); img.style.minHeight = '80px'; img.style.marginBottom = '8px';
+                    if (it.image) { const im = document.createElement('img'); im.src = it.image; im.style.maxWidth = '100%'; im.style.maxHeight = '120px'; im.style.objectFit = 'cover'; img.appendChild(im); }
+                    const meta = document.createElement('div'); meta.className = 'text-muted small mb-2'; meta.textContent = (it.price ? ('HK$' + it.price) : '');
+                    const btn = document.createElement('button'); btn.className = 'btn btn-sm btn-primary mt-auto'; btn.textContent = 'Add';
+                    btn.addEventListener('click', function () {
+                        const pid = it.productid || it.id || it.item_id || '';
+                        if (!pid) return;
+                        const editForm = document.querySelector('#editFormWrapper form');
+                        if (!editForm) { alert('Enter Edit mode and click "Start Edit" to add references.'); return; }
+                        if (editForm.querySelector('input[name="add_refs[]"][value="' + pid + '"]')) return;
+                        const hid = document.createElement('input'); hid.type = 'hidden'; hid.name = 'add_refs[]'; hid.value = pid; editForm.appendChild(hid);
+                        if (selectedLikesContainer && selectedLikesWrapper) {
+                            selectedLikesWrapper.style.display = '';
+                            const pill = document.createElement('div'); pill.className = 'badge bg-primary text-white d-inline-flex align-items-center';
+                            pill.style.padding = '0.45rem 0.6rem'; pill.style.marginRight = '6px';
+                            const txt = document.createElement('span'); txt.textContent = it.title || it.pname || pid; pill.appendChild(txt);
+                            const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'btn-close btn-close-white btn-sm ms-2'; remove.style.marginLeft = '8px';
+                            remove.addEventListener('click', function () { hid.remove(); pill.remove(); if (!document.querySelector('#editFormWrapper form input[name="add_refs[]"]')) selectedLikesWrapper.style.display = 'none'; });
+                            pill.appendChild(remove);
+                            selectedLikesContainer.appendChild(pill);
+                        }
+                    });
+                    b.appendChild(title); b.appendChild(img); b.appendChild(meta); b.appendChild(btn);
+                    card.appendChild(b); col.appendChild(card); list.appendChild(col);
+                });
+            }
+
+            async function loadLiked() {
+                if (!list) return;
+                list.innerHTML = '<div class="col-12 text-muted">Loading...</div>';
+                try {
+                    const res = await fetch('<?= dirname($_SERVER['SCRIPT_NAME']) ?>/../Public/get_chat_suggestions.php');
+                    const j = await res.json();
+                    const items = (j && j.liked_products) ? j.liked_products : [];
+                    renderItems(items);
+                } catch (e) { list.innerHTML = '<div class="col-12 text-danger">Failed to load liked items.</div>'; }
+            }
+
+            if (openBtn && modal) {
+                openBtn.addEventListener('click', function (e) {
+                    e.preventDefault(); modal.style.display = 'flex'; loadLiked();
+                });
+            }
+            if (closeBtn && modal) { closeBtn.addEventListener('click', function () { modal.style.display = 'none'; }); }
+            if (modal) { modal.addEventListener('click', function (ev) { if (ev.target === modal) modal.style.display = 'none'; }); }
+        })();
+    </script>
 </body>
+
 </html>

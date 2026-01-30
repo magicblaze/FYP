@@ -24,6 +24,7 @@ $user_name = $user['name'];
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="../css/styles.css">
 </head>
+
 <body>
     <?php include_once __DIR__ . '/../includes/header.php'; ?>
 
@@ -39,33 +40,31 @@ $user_name = $user['name'];
                 <h5 class="card-title mb-4">
                     <i class="fas fa-tasks me-2"></i>Select an Order Category
                 </h5>
-                <div class="btn-group">
-                    <button class="btn btn-primary" onclick="location.href='Order_Management.php'">
-                        <i class="fas fa-list me-2"></i>Total Order
-                    </button>
-                    <button class="btn btn-warning" onclick="location.href='Manager_MyOrder_AwaitingConfirm.php'">
-                        <i class="fas fa-hourglass-half me-2"></i>Awaiting Confirm
-                    </button>
-                    <button class="btn btn-success" onclick="location.href='Manager_MyOrder_Completed.php'">
-                        <i class="fas fa-check-circle me-2"></i>Completed
-                    </button>
-                    <button class="btn btn-info" onclick="location.href='Manager_MyOrder_buyProduct.php'">
-                        <i class="fas fa-pencil-alt me-2"></i>Help to Designing
-                    </button>
-                    <button class="btn btn-danger" onclick="location.href='Manager_MyOrder_Rejected.php'">
-                        <i class="fas fa-times-circle me-2"></i>Rejected
-                    </button>
-                </div>
+                <button class="btn btn-primary" onclick="location.href='Order_Management.php'">
+                    <i class="fas fa-list me-2"></i>Total Order
+                </button>
+                <button class="btn btn-warning" onclick="location.href='Manager_MyOrder_AwaitingConfirm.php'">
+                    <i class="fas fa-hourglass-half me-2"></i>Awaiting Confirm
+                </button>
+                <button class="btn btn-success" onclick="location.href='Manager_MyOrder_Completed.php'">
+                    <i class="fas fa-check-circle me-2"></i>Completed
+                </button>
+                <button class="btn btn-info" onclick="location.href='Manager_MyOrder_buyProduct.php'">
+                    <i class="fas fa-pencil-alt me-2"></i>Help to Designing
+                </button>
+                <button class="btn btn-danger" onclick="location.href='Manager_MyOrder_Rejected.php'">
+                    <i class="fas fa-times-circle me-2"></i>Rejected
+                </button>
             </div>
         </div>
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             const currentPage = window.location.pathname.split('/').pop();
             const navLinks = document.querySelectorAll('.nav-links a, .nav a');
-            
+
             navLinks.forEach(link => {
                 if (link.getAttribute('href') === currentPage) {
                     link.classList.add('active');
@@ -79,4 +78,5 @@ $user_name = $user['name'];
     <!-- Include chat widget -->
     <?php include __DIR__ . '/../Public/chat_widget.php'; ?>
 </body>
+
 </html>

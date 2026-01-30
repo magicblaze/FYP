@@ -71,7 +71,7 @@ $availableStatuses = ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelle
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Manage Orders - HappyDesign</title>
+    <title>Manage Order - HappyDesign</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="../css/styles.css">
@@ -442,8 +442,8 @@ $availableStatuses = ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelle
             <div class="product-card">
                 <div class="no-orders">
                     <i class="fas fa-inbox" style="font-size: 3rem; color: #ccc; margin-bottom: 1rem;"></i>
-                    <h4>No Orders Found</h4>
-                    <p>You don't have any orders containing your products yet.</p>
+                    <h4>No Order Found</h4>
+                    <p>You don't have any order containing your products yet.</p>
                 </div>
             </div>
         <?php endif; ?>

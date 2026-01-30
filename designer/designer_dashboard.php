@@ -58,7 +58,6 @@ $designerName = $_SESSION['user']['name'];
             padding: 1.25rem;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
             text-align: center;
-            height: 100%;
         }
 
         .stat-number {

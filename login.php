@@ -185,7 +185,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="col-12" style="max-width: 520px;">
                 <div class="card">
                     <div class="card-body">
-                        <h1 class="h4 text-center mb-3">HappyDesign</h1>
+                        <h1 class="h4 text-center mb-3 text-dark">HappyDesign</h1>
                         <p class="text-center text-muted mb-4">Please sign in to continue</p>
 
                         <?php if ($error): ?>

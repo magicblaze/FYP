@@ -27,7 +27,7 @@ if ($orderId <= 0) {
 }
 
 // Fetch order details with verification that it belongs to the client
-$orderSql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.gross_floor_area,
+$orderSql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.gross_floor_area, o.deposit,
               d.designid, d.expect_price, d.tag, dz.dname, dz.designerid,
               c.budget
              FROM `Order` o

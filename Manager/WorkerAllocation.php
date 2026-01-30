@@ -422,7 +422,7 @@ mysqli_stmt_close($existing_display_stmt);
                             <?php endforeach; ?>
                         </tbody>
                         <tfoot>
-                            <tr class="table-light">
+                            <tr class="table">
                                 <td colspan="6">
                                     <small class="text-success">
                                         <i class="fas fa-info-circle me-1"></i>
