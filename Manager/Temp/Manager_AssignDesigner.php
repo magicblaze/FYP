@@ -127,7 +127,7 @@ $stats = mysqli_fetch_assoc($stats_result);
     <title>HappyDesign - Assign Designer</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="../css/Manager_style.css">
+    <link rel="stylesheet" href="../css/styles.css">
     <style>
         .order-card {
             border-left: 4px solid #007bff;

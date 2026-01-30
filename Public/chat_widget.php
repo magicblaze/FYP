@@ -1046,7 +1046,6 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
                 holder.appendChild(img);
               } else {
                 const badge = document.createElement('div'); badge.className = 'file-badge'; badge.textContent = 'FILE'; holder.appendChild(badge);
-                const span = document.createElement('div'); span.textContent = file.name; span.className = 'name small'; holder.appendChild(span);
               }
               // actions
               const rm = document.createElement('button');
@@ -1106,17 +1105,9 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
         // Prefer server-provided payload when this file is included from a page
         <?php if (isset($CHAT_SHARE) && is_array($CHAT_SHARE)): ?>
         const payload = <?= json_encode($CHAT_SHARE) ?>;
-        <?php else: ?>
-        const payload = window.__chat_share_payload || null;
         <?php endif; ?>
-        // Always show the share button so users can open the share chooser on any page.
         shareBtn.style.display = '';
-        // If no page-specific payload was provided, leave the default share chooser behavior
-        // (the separate share modal script wires `shareBtn` to open the chooser). Only
-        // attach the special quick-share handler when a payload exists.
         if (!payload) { return; }
-        // Prefer the image already rendered on the page (design_detail.php uses `$mainImg`) so
-        // the widget preview uses the same resolved src. The DOM `img.src` will be absolute.
         try {
           const pageImg = document.querySelector('.design-image-wrapper img');
           if (pageImg && pageImg.src) {

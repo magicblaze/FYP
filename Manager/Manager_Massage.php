@@ -25,7 +25,7 @@ $userAvatar = substr($userName, 0, 1);
 
     <!-- 样式文件 -->
     <link rel="stylesheet" href="../css/ChatRoom_style.css">
-    <link rel="stylesheet" href="../css/Manager_style.css">
+    <link rel="stylesheet" href="../css/styles.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     

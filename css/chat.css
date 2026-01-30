@@ -1,7 +1,3 @@
-/* Centralized, lightweight chat styles — "simplelist" theme
-   Intended to be included on pages using the chat widget/chooser.
-   Keeps spacing, avatars, and typography consistent. */
-
 :root {
   --chat-bg: #ffffff;
   --chat-muted: #6c757d;
