@@ -161,9 +161,13 @@ while ($row = $result->fetch_assoc()) {
 }
 
 $stmt->close();
-
-$status = strtolower(trim($order['ostatus'] ?? ''));
-$canEdit = in_array($status, ['designing']);
+$anyCanEdit = false;
+foreach ($orders as $o) {
+    if (strtolower(trim($o['ostatus'] ?? '')) === 'designing') {
+        $anyCanEdit = true;
+        break;
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -757,7 +761,7 @@ $canEdit = in_array($status, ['designing']);
     <!-- Dashboard Content -->
     <main class="container-lg mt-4">
         <div class="mt-5 mb-4 text-center">
-            <?php if ($canEdit): ?>
+            <?php if ($anyCanEdit): ?>
                 <h2>Proposal Drafter</h2>
             <?php else: ?>
                 <h2>Order Detail</h2>
@@ -768,6 +772,7 @@ $canEdit = in_array($status, ['designing']);
         <?php if (count($orders) > 0): ?>
 
             <?php foreach ($orders as $order): ?>
+                <?php $canEdit = (strtolower(trim($order['ostatus'] ?? '')) === 'designing'); ?>
                 <div class="order-card">
                     <!-- Order Title and Status (Main Focus) -->
                     <div class="order-title-bar">
