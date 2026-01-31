@@ -863,7 +863,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
 
 
                 <!-- Edit Sections -->
-                <div class="row">
+                <div class="row mt-3">
                     <?php if ($status === 'reviewing design proposal'): ?>
                         <div class="col-12 mt-3">
                             <div class="card border-primary mb-4">
@@ -1155,9 +1155,9 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                             </div>
                         </div>
 
-                                                            
+
                         <div class="col-12">
-                            <div class="card h-100">
+                            <div class="card">
                                 <div class="card-header">
                                     <h5 class="card-title mb-0">
                                         <i class="fas fa-tags me-2"></i>Product Reference Status
@@ -1268,8 +1268,47 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                     </div>
                                 </div>
                             </div>
-                        <?php endif; ?>
-                    </div>
+                            <?php
+                                // Ensure $allRefsConfirmed is defined before use (check referenced product statuses)
+                                $allRefsConfirmed = true;
+                                if (!empty($references)) {
+                                    foreach ($references as $r) {
+                                        $rs = strtolower(trim($r['status'] ?? ''));
+                                        if (!in_array($rs, ['confirmed', 'approved'])) {
+                                            $allRefsConfirmed = false;
+                                            break;
+                                        }
+                                    }
+                                }
+                            ?>
+
+                            <div class="col-12 mt-3">
+                                <div class="card border-primary">
+                                    <div class="card-body text-center">
+                                        <div class="mt-3">
+                                            <?php if ($allRefsConfirmed): ?>
+                                                <form method="post"
+                                                    onsubmit="return confirm('Submit the 2nd proposal to the client for review?');">
+                                                    <input type="hidden" name="submit_second_proposal" value="1">
+                                                    <button type="submit" class="btn btn-primary">
+                                                        Submit 2nd Proposal for Client Review
+                                                    </button>
+                                                </form>
+                                            <?php else: ?>
+                                                <div class="alert alert-warning mb-0">
+                                                    <i class="fas fa-exclamation-triangle me-2"></i>
+                                                    Not all referenced products have been confirmed. Please confirm all product
+                                                    references
+                                                    before
+                                                    submitting the 2nd proposal.
+                                                </div>
+                                            <?php endif; ?>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    <?php endif; ?>
                     <!-- Proposal Preview Modal -->
                     <div class="modal fade" id="proposalPreviewModal" tabindex="-1" aria-hidden="true">
                         <div class="modal-dialog modal-xl modal-dialog-centered">
@@ -1309,34 +1348,6 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                             </div>
                         </div>
                     </div>
-
-                    <?php if ($status === 'drafting 2nd proposal'): ?>
-                        <div class="col-12 mt-3">
-                            <div class="card border-primary">
-                                <div class="card-body text-center">
-                                    <div class="mt-3">
-                                        <?php if ($allRefsConfirmed): ?>
-                                            <form method="post"
-                                                onsubmit="return confirm('Submit the 2nd proposal to the client for review?');">
-                                                <input type="hidden" name="submit_second_proposal" value="1">
-                                                <button type="submit" class="btn btn-primary">
-                                                    Submit 2nd Proposal for Client Review
-                                                </button>
-                                            </form>
-                                        <?php else: ?>
-                                            <div class="alert alert-warning mb-0">
-                                                <i class="fas fa-exclamation-triangle me-2"></i>
-                                                Not all referenced products have been confirmed. Please confirm all product
-                                                references
-                                                before
-                                                submitting the 2nd proposal.
-                                            </div>
-                                        <?php endif; ?>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    <?php endif; ?>
                     <!-- Confirm/Reject Order Section -->
                     <div class="row mt-4" style="<?php echo !$show_confirm_reject ? 'display: none;' : ''; ?>">
                         <div class="col-lg-12">
@@ -1427,12 +1438,11 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                     </a>
                 </div>
             </div>
-        </div>
 
-        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
+            <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
 
-        <!-- Include chat widget -->
-        <?php include __DIR__ . '/../Public/chat_widget.php'; ?>
+            <!-- Include chat widget -->
+            <?php include __DIR__ . '/../Public/chat_widget.php'; ?>
 </body>
 
 </html>
