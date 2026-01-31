@@ -865,10 +865,10 @@ foreach ($orders as $o) {
                         </div>
                     <?php endif; ?>
 
-                    <!-- Design picture Section -->
+                    <!-- Design proposal Section -->
                     <div class="designed-picture-section" style="margin-top: 1.5rem;">
-                        <h6 class="mb-2 section-title"><i class="fas fa-file-alt me-2"></i>Design Picture</h6>
-                        <div class="muted-hint mb-3">Upload images or PDF files for client review.</div>
+                        <h6 class="mb-2 section-title"><i class="fas fa-file-alt me-2"></i>Design Proposal</h6>
+                        <div class="muted-hint mb-3">Upload images or PDF files.</div>
 
                         <?php if (!empty($order['pictures'])): ?>
                             <div class="picture-gallery">
@@ -876,9 +876,6 @@ foreach ($orders as $o) {
                                     <div class="picture-item">
                                         <img src="../uploads/designed_Picture/<?= htmlspecialchars($pic['filename']) ?>"
                                             alt="Designed Picture">
-                                        <span class="picture-status status-<?= $pic['status'] ?>">
-                                            <?= ucfirst($pic['status']) ?>
-                                        </span>
                                         <div class="picture-actions">
                                             <button
                                                 onclick="viewPicture(<?= (int) $pic['pictureid'] ?>, <?= htmlspecialchars(json_encode($pic['filename']), ENT_QUOTES, 'UTF-8') ?>)">
@@ -906,30 +903,6 @@ foreach ($orders as $o) {
 
                         <!-- Upload Area -->
                         <div class="mt-3">
-                            <?php
-                            $hasPendingPicture = false;
-                            $hasApprovedPicture = false;
-                            foreach ($order['pictures'] as $pic) {
-                                if ($pic['status'] === 'pending') {
-                                    $hasPendingPicture = true;
-                                }
-                                if ($pic['status'] === 'approved') {
-                                    $hasApprovedPicture = true;
-                                }
-                            }
-                            ?>
-                            <?php if ($hasApprovedPicture): ?>
-                                <div
-                                    style="background: #d4edda; border: 2px dashed #28a745; border-radius: 8px; padding: 2rem; text-align: center;">
-                                    <i class="fas fa-check-circle"
-                                        style="font-size: 2rem; color: #28a745; margin-bottom: 0.5rem; display: block;"></i>
-                                    <strong style="color: #155724;">Picture Approved</strong>
-                                    <p class="text-muted mb-0" style="font-size: 0.9rem; color: #155724;">This design has been
-                                        approved. No further uploads are allowed.</p>
-                                </div>
-                            <?php elseif ($hasPendingPicture): ?>
-                                <?php /* Pending picture exists - hide old message */ ?>
-                            <?php else: ?>
                                 <div id="uploadContainer_<?= $order['orderid'] ?>" class="upload-section-hidden">
                                     <label class="upload-area" id="uploadArea_<?= $order['orderid'] ?>">
                                         <div>
@@ -952,18 +925,17 @@ foreach ($orders as $o) {
                                         </div>
                                     </div>
                                 </div>
-                            <?php endif; ?>
                         </div>
                     </div>
 
                     <?php if (!empty($order['references'])): ?>
-                        <div class="order-info" style="background:#fff7e6;border-left:4px solid #ffc107;margin-top:1rem">
-                            <div class="order-info-item" style="display: flex; justify-content: space-between; align-items: center;">
-                                <strong><i class="fas fa-link me-2"></i>References (<?= count($order['references']) ?>)</strong>
-                                <button class="btn btn-sm btn-warning" id="refAddBtn_<?= $order['orderid'] ?>" onclick="toggleReferenceEdit(<?= $order['orderid'] ?>, true)" style="display: none;">
-                                    <i class="fas fa-plus me-1"></i>Add Reference
-                                </button>
-                            </div>
+                    <div class="order-info" style="background:#fff7e6;border-left:4px solid #ffc107;margin-top:1rem">
+                        <div class="order-info-item" style="display: flex; justify-content: space-between; align-items: center;">
+                            <strong><i class="fas fa-link me-2"></i>References (<?= count($order['references']) ?>)</strong>
+                            <button class="btn btn-sm btn-warning" id="refAddBtn_<?= $order['orderid'] ?>" onclick="toggleReferenceEdit(<?= $order['orderid'] ?>, true)" style="display: none;">
+                                <i class="fas fa-plus me-1"></i>Add Reference
+                            </button>
+                        </div>
                             <div style="margin-top:0.5rem">
                                 <?php foreach ($order['references'] as $ref):
                                     $refName = null; $refImg = null; $refLink = null;
