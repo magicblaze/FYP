@@ -193,8 +193,8 @@ CREATE TABLE `Comment_design` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 INSERT INTO `Comment_design` (`comment_designid`,`clientid`,`content`,`designid`) VALUES
-(1, 2,'abc',1),
-(2, 1,'123',1);
+(1, 2,'I like it.',1),
+(2, 1,'This design is great!',1);
 
 -- Product table
 CREATE TABLE `Product` (
