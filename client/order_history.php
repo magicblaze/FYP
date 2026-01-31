@@ -310,13 +310,15 @@ if (!empty($_GET['msg'])) {
                         <?php endif; ?>
                         <div style="margin-top: 0.75rem; display:flex; gap:8px;">
                             <!-- Primary view/proposal/details button -->
-                            <a href="Order_View.php?id=<?= (int)$order['orderid'] ?>" class="view-details-btn" onclick="event.stopPropagation();">
-                                <?php if ($statusLower === 'waiting client review'): ?>
-                                    <i class="fas fa-file-image me-1"></i>View Proposal
+                            
+                                <?php if ($statusLower === 'waiting client review' || $statusLower === 'waiting client payment' || $statusLower === 'complete'): ?>
+                                    <a href="Order_View.php?id=<?= (int)$order['orderid'] ?>" class="view-details-btn" onclick="event.stopPropagation();">
+                                    <i class="fas fa-file-image me-1"></i>View Proposal</a>
                                 <?php else: ?>
-                                    <i class="fas fa-arrow-right me-1"></i>View Details
+                                    <a href="order_detail.php?orderid=<?= (int)$order['orderid'] ?>" class="view-details-btn" onclick="event.stopPropagation();">
+                                    <i class="fas fa-arrow-right me-1"></i>View Details</a>
                                 <?php endif; ?>
-                            </a>
+
 
                             <!-- Proceed to Payment button (separate) -->
                             <?php if ($statusLower === 'waiting client payment'): ?>

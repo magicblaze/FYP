@@ -567,24 +567,6 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€
                             <img src="../uploads/designed_Picture/<?= htmlspecialchars($picture['filename']) ?>"
                                 alt="Designed Picture" class="picture-image"
                                 onclick="viewPicture('<?= htmlspecialchars($picture['filename']) ?>')">
-                            <div class="picture-info">
-                                <div class="picture-status status-<?= $picture['status'] ?>"><?= ucfirst($picture['status']) ?>
-                                </div>
-                                <div style="font-size: 0.85rem; color: #7f8c8d; margin-bottom: 0.5rem;">
-                                    <?= date('M d, Y H:i', strtotime($picture['upload_date'])) ?></div>
-                                <?php if ($picture['status'] === 'pending'): ?>
-                                    <div class="picture-actions">
-                                        <button class="btn-approve" onclick="approvePicture(<?= $picture['pictureid'] ?>)"><i
-                                                class="fas fa-check me-1"></i>Approve</button>
-                                        <button class="btn-reject" onclick="openRejectModal(<?= $picture['pictureid'] ?>)"><i
-                                                class="fas fa-times me-1"></i>Reject</button>
-                                    </div>
-                                <?php endif; ?>
-                                <?php if ($picture['status'] === 'rejected' && !empty($picture['rejection_reason'])): ?>
-                                    <div class="rejection-reason"><strong>Reason:</strong>
-                                        <?= htmlspecialchars($picture['rejection_reason']) ?></div>
-                                <?php endif; ?>
-                            </div>
                         </div>
                     <?php endwhile; ?>
                 </div>
@@ -891,100 +873,6 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€
             modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;z-index:2000;';
             modal.innerHTML = '<div style="max-width:90%;max-height:90%;"><img src="../uploads/designed_Picture/' + filename + '" style="max-width:100%;max-height:100%;border-radius:8px;" onclick="this.parentElement.parentElement.remove();"><p style="color:white;text-align:center;margin-top:1rem;cursor:pointer;" onclick="this.parentElement.parentElement.remove();">Click to close</p></div>';
             document.body.appendChild(modal);
-        }
-
-        function approvePicture(pictureId) {
-            if (confirm('Are you sure you want to approve this picture?')) {
-                const formData = new FormData();
-                formData.append('pictureid', pictureId);
-
-                fetch('approve_picture.php', {
-                    method: 'POST',
-                    body: formData
-                })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            alert(data.message);
-                            location.reload();
-                        } else {
-                            alert('Error: ' + data.message);
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                        alert('An error occurred while approving the picture.');
-                    });
-            }
-        }
-
-        function openRejectModal(pictureId) {
-            rejectModalPictureId = pictureId;
-            const modal = document.getElementById('rejectModal');
-            if (!modal) {
-                createRejectModal();
-            }
-            document.getElementById('rejectModal').style.display = 'block';
-        }
-
-        function createRejectModal() {
-            const modal = document.createElement('div');
-            modal.id = 'rejectModal';
-            modal.style.cssText = 'display:none;position:fixed;z-index:1000;left:0;top:0;width:100%;height:100%;background-color:rgba(0,0,0,0.5);';
-            modal.innerHTML = `
-                <div style="background-color:white;margin:10% auto;padding:2rem;border-radius:8px;width:90%;max-width:400px;box-shadow:0 4px 12px rgba(0,0,0,0.2);">
-                    <div style="font-size:1.25rem;font-weight:600;margin-bottom:1rem;">Reject Picture</div>
-                    <textarea id="rejectionReason" placeholder="Please provide a reason for rejection..." style="width:100%;height:100px;padding:0.75rem;border:1px solid #dee2e6;border-radius:4px;font-family:Arial;" required></textarea>
-                    <div style="display:flex;gap:0.5rem;margin-top:1rem;">
-                        <button onclick="closeRejectModal()" style="flex:1;padding:0.75rem;background-color:#bdc3c7;color:white;border:none;border-radius:4px;cursor:pointer;font-weight:500;">Cancel</button>
-                        <button onclick="confirmReject()" style="flex:1;padding:0.75rem;background-color:#e74c3c;color:white;border:none;border-radius:4px;cursor:pointer;font-weight:500;">Reject</button>
-                    </div>
-                </div>
-            `;
-            document.body.appendChild(modal);
-        }
-
-        function closeRejectModal() {
-            document.getElementById('rejectModal').style.display = 'none';
-            document.getElementById('rejectionReason').value = '';
-            rejectModalPictureId = null;
-        }
-
-        function confirmReject() {
-            const reason = document.getElementById('rejectionReason').value.trim();
-            if (!reason) {
-                alert('Please provide a reason for rejection.');
-                return;
-            }
-
-            const formData = new FormData();
-            formData.append('pictureid', rejectModalPictureId);
-            formData.append('reason', reason);
-
-            fetch('reject_picture.php', {
-                method: 'POST',
-                body: formData
-            })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        alert(data.message);
-                        location.reload();
-                    } else {
-                        alert('Error: ' + data.message);
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    alert('An error occurred while rejecting the picture.');
-                });
-        }
-
-        window.onclick = function (event) {
-            const modal = document.getElementById('rejectModal');
-            if (modal && event.target === modal) {
-                closeRejectModal();
-            }
         }
     </script>
 </body>
