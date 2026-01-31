@@ -116,9 +116,22 @@ $edit_reference = isset($_GET['edit']) && $_GET['edit'] == 'reference';
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (isset($_POST['update_status'])) {
-        $new_status = mysqli_real_escape_string($mysqli, $_POST['ostatus']);
-        $order_finish_date = mysqli_real_escape_string($mysqli, $_POST['OrderFinishDate']);
-        $design_finish_date = mysqli_real_escape_string($mysqli, $_POST['DesignFinishDate']);
+        $new_status = mysqli_real_escape_string($mysqli, $_POST['ostatus'] ?? '');
+        $order_finish_date = mysqli_real_escape_string($mysqli, $_POST['OrderFinishDate'] ?? '');
+        $design_finish_date = mysqli_real_escape_string($mysqli, $_POST['DesignFinishDate'] ?? '');
+
+        // Normalize HTML5 datetime-local (YYYY-MM-DDTHH:MM) to MySQL DATETIME (YYYY-MM-DD HH:MM:SS)
+        $normalize_dt = function($d) {
+            if (empty($d)) return null;
+            $d = str_replace('T', ' ', $d);
+            if (preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/', $d)) {
+                $d .= ':00';
+            }
+            return $d;
+        };
+
+        $order_finish_date = $normalize_dt($order_finish_date);
+        $design_finish_date = $normalize_dt($design_finish_date);
 
         // Update order status
         $update_order_status_sql = "UPDATE `Order` SET ostatus = ? WHERE orderid = ?";
@@ -373,14 +386,27 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
         <?php if ($order): ?>
 
-            <!-- Workflow Status Banner -->
-            <div class="alert <?php echo $show_confirm_reject ? 'alert-warning' : 'alert-info'; ?> mb-4" role="alert">
-                <i class="fas <?php echo $show_confirm_reject ? 'fa-hourglass-half' : 'fa-pencil-alt'; ?> me-2"></i>
-                <?php if ($show_confirm_reject): ?>
-                    <strong>Pending Confirmation:</strong> Please review the details, assign a designer, then confirm or reject this order.
-                <?php else: ?>
-                    <strong>In Progress:</strong> This order has been confirmed. You can now update schedules, requirements, costs, and monitor the design process.
-                <?php endif; ?>
+            <!-- Workflow Status Banner (dynamic messages per status) -->
+            <?php
+                $banner_status = strtolower($order['ostatus'] ?? 'waiting confirm');
+                $status_map = [
+                    'waiting confirm' => ['class' => 'alert-warning', 'icon' => 'fa-hourglass-half', 'title' => 'Pending Confirmation', 'text' => 'Please review the details, assign a designer, then confirm or reject this order.'],
+                    'designing' => ['class' => 'alert-info', 'icon' => 'fa-pencil-alt', 'title' => 'Designing', 'text' => 'Design is in progress. Please contact via chat if needed.'],
+                    'drafting 2nd proposal' => ['class' => 'alert-info', 'icon' => 'fa-pencil-alt', 'title' => 'Drafting 2nd Proposal', 'text' => 'Please preparing a 2nd proposal. Update all info if needed.'],
+                    'reviewing design proposal' => ['class' => 'alert-info', 'icon' => 'fa-search', 'title' => 'Proposal Review', 'text' => 'A design proposal has been submitted. Please review and confirm or request changes.'],
+                    'waiting client review' => ['class' => 'alert-warning', 'icon' => 'fa-eye', 'title' => 'Waiting Client Review', 'text' => '2nd Proposal has been submitted, please wait for client to review.'],
+                    'waiting payment' => ['class' => 'alert-warning', 'icon' => 'fa-credit-card', 'title' => 'Waiting Payment', 'text' => 'Waiting for client payment to proceed.'],
+                    'waiting client payment' => ['class' => 'alert-warning', 'icon' => 'fa-credit-card', 'title' => 'Waiting Payment', 'text' => 'Waiting for client payment to proceed.'],
+                    'complete' => ['class' => 'alert-success', 'icon' => 'fa-check-circle', 'title' => 'Complete', 'text' => 'Order completed successfully.'],
+                    'reject' => ['class' => 'alert-danger', 'icon' => 'fa-times-circle', 'title' => 'Rejected', 'text' => 'Order has been rejected. See notes for reason.'],
+                ];
+
+                $banner = $status_map[$banner_status] ?? ['class' => 'alert-info', 'icon' => 'fa-info-circle', 'title' => ucwords($banner_status), 'text' => 'Status: ' . $banner_status];
+            ?>
+
+            <div class="alert <?php echo $banner['class']; ?> mb-4" role="alert">
+                <i class="fas <?php echo $banner['icon']; ?> me-2"></i>
+                <strong><?php echo $banner['title']; ?>:</strong> <?php echo $banner['text']; ?>
             </div>
 
             <!-- Customer Detail Card -->
@@ -704,54 +730,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     </div>
                 </div>
             <?php endif; ?>
-
-            <div class="row" style="<?php echo ($show_confirm_reject || $hideEditCards) ? 'display: none;' : ''; ?>">
-                <!-- Update Status Section -->
-                <div class="col-lg-6 mb-4">
-                    <div class="card h-100">
-                        <div class="card-header bg-light">
-                            <h5 class="card-title mb-0">
-                                <i class="fas fa-tasks me-2"></i>Update Schedule
-                            </h5>
-                        </div>
-                        <div class="card-body">
-                            <!-- View Mode -->
-                            <div id="status-view" class="<?php echo $edit_status ? 'd-none' : ''; ?>">
-                                <button type="button" class="btn btn-primary w-100" onclick="toggleEdit('status', true)">
-                                    <i class="fas fa-edit me-2"></i>Update Schedule
-                                </button>
-                            </div>
-
-                            <!-- Edit Mode -->
-                            <div id="status-edit" class="<?php echo $edit_status ? '' : 'd-none'; ?>">
-                                <form method="post">
-                                    <input type="hidden" name="update_status" value="1">
-                                    <div class="mb-3">
-                                        <label class="form-label fw-bold">Order Finish Date</label>
-                                        <input type="datetime-local" name="OrderFinishDate" class="form-control" value="<?php echo isset($order['OrderFinishDate']) && $order['OrderFinishDate'] != '0000-00-00 00:00:00'
-                                            ? date('Y-m-d\TH:i', strtotime($order['OrderFinishDate']))
-                                            : date('Y-m-d\TH:i', strtotime('+7 days')); ?>">
-                                    </div>
-                                    <div class="mb-3">
-                                        <label class="form-label fw-bold">Design Finish Date</label>
-                                        <input type="datetime-local" name="DesignFinishDate" class="form-control" value="<?php echo isset($order['DesignFinishDate']) && $order['DesignFinishDate'] != '0000-00-00 00:00:00'
-                                            ? date('Y-m-d\TH:i', strtotime($order['DesignFinishDate']))
-                                            : date('Y-m-d\TH:i', strtotime('+3 days')); ?>">
-                                    </div>
-                                    <div class="d-flex gap-2">
-                                        <button type="submit" class="btn btn-success flex-grow-1">
-                                            <i class="fas fa-save me-2"></i>Save Changes
-                                        </button>
-                                        <button type="button" class="btn btn-secondary"
-                                            onclick="toggleEdit('status', false)">
-                                            <i class="fas fa-times me-2"></i>Cancel
-                                        </button>
-                                    </div>
-                                </form>
-                            </div>
-                        </div>
-                    </div>
-                </div>
 
                 <!-- Update Order Information Section -->
                 <div class="col-lg-6 mb-4">
