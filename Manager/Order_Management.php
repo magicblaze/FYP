@@ -157,73 +157,73 @@ $stats = mysqli_fetch_assoc($stats_result);
                     </div>
                 </div>
             </div>
+        </div>
 
-            <!-- Orders Table -->
-            <div class="table-container">
-                <table class="table">
-                    <thead>
+        <!-- Orders Table -->
+        <div class="table-container">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Order ID</th>
+                        <th>Client</th>
+                        <th>Designer</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php while ($row = mysqli_fetch_assoc($result)):
+                        // Determine status class
+                        $status_class = '';
+                        switch ($row["ostatus"]) {
+                            case 'complete':
+                                $status_class = 'status-completed';
+                                break;
+                            case 'designing':
+                            case 'drafting 2nd proposal':
+                            case 'reviewing design proposal':
+                                $status_class = 'status-designing';
+                                break;
+                            case 'waiting confirm':
+                            case 'waiting client review':
+                            case 'waiting payment':
+                                $status_class = 'status-pending';
+                                break;
+                            case 'reject':
+                                $status_class = 'bg-danger text-white';
+                                break;
+                            default:
+                                $status_class = 'status-pending';
+                        }
+                        ?>
                         <tr>
-                            <th>Order ID</th>
-                            <th>Client</th>
-                            <th>Designer</th>
-                            <th>Status</th>
-                            <th>Actions</th>
+                            <td>
+                                <strong>#<?php echo htmlspecialchars($row["orderid"]); ?></strong>
+                            </td>
+                            <td>
+                                <strong><?php echo htmlspecialchars($row["client_name"] ?? 'N/A'); ?></strong>
+                                <br>
+                                <small class="text-muted">ID:
+                                    <?php echo htmlspecialchars($row["clientid"] ?? 'N/A'); ?></small>
+                            </td>
+                            <td>
+                                <strong><?php echo htmlspecialchars($row["designer_name"] ?? 'N/A'); ?></strong>
+                            </td>
+                            <td>
+                                <span class="status-badge <?php echo $status_class; ?>">
+                                    <?php echo htmlspecialchars($row["ostatus"]); ?>
+                                </span>
+                            </td>
+                            <td>
+                                <a href="Order_Edit.php?id=<?php echo $row["orderid"]; ?>" class="btn btn-sm btn-primary">
+                                    <i class="fas fa-edit me-1"></i>
+                                </a>
+                            </td>
                         </tr>
-                    </thead>
-                    <tbody>
-                        <?php while ($row = mysqli_fetch_assoc($result)):
-                            // Determine status class
-                            $status_class = '';
-                            switch ($row["ostatus"]) {
-                                case 'complete':
-                                    $status_class = 'status-completed';
-                                    break;
-                                case 'designing':
-                                case 'drafting 2nd proposal':
-                                case 'reviewing design proposal':
-                                    $status_class = 'status-designing';
-                                    break;
-                                case 'waiting confirm':
-                                case 'waiting client review':
-                                case 'waiting payment':
-                                    $status_class = 'status-pending';
-                                    break;
-                                case 'reject':
-                                    $status_class = 'bg-danger text-white';
-                                    break;
-                                default:
-                                    $status_class = 'status-pending';
-                            }
-                            ?>
-                            <tr>
-                                <td>
-                                    <strong>#<?php echo htmlspecialchars($row["orderid"]); ?></strong>
-                                </td>
-                                <td>
-                                    <strong><?php echo htmlspecialchars($row["client_name"] ?? 'N/A'); ?></strong>
-                                    <br>
-                                    <small class="text-muted">ID:
-                                        <?php echo htmlspecialchars($row["clientid"] ?? 'N/A'); ?></small>
-                                </td>
-                                <td>
-                                    <strong><?php echo htmlspecialchars($row["designer_name"] ?? 'N/A'); ?></strong>
-                                </td>
-                                <td>
-                                    <span class="status-badge <?php echo $status_class; ?>">
-                                        <?php echo htmlspecialchars($row["ostatus"]); ?>
-                                    </span>
-                                </td>
-                                <td>
-                                    <a href="Order_Edit.php?id=<?php echo $row["orderid"]; ?>"
-                                        class="btn btn-sm btn-primary">
-                                        <i class="fas fa-edit me-1"></i>
-                                    </a>
-                                </td>
-                            </tr>
-                        <?php endwhile; ?>
-                    </tbody>
-                </table>
-            </div>
+                    <?php endwhile; ?>
+                </tbody>
+            </table>
+        </div>
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
