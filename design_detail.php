@@ -6,19 +6,6 @@
 require_once __DIR__ . '/config.php';
 session_start();
 
-// Page is accessible to all users (login optional)
-
-// Determine current user's role for conditional UI rendering
-$userRole = isset($_SESSION['user']['role']) ? strtolower($_SESSION['user']['role']) : null;
-if (empty($userRole)) {
-    if (!empty($_SESSION['user']['designerid']))
-        $userRole = 'designer';
-    elseif (!empty($_SESSION['user']['managerid']))
-        $userRole = 'manager';
-    elseif (!empty($_SESSION['user']['clientid']))
-        $userRole = 'client';
-}
-
 $designid = isset($_GET['designid']) ? (int) $_GET['designid'] : 0;
 if ($designid <= 0) {
     http_response_code(404);
@@ -39,7 +26,7 @@ if (!$design) {
 }
 
 $err = '';
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['comment'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['comment']) && isset($_SESSION['user']['role']) && strtolower(trim($_SESSION['user']['role'])) === 'client') {
     $content = trim($_POST['comment']);
     if ($content !== '') {
         $clientId = (int) ($_SESSION['user']['clientid'] ?? 0);
@@ -79,15 +66,16 @@ $o->bind_param("ii", $design['designerid'], $designid);
 $o->execute();
 $others = $o->get_result();
 
-// Check if current user has liked this design
+// Check if current user has liked this design (only when session user exists)
 $liked = false;
-$user_type = $_SESSION['user']['role'] ?? null;
+$user = $_SESSION['user'] ?? null;
+$user_type = null;
 $user_id = 0;
-if (!empty($user_type)) {
-    $user_type = strtolower($user_type);
-    if ($user_type === 'client') $user_id = (int)($_SESSION['user']['clientid'] ?? 0);
-    elseif ($user_type === 'designer') $user_id = (int)($_SESSION['user']['designerid'] ?? 0);
-    elseif ($user_type === 'manager') $user_id = (int)($_SESSION['user']['managerid'] ?? 0);
+if (!empty($user) && !empty($user['role'])) {
+    $user_type = strtolower($user['role']);
+    if ($user_type === 'client') $user_id = (int)($user['clientid'] ?? 0);
+    elseif ($user_type === 'designer') $user_id = (int)($user['designerid'] ?? 0);
+    elseif ($user_type === 'manager') $user_id = (int)($user['managerid'] ?? 0);
 }
 
 if ($user_id > 0 && !empty($user_type)) {
@@ -101,6 +89,16 @@ if ($user_id > 0 && !empty($user_type)) {
         $liked = ($res['cnt'] ?? 0) > 0;
     }
 }
+
+// Prepare attributes for like button and login redirect
+$currentRequest = $_SERVER['REQUEST_URI'] ?? ('/design_detail.php?designid=' . intval($designid));
+$loginUrl = 'login.php?redirect=' . urlencode($currentRequest);
+$heart_attrs = 'data-login="' . htmlspecialchars($loginUrl, ENT_QUOTES) . '"';
+if ($user_id > 0 && !empty($user_type)) {
+    $heart_attrs .= ' data-userid="' . intval($user_id) . '" data-usertype="' . htmlspecialchars($user_type, ENT_QUOTES) . '"';
+}
+// Ensure $heart_disabled is defined to avoid undefined variable notices
+$heart_disabled = '';
 
 // Determine back button destination based on referrer
 // Default destination (file is in project root)
@@ -209,7 +207,7 @@ $mainImg = $baseUrlEarly . $appRoot . '/design_image.php?id=' . (int) $design['d
 
                 <div class="design-stats">
                     <div class="likes-count">
-                        <button class="heart-icon <?= $liked ? 'liked' : '' ?>" id="likeHeart"
+                        <button class="heart-icon <?= $liked ? 'liked' : '' ?>" id="likeHeart" <?= $heart_attrs ?> <?= $heart_disabled ?>
                             data-designid="<?= (int) $design['designid'] ?>" title="Like this design" aria-pressed="<?= $liked ? 'true' : 'false' ?>">
                             <i class="<?= $liked ? 'fas' : 'far' ?> fa-heart" aria-hidden="true"></i>
                         </button>
@@ -240,9 +238,14 @@ $mainImg = $baseUrlEarly . $appRoot . '/design_image.php?id=' . (int) $design['d
 
                 <!-- Action Buttons -->
                 <div class="design-actions">
-                    <?php if (!in_array($userRole, ['designer', 'manager'], true)): ?>
+                    <?php if (!empty($user)): ?>
                         <button type="button" class="btn btn-primary btn-order"
                             onclick="handleOrder(<?= (int) $design['designid'] ?>)">
+                            <i class="fas fa-shopping-cart me-2"></i>Order
+                        </button>
+                    <?php else: ?>
+                        <button type="button" class="btn btn-primary btn-order"
+                            onclick="window.location.href='<?= htmlspecialchars($loginUrl) ?>'">
                             <i class="fas fa-shopping-cart me-2"></i>Order
                         </button>
                     <?php endif; ?>
@@ -360,9 +363,16 @@ $mainImg = $baseUrlEarly . $appRoot . '/design_image.php?id=' . (int) $design['d
         (function () {
             const heart = document.getElementById('likeHeart');
             if (!heart) return;
-            heart.addEventListener('click', function (e) {
+                heart.addEventListener('click', function (e) {
                 e.preventDefault();
                 const designid = this.dataset.designid;
+                // If guest (no userid), redirect to login
+                const userId = this.dataset.userid;
+                const loginRedirect = this.dataset.login || 'login.php?redirect=' + encodeURIComponent(window.location.pathname + window.location.search);
+                if (!userId) {
+                    window.location.href = loginRedirect;
+                    return;
+                }
                 const btn = this;
                 const formData = new FormData();
                 formData.append('action', 'toggle_like');
