@@ -82,6 +82,10 @@ $colorImageStmt->close();
             border-radius: 5px;
         }
 
+        .product-table thead th {
+            color: #000000 !important;
+        }
+
         .action-btn {
             width: 32px;
             height: 32px;
@@ -268,12 +272,11 @@ $colorImageStmt->close();
 </head>
 
 <body>
-    <!-- Navbar -->
-    <?php include_once __DIR__ . '/../includes/header.php'; ?>
+<?php include __DIR__ . '/../includes/header.php'; ?>
 
     <!-- Dashboard Content -->
     <div class="container mb-5">
-        <h2 class="mt-3">Supplier Dashboard</h2>
+        <h2 class="mt-3">Contractor Dashboard</h2>
 
         <div class="row g-4 mb-4">
             <div class="col-md-4">
@@ -306,17 +309,17 @@ $colorImageStmt->close();
         </div>
         <div class="card shadow-sm border-0">
             <div class="card-header bg-white py-3">
-                <h5 class="mb-0"><i class="fas fa-boxes me-2"></i>My Products List</h5>
+                <h5 class="mb-0 text-dark"><i class="fas fa-boxes me-2"></i>My Products List</h5>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0 product-table">
-                        <thead class="bg-light">
+                    <table class="table mb-0 product-table">
+                        <thead class="bg-light text-dark">
                             <tr>
-                                <th class="ps-4">Image</th>
-                                <th>Product Name</th>
-                                <th>Category</th>
-                                <th>Price</th>
+                                <th class="ps-4 text-start">Image</th>
+                                <th class="text-start">Product Name</th>
+                                <th class="text-start">Category</th>
+                                <th class="text-start">Price</th>
                                 <th class="text-end pe-4">Actions</th>
                             </tr>
                         </thead>
@@ -324,7 +327,7 @@ $colorImageStmt->close();
                             <?php if ($result->num_rows > 0): ?>
                                 <?php while ($row = $result->fetch_assoc()): ?>
                                     <tr>
-                                        <td class="ps-4">
+                                        <td class="ps-4 text-start">
                                             <?php
                                             $productId = $row['productid'];
                                             $imageFile = $productFirstColorImages[$productId] ?? null;
@@ -335,14 +338,14 @@ $colorImageStmt->close();
                                             }
                                             ?>
                                         </td>
-                                        <td>
+                                        <td class="text-start">
                                             <div class="fw-bold"><?= htmlspecialchars($row['pname']) ?></div>
                                             <small class="text-muted">ID: <?= $row['productid'] ?></small>
                                         </td>
-                                        <td><span
+                                        <td class="text-start"><span
                                                 class="badge bg-info text-dark"><?= htmlspecialchars($row['category']) ?></span>
                                         </td>
-                                        <td>
+                                        <td class="text-start">
                                             HK$<?= number_format($row['price']) ?>
                                         </td>
                                         <td class="text-end pe-4">
@@ -398,8 +401,8 @@ $colorImageStmt->close();
                             <div class="col-md-6">
                                 <div class="form-section">
                                     <label class="form-label"><i class="fas fa-dollar-sign"></i> Price (HK$) *</label>
-                                    <input type="number" id="productPrice" name="price" class="form-control" min="1"
-                                        step="100" required>
+                                    <input type="number" id="productPrice" name="price" class="form-control" min="0"
+                                        step="1" required>
                                 </div>
                             </div>
                             <div class="col-md-6">
