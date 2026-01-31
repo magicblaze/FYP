@@ -864,7 +864,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
 
                 <!-- Edit Sections -->
                 <div class="row">
-                    <?php if ($status === 'drafting 2nd proposal'): ?>
+                    <?php if ($status === 'reviewing design proposal'): ?>
                         <div class="col-12 mt-3">
                             <div class="card border-primary mb-4">
                                 <div class="card-body text-center">
@@ -885,8 +885,9 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                 </div>
                             </div>
                         </div>
+                    <?php endif; ?>
 
-
+                    <?php if ($status === 'drafting 2nd proposal'): ?>
                         <!-- Update Order Information Section -->
                         <div class="col-lg-6 mb-4">
                             <div class="card h-100">
@@ -1154,19 +1155,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                             </div>
                         </div>
 
-
-                        // ensure all referenced products are confirmed before allowing submission
-                        $allRefsConfirmed = true;
-                        if (!empty($references)) {
-                        foreach ($references as $r) {
-                        $rs = strtolower(trim($r['status'] ?? ''));
-                        if (!in_array($rs, ['confirmed', 'approved'])) {
-                        $allRefsConfirmed = false;
-                        break;
-                        }
-                        }
-                        }
-                        ?>
+                                                            
                         <div class="col-12">
                             <div class="card h-100">
                                 <div class="card-header">
