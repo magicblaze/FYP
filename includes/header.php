@@ -70,7 +70,7 @@ $baseUrl = $scheme . '://' . $host . $appRoot;
           </li>
         <?php elseif ($role === 'supplier'): ?>
           <li class="nav-item"><a class="nav-link" href="<?= $baseUrl ?>/supplier/dashboard.php">Dashboard</a></li>
-          <li class="nav-item"><a class="nav-link" href="<?= $baseUrl ?>/supplier/product-detail.php">Products</a></li>
+          <li class=""><a class="nav-link" href="<?= $baseUrl ?>/supplier/schedule.php">Schedule</a></li>
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle" href="#" id="browseDropdownSupplier" role="button"
               data-bs-toggle="dropdown" aria-expanded="false">Browse</a>

@@ -269,31 +269,7 @@ $colorImageStmt->close();
 
 <body>
     <!-- Navbar -->
-    <header class="bg-white shadow p-3 d-flex justify-content-between align-items-center">
-        <div class="d-flex align-items-center gap-3">
-            <div class="h4 mb-0"><a href="dashboard.php" style="text-decoration: none; color: inherit;">HappyDesign</a>
-            </div>
-            <nav>
-                <ul class="nav align-items-center gap-2">
-                    <li class="nav-item"><a class="nav-link" href="dashboard.php">Dashboard</a></li>
-                    <li class="nav-item"><a class="nav-link" href="schedule.php">Schedule</a></li>
-                </ul>
-            </nav>
-        </div>
-        <nav>
-            <ul class="nav align-items-center">
-                <li class="nav-item me-2">
-                    <a class="nav-link text-muted fw-bold" href="../includes/profile.php">
-                        <i class="fas fa-user-shield me-1"></i>Hello <?= htmlspecialchars($supplierName) ?>
-
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link text-danger" href="../logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a>
-                </li>
-            </ul>
-        </nav>
-    </header>
+    <?php include_once __DIR__ . '/../includes/header.php'; ?>
 
     <!-- Dashboard Content -->
     <div class="container mb-5">
