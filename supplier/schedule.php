@@ -529,30 +529,8 @@ $month_name = date('F', mktime(0, 0, 0, $current_month, 1));
     </style>
 </head>
 <body>
-    
-    <!-- Navbar -->
-    <header class="bg-white shadow p-3 d-flex justify-content-between align-items-center">
-        <div class="d-flex align-items-center gap-3">
-            <div class="h4 mb-0"><a href="<?= $dashboardLink ?>" style="text-decoration: none; color: inherit;">HappyDesign</a></div>
-            <nav>
-                <ul class="nav align-items-center gap-2">
-                    <li class="nav-item"><a class="nav-link" href="<?= $dashboardLink ?>">Dashboard</a></li>
-                    <li class="nav-item"><a class="nav-link active" href="schedule.php">Schedule</a></li>
-                </ul>
-            </nav>
-        </div>
-        <nav>
-            <ul class="nav align-items-center">
-                <li class="nav-item me-2">
-                    <a class="nav-link text-muted" href="#">
-                        <i class="fas fa-user me-1"></i>Hello <?= htmlspecialchars($user_name) ?>
-                    </a>
-                </li>
-                <li class="nav-item"><a class="nav-link" href="../logout.php">Logout</a></li>
-            </ul>
-        </nav>
-    </header>
-
+  
+    <?php include_once __DIR__ . '/../includes/header.php'; ?>
     <!-- Dashboard Content -->
     <div class="container mb-5">
 
