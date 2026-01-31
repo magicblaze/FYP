@@ -278,7 +278,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                             <button type="submit" class="btn btn-primary">Update Schedule</button>
                         </div>
                         <div>
-                            <a href="Manager_view_order.php?id=<?php echo $orderid; ?>" class="btn btn-outline">View Order Details</a>
+                            <a href="Order_Edit.php?id=<?php echo $orderid; ?>" class="btn btn-outline">View Order Details</a>
                             <a href="Manager_Schedule_detail.php?orderid=<?php echo $orderid; ?>" class="btn btn-info">View Calendar</a>
                         </div>
                     </div>

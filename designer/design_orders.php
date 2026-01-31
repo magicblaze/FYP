@@ -157,10 +157,13 @@ while ($row = $result->fetch_assoc()) {
         $refStmt->close();
     }
     $orders[] = $row;
+                                       
 }
 
 $stmt->close();
 
+$status = strtolower(trim($order['ostatus'] ?? ''));
+$canEdit = in_array($status, ['designing']);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -754,7 +757,11 @@ $stmt->close();
     <!-- Dashboard Content -->
     <main class="container-lg mt-4">
         <div class="mt-5 mb-4 text-center">
-            <h2>Proposal Drafter</h2>
+            <?php if ($canEdit): ?>
+                <h2>Proposal Drafter</h2>
+            <?php else: ?>
+                <h2>Order Detail</h2>
+            <?php endif; ?>
             <p class="mb-0"></p>
         </div>
 
@@ -771,12 +778,6 @@ $stmt->close();
                             </div>
                         </div>
                         <div>
-                            <?php 
-                                $status = strtolower(trim($order['ostatus'] ?? ''));
-                                // Allow edit only if not yet reviewing/complete
-                                $canEdit = in_array($status, ['waiting confirm', 'designing']);
-                            ?>
-
                             <?php if ($canEdit): ?>
                                 <button class="edit-mode-toggle off" id="editBtn_<?= $order['orderid'] ?>" onclick="toggleEditMode(<?= $order['orderid'] ?>)">
                                     <i class="fas fa-edit me-1"></i>Edit
@@ -1170,14 +1171,6 @@ $stmt->close();
                                 </button>
                             <?php endif; ?>
                         </div>
-                        <?php if (strtolower(trim($order['ostatus'] ?? '')) === 'waiting confirm'): ?>
-                            <div>
-                                <button class="btn btn-sm btn-success"
-                                    onclick="updateOrder(<?= $order['orderid'] ?>,'confirm', this)"><i class="fas fa-check me-1"></i>Confirm Order</button>
-                                <button class="btn btn-sm btn-danger ms-2"
-                                    onclick="updateOrder(<?= $order['orderid'] ?>,'reject', this)"><i class="fas fa-times me-1"></i>Reject Order</button>
-                            </div>
-                        <?php endif; ?>
                     </div>
                 </div>
             <?php endforeach; ?>

@@ -300,7 +300,7 @@ $stats = mysqli_fetch_assoc($stats_result);
                                         </div>
 
                                         <!-- Action Button -->
-                                        <a href="Manager_view_order.php?orderid=<?php echo $order['orderid']; ?>" 
+                                        <a href="Order_Edit.php?orderid=<?php echo $order['orderid']; ?>" 
                                            class="btn btn-sm btn-outline-primary w-100">
                                             <i class="fas fa-eye me-1"></i>View Details
                                         </a>

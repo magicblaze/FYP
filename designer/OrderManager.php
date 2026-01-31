@@ -101,14 +101,7 @@ $res = $stmt->get_result();
                     </td>
                     <td id="status_<?= (int) $row['orderid'] ?>"><?= htmlspecialchars($row['ostatus'] ?? '') ?></td>
                     <td class="text-end" id="actions_<?= (int) $row['orderid'] ?>">
-                      <a href="design_orders.php?orderid=<?= (int) $row['orderid'] ?>"
-                        class="btn btn-sm btn-primary">View</a>
-                      <?php if (strtolower(trim($row['ostatus'] ?? '')) === 'waiting confirm'): ?>
-                        <button class="btn btn-sm btn-success ms-1"
-                          onclick="updateOrder(<?= (int) $row['orderid'] ?>,'confirm', this)">Confirm</button>
-                        <button class="btn btn-sm btn-danger ms-1"
-                          onclick="updateOrder(<?= (int) $row['orderid'] ?>,'reject', this)">Reject</button>
-                      <?php endif; ?>
+                      <a href="design_orders.php?orderid=<?= (int) $row['orderid'] ?>" class="btn btn-sm btn-primary">View</a>
                     </td>
                   </tr>
                 <?php endwhile; else: ?>

@@ -283,7 +283,7 @@ $stats = mysqli_fetch_assoc($stats_result);
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
     function viewOrder(orderId) {
-        window.location.href = 'Manager_view_order.php?id=' + orderId;
+        window.location.href = 'Order_Edit.php?id=' + orderId;
     }
     
     function deleteOrder(orderId) {

@@ -614,11 +614,11 @@ function initApp(config = {}) {
               }
             } else if (String(userType).toLowerCase() === 'manager') {
               if (viewUrl && viewUrl.indexOf('/client/order_detail.php?orderid=') !== -1) {
-                viewUrl = viewUrl.replace('/client/order_detail.php?orderid=', '/Manager/Manager_view_order.php?id=');
+                viewUrl = viewUrl.replace('/client/order_detail.php?orderid=', '/Manager/Order_Edit.php?id=');
               } else if (viewUrl && viewUrl.indexOf('/client/order_detail.php') !== -1) {
-                viewUrl = viewUrl.replace('/client/order_detail.php', '/Manager/Manager_view_order.php') + '?id=' + encodeURIComponent(o.id);
+                viewUrl = viewUrl.replace('/client/order_detail.php', '/Manager/Order_Edit.php') + '?id=' + encodeURIComponent(o.id);
               } else {
-                viewUrl = '/Manager/Manager_view_order.php?id=' + encodeURIComponent(o.id);
+                viewUrl = '/Manager/Order_Edit.php?id=' + encodeURIComponent(o.id);
               }
             }
           }
@@ -652,11 +652,11 @@ function initApp(config = {}) {
                         }
                       } else if (String(userType).toLowerCase() === 'manager') {
                         if (url && url.indexOf('/client/order_detail.php?orderid=') !== -1) {
-                          url = url.replace('/client/order_detail.php?orderid=', '/Manager/Manager_view_order.php?id=');
+                          url = url.replace('/client/order_detail.php?orderid=', '/Manager/Order_Edit.php?id=');
                         } else if (url && url.indexOf('/client/order_detail.php') !== -1) {
-                          url = url.replace('/client/order_detail.php', '/Manager/Manager_view_order.php') + '?id=' + encodeURIComponent(o.id);
+                          url = url.replace('/client/order_detail.php', '/Manager/Order_Edit.php') + '?id=' + encodeURIComponent(o.id);
                         } else {
-                          url = '/Manager/Manager_view_order.php?id=' + encodeURIComponent(o.id);
+                          url = '/Manager/Order_Edit.php?id=' + encodeURIComponent(o.id);
                         }
                       }
                     }
@@ -965,11 +965,11 @@ function initApp(config = {}) {
                   }
                 } else if (String(userType).toLowerCase() === 'manager') {
                   if (viewUrl && viewUrl.indexOf('/client/order_detail.php?orderid=') !== -1) {
-                    viewUrl = viewUrl.replace('/client/order_detail.php?orderid=', '/Manager/Manager_view_order.php?id=');
+                    viewUrl = viewUrl.replace('/client/order_detail.php?orderid=', '/Manager/Order_Edit.php?id=');
                   } else if (viewUrl && viewUrl.indexOf('/client/order_detail.php') !== -1) {
-                    viewUrl = viewUrl.replace('/client/order_detail.php', '/Manager/Manager_view_order.php') + '?id=' + encodeURIComponent(foundOrder.id);
+                    viewUrl = viewUrl.replace('/client/order_detail.php', '/Manager/Order_Edit.php') + '?id=' + encodeURIComponent(foundOrder.id);
                   } else {
-                    viewUrl = '/Manager/Manager_view_order.php?id=' + encodeURIComponent(foundOrder.id);
+                    viewUrl = '/Manager/Order_Edit.php?id=' + encodeURIComponent(foundOrder.id);
                   }
                 }
               }

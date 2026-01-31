@@ -718,7 +718,7 @@ $designing_orders = count(array_filter($schedules, function($s) {
                                         <a href="Manager_update_schedule.php?id=<?php echo $order['orderid']; ?>" class="btn btn-sm btn-outline-primary">
                                             <i class="fas fa-calendar-plus"></i> Add Schedule
                                         </a>
-                                        <a href="Manager_view_order.php?id=<?php echo $order['orderid']; ?>" class="btn btn-sm btn-outline-secondary">
+                                        <a href="Order_Edit.php?id=<?php echo $order['orderid']; ?>" class="btn btn-sm btn-outline-secondary">
                                             <i class="fas fa-eye"></i> View
                                         </a>
                                     </div>
@@ -847,7 +847,7 @@ $designing_orders = count(array_filter($schedules, function($s) {
                                 <a href="Manager_update_schedule.php?id=<?php echo $schedule['orderid']; ?>" class="btn btn-primary">
                                     <i class="fas fa-edit me-2"></i>Update Schedule
                                 </a>
-                                <a href="Manager_view_order.php?id=<?php echo $schedule['orderid']; ?>" class="btn btn-info">
+                                <a href="Order_Edit.php?id=<?php echo $schedule['orderid']; ?>" class="btn btn-info">
                                     <i class="fas fa-eye me-2"></i>View Order Details
                                 </a>
                                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
@@ -970,7 +970,7 @@ $designing_orders = count(array_filter($schedules, function($s) {
                                 <a href="Manager_update_schedule.php?id=<?php echo $schedule['orderid']; ?>" class="btn btn-primary">
                                     <i class="fas fa-edit me-2"></i>Update Schedule
                                 </a>
-                                <a href="Manager_view_order.php?id=<?php echo $schedule['orderid']; ?>" class="btn btn-info">
+                                <a href="Order_Edit.php?id=<?php echo $schedule['orderid']; ?>" class="btn btn-info">
                                     <i class="fas fa-eye me-2"></i>View Order Details
                                 </a>
                                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">

@@ -58,7 +58,7 @@ if (!$order) {
 // Check if order status is Designing
 if (strtolower($order['ostatus']) !== 'designing') {
     $error = "Only orders with 'designing' status can be marked as complete.";
-    $redirect = "Manager_view_order.php?id=$orderid";
+    $redirect = "Order_Edit.php?id=$orderid";
 }
 
 // Handle mark complete operation
@@ -90,7 +90,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && empty($error)) {
 
         // Set success message and redirect
         $message = "Order #$orderid has been successfully marked as completed!";
-        $redirect = "Manager_view_order.php?id=$orderid";
+        $redirect = "Order_Edit.php?id=$orderid";
 
     } catch (Exception $e) {
         // Rollback transaction

@@ -243,7 +243,7 @@ $result = mysqli_stmt_get_result($stmt);
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         function viewOrder(orderId) {
-            window.location.href = 'Manager_view_order.php?id=' + encodeURIComponent(orderId);
+            window.location.href = 'Order_Edit.php?id=' + encodeURIComponent(orderId);
         }
 
         function archiveOrder(orderId) {

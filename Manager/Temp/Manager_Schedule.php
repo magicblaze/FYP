@@ -530,7 +530,7 @@ $weekly_stats = mysqli_fetch_assoc($weekly_result);
 
         <script>
             function viewOrder(orderId) {
-                window.location.href = 'Manager_view_order.php?id=' + orderId;
+                window.location.href = 'Order_Edit.php?id=' + orderId;
             }
 
             function viewSchedule(orderId) {
