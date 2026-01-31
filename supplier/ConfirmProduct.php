@@ -182,5 +182,13 @@ function fillModal(data) {
     document.getElementById('m_price').value = data.ref_price || data.original_price;
 }
 </script>
+    <!-- ==================== Chat Widget Integration ==================== -->
+    <?php
+    if (isset($_SESSION['user'])) {
+        include __DIR__ . '/../Public/chat_widget.php';
+    }
+    ?>
+
+    <!-- Chatfunction and initialization moved into Public/chat_widget.php -->
 </body>
 </html>
