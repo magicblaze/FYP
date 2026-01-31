@@ -361,6 +361,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         mysqli_stmt_close($reject_stmt);
     }
 }
+// Normalize status strings
+$status = strtolower($order['ostatus'] ?? 'waiting confirm');
+$isProposalConfirmed = !in_array($status, ['waiting confirm', 'designing', 'drafting 2nd proposal', 'reviewing design proposal', 'submit_proposal', 'reject']);
+$hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing design proposal', 'waiting client review', 'reject', 'waiting client payment', 'complete']);
+
 ?>
 
 <!DOCTYPE html>
@@ -859,13 +864,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
                 <!-- Edit Sections -->
                 <div class="row">
-                    <?php
-                    $status = strtolower($order['ostatus'] ?? 'waiting confirm');
-                    $isProposalConfirmed = !in_array($status, ['waiting confirm', 'designing', 'drafting 2nd proposal', 'reviewing design proposal', 'submit_proposal', 'reject']);
-                    // Show edit cards when status is 'drafting 2nd proposal'
-                    $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing design proposal', 'waiting client review', 'reject', 'waiting client payment', 'complete']);
-                    ?>
-                    <?php if ($status === 'reviewing design proposal'): ?>
+                    <?php if ($status === 'drafting 2nd proposal'): ?>
                         <div class="col-12 mt-3">
                             <div class="card border-primary mb-4">
                                 <div class="card-body text-center">
@@ -1153,20 +1152,19 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                     </div>
                                 </div>
                             </div>
-                        <?php endif; ?>
-                    </div>
-                    <?php if ($status === 'drafting 2nd proposal'):
+                        </div>
+
 
                         // ensure all referenced products are confirmed before allowing submission
                         $allRefsConfirmed = true;
                         if (!empty($references)) {
-                            foreach ($references as $r) {
-                                $rs = strtolower(trim($r['status'] ?? ''));
-                                if (!in_array($rs, ['confirmed', 'approved'])) {
-                                    $allRefsConfirmed = false;
-                                    break;
-                                }
-                            }
+                        foreach ($references as $r) {
+                        $rs = strtolower(trim($r['status'] ?? ''));
+                        if (!in_array($rs, ['confirmed', 'approved'])) {
+                        $allRefsConfirmed = false;
+                        break;
+                        }
+                        }
                         }
                         ?>
                         <div class="col-12">
