@@ -94,7 +94,7 @@ $deposit = isset($order['deposit']) ? floatval($order['deposit']) : 2000.0;
 $references_total = 0.0;
 if (!empty($references)) {
     foreach ($references as $r) {
-        $rprice = isset($r['price']) && $r['price'] !== null ? (float)$r['price'] : (float)($r['product_price'] ?? 0);
+        $rprice = isset($r['price']) && $r['price'] !== null ? (float) $r['price'] : (float) ($r['product_price'] ?? 0);
         $references_total += $rprice;
     }
 }
@@ -121,8 +121,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $design_finish_date = mysqli_real_escape_string($mysqli, $_POST['DesignFinishDate'] ?? '');
 
         // Normalize HTML5 datetime-local (YYYY-MM-DDTHH:MM) to MySQL DATETIME (YYYY-MM-DD HH:MM:SS)
-        $normalize_dt = function($d) {
-            if (empty($d)) return null;
+        $normalize_dt = function ($d) {
+            if (empty($d))
+                return null;
             $d = str_replace('T', ' ', $d);
             if (preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/', $d)) {
                 $d .= ':00';
@@ -280,8 +281,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (isset($_POST['update_reference_status'])) {
         if (isset($_POST['ref']) && is_array($_POST['ref'])) {
             foreach ($_POST['ref'] as $refId => $payload) {
-                $rid = (int)$refId;
-                $newPrice = isset($payload['price']) ? (float)$payload['price'] : null;
+                $rid = (int) $refId;
+                $newPrice = isset($payload['price']) ? (float) $payload['price'] : null;
                 $update_ref_sql = "UPDATE `OrderReference` SET price = ?, status = 'waiting confirm' WHERE id = ? AND orderid = ?";
                 $update_ref_stmt = mysqli_prepare($mysqli, $update_ref_sql);
                 mysqli_stmt_bind_param($update_ref_stmt, "dii", $newPrice, $rid, $orderid);
@@ -372,6 +373,157 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="../css/styles.css">
+    <script>
+        function openProposalPreview(fileUrl) {
+            const imgWrap = document.getElementById('proposalPreviewImageWrap');
+            const pdfWrap = document.getElementById('proposalPreviewPdfWrap');
+            const img = document.getElementById('proposalPreviewImage');
+            const pdf = document.getElementById('proposalPreviewPdf');
+            if (!imgWrap || !pdfWrap || !img || !pdf) return;
+
+            const isPdf = fileUrl.toLowerCase().endsWith('.pdf');
+            if (isPdf) {
+                imgWrap.style.display = 'none';
+                pdfWrap.style.display = 'block';
+                pdf.src = fileUrl;
+                img.src = '';
+            } else {
+                pdfWrap.style.display = 'none';
+                imgWrap.style.display = 'block';
+                img.src = fileUrl;
+                pdf.src = '';
+            }
+
+            const modalEl = document.getElementById('proposalPreviewModal');
+            if (modalEl) {
+                const modal = new bootstrap.Modal(modalEl);
+                modal.show();
+            }
+        }
+
+        function toggleEdit(section, show) {
+            const view = document.getElementById(section + '-view');
+            const edit = document.getElementById(section + '-edit');
+            if (show) {
+                view.classList.add('d-none');
+                edit.classList.remove('d-none');
+            } else {
+                view.classList.remove('d-none');
+                edit.classList.add('d-none');
+                // Optional: Clear URL param if present
+                const url = new URL(window.location);
+                if (url.searchParams.has('edit')) {
+                    url.searchParams.delete('edit');
+                    window.history.pushState({}, '', url);
+                }
+            }
+        }
+
+        // Legacy support for cost edit if needed, or alias it
+        function toggleCostEdit(show) {
+            toggleEdit('cost', show);
+        }
+
+        let feeIndex = 0;
+        function addFeeToList() {
+            const nameInput = document.getElementById('new_fee_name');
+            const amountInput = document.getElementById('new_fee_amount');
+            const descInput = document.getElementById('new_fee_desc');
+            const name = nameInput.value.trim();
+            const amount = parseFloat(amountInput.value);
+            const desc = descInput.value.trim();
+
+            if (!name || isNaN(amount) || amount <= 0) {
+                alert('Please enter a valid name and amount.');
+                return;
+            }
+
+            // Remove "No fees" message if it exists
+            const noFeesRow = document.getElementById('no_fees_row');
+            if (noFeesRow) noFeesRow.remove();
+
+            const tbody = document.getElementById('fee_list_body');
+            const row = document.createElement('tr');
+            row.id = 'fee-row-' + feeIndex;
+            row.className = 'table-success'; // Highlight new rows
+            row.innerHTML = `
+                        <td>
+                            <small>${name} <span class="badge bg-success ms-1">Not saved</span></small>
+                            ${desc ? '<br><small class="text-muted">' + desc + '</small>' : ''}
+                            <input type="hidden" name="new_fees[${feeIndex}][name]" value="${name}" form="cost-edit-form">
+                            <input type="hidden" name="new_fees[${feeIndex}][description]" value="${desc}" form="cost-edit-form">
+                        </td>
+                        <td>
+                            <small><strong>HK$${amount.toFixed(2)}</strong></small>
+                            <input type="hidden" name="new_fees[${feeIndex}][amount]" value="${amount}" form="cost-edit-form">
+                        </td>
+                        <td>
+                            <button type="button" class="btn btn-sm btn-link text-danger p-0" onclick="removeFeeFromList(${feeIndex})">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </td>
+                    `;
+            tbody.appendChild(row);
+
+            // clear inputs
+            nameInput.value = '';
+            amountInput.value = '';
+            descInput.value = '';
+            nameInput.focus();
+
+            feeIndex++;
+            updatePricePreview();
+        }
+
+        function removeFeeFromList(index) {
+            const row = document.getElementById('fee-row-' + index);
+            if (row) row.remove();
+
+            const tbody = document.getElementById('fee_list_body');
+            if (tbody.children.length === 0) {
+                const noRow = document.createElement('tr');
+                noRow.id = 'no_fees_row';
+                noRow.innerHTML = '<td colspan="3" class="text-center text-muted small">No additional fees recorded.</td>';
+                tbody.appendChild(noRow);
+            }
+            updatePricePreview();
+        }
+
+        function updatePricePreview() {
+            const feesText = document.getElementById('preview_fees_text');
+            const totalText = document.getElementById('preview_total_text');
+            const totalInput = document.getElementById('input_total_cost');
+
+            if (!feesText || !totalText) return;
+
+            const baseFees = parseFloat(feesText.getAttribute('data-base')) || 0;
+            const designPrice = parseFloat(totalText.getAttribute('data-design')) || 0;
+
+            // Sum new fees
+            let newFeesTotal = 0;
+            const newFeeInputs = document.querySelectorAll('input[name^="new_fees"][name$="[amount]"]');
+            newFeeInputs.forEach(input => {
+                newFeesTotal += parseFloat(input.value) || 0;
+            });
+
+            const currentTotalFees = baseFees + newFeesTotal;
+            const finalTotal = designPrice + currentTotalFees;
+
+            // Update display
+            feesText.textContent = 'HK$' + currentTotalFees.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+            totalText.textContent = 'HK$' + finalTotal.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+
+            // Update input if it exists
+            if (totalInput) {
+                totalInput.value = finalTotal.toFixed(2);
+            }
+        }
+
+        function showRejectModal() {
+            const rejectModal = new bootstrap.Modal(document.getElementById('rejectModal'));
+            rejectModal.show();
+        }
+    </script>
 </head>
 
 <body>
@@ -388,20 +540,20 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
             <!-- Workflow Status Banner (dynamic messages per status) -->
             <?php
-                $banner_status = strtolower($order['ostatus'] ?? 'waiting confirm');
-                $status_map = [
-                    'waiting confirm' => ['class' => 'alert-warning', 'icon' => 'fa-hourglass-half', 'title' => 'Pending Confirmation', 'text' => 'Please review the details, assign a designer, then confirm or reject this order.'],
-                    'designing' => ['class' => 'alert-info', 'icon' => 'fa-pencil-alt', 'title' => 'Designing', 'text' => 'Design is in progress. Please contact via chat if needed.'],
-                    'drafting 2nd proposal' => ['class' => 'alert-info', 'icon' => 'fa-pencil-alt', 'title' => 'Drafting 2nd Proposal', 'text' => 'Please preparing a 2nd proposal. Update all info if needed.'],
-                    'reviewing design proposal' => ['class' => 'alert-info', 'icon' => 'fa-search', 'title' => 'Proposal Review', 'text' => 'A design proposal has been submitted. Please review and confirm or request changes.'],
-                    'waiting client review' => ['class' => 'alert-warning', 'icon' => 'fa-eye', 'title' => 'Waiting Client Review', 'text' => '2nd Proposal has been submitted, please wait for client to review.'],
-                    'waiting payment' => ['class' => 'alert-warning', 'icon' => 'fa-credit-card', 'title' => 'Waiting Payment', 'text' => 'Waiting for client payment to proceed.'],
-                    'waiting client payment' => ['class' => 'alert-warning', 'icon' => 'fa-credit-card', 'title' => 'Waiting Payment', 'text' => 'Waiting for client payment to proceed.'],
-                    'complete' => ['class' => 'alert-success', 'icon' => 'fa-check-circle', 'title' => 'Complete', 'text' => 'Order completed successfully.'],
-                    'reject' => ['class' => 'alert-danger', 'icon' => 'fa-times-circle', 'title' => 'Rejected', 'text' => 'Order has been rejected. See notes for reason.'],
-                ];
+            $banner_status = strtolower($order['ostatus'] ?? 'waiting confirm');
+            $status_map = [
+                'waiting confirm' => ['class' => 'alert-warning', 'icon' => 'fa-hourglass-half', 'title' => 'Pending Confirmation', 'text' => 'Please review the details, assign a designer, then confirm or reject this order.'],
+                'designing' => ['class' => 'alert-info', 'icon' => 'fa-pencil-alt', 'title' => 'Designing', 'text' => 'Design is in progress. Please contact via chat if needed.'],
+                'drafting 2nd proposal' => ['class' => 'alert-info', 'icon' => 'fa-pencil-alt', 'title' => 'Drafting 2nd Proposal', 'text' => 'Please preparing a 2nd proposal. Update all info if needed.'],
+                'reviewing design proposal' => ['class' => 'alert-info', 'icon' => 'fa-search', 'title' => 'Proposal Review', 'text' => 'A design proposal has been submitted. Please review and confirm or request changes.'],
+                'waiting client review' => ['class' => 'alert-warning', 'icon' => 'fa-eye', 'title' => 'Waiting Client Review', 'text' => '2nd Proposal has been submitted, please wait for client to review.'],
+                'waiting payment' => ['class' => 'alert-warning', 'icon' => 'fa-credit-card', 'title' => 'Waiting Payment', 'text' => 'Waiting for client payment to proceed.'],
+                'waiting client payment' => ['class' => 'alert-warning', 'icon' => 'fa-credit-card', 'title' => 'Waiting Payment', 'text' => 'Waiting for client payment to proceed.'],
+                'complete' => ['class' => 'alert-success', 'icon' => 'fa-check-circle', 'title' => 'Complete', 'text' => 'Order completed successfully.'],
+                'reject' => ['class' => 'alert-danger', 'icon' => 'fa-times-circle', 'title' => 'Rejected', 'text' => 'Order has been rejected. See notes for reason.'],
+            ];
 
-                $banner = $status_map[$banner_status] ?? ['class' => 'alert-info', 'icon' => 'fa-info-circle', 'title' => ucwords($banner_status), 'text' => 'Status: ' . $banner_status];
+            $banner = $status_map[$banner_status] ?? ['class' => 'alert-info', 'icon' => 'fa-info-circle', 'title' => ucwords($banner_status), 'text' => 'Status: ' . $banner_status];
             ?>
 
             <div class="alert <?php echo $banner['class']; ?> mb-4" role="alert">
@@ -610,8 +762,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                         <?php if (!empty($references)): ?>
                                             <li class="mt-2"><small class="text-muted">Product References</small></li>
                                             <?php foreach ($references as $r):
-                                                $rprice = isset($r['price']) && $r['price'] !== null ? (float)$r['price'] : (float)($r['product_price'] ?? 0);
-                                            ?>
+                                                $rprice = isset($r['price']) && $r['price'] !== null ? (float) $r['price'] : (float) ($r['product_price'] ?? 0);
+                                                ?>
                                                 <li class="d-flex justify-content-between ps-3">
                                                     <small><?php echo htmlspecialchars($r['pname'] ?? ('Product #' . $r['productid'])); ?></small>
                                                     <small class="text-success">HK$<?php echo number_format($rprice, 2); ?></small>
@@ -624,784 +776,676 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                             <?php foreach ($fees as $f): ?>
                                                 <li class="d-flex justify-content-between ps-3">
                                                     <small><?php echo htmlspecialchars($f['fee_name']); ?></small>
-                                                    <small class="text-success">HK$<?php echo number_format((float)$f['amount'], 2); ?></small>
+                                                    <small
+                                                        class="text-success">HK$<?php echo number_format((float) $f['amount'], 2); ?></small>
                                                 </li>
                                             <?php endforeach; ?>
                                         <?php endif; ?>
                                     </ul>
                                 </div>
                                 <label class="fw-bold text-muted small">Total Cost</label>
-                                <p class="mb-0"><strong class="text-danger fs-5">HK$<?php echo number_format($final_total_cost, 2); ?></strong></p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <?php if ($show_confirm_reject): ?>
-            <!-- Assign Designer Section (Only shown when waiting confirm) -->
-            <div class="row mb-4">
-                <div class="col-lg-6">
-                    <div class="card h-100">
-                        <div class="card-header bg-light">
-                            <h5 class="card-title mb-0">
-                                <i class="fas fa-user-tie me-2"></i>Reassign Designer
-                            </h5>
-                        </div>
-                        <div class="card-body">
-                            <!-- View Mode -->
-                            <div id="designer-view" class="<?php echo $edit_designer ? 'd-none' : ''; ?>">
-                                <button type="button" class="btn btn-primary w-100" onclick="toggleEdit('designer', true)">
-                                    <i class="fas fa-edit me-2"></i><?php echo isset($current_designer) && $current_designer ? 'Change Designer' : 'Reassign Designer'; ?>
-                                </button>
-                            </div>
-
-                            <!-- Edit Mode -->
-                            <div id="designer-edit" class="<?php echo $edit_designer ? '' : 'd-none'; ?>">
-                                <form method="post">
-                                    <input type="hidden" name="assign_designer" value="1">
-                                    <div class="mb-3">
-                                        <label class="form-label fw-bold">Select Designer</label>
-                                        <select name="designer_id" class="form-select" required>
-                                            <option value="">-- Choose Designer --</option>
-                                            <?php
-                                            $designers_sql = "SELECT designerid, dname, status FROM `Designer` WHERE managerid = ? ORDER BY status ASC, dname ASC";
-                                            $designers_stmt = mysqli_prepare($mysqli, $designers_sql);
-                                            mysqli_stmt_bind_param($designers_stmt, "i", $user_id);
-                                            mysqli_stmt_execute($designers_stmt);
-                                            $designers_result = mysqli_stmt_get_result($designers_stmt);
-
-                                            while ($designer = mysqli_fetch_assoc($designers_result)) {
-                                                $status_indicator = $designer['status'] === 'Available' ? '✓ Available' : '⊙ Busy';
-                                                echo '<option value="' . $designer['designerid'] . '">' .
-                                                    htmlspecialchars($designer['dname']) . ' (' . $status_indicator . ')' .
-                                                    '</option>';
-                                            }
-                                            mysqli_free_result($designers_result);
-                                            mysqli_stmt_close($designers_stmt);
-                                            ?>
-                                        </select>
-                                    </div>
-                                    <div class="d-flex gap-2">
-                                        <button type="submit" class="btn btn-success flex-grow-1">
-                                            <i class="fas fa-check me-2"></i>Assign
-                                        </button>
-                                        <button type="button" class="btn btn-secondary" onclick="toggleEdit('designer', false)">
-                                            <i class="fas fa-times me-2"></i>Cancel
-                                        </button>
-                                    </div>
-                                </form>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <?php endif; ?>
-
-
-            <!-- Edit Sections -->
-            <?php 
-                $status = strtolower($order['ostatus'] ?? 'waiting confirm');
-                $isProposalConfirmed = !in_array($status, ['waiting confirm', 'designing', 'drafting 2nd proposal', 'reviewing design proposal', 'submit_proposal', 'reject']); 
-                // Show edit cards when status is 'drafting 2nd proposal'
-                $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing design proposal','waiting client review', 'reject', 'waiting client payment','complete']);
-            ?>
-            <?php if ($status === 'reviewing design proposal'): ?>
-                <div class="row mb-4">
-                    <div class="col-12">
-                         <div class="card bg-light border-info">
-                             <div class="card-body text-center">
-                                 <h5 class="text-info"><i class="fas fa-search me-2"></i>Design Proposal Review</h5>
-                                 <p>The designer has submitted a proposal. Please review the design details.</p>
-                                 <div class="mt-3">
-                                     <?php if ($latest_picture): ?>
-                                            <button type="button" class="btn btn-primary me-2"
-                                                onclick="openProposalPreview('../uploads/designed_Picture/<?php echo htmlspecialchars($latest_picture['filename']); ?>')">
-                                             <i class="fas fa-file-image me-1"></i>Preview Design Proposal
-                                         </button>
-                                     <?php else: ?>
-                                         <button disabled class="btn btn-secondary me-2">
-                                             <i class="fas fa-exclamation-triangle me-1"></i>No Proposal File Found
-                                         </button>
-                                     <?php endif; ?>
-                                 </div>
-                             </div>
-                         </div>
-                    </div>
-                </div>
-            <?php endif; ?>
-
-                <!-- Update Order Information Section -->
-                <div class="col-lg-6 mb-4">
-                    <div class="card h-100">
-                        <div class="card-header bg-light">
-                            <h5 class="card-title mb-0">
-                                <i class="fas fa-pencil-alt me-2"></i>Update design references
-                            </h5>
-                        </div>
-                        <div class="card-body">
-                            <!-- View Mode -->
-                            <div id="order-view" class="<?php echo $edit_order ? 'd-none' : ''; ?>">
-                                <button type="button" class="btn btn-primary w-100" onclick="toggleEdit('order', true)">
-                                    <i class="fas fa-edit me-2"></i>Update
-                                </button>
-                            </div>
-
-                            <!-- Edit Mode -->
-                            <div id="order-edit" class="<?php echo $edit_order ? '' : 'd-none'; ?>">
-                                <form method="post">
-                                    <input type="hidden" name="update_order" value="1">
-
-                                    <div class="mb-3">
-                                        <label class="form-label fw-bold">Design</label>
-                                        <select name="designid" class="form-select" required>
-                                            <?php
-                                            $design_stmt = mysqli_prepare($mysqli, "SELECT designid, expect_price as price, tag FROM Design ORDER BY designid");
-                                            mysqli_stmt_execute($design_stmt);
-                                            $design_result = mysqli_stmt_get_result($design_stmt);
-                                            while ($design = mysqli_fetch_assoc($design_result)) {
-                                                $selected = ($design['designid'] == $order['designid']) ? 'selected' : '';
-                                                echo '<option value="' . $design['designid'] . '" ' . $selected . '>' .
-                                                    'Design #' . $design['designid'] . ' - $' . number_format($design['price'], 2) .
-                                                    ' (' . htmlspecialchars(substr($design['tag'], 0, 30)) . '...)' . '</option>';
-                                            }
-                                            mysqli_free_result($design_result);
-                                            mysqli_stmt_close($design_stmt);
-                                            ?>
-                                        </select>
-                                    </div>
-                                    <div class="d-flex gap-2">
-                                        <button type="submit" class="btn btn-success flex-grow-1">
-                                            <i class="fas fa-save me-2"></i>Save Changes
-                                        </button>
-                                        <button type="button" class="btn btn-secondary"
-                                            onclick="toggleEdit('order', false)">
-                                            <i class="fas fa-times me-2"></i>Cancel
-                                        </button>
-                                    </div>
-                                </form>
+                                <p class="mb-0"><strong
+                                        class="text-danger fs-5">HK$<?php echo number_format($final_total_cost, 2); ?></strong>
+                                </p>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Update Requirements Section -->
-                <div class="col-lg-6 mb-4">
-                    <div class="card h-100">
-                        <div class="card-header bg-light">
-                            <h5 class="card-title mb-0">
-                                <i class="fas fa-clipboard-list me-2"></i>Update Requirements
-                            </h5>
-                        </div>
-                        <div class="card-body">
-                            <!-- View Mode -->
-                            <div id="requirements-view" class="<?php echo $edit_requirements ? 'd-none' : ''; ?>">
-                                <button type="button" class="btn btn-primary w-100"
-                                    onclick="toggleEdit('requirements', true)">
-                                    <i class="fas fa-edit me-2"></i>Update Requirements
-                                </button>
-                            </div>
 
-                            <!-- Edit Mode -->
-                            <div id="requirements-edit" class="<?php echo $edit_requirements ? '' : 'd-none'; ?>">
-                                <form method="post">
-                                    <input type="hidden" name="update_requirements" value="1">
-                                    <div class="mb-3">
-                                        <label class="form-label fw-bold">Requirements</label>
-                                        <textarea name="Requirements" class="form-control" rows="6"
-                                            required><?php echo htmlspecialchars($order['Requirements'] ?? ''); ?></textarea>
-                                    </div>
-                                    <div class="d-flex gap-2">
-                                        <button type="submit" class="btn btn-success flex-grow-1">
-                                            <i class="fas fa-save me-2"></i>Save Changes
-                                        </button>
-                                        <button type="button" class="btn btn-secondary"
-                                            onclick="toggleEdit('requirements', false)">
-                                            <i class="fas fa-times me-2"></i>Cancel
+                <?php if ($show_confirm_reject): ?>
+                    <!-- Assign Designer Section (Only shown when waiting confirm) -->
+                    <div class="row mb-4">
+                        <div class="col-lg-6">
+                            <div class="card h-100">
+                                <div class="card-header bg-light">
+                                    <h5 class="card-title mb-0">
+                                        <i class="fas fa-user-tie me-2"></i>Reassign Designer
+                                    </h5>
+                                </div>
+                                <div class="card-body">
+                                    <!-- View Mode -->
+                                    <div id="designer-view" class="<?php echo $edit_designer ? 'd-none' : ''; ?>">
+                                        <button type="button" class="btn btn-primary w-100"
+                                            onclick="toggleEdit('designer', true)">
+                                            <i
+                                                class="fas fa-edit me-2"></i><?php echo isset($current_designer) && $current_designer ? 'Change Designer' : 'Reassign Designer'; ?>
                                         </button>
                                     </div>
-                                </form>
-                            </div>
-                        </div>
-                    </div>
-                </div>
 
-                <!-- Edit Cost Section -->
-                <div class="col-lg-6 mb-4">
-                    <div class="card h-100">
-                        <div class="card-header bg-light">
-                            <h5 class="card-title mb-0">
-                                <i class="fas fa-dollar-sign me-2"></i>Edit Cost & Fees
-                            </h5>
-                        </div>
-                        <div class="card-body">
-                            <!-- View Mode -->
-                            <div id="cost-view" class="<?php echo $edit_cost ? 'd-none' : ''; ?>">
-                                <button type="button" class="btn btn-primary w-100" onclick="toggleEdit('cost', true)">
-                                    <i class="fas fa-edit me-2"></i>Edit
-                                </button>
-                            </div>
+                                    <!-- Edit Mode -->
+                                    <div id="designer-edit" class="<?php echo $edit_designer ? '' : 'd-none'; ?>">
+                                        <form method="post">
+                                            <input type="hidden" name="assign_designer" value="1">
+                                            <div class="mb-3">
+                                                <label class="form-label fw-bold">Select Designer</label>
+                                                <select name="designer_id" class="form-select" required>
+                                                    <option value="">-- Choose Designer --</option>
+                                                    <?php
+                                                    $designers_sql = "SELECT designerid, dname, status FROM `Designer` WHERE managerid = ? ORDER BY status ASC, dname ASC";
+                                                    $designers_stmt = mysqli_prepare($mysqli, $designers_sql);
+                                                    mysqli_stmt_bind_param($designers_stmt, "i", $user_id);
+                                                    mysqli_stmt_execute($designers_stmt);
+                                                    $designers_result = mysqli_stmt_get_result($designers_stmt);
 
-                            <!-- Edit Mode -->
-                            <div id="cost-edit" class="<?php echo $edit_cost ? '' : 'd-none'; ?>">
-                                <!-- Additional Fees List -->
-                                <div class="mb-4">
-                                    <label class="fw-bold mb-2">Additional Fees Detail</label>
-                                    <div class="table-responsive">
-                                        <table class="table table-sm table-hover mb-0">
-                                            <thead class="table">
-                                                <tr>
-                                                    <th>Fee Name</th>
-                                                    <th>Amount</th>
-                                                    <th style="width: 60px;">Action</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody id="fee_list_body">
-                                                <?php if (!empty($references)): ?>
-                                                    <!-- Show referenced items (product/design refs) in the cost list -->
-                                                    <?php foreach ($references as $ref): 
-                                                        $refPrice = isset($ref['price']) && $ref['price'] !== null ? (float)$ref['price'] : (float)($ref['product_price'] ?? 0);
+                                                    while ($designer = mysqli_fetch_assoc($designers_result)) {
+                                                        $status_indicator = $designer['status'] === 'Available' ? '✓ Available' : '⊙ Busy';
+                                                        echo '<option value="' . $designer['designerid'] . '">' .
+                                                            htmlspecialchars($designer['dname']) . ' (' . $status_indicator . ')' .
+                                                            '</option>';
+                                                    }
+                                                    mysqli_free_result($designers_result);
+                                                    mysqli_stmt_close($designers_stmt);
                                                     ?>
-                                                        <tr>
-                                                            <td>
-                                                                <small><?php echo htmlspecialchars($ref['pname'] ?? ('Product #' . $ref['productid'])); ?></small>
-                                                            </td>
-                                                            <td><small><strong>HK$<?php echo number_format($refPrice, 0); ?></strong></small></td>
-                                                            <td></td>
-                                                        </tr>
-                                                    <?php endforeach; ?>
-                                                <?php endif; ?>
-
-                                                <?php if (!empty($fees)): ?>
-                                                    <?php foreach ($fees as $fee): ?>
-                                                        <tr>
-                                                            <td>
-                                                                <small><?php echo htmlspecialchars($fee['fee_name']); ?></small>
-                                                                <?php if ($fee['description']): ?>
-                                                                    <br><small
-                                                                        class="text-muted"><?php echo htmlspecialchars($fee['description']); ?></small>
-                                                                <?php endif; ?>
-                                                            </td>
-                                                            <td><small><strong>HK$<?php echo number_format($fee['amount'], 0); ?></strong></small>
-                                                            </td>
-                                                            <td>
-                                                                <form method="post" style="display: inline;">
-                                                                    <input type="hidden" name="delete_fee" value="1">
-                                                                    <input type="hidden" name="fee_id"
-                                                                        value="<?php echo $fee['fee_id']; ?>">
-                                                                    <button type="submit" class="btn btn-sm btn-outline-danger"
-                                                                        onclick="return confirm('Delete this fee?');">
-                                                                        <i class="fas fa-trash"></i>
-                                                                    </button>
-                                                                </form>
-                                                            </td>
-                                                        </tr>
-                                                    <?php endforeach; ?>
-                                                <?php else: ?>
-                                                    <tr id="no_fees_row">
-                                                        <td colspan="3" class="text-center text-muted small">No additional fees
-                                                            recorded.</td>
-                                                    </tr>
-                                                <?php endif; ?>
-                                            </tbody>
-                                        </table>
+                                                </select>
+                                            </div>
+                                            <div class="d-flex gap-2">
+                                                <button type="submit" class="btn btn-success flex-grow-1">
+                                                    <i class="fas fa-check me-2"></i>Assign
+                                                </button>
+                                                <button type="button" class="btn btn-secondary"
+                                                    onclick="toggleEdit('designer', false)">
+                                                    <i class="fas fa-times me-2"></i>Cancel
+                                                </button>
+                                            </div>
+                                        </form>
                                     </div>
                                 </div>
-
-                                <!-- Combined Cost Edit Form -->
-                                <form method="post" id="cost-edit-form">
-                                    <input type="hidden" name="save_cost_changes" value="1">
-
-                                    <!-- Add New Fee Interface -->
-                                    <div class="mb-4">
-                                        <div class="card p-3 bg-light border">
-                                            <div class="row g-2 mb-2 align-items-end">
-                                                <div class="col-md-4">
-                                                    <label class="small text-muted">Name</label>
-                                                    <input type="text" id="new_fee_name"
-                                                        class="form-control form-control-sm" placeholder="e.g. Rush Fee">
-                                                </div>
-                                                <div class="col-md-3">
-                                                    <label class="small text-muted">Amount</label>
-                                                    <input type="number" id="new_fee_amount"
-                                                        class="form-control form-control-sm" placeholder="0.00" min="0"
-                                                        step="0.01">
-                                                </div>
-                                                <div class="col-md-3">
-                                                    <label class="small text-muted">Description</label>
-                                                    <input type="text" id="new_fee_desc"
-                                                        class="form-control form-control-sm" placeholder="Optional">
-                                                </div>
-                                                <div class="col-md-2">
-                                                    <button type="button" class="btn btn-sm btn-primary w-100"
-                                                        onclick="addFeeToList()">
-                                                        <i class="fas fa-plus"></i> Add
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <!-- Update Total Cost Input -->
-                                    <div class="mb-3">
-                                        <!-- Cost Summary -->
-                                        <div class="mb-4 p-3 rounded border">
-                                            <div class="row mb-2">
-                                                 <div class="mt-3">
-                                                     <?php if ($status === 'reviewing design proposal'): ?>
-                                                         <?php if ($latest_picture): ?>
-                                                            <button type="button" class="btn btn-primary me-2"
-                                                                onclick="openProposalPreview('../uploads/designed_Picture/<?php echo htmlspecialchars($latest_picture['filename']); ?>')">
-                                                                 <i class="fas fa-file-image me-1"></i>Preview Design Proposal
-                                                             </button>
-                                                         <?php else: ?>
-                                                             <button disabled class="btn btn-secondary me-2">
-                                                                 <i class="fas fa-exclamation-triangle me-1"></i>No Proposal File Found
-                                                             </button>
-                                                         <?php endif; ?>
-                                                     <?php endif; ?>
-                                     
-                                                     <!-- Confirm/Reject buttons are inside the preview modal -->
-                                                    <strong class="text-info" id="preview_fees_text"
-                                                        data-base="<?php echo ($total_fees + $references_total); ?>">HK$<?php echo number_format(($total_fees + $references_total), 0); ?></strong>
-                                                </div>
-                                            </div>
-                                            <hr class="my-2">
-                                            <div class="row">
-                                                <div class="col-6">
-                                                    <small class="text-muted">Total Cost:</small>
-                                                </div>
-                                                <div class="col-6 text-end">
-                                                    <strong class="text-danger fs-5" id="preview_total_text"
-                                                        data-design="<?php echo $order["design_price"] ?? 0; ?>">HK$<?php echo number_format($final_total_cost, 0); ?></strong>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div class="d-flex gap-2">
-                                            <button type="submit" class="btn btn-success flex-grow-1">
-                                                <i class="fas fa-check me-2"></i>Save
-                                            </button>
-                                            <button type="button" class="btn btn-secondary"
-                                                onclick="toggleEdit('cost', false)">
-                                                <i class="fas fa-times me-2"></i>Cancel
-                                            </button>
-                                        </div>
-                                    </div>
-                            </div>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Proposal Preview Modal -->
-            <div class="modal fade" id="proposalPreviewModal" tabindex="-1" aria-hidden="true">
-                <div class="modal-dialog modal-xl modal-dialog-centered">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title"><i class="fas fa-file-alt me-2"></i>Design Proposal Preview</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                        </div>
-                        <div class="modal-body">
-                            <div id="proposalPreviewImageWrap" class="text-center" style="display:none;">
-                                <img id="proposalPreviewImage" src="" alt="Design Proposal" style="max-width:100%;max-height:70vh;border-radius:8px;" />
-                            </div>
-                            <div id="proposalPreviewPdfWrap" style="display:none;">
-                                <iframe id="proposalPreviewPdf" src="" style="width:100%;height:70vh;border:0;"></iframe>
-                            </div>
-                        </div>
-                        <div class="modal-footer d-flex justify-content-between">
-                            <div class="text-muted small">Confirm or reject after reviewing the proposal.</div>
-                            <div class="d-flex gap-2">
-                                <form method="post" class="m-0">
-                                    <input type="hidden" name="confirm_proposal" value="1">
-                                    <button type="submit" class="btn btn-success">
-                                        <i class="fas fa-check me-1"></i>Confirm Proposal
-                                    </button>
-                                </form>
-                                <form method="post" class="m-0">
-                                    <input type="hidden" name="reject_proposal" value="1">
-                                    <button type="submit" class="btn btn-danger">
-                                        <i class="fas fa-times me-1"></i>Reject Proposal
-                                    </button>
-                                </form>
                             </div>
                         </div>
                     </div>
-                </div>
-            </div>
-                        <?php if ($status === 'drafting 2nd proposal'): 
-                        
-                            // ensure all referenced products are confirmed before allowing submission
-                            $allRefsConfirmed = true;
-                            if (!empty($references)) {
-                                foreach ($references as $r) {
-                                    $rs = strtolower(trim($r['status'] ?? ''));
-                                    if (!in_array($rs, ['confirmed', 'approved'])) { $allRefsConfirmed = false; break; }
-                                }
-                            }
-                        ?>
-                        <div class="row mb-4">
-                    <div class="col-12">
-                        <div class="card h-100">
-                            <div class="card-header">
-                                <h5 class="card-title mb-0">
-                                    <i class="fas fa-tags me-2"></i>Product Reference Status
-                                </h5>
-                            </div>
-                            <div class="card-body">
-                                <!-- View Mode -->
-                                <div id="reference-view" class="<?php echo $edit_reference ? 'd-none' : ''; ?>">
-                                    <div class="table-responsive">
-                                        <table class="table table-sm align-middle">
-                                            <thead class="table">
-                                                <tr>
-                                                    <th>Product</th>
-                                                    <th>Category</th>
-                                                    <th>Status</th>
-                                                    <th>Requested Price</th>
-                                                    <th>Note</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <?php foreach ($references as $ref): 
-                                                    $refStatus = strtolower(trim($ref['status'] ?? 'pending'));
-                                                    $displayPrice = isset($ref['price']) && $ref['price'] !== null ? (float)$ref['price'] : (float)($ref['product_price'] ?? 0);
-                                                    $badgeClass = 'bg-secondary';
-                                                    if (in_array($refStatus, ['waiting confirm', 'pending'])) $badgeClass = 'bg-warning';
-                                                    if (in_array($refStatus, ['confirmed', 'approved'])) $badgeClass = 'bg-success';
-                                                    if (in_array($refStatus, ['rejected', 'reject'])) $badgeClass = 'bg-danger';
-                                                ?>
-                                                    <tr>
-                                                        <td><?php echo htmlspecialchars($ref['pname'] ?? ('Product #' . $ref['productid'])); ?></td>
-                                                        <td><?php echo htmlspecialchars($ref['category'] ?? '—'); ?></td>
-                                                        <td>
-                                                            <span class="badge <?php echo $badgeClass; ?>">
-                                                                <?php echo $refStatus === 'waiting confirm' ? 'Request Confirm' : htmlspecialchars($refStatus); ?>
-                                                            </span>
-                                                        </td>
-                                                        <td>HK$<?php echo number_format($displayPrice, 2); ?></td>
-                                                        <td><?php echo htmlspecialchars($ref['note'] ?? '—'); ?></td>
-                                                    </tr>
-                                                <?php endforeach; ?>
-                                            </tbody>
-                                        </table>
-                                    </div>
+                <?php endif; ?>
+
+
+                <!-- Edit Sections -->
+                <div class="row">
+                    <?php
+                    $status = strtolower($order['ostatus'] ?? 'waiting confirm');
+                    $isProposalConfirmed = !in_array($status, ['waiting confirm', 'designing', 'drafting 2nd proposal', 'reviewing design proposal', 'submit_proposal', 'reject']);
+                    // Show edit cards when status is 'drafting 2nd proposal'
+                    $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing design proposal', 'waiting client review', 'reject', 'waiting client payment', 'complete']);
+                    ?>
+                    <?php if ($status === 'reviewing design proposal'): ?>
+                        <div class="col-12 mt-3">
+                            <div class="card border-primary mb-4">
+                                <div class="card-body text-center">
+                                    <h5 class="text-info"><i class="fas fa-search me-2"></i>Design Proposal</h5>
+                                    <p>The designer has submitted a proposal. Please review the design details.</p>
                                     <div class="mt-3">
-                                        <button type="button" class="btn btn-primary" onclick="toggleEdit('reference', true)">
+                                        <?php if ($latest_picture): ?>
+                                            <button type="button" class="btn btn-primary me-2"
+                                                onclick="openProposalPreview('../uploads/designed_Picture/<?php echo htmlspecialchars($latest_picture['filename']); ?>')">
+                                                <i class="fas fa-file-image me-1"></i>Preview Design Proposal
+                                            </button>
+                                        <?php else: ?>
+                                            <button disabled class="btn btn-secondary me-2">
+                                                <i class="fas fa-exclamation-triangle me-1"></i>No Proposal File Found
+                                            </button>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+
+                        <!-- Update Order Information Section -->
+                        <div class="col-lg-6 mb-4">
+                            <div class="card h-100">
+                                <div class="card-header bg-light">
+                                    <h5 class="card-title mb-0">
+                                        <i class="fas fa-pencil-alt me-2"></i>Update design references
+                                    </h5>
+                                </div>
+                                <div class="card-body">
+                                    <!-- View Mode -->
+                                    <div id="order-view" class="<?php echo $edit_order ? 'd-none' : ''; ?>">
+                                        <button type="button" class="btn btn-primary w-100" onclick="toggleEdit('order', true)">
+                                            <i class="fas fa-edit me-2"></i>Update
+                                        </button>
+                                    </div>
+
+                                    <!-- Edit Mode -->
+                                    <div id="order-edit" class="<?php echo $edit_order ? '' : 'd-none'; ?>">
+                                        <form method="post">
+                                            <input type="hidden" name="update_order" value="1">
+
+                                            <div class="mb-3">
+                                                <label class="form-label fw-bold">Design</label>
+                                                <select name="designid" class="form-select" required>
+                                                    <?php
+                                                    $design_stmt = mysqli_prepare($mysqli, "SELECT designid, expect_price as price, tag FROM Design ORDER BY designid");
+                                                    mysqli_stmt_execute($design_stmt);
+                                                    $design_result = mysqli_stmt_get_result($design_stmt);
+                                                    while ($design = mysqli_fetch_assoc($design_result)) {
+                                                        $selected = ($design['designid'] == $order['designid']) ? 'selected' : '';
+                                                        echo '<option value="' . $design['designid'] . '" ' . $selected . '>' .
+                                                            'Design #' . $design['designid'] . ' - $' . number_format($design['price'], 2) .
+                                                            ' (' . htmlspecialchars(substr($design['tag'], 0, 30)) . '...)' . '</option>';
+                                                    }
+                                                    mysqli_free_result($design_result);
+                                                    mysqli_stmt_close($design_stmt);
+                                                    ?>
+                                                </select>
+                                            </div>
+                                            <div class="d-flex gap-2">
+                                                <button type="submit" class="btn btn-success flex-grow-1">
+                                                    <i class="fas fa-save me-2"></i>Save Changes
+                                                </button>
+                                                <button type="button" class="btn btn-secondary"
+                                                    onclick="toggleEdit('order', false)">
+                                                    <i class="fas fa-times me-2"></i>Cancel
+                                                </button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Update Requirements Section -->
+                        <div class="col-lg-6 mb-4">
+                            <div class="card h-100">
+                                <div class="card-header bg-light">
+                                    <h5 class="card-title mb-0">
+                                        <i class="fas fa-clipboard-list me-2"></i>Update Requirements
+                                    </h5>
+                                </div>
+                                <div class="card-body">
+                                    <!-- View Mode -->
+                                    <div id="requirements-view" class="<?php echo $edit_requirements ? 'd-none' : ''; ?>">
+                                        <button type="button" class="btn btn-primary w-100"
+                                            onclick="toggleEdit('requirements', true)">
+                                            <i class="fas fa-edit me-2"></i>Update Requirements
+                                        </button>
+                                    </div>
+
+                                    <!-- Edit Mode -->
+                                    <div id="requirements-edit" class="<?php echo $edit_requirements ? '' : 'd-none'; ?>">
+                                        <form method="post">
+                                            <input type="hidden" name="update_requirements" value="1">
+                                            <div class="mb-3">
+                                                <label class="form-label fw-bold">Requirements</label>
+                                                <textarea name="Requirements" class="form-control" rows="6"
+                                                    required><?php echo htmlspecialchars($order['Requirements'] ?? ''); ?></textarea>
+                                            </div>
+                                            <div class="d-flex gap-2">
+                                                <button type="submit" class="btn btn-success flex-grow-1">
+                                                    <i class="fas fa-save me-2"></i>Save Changes
+                                                </button>
+                                                <button type="button" class="btn btn-secondary"
+                                                    onclick="toggleEdit('requirements', false)">
+                                                    <i class="fas fa-times me-2"></i>Cancel
+                                                </button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Edit Cost Section -->
+                        <div class="col-lg-6 mb-4">
+                            <div class="card h-100">
+                                <div class="card-header bg-light">
+                                    <h5 class="card-title mb-0">
+                                        <i class="fas fa-dollar-sign me-2"></i>Edit Cost & Fees
+                                    </h5>
+                                </div>
+                                <div class="card-body">
+                                    <!-- View Mode -->
+                                    <div id="cost-view" class="<?php echo $edit_cost ? 'd-none' : ''; ?>">
+                                        <button type="button" class="btn btn-primary w-100" onclick="toggleEdit('cost', true)">
                                             <i class="fas fa-edit me-2"></i>Edit
                                         </button>
                                     </div>
-                                </div>
 
-                                <!-- Edit Mode -->
-                                <div id="reference-edit" class="<?php echo $edit_reference ? '' : 'd-none'; ?>">
-                                    <form method="post">
-                                        <input type="hidden" name="update_reference_status" value="1">
+                                    <!-- Edit Mode -->
+                                    <div id="cost-edit" class="<?php echo $edit_cost ? '' : 'd-none'; ?>">
+                                        <!-- Additional Fees List -->
+                                        <div class="mb-4">
+                                            <label class="fw-bold mb-2">Additional Fees Detail</label>
+                                            <div class="table-responsive">
+                                                <table class="table table-sm table-hover mb-0">
+                                                    <thead class="table">
+                                                        <tr>
+                                                            <th>Fee Name</th>
+                                                            <th>Amount</th>
+                                                            <th style="width: 60px;">Action</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody id="fee_list_body">
+                                                        <?php if (!empty($references)): ?>
+                                                            <!-- Show referenced items (product/design refs) in the cost list -->
+                                                            <?php foreach ($references as $ref):
+                                                                $refPrice = isset($ref['price']) && $ref['price'] !== null ? (float) $ref['price'] : (float) ($ref['product_price'] ?? 0);
+                                                                ?>
+                                                                <tr>
+                                                                    <td>
+                                                                        <small><?php echo htmlspecialchars($ref['pname'] ?? ('Product #' . $ref['productid'])); ?></small>
+                                                                    </td>
+                                                                    <td><small><strong>HK$<?php echo number_format($refPrice, 0); ?></strong></small>
+                                                                    </td>
+                                                                    <td></td>
+                                                                </tr>
+                                                            <?php endforeach; ?>
+                                                        <?php endif; ?>
+
+                                                        <?php if (!empty($fees)): ?>
+                                                            <?php foreach ($fees as $fee): ?>
+                                                                <tr>
+                                                                    <td>
+                                                                        <small><?php echo htmlspecialchars($fee['fee_name']); ?></small>
+                                                                        <?php if ($fee['description']): ?>
+                                                                            <br><small
+                                                                                class="text-muted"><?php echo htmlspecialchars($fee['description']); ?></small>
+                                                                        <?php endif; ?>
+                                                                    </td>
+                                                                    <td><small><strong>HK$<?php echo number_format($fee['amount'], 0); ?></strong></small>
+                                                                    </td>
+                                                                    <td>
+                                                                        <form method="post" style="display: inline;">
+                                                                            <input type="hidden" name="delete_fee" value="1">
+                                                                            <input type="hidden" name="fee_id"
+                                                                                value="<?php echo $fee['fee_id']; ?>">
+                                                                            <button type="submit" class="btn btn-sm btn-outline-danger"
+                                                                                onclick="return confirm('Delete this fee?');">
+                                                                                <i class="fas fa-trash"></i>
+                                                                            </button>
+                                                                        </form>
+                                                                    </td>
+                                                                </tr>
+                                                            <?php endforeach; ?>
+                                                        <?php else: ?>
+                                                            <tr id="no_fees_row">
+                                                                <td colspan="3" class="text-center text-muted small">No additional
+                                                                    fees
+                                                                    recorded.</td>
+                                                            </tr>
+                                                        <?php endif; ?>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+
+                                        <!-- Combined Cost Edit Form -->
+                                        <form method="post" id="cost-edit-form">
+                                            <input type="hidden" name="save_cost_changes" value="1">
+
+                                            <!-- Add New Fee Interface -->
+                                            <div class="mb-4">
+                                                <div class="card p-3 bg-light border">
+                                                    <div class="row g-2 mb-2 align-items-end">
+                                                        <div class="col-md-4">
+                                                            <label class="small text-muted">Name</label>
+                                                            <input type="text" id="new_fee_name"
+                                                                class="form-control form-control-sm"
+                                                                placeholder="e.g. Rush Fee">
+                                                        </div>
+                                                        <div class="col-md-3">
+                                                            <label class="small text-muted">Amount</label>
+                                                            <input type="number" id="new_fee_amount"
+                                                                class="form-control form-control-sm" placeholder="0.00" min="0"
+                                                                step="0.01">
+                                                        </div>
+                                                        <div class="col-md-3">
+                                                            <label class="small text-muted">Description</label>
+                                                            <input type="text" id="new_fee_desc"
+                                                                class="form-control form-control-sm" placeholder="Optional">
+                                                        </div>
+                                                        <div class="col-md-2">
+                                                            <button type="button" class="btn btn-sm btn-primary w-100"
+                                                                onclick="addFeeToList()">
+                                                                <i class="fas fa-plus"></i> Add
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <!-- Update Total Cost Input -->
+                                            <div class="mb-3">
+                                                <!-- Cost Summary -->
+                                                <div class="mb-4 p-3 rounded border">
+                                                    <div class="row mb-2">
+                                                        <div class="mt-3">
+                                                            <?php if ($status === 'reviewing design proposal'): ?>
+                                                                <?php if ($latest_picture): ?>
+                                                                    <button type="button" class="btn btn-primary me-2"
+                                                                        onclick="openProposalPreview('../uploads/designed_Picture/<?php echo htmlspecialchars($latest_picture['filename']); ?>')">
+                                                                        <i class="fas fa-file-image me-1"></i>Preview Design Proposal
+                                                                    </button>
+                                                                <?php else: ?>
+                                                                    <button disabled class="btn btn-secondary me-2">
+                                                                        <i class="fas fa-exclamation-triangle me-1"></i>No Proposal File
+                                                                        Found
+                                                                    </button>
+                                                                <?php endif; ?>
+                                                            <?php endif; ?>
+
+                                                            <!-- Confirm/Reject buttons are inside the preview modal -->
+                                                            <strong class="text-info" id="preview_fees_text"
+                                                                data-base="<?php echo ($total_fees + $references_total); ?>">HK$<?php echo number_format(($total_fees + $references_total), 0); ?></strong>
+                                                        </div>
+                                                    </div>
+                                                    <hr class="my-2">
+                                                    <div class="row">
+                                                        <div class="col-6">
+                                                            <small class="text-muted">Total Cost:</small>
+                                                        </div>
+                                                        <div class="col-6 text-end">
+                                                            <strong class="text-danger fs-5" id="preview_total_text"
+                                                                data-design="<?php echo $order["design_price"] ?? 0; ?>">HK$<?php echo number_format($final_total_cost, 0); ?></strong>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div class="d-flex gap-2">
+                                                    <button type="submit" class="btn btn-success flex-grow-1">
+                                                        <i class="fas fa-check me-2"></i>Save
+                                                    </button>
+                                                    <button type="button" class="btn btn-secondary"
+                                                        onclick="toggleEdit('cost', false)">
+                                                        <i class="fas fa-times me-2"></i>Cancel
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                    <?php if ($status === 'drafting 2nd proposal'):
+
+                        // ensure all referenced products are confirmed before allowing submission
+                        $allRefsConfirmed = true;
+                        if (!empty($references)) {
+                            foreach ($references as $r) {
+                                $rs = strtolower(trim($r['status'] ?? ''));
+                                if (!in_array($rs, ['confirmed', 'approved'])) {
+                                    $allRefsConfirmed = false;
+                                    break;
+                                }
+                            }
+                        }
+                        ?>
+                        <div class="col-12">
+                            <div class="card h-100">
+                                <div class="card-header">
+                                    <h5 class="card-title mb-0">
+                                        <i class="fas fa-tags me-2"></i>Product Reference Status
+                                    </h5>
+                                </div>
+                                <div class="card-body">
+                                    <!-- View Mode -->
+                                    <div id="reference-view" class="<?php echo $edit_reference ? 'd-none' : ''; ?>">
                                         <div class="table-responsive">
                                             <table class="table table-sm align-middle">
                                                 <thead class="table">
                                                     <tr>
                                                         <th>Product</th>
+                                                        <th>Category</th>
+                                                        <th>Status</th>
                                                         <th>Requested Price</th>
                                                         <th>Note</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    <?php foreach ($references as $ref): 
-                                                        $displayPrice = isset($ref['price']) && $ref['price'] !== null ? (float)$ref['price'] : (float)($ref['product_price'] ?? 0);
-                                                    ?>
+                                                    <?php foreach ($references as $ref):
+                                                        $refStatus = strtolower(trim($ref['status'] ?? 'pending'));
+                                                        $displayPrice = isset($ref['price']) && $ref['price'] !== null ? (float) $ref['price'] : (float) ($ref['product_price'] ?? 0);
+                                                        $badgeClass = 'bg-secondary';
+                                                        if (in_array($refStatus, ['waiting confirm', 'pending']))
+                                                            $badgeClass = 'bg-warning';
+                                                        if (in_array($refStatus, ['confirmed', 'approved']))
+                                                            $badgeClass = 'bg-success';
+                                                        if (in_array($refStatus, ['rejected', 'reject']))
+                                                            $badgeClass = 'bg-danger';
+                                                        ?>
                                                         <tr>
-                                                            <td><?php echo htmlspecialchars($ref['pname'] ?? ('Product #' . $ref['productid'])); ?></td>
                                                             <td>
-                                                                <input type="number" step="0.01" min="0" class="form-control form-control-sm" name="ref[<?php echo (int)$ref['id']; ?>][price]" value="<?php echo htmlspecialchars(number_format($displayPrice, 2, '.', '')); ?>">
+                                                                <?php echo htmlspecialchars($ref['pname'] ?? ('Product #' . $ref['productid'])); ?>
                                                             </td>
-                                                            <td><?php echo htmlspecialchars($ref['note'] ?? '—'); ?></td>
+                                                            <td>
+                                                                <?php echo htmlspecialchars($ref['category'] ?? '—'); ?>
+                                                            </td>
+                                                            <td>
+                                                                <span class="badge <?php echo $badgeClass; ?>">
+                                                                    <?php echo $refStatus === 'waiting confirm' ? 'Request Confirm' : htmlspecialchars($refStatus); ?>
+                                                                </span>
+                                                            </td>
+                                                            <td>HK$
+                                                                <?php echo number_format($displayPrice, 2); ?>
+                                                            </td>
+                                                            <td>
+                                                                <?php echo htmlspecialchars($ref['note'] ?? '—'); ?>
+                                                            </td>
                                                         </tr>
                                                     <?php endforeach; ?>
                                                 </tbody>
                                             </table>
                                         </div>
-                                        <div class="d-flex gap-2">
-                                            <button type="submit" class="btn btn-success flex-grow-1">
-                                                <i class="fas fa-save me-2"></i>Request Quotation
-                                            </button>
-                                            <button type="button" class="btn btn-secondary" onclick="toggleEdit('reference', false)">
-                                                <i class="fas fa-times me-2"></i>Cancel
+                                        <div class="mt-3">
+                                            <button type="button" class="btn btn-primary"
+                                                onclick="toggleEdit('reference', true)">
+                                                <i class="fas fa-edit me-2"></i>Edit
                                             </button>
                                         </div>
-                                    </form>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                            <div class="row mb-4">
-                                <div class="col-12">
-                                    <div class="card border-primary">
-                                        <div class="card-body text-center">
-                                            <div class="mt-3">
-                                                <?php if ($allRefsConfirmed): ?>
-                                                    <form method="post" onsubmit="return confirm('Submit the 2nd proposal to the client for review?');">
-                                                        <input type="hidden" name="submit_second_proposal" value="1">
-                                                        <button type="submit" class="btn btn-primary">
-                                                            Submit 2nd Proposal for Client Review
-                                                        </button>
-                                                    </form>
-                                                <?php else: ?>
-                                                    <div class="alert alert-warning mb-0">
-                                                        <i class="fas fa-exclamation-triangle me-2"></i>
-                                                        Not all referenced products have been confirmed. Please confirm all product references before submitting the 2nd proposal.
-                                                    </div>
-                                                <?php endif; ?>
+                                    </div>
+
+                                    <!-- Edit Mode -->
+                                    <div id="reference-edit" class="<?php echo $edit_reference ? '' : 'd-none'; ?>">
+                                        <form method="post">
+                                            <input type="hidden" name="update_reference_status" value="1">
+                                            <div class="table-responsive">
+                                                <table class="table table-sm align-middle">
+                                                    <thead class="table">
+                                                        <tr>
+                                                            <th>Product</th>
+                                                            <th>Requested Price</th>
+                                                            <th>Note</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        <?php foreach ($references as $ref):
+                                                            $displayPrice = isset($ref['price']) && $ref['price'] !== null ? (float) $ref['price'] : (float) ($ref['product_price'] ?? 0);
+                                                            ?>
+                                                            <tr>
+                                                                <td>
+                                                                    <?php echo htmlspecialchars($ref['pname'] ?? ('Product #' . $ref['productid'])); ?>
+                                                                </td>
+                                                                <td>
+                                                                    <input type="number" step="0.01" min="0"
+                                                                        class="form-control form-control-sm"
+                                                                        name="ref[<?php echo (int) $ref['id']; ?>][price]"
+                                                                        value="<?php echo htmlspecialchars(number_format($displayPrice, 2, '.', '')); ?>">
+                                                                </td>
+                                                                <td>
+                                                                    <?php echo htmlspecialchars($ref['note'] ?? '—'); ?>
+                                                                </td>
+                                                            </tr>
+                                                        <?php endforeach; ?>
+                                                    </tbody>
+                                                </table>
                                             </div>
-                                        </div>
+                                            <div class="d-flex gap-2">
+                                                <button type="submit" class="btn btn-success flex-grow-1">
+                                                    <i class="fas fa-save me-2"></i>Request Quotation
+                                                </button>
+                                                <button type="button" class="btn btn-secondary"
+                                                    onclick="toggleEdit('reference', false)">
+                                                    <i class="fas fa-times me-2"></i>Cancel
+                                                </button>
+                                            </div>
+                                        </form>
                                     </div>
                                 </div>
                             </div>
                         <?php endif; ?>
-
-            <script>
-                function openProposalPreview(fileUrl) {
-                    const imgWrap = document.getElementById('proposalPreviewImageWrap');
-                    const pdfWrap = document.getElementById('proposalPreviewPdfWrap');
-                    const img = document.getElementById('proposalPreviewImage');
-                    const pdf = document.getElementById('proposalPreviewPdf');
-                    if (!imgWrap || !pdfWrap || !img || !pdf) return;
-
-                    const isPdf = fileUrl.toLowerCase().endsWith('.pdf');
-                    if (isPdf) {
-                        imgWrap.style.display = 'none';
-                        pdfWrap.style.display = 'block';
-                        pdf.src = fileUrl;
-                        img.src = '';
-                    } else {
-                        pdfWrap.style.display = 'none';
-                        imgWrap.style.display = 'block';
-                        img.src = fileUrl;
-                        pdf.src = '';
-                    }
-
-                    const modalEl = document.getElementById('proposalPreviewModal');
-                    if (modalEl) {
-                        const modal = new bootstrap.Modal(modalEl);
-                        modal.show();
-                    }
-                }
-
-                function toggleEdit(section, show) {
-                    const view = document.getElementById(section + '-view');
-                    const edit = document.getElementById(section + '-edit');
-                    if (show) {
-                        view.classList.add('d-none');
-                        edit.classList.remove('d-none');
-                    } else {
-                        view.classList.remove('d-none');
-                        edit.classList.add('d-none');
-                        // Optional: Clear URL param if present
-                        const url = new URL(window.location);
-                        if (url.searchParams.has('edit')) {
-                            url.searchParams.delete('edit');
-                            window.history.pushState({}, '', url);
-                        }
-                    }
-                }
-
-                // Legacy support for cost edit if needed, or alias it
-                function toggleCostEdit(show) {
-                    toggleEdit('cost', show);
-                }
-
-                let feeIndex = 0;
-                function addFeeToList() {
-                    const nameInput = document.getElementById('new_fee_name');
-                    const amountInput = document.getElementById('new_fee_amount');
-                    const descInput = document.getElementById('new_fee_desc');
-                    const name = nameInput.value.trim();
-                    const amount = parseFloat(amountInput.value);
-                    const desc = descInput.value.trim();
-
-                    if (!name || isNaN(amount) || amount <= 0) {
-                        alert('Please enter a valid name and amount.');
-                        return;
-                    }
-
-                    // Remove "No fees" message if it exists
-                    const noFeesRow = document.getElementById('no_fees_row');
-                    if (noFeesRow) noFeesRow.remove();
-
-                    const tbody = document.getElementById('fee_list_body');
-                    const row = document.createElement('tr');
-                    row.id = 'fee-row-' + feeIndex;
-                    row.className = 'table-success'; // Highlight new rows
-                    row.innerHTML = `
-                        <td>
-                            <small>${name} <span class="badge bg-success ms-1">Not saved</span></small>
-                            ${desc ? '<br><small class="text-muted">' + desc + '</small>' : ''}
-                            <input type="hidden" name="new_fees[${feeIndex}][name]" value="${name}" form="cost-edit-form">
-                            <input type="hidden" name="new_fees[${feeIndex}][description]" value="${desc}" form="cost-edit-form">
-                        </td>
-                        <td>
-                            <small><strong>HK$${amount.toFixed(2)}</strong></small>
-                            <input type="hidden" name="new_fees[${feeIndex}][amount]" value="${amount}" form="cost-edit-form">
-                        </td>
-                        <td>
-                            <button type="button" class="btn btn-sm btn-link text-danger p-0" onclick="removeFeeFromList(${feeIndex})">
-                                <i class="fas fa-times"></i>
-                            </button>
-                        </td>
-                    `;
-                    tbody.appendChild(row);
-
-                    // clear inputs
-                    nameInput.value = '';
-                    amountInput.value = '';
-                    descInput.value = '';
-                    nameInput.focus();
-
-                    feeIndex++;
-                    updatePricePreview();
-                }
-
-                function removeFeeFromList(index) {
-                    const row = document.getElementById('fee-row-' + index);
-                    if (row) row.remove();
-
-                    const tbody = document.getElementById('fee_list_body');
-                    if (tbody.children.length === 0) {
-                        const noRow = document.createElement('tr');
-                        noRow.id = 'no_fees_row';
-                        noRow.innerHTML = '<td colspan="3" class="text-center text-muted small">No additional fees recorded.</td>';
-                        tbody.appendChild(noRow);
-                    }
-                    updatePricePreview();
-                }
-
-                function updatePricePreview() {
-                    const feesText = document.getElementById('preview_fees_text');
-                    const totalText = document.getElementById('preview_total_text');
-                    const totalInput = document.getElementById('input_total_cost');
-
-                    if (!feesText || !totalText) return;
-
-                    const baseFees = parseFloat(feesText.getAttribute('data-base')) || 0;
-                    const designPrice = parseFloat(totalText.getAttribute('data-design')) || 0;
-
-                    // Sum new fees
-                    let newFeesTotal = 0;
-                    const newFeeInputs = document.querySelectorAll('input[name^="new_fees"][name$="[amount]"]');
-                    newFeeInputs.forEach(input => {
-                        newFeesTotal += parseFloat(input.value) || 0;
-                    });
-
-                    const currentTotalFees = baseFees + newFeesTotal;
-                    const finalTotal = designPrice + currentTotalFees;
-
-                    // Update display
-                    feesText.textContent = 'HK$' + currentTotalFees.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-                    totalText.textContent = 'HK$' + finalTotal.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-
-                    // Update input if it exists
-                    if (totalInput) {
-                        totalInput.value = finalTotal.toFixed(2);
-                    }
-                }
-
-                function showRejectModal() {
-                    const rejectModal = new bootstrap.Modal(document.getElementById('rejectModal'));
-                    rejectModal.show();
-                }
-            </script>
-
-            <!-- Confirm/Reject Order Section -->
-            <div class="row mt-4" style="<?php echo !$show_confirm_reject ? 'display: none;' : ''; ?>">
-                <div class="col-lg-12">
-                    <div class="card border-warning">
-                        <div class="card-header bg-warning bg-opacity-10">
-                            <h5 class="card-title mb-0">
-                                <i class="fas fa-check-circle me-2"></i>Order Action
-                            </h5>
+                    </div>
+                    <!-- Proposal Preview Modal -->
+                    <div class="modal fade" id="proposalPreviewModal" tabindex="-1" aria-hidden="true">
+                        <div class="modal-dialog modal-xl modal-dialog-centered">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title"><i class="fas fa-file-alt me-2"></i>Design Proposal Preview</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"
+                                        aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div id="proposalPreviewImageWrap" class="text-center" style="display:none;">
+                                        <img id="proposalPreviewImage" src="" alt="Design Proposal"
+                                            style="max-width:100%;max-height:70vh;border-radius:8px;" />
+                                    </div>
+                                    <div id="proposalPreviewPdfWrap" style="display:none;">
+                                        <iframe id="proposalPreviewPdf" src=""
+                                            style="width:100%;height:70vh;border:0;"></iframe>
+                                    </div>
+                                </div>
+                                <div class="modal-footer d-flex justify-content-between">
+                                    <div class="text-muted small">Confirm or reject after reviewing the proposal.</div>
+                                    <div class="d-flex gap-2">
+                                        <form method="post" class="m-0">
+                                            <input type="hidden" name="confirm_proposal" value="1">
+                                            <button type="submit" class="btn btn-success">
+                                                <i class="fas fa-check me-1"></i>Confirm Proposal
+                                            </button>
+                                        </form>
+                                        <form method="post" class="m-0">
+                                            <input type="hidden" name="reject_proposal" value="1">
+                                            <button type="submit" class="btn btn-danger">
+                                                <i class="fas fa-times me-1"></i>Reject Proposal
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        <div class="card-body">
-                            <?php if ($error_msg): ?>
-                                <div class="alert alert-danger mb-3" role="alert">
-                                    <i class="fas fa-exclamation-circle me-2"></i><?php echo $error_msg; ?>
+                    </div>
+
+                    <?php if ($status === 'drafting 2nd proposal'): ?>
+                        <div class="col-12 mt-3">
+                            <div class="card border-primary">
+                                <div class="card-body text-center">
+                                    <div class="mt-3">
+                                        <?php if ($allRefsConfirmed): ?>
+                                            <form method="post"
+                                                onsubmit="return confirm('Submit the 2nd proposal to the client for review?');">
+                                                <input type="hidden" name="submit_second_proposal" value="1">
+                                                <button type="submit" class="btn btn-primary">
+                                                    Submit 2nd Proposal for Client Review
+                                                </button>
+                                            </form>
+                                        <?php else: ?>
+                                            <div class="alert alert-warning mb-0">
+                                                <i class="fas fa-exclamation-triangle me-2"></i>
+                                                Not all referenced products have been confirmed. Please confirm all product
+                                                references
+                                                before
+                                                submitting the 2nd proposal.
+                                            </div>
+                                        <?php endif; ?>
+                                    </div>
                                 </div>
-                            <?php endif; ?>
-                            <p class="text-muted mb-3">Please review all details and assign a designer. Then confirm or reject the order.</p>
-                            
-                            <div class="row">
-                                <div class="col-md-6 mb-2">
-                                    <form method="post" style="display: inline;">
-                                        <input type="hidden" name="confirm_order" value="1">
-                                        <button type="submit" class="btn btn-success w-100" onclick="return confirm('Confirm this order?');">
-                                            <i class="fas fa-check-circle me-2"></i>Confirm Order
-                                        </button>
-                                    </form>
+                            </div>
+                        </div>
+                    <?php endif; ?>
+                    <!-- Confirm/Reject Order Section -->
+                    <div class="row mt-4" style="<?php echo !$show_confirm_reject ? 'display: none;' : ''; ?>">
+                        <div class="col-lg-12">
+                            <div class="card border-warning">
+                                <div class="card-header bg-warning bg-opacity-10">
+                                    <h5 class="card-title mb-0">
+                                        <i class="fas fa-check-circle me-2"></i>Order Action
+                                    </h5>
                                 </div>
-                                <div class="col-md-6 mb-2">
-                                    <button type="button" class="btn btn-danger w-100" onclick="showRejectModal()">
+                                <div class="card-body">
+                                    <?php if ($error_msg): ?>
+                                        <div class="alert alert-danger mb-3" role="alert">
+                                            <i class="fas fa-exclamation-circle me-2"></i><?php echo $error_msg; ?>
+                                        </div>
+                                    <?php endif; ?>
+                                    <p class="text-muted mb-3">Please review all details and assign a designer. Then confirm
+                                        or
+                                        reject the order.</p>
+
+                                    <div class="row">
+                                        <div class="col-md-6 mb-2">
+                                            <form method="post" style="display: inline;">
+                                                <input type="hidden" name="confirm_order" value="1">
+                                                <button type="submit" class="btn btn-success w-100"
+                                                    onclick="return confirm('Confirm this order?');">
+                                                    <i class="fas fa-check-circle me-2"></i>Confirm Order
+                                                </button>
+                                            </form>
+                                        </div>
+                                        <div class="col-md-6 mb-2">
+                                            <button type="button" class="btn btn-danger w-100" onclick="showRejectModal()">
+                                                <i class="fas fa-times-circle me-2"></i>Reject Order
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Reject Modal -->
+                    <div class="modal fade" id="rejectModal" tabindex="-1" aria-labelledby="rejectModalLabel"
+                        aria-hidden="true">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header bg-danger bg-opacity-10">
+                                    <h5 class="modal-title" id="rejectModalLabel">
                                         <i class="fas fa-times-circle me-2"></i>Reject Order
-                                    </button>
+                                    </h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"
+                                        aria-label="Close"></button>
                                 </div>
+                                <form method="post">
+                                    <div class="modal-body">
+                                        <input type="hidden" name="reject_order" value="1">
+                                        <div class="mb-3">
+                                            <label for="reject_reason" class="form-label fw-bold">Reason for
+                                                Rejection</label>
+                                            <textarea id="reject_reason" name="reject_reason" class="form-control" rows="4"
+                                                placeholder="Enter reason for rejecting this order..." required></textarea>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary"
+                                            data-bs-dismiss="modal">Cancel</button>
+                                        <button type="submit" class="btn btn-danger"
+                                            onclick="return confirm('Are you sure you want to reject this order?');">
+                                            <i class="fas fa-times-circle me-2"></i>Reject
+                                        </button>
+                                    </div>
+                                </form>
                             </div>
                         </div>
                     </div>
-                </div>
-            </div>
 
-        <!-- Reject Modal -->
-        <div class="modal fade" id="rejectModal" tabindex="-1" aria-labelledby="rejectModalLabel" aria-hidden="true">
-            <div class="modal-dialog">
-                <div class="modal-content">
-                    <div class="modal-header bg-danger bg-opacity-10">
-                        <h5 class="modal-title" id="rejectModalLabel">
-                            <i class="fas fa-times-circle me-2"></i>Reject Order
-                        </h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                <?php else: ?>
+                    <div class="alert alert-danger" role="alert">
+                        <i class="fas fa-exclamation-circle me-2"></i>
+                        <strong>Order not found.</strong>
+                        <p class="mb-0">The requested order does not exist or has been removed.</p>
                     </div>
-                    <form method="post">
-                        <div class="modal-body">
-                            <input type="hidden" name="reject_order" value="1">
-                            <div class="mb-3">
-                                <label for="reject_reason" class="form-label fw-bold">Reason for Rejection</label>
-                                <textarea id="reject_reason" name="reject_reason" class="form-control" rows="4"
-                                    placeholder="Enter reason for rejecting this order..." required></textarea>
-                            </div>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                            <button type="submit" class="btn btn-danger"
-                                onclick="return confirm('Are you sure you want to reject this order?');">
-                                <i class="fas fa-times-circle me-2"></i>Reject
-                            </button>
-                        </div>
-                    </form>
+                <?php endif; ?>
+
+                <!-- Action Buttons -->
+                <div class="d-flex justify-content-between align-items-center mt-4">
+                    <a href="Order_Management.php" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left me-2"></i>Back to Order List
+                    </a>
                 </div>
             </div>
         </div>
 
-    <?php else: ?>
-        <div class="alert alert-danger" role="alert">
-            <i class="fas fa-exclamation-circle me-2"></i>
-            <strong>Order not found.</strong>
-            <p class="mb-0">The requested order does not exist or has been removed.</p>
-        </div>
-    <?php endif; ?>
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
 
-    <!-- Action Buttons -->
-    <div class="d-flex justify-content-between align-items-center mt-4">
-        <a href="Order_Management.php" class="btn btn-secondary">
-            <i class="fas fa-arrow-left me-2"></i>Back to Order List
-        </a>
-    </div>
-    </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
-
-    <!-- Include chat widget -->
-    <?php include __DIR__ . '/../Public/chat_widget.php'; ?>
+        <!-- Include chat widget -->
+        <?php include __DIR__ . '/../Public/chat_widget.php'; ?>
 </body>
 
 </html>
