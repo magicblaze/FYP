@@ -209,6 +209,12 @@ function colorNameToHex($colorInput) {
     <?php include_once __DIR__ . '/includes/header.php'; ?>
 
     <main>
+    <div class="container-lg mt-4">
+        <div class="back-button-row mb-3">
+            <button type="button" class="btn btn-light" onclick="handleBack()" aria-label="Back">
+                ← Back
+            </button>
+    </div>
         <div class="product-detail-wrapper">
             <!-- Product Image -->
             <div class="product-image-wrapper">
@@ -217,11 +223,6 @@ function colorNameToHex($colorInput) {
 
             <!-- Product Information Panel -->
             <div class="product-panel">
-                <div class="back-button">
-                    <button type="button" class="btn btn-light" onclick="handleBack()" aria-label="Back">
-                        ← Back
-                    </button>
-                </div>
 
                 <div class="product-title"><?= htmlspecialchars($product['pname']) ?></div>
                 <div class="product-price">HK$<?= number_format((float)$product['price']) ?></div>

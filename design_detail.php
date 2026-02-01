@@ -142,6 +142,15 @@ $mainImg = $baseUrlEarly . $appRoot . '/design_image.php?id=' . (int) $design['d
     <?php include_once __DIR__ . '/includes/header.php'; ?>
 
     <main>
+        <div class="container-lg mt-4">
+            <div class="back-button-row mb-3">
+                <button type="button" class="btn btn-light shadow-sm"
+                    onclick="window.location.href='<?= htmlspecialchars($backUrl) ?>'" aria-label="Back">
+                    <i class="fas fa-arrow-left me-2"></i>Back
+                </button>
+            </div>
+        </div>
+
         <div class="design-detail-wrapper">
             <!-- Design Image with Carousel -->
             <div class="design-image-section">
@@ -192,12 +201,6 @@ $mainImg = $baseUrlEarly . $appRoot . '/design_image.php?id=' . (int) $design['d
 
             <!-- Design Information Panel -->
             <div class="design-panel">
-                <div class="back-button">
-                    <button type="button" class="btn btn-light"
-                        onclick="window.location.href='<?= htmlspecialchars($backUrl) ?>'" aria-label="Back">
-                        ← Back
-                    </button>
-                </div>
 
                 <div class="design-title"><?= htmlspecialchars($design['designName']) ?></div>
                 <div class="design-price">
@@ -254,7 +257,7 @@ $mainImg = $baseUrlEarly . $appRoot . '/design_image.php?id=' . (int) $design['d
         </div>
 
         <!-- Comments Section -->
-        <div class="comments-section" style="max-width: max-content; margin: 0 auto; padding: 0 1rem;">
+        <div class="comments-section" style="max-width: 964px; margin: 0 auto; padding: 0 1rem;">
             <h5><i class="fas fa-comments me-2"></i>Comments (<?= $commentCount ?>)</h5>
 
             <?php if (!empty($err)): ?>
@@ -287,7 +290,7 @@ $mainImg = $baseUrlEarly . $appRoot . '/design_image.php?id=' . (int) $design['d
 
     <?php if ($others->num_rows > 0): ?>
         <section class="detail-gallery" aria-label="Other Designs from This Designer"
-            style="max-width: max-content; margin: 2rem auto; padding: 0 1rem;">
+            style="max-width: 964px; margin: 2rem auto; padding: 0 1rem;">
             <h3 style="color: #2c3e50; font-weight: 600; margin-bottom: 1rem; font-size: 1.3rem;">Other Designs from
                 <?= htmlspecialchars($design['dname']) ?></h3>
             <div class="detail-gallery-images">
