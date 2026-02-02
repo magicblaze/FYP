@@ -597,7 +597,8 @@ function initApp(config = {}) {
           const mid = existingId || msgObj.messageid || msgObj.id || '';
           const did = (msgObj.share && msgObj.share.designid) ? msgObj.share.designid : (msgObj.content && /^\d+$/.test(String(msgObj.content).trim()) ? String(msgObj.content).trim() : '');
           const hasDesignId = (did && String(did).trim() !== '');
-          if (isOrderRoom) {
+          // Only show Add to Reference for explicit `design` message types
+          if (isOrderRoom && (msgObj.message_type && msgObj.message_type === 'design')) {
             // determine initial button state using preloaded references
             const midStr = String(mid || '');
             const didStr = String(did || '');
