@@ -244,7 +244,23 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     }
 
     if (isset($_POST['save_cost_changes'])) {
-        // 1. Handle Batch Fees if present
+        // 1. Handle deletion requests for existing fees (deferred until Save)
+        if (isset($_POST['delete_fees']) && is_array($_POST['delete_fees'])) {
+            $del_fee_sql = "DELETE FROM AdditionalFee WHERE fee_id = ? AND orderid = ?";
+            $del_fee_stmt = mysqli_prepare($mysqli, $del_fee_sql);
+            foreach ($_POST['delete_fees'] as $dfid) {
+                $dfid_int = intval($dfid);
+                if ($dfid_int <= 0)
+                    continue;
+                // verify ownership and delete
+                mysqli_stmt_bind_param($del_fee_stmt, "ii", $dfid_int, $orderid);
+                mysqli_stmt_execute($del_fee_stmt);
+            }
+            if ($del_fee_stmt)
+                mysqli_stmt_close($del_fee_stmt);
+        }
+
+        // 2. Handle Batch Fees if present (new fees to insert)
         if (isset($_POST['new_fees']) && is_array($_POST['new_fees'])) {
             $add_fee_sql = "INSERT INTO `AdditionalFee` (orderid, fee_name, amount, description) VALUES (?, ?, ?, ?)";
             $add_fee_stmt = mysqli_prepare($mysqli, $add_fee_sql);
@@ -364,7 +380,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
                 if ($roomId) {
                     // ensure client and manager are members; also try to add designer if we can find one
-                    $clientMemberId = isset($order['clientid']) ? (int)$order['clientid'] : 0;
+                    $clientMemberId = isset($order['clientid']) ? (int) $order['clientid'] : 0;
                     $designerMemberId = null;
                     // attempt to fetch designer id from Design if order has designid
                     if (!empty($order['designid'])) {
@@ -374,7 +390,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                             $dstmt->execute();
                             $dr = $dstmt->get_result()->fetch_assoc();
                             $dstmt->close();
-                            if ($dr && !empty($dr['designerid'])) $designerMemberId = (int)$dr['designerid'];
+                            if ($dr && !empty($dr['designerid']))
+                                $designerMemberId = (int) $dr['designerid'];
                         }
                     }
                     $chkM = $mysqli->prepare("SELECT COUNT(*) FROM ChatRoomMember WHERE ChatRoomid=? AND member_type=? AND memberid=?");
@@ -382,31 +399,34 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     if ($chkM && $insM) {
                         // client
                         if ($clientMemberId) {
-                            $mt = 'client'; $mid = $clientMemberId;
+                            $mt = 'client';
+                            $mid = $clientMemberId;
                             $chkM->bind_param('isi', $roomId, $mt, $mid);
                             $chkM->execute();
                             $cnt = $chkM->get_result()->fetch_row()[0] ?? 0;
-                            if ((int)$cnt === 0) {
+                            if ((int) $cnt === 0) {
                                 $insM->bind_param('isi', $roomId, $mt, $mid);
                                 $insM->execute();
                             }
                         }
                         // manager (current user)
-                        $mt = 'manager'; $mid = $user_id;
+                        $mt = 'manager';
+                        $mid = $user_id;
                         $chkM->bind_param('isi', $roomId, $mt, $mid);
                         $chkM->execute();
                         $cnt = $chkM->get_result()->fetch_row()[0] ?? 0;
-                        if ((int)$cnt === 0) {
+                        if ((int) $cnt === 0) {
                             $insM->bind_param('isi', $roomId, $mt, $mid);
                             $insM->execute();
                         }
                         // designer
                         if (!empty($designerMemberId)) {
-                            $mt = 'designer'; $mid = $designerMemberId;
+                            $mt = 'designer';
+                            $mid = $designerMemberId;
                             $chkM->bind_param('isi', $roomId, $mt, $mid);
                             $chkM->execute();
                             $cnt = $chkM->get_result()->fetch_row()[0] ?? 0;
-                            if ((int)$cnt === 0) {
+                            if ((int) $cnt === 0) {
                                 $insM->bind_param('isi', $roomId, $mt, $mid);
                                 $insM->execute();
                             }
@@ -421,7 +441,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         $stype = 'manager';
                         $sId = $user_id;
                         $mtype = 'order';
-                        $orderContent = (string)$orderid;
+                        $orderContent = (string) $orderid;
                         $insMsg->bind_param('sissi', $stype, $sId, $orderContent, $mtype, $roomId);
                         $insMsg->execute();
                         $msgId = $insMsg->insert_id;
@@ -437,7 +457,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                 $insRead = $mysqli->prepare('INSERT INTO MessageRead (messageid, ChatRoomMemberid, is_read, read_at) VALUES (?,?,?,?)');
                                 while ($mr = $mres->fetch_assoc()) {
                                     $crmId = (int) $mr['ChatRoomMemberid'];
-                                    if ($mr['member_type'] === 'manager' && (int)$mr['memberid'] === $user_id) {
+                                    if ($mr['member_type'] === 'manager' && (int) $mr['memberid'] === $user_id) {
                                         $isr = 1;
                                         $rtime = date('Y-m-d H:i:s');
                                     } else {
@@ -449,7 +469,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                         $insRead->execute();
                                     }
                                 }
-                                if ($insRead) $insRead->close();
+                                if ($insRead)
+                                    $insRead->close();
                                 $membersQ->close();
                             }
                         }
@@ -588,7 +609,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                             <input type="hidden" name="new_fees[${feeIndex}][amount]" value="${amount}" form="cost-edit-form">
                         </td>
                         <td>
-                            <button type="button" class="btn btn-sm btn-link text-danger p-0" onclick="removeFeeFromList(${feeIndex})">
+                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeFeeFromList(${feeIndex})">
                                 <i class="fas fa-times"></i>
                             </button>
                         </td>
@@ -619,6 +640,38 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
             updatePricePreview();
         }
 
+        function toggleExistingFeeDelete(feeId, btn) {
+            const row = document.getElementById('fee-existing-' + feeId);
+            const form = document.getElementById('cost-edit-form');
+            if (!row || !form) return;
+            const inputId = 'del_fee_input_' + feeId;
+            const existingInput = document.getElementById(inputId);
+            if (existingInput) {
+                // unmark
+                existingInput.remove();
+                row.classList.remove('table-danger');
+                row.style.opacity = '1';
+                btn.innerHTML = '<i class="fas fa-times"></i>';
+                btn.classList.add('btn-outline-danger');
+                btn.classList.remove('btn-outline-secondary');
+            } else {
+                // mark for deletion
+                const hidden = document.createElement('input');
+                hidden.type = 'hidden';
+                hidden.name = 'delete_fees[]';
+                hidden.value = feeId;
+                hidden.id = inputId;
+                hidden.setAttribute('form', 'cost-edit-form');
+                form.appendChild(hidden);
+                row.classList.add('table-danger');
+                row.style.opacity = '0.6';
+                btn.innerHTML = '<i class="fas fa-undo"></i>';
+                btn.classList.remove('btn-outline-danger');
+                btn.classList.add('btn-outline-secondary');
+            }
+            updatePricePreview();
+        }
+
         function updatePricePreview() {
             const feesText = document.getElementById('preview_fees_text');
             const totalText = document.getElementById('preview_total_text');
@@ -626,8 +679,18 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
 
             if (!feesText || !totalText) return;
 
-            const baseFees = parseFloat(feesText.getAttribute('data-base')) || 0;
+            const originalBase = parseFloat(feesText.getAttribute('data-base')) || 0; // includes existing fees + references
             const designPrice = parseFloat(totalText.getAttribute('data-design')) || 0;
+
+            // Sum amounts of existing fees that are marked for deletion
+            let deletedSum = 0;
+            document.querySelectorAll('.existing-fee-amount').forEach(el => {
+                const fid = el.getAttribute('data-fee-id');
+                const amt = parseFloat(el.getAttribute('data-amount')) || 0;
+                if (document.getElementById('del_fee_input_' + fid)) {
+                    deletedSum += amt;
+                }
+            });
 
             // Sum new fees
             let newFeesTotal = 0;
@@ -636,7 +699,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                 newFeesTotal += parseFloat(input.value) || 0;
             });
 
-            const currentTotalFees = baseFees + newFeesTotal;
+            const currentTotalFees = originalBase - deletedSum + newFeesTotal;
             const finalTotal = designPrice + currentTotalFees;
 
             // Update display
@@ -653,6 +716,10 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
             const rejectModal = new bootstrap.Modal(document.getElementById('rejectModal'));
             rejectModal.show();
         }
+        // Initialize preview on load
+        document.addEventListener('DOMContentLoaded', function () {
+            updatePricePreview();
+        });
     </script>
 </head>
 
@@ -962,7 +1029,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                                     $designers_result = mysqli_stmt_get_result($designers_stmt);
 
                                                     while ($designer = mysqli_fetch_assoc($designers_result)) {
-                                                        $status_indicator = $designer['status'] === 'Available' ? '✓ Available' : '⊙ Busy';
+                                                        $status_indicator = $designer['status'] === 'Available' ? 'Available' : 'Busy';
                                                         echo '<option value="' . $designer['designerid'] . '">' .
                                                             htmlspecialchars($designer['dname']) . ' (' . $status_indicator . ')' .
                                                             '</option>';
@@ -985,7 +1052,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                     </div>
                                 </div>
                             </div>
-                        </div> 
+                        </div>
                         <!-- Confirm/Reject Order Section -->
                         <div class="row mt-4">
                             <div class="col-lg-12">
@@ -1079,7 +1146,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                     </div>
                                 </div>
                             </div>
-                                </div>
+                        </div>
                     <?php elseif ($status === 'drafting 2nd proposal'): ?>
                         <!-- Update Order Information Section -->
                         <div class="col-lg-6 mb-4">
@@ -1196,7 +1263,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                     <div id="cost-edit" class="<?php echo $edit_cost ? '' : 'd-none'; ?>">
                                         <!-- Additional Fees List -->
                                         <div class="mb-4">
-                                            <label class="fw-bold mb-2">Additional Fees Detail</label>
+                                            <h6 class="text-muted mb-2">Additional Fees Detail</h6>
                                             <div class="table-responsive">
                                                 <table class="table table-sm table-hover mb-0">
                                                     <thead class="table">
@@ -1208,7 +1275,6 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                                     </thead>
                                                     <tbody id="fee_list_body">
                                                         <?php if (!empty($references)): ?>
-                                                            <!-- Show referenced items (product/design refs) in the cost list -->
                                                             <?php foreach ($references as $ref):
                                                                 $refPrice = isset($ref['price']) && $ref['price'] !== null ? (float) $ref['price'] : (float) ($ref['product_price'] ?? 0);
                                                                 ?>
@@ -1225,7 +1291,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
 
                                                         <?php if (!empty($fees)): ?>
                                                             <?php foreach ($fees as $fee): ?>
-                                                                <tr>
+                                                                <tr id="fee-existing-<?php echo $fee['fee_id']; ?>">
                                                                     <td>
                                                                         <small><?php echo htmlspecialchars($fee['fee_name']); ?></small>
                                                                         <?php if ($fee['description']): ?>
@@ -1233,18 +1299,16 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                                                                 class="text-muted"><?php echo htmlspecialchars($fee['description']); ?></small>
                                                                         <?php endif; ?>
                                                                     </td>
-                                                                    <td><small><strong>HK$<?php echo number_format($fee['amount'], 0); ?></strong></small>
+                                                                    <td>
+                                                                        <small><strong class="existing-fee-amount"
+                                                                                data-fee-id="<?php echo $fee['fee_id']; ?>"
+                                                                                data-amount="<?php echo htmlspecialchars($fee['amount']); ?>">HK$<?php echo number_format($fee['amount'], 0); ?></strong></small>
                                                                     </td>
                                                                     <td>
-                                                                        <form method="post" style="display: inline;">
-                                                                            <input type="hidden" name="delete_fee" value="1">
-                                                                            <input type="hidden" name="fee_id"
-                                                                                value="<?php echo $fee['fee_id']; ?>">
-                                                                            <button type="submit" class="btn btn-sm btn-outline-danger"
-                                                                                onclick="return confirm('Delete this fee?');">
-                                                                                <i class="fas fa-trash"></i>
-                                                                            </button>
-                                                                        </form>
+                                                                        <button type="button" class="btn btn-sm btn-outline-danger"
+                                                                            onclick="toggleExistingFeeDelete(<?php echo $fee['fee_id']; ?>, this)">
+                                                                            <i class="fas fa-times"></i>
+                                                                        </button>
                                                                     </td>
                                                                 </tr>
                                                             <?php endforeach; ?>
@@ -1258,81 +1322,54 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                                     </tbody>
                                                 </table>
                                             </div>
-                                        </div>
 
-                                        <!-- Combined Cost Edit Form -->
-                                        <form method="post" id="cost-edit-form">
-                                            <input type="hidden" name="save_cost_changes" value="1">
 
-                                            <!-- Add New Fee Interface -->
-                                            <div class="mb-4">
-                                                <div class="card p-3 bg-light border">
-                                                    <div class="row g-2 mb-2 align-items-end">
-                                                        <div class="col-md-4">
-                                                            <label class="small text-muted">Name</label>
-                                                            <input type="text" id="new_fee_name"
-                                                                class="form-control form-control-sm"
-                                                                placeholder="e.g. Rush Fee">
+                                            <!-- Combined Cost Edit Form -->
+                                            <form method="post" id="cost-edit-form">
+                                                <input type="hidden" name="save_cost_changes" value="1">
+                                                <input type="hidden" name="total_cost" id="input_total_cost"
+                                                    value="<?php echo number_format($final_total_cost, 2, '.', ''); ?>">
+
+                                                <!-- Add New Fee Interface -->
+                                                <div class="mb-4">
+                                                    <div class="card p-3 bg-light border">
+                                                        <div class="row d-flex g-2 mb-2 justify-content-evenly">
+                                                            <div class="col-md-5">
+                                                                <label class="small text-muted">Name</label>
+                                                                <input type="text" id="new_fee_name"
+                                                                    class="form-control form-control-sm"
+                                                                    placeholder="e.g. Rush Fee">
+                                                            </div>
+                                                            <div class="col-md-3">
+                                                                <label class="small text-muted">Amount</label>
+                                                                <input type="number" id="new_fee_amount"
+                                                                    class="form-control form-control-sm" placeholder="0.00"
+                                                                    min="0" step="0.01">
+                                                            </div>
+                                                            <div class="col-md-3">
+                                                                <label class="small text-muted">Description</label>
+                                                                <input type="text" id="new_fee_desc"
+                                                                    class="form-control form-control-sm" placeholder="Optional">
+                                                            </div>
                                                         </div>
-                                                        <div class="col-md-3">
-                                                            <label class="small text-muted">Amount</label>
-                                                            <input type="number" id="new_fee_amount"
-                                                                class="form-control form-control-sm" placeholder="0.00" min="0"
-                                                                step="0.01">
-                                                        </div>
-                                                        <div class="col-md-3">
-                                                            <label class="small text-muted">Description</label>
-                                                            <input type="text" id="new_fee_desc"
-                                                                class="form-control form-control-sm" placeholder="Optional">
-                                                        </div>
-                                                        <div class="col-md-2">
-                                                            <button type="button" class="btn btn-sm btn-primary w-100"
-                                                                onclick="addFeeToList()">
-                                                                <i class="fas fa-plus"></i> Add
-                                                            </button>
-                                                        </div>
+                                                        <button type="button" class="btn btn-sm btn-primary w-100"
+                                                            onclick="addFeeToList()">
+                                                            <i class="fas fa-plus"></i> Append
+                                                        </button>
+
                                                     </div>
                                                 </div>
-                                            </div>
-
-                                            <!-- Update Total Cost Input -->
-                                            <div class="mb-3">
                                                 <!-- Cost Summary -->
-                                                <div class="mb-4 p-3 rounded border">
-                                                    <div class="row mb-2">
-                                                        <div class="mt-3">
-                                                            <?php if ($status === 'reviewing design proposal'): ?>
-                                                                <?php if ($latest_picture): ?>
-                                                                    <button type="button" class="btn btn-primary me-2"
-                                                                        onclick="openProposalPreview('../uploads/designed_Picture/<?php echo htmlspecialchars($latest_picture['filename']); ?>')">
-                                                                        <i class="fas fa-file-image me-1"></i>Preview Design Proposal
-                                                                    </button>
-                                                                <?php else: ?>
-                                                                    <button disabled class="btn btn-secondary me-2">
-                                                                        <i class="fas fa-exclamation-triangle me-1"></i>No Proposal File
-                                                                        Found
-                                                                    </button>
-                                                                <?php endif; ?>
-                                                            <?php endif; ?>
-
-                                                            <!-- Confirm/Reject buttons are inside the preview modal -->
-                                                            <strong class="text-info" id="preview_fees_text"
-                                                                data-base="<?php echo ($total_fees + $references_total); ?>">HK$<?php echo number_format(($total_fees + $references_total), 0); ?></strong>
-                                                        </div>
+                                                <div class="d-flex flex-row justify-content-between mb-4 p-3 rounded border ">
+                                                    <div class="col-6">
+                                                        <small class="text-muted">Total: </small>
                                                     </div>
-                                                    <hr class="my-2">
-                                                    <div class="row">
-                                                        <div class="col-6">
-                                                            <small class="text-muted">Total Cost:</small>
-                                                        </div>
-                                                        <div class="col-6 text-end">
-                                                            <strong class="text-danger fs-5" id="preview_total_text"
-                                                                data-design="<?php echo $order["design_price"] ?? 0; ?>">HK$<?php echo number_format($final_total_cost, 0); ?></strong>
-                                                        </div>
+                                                    <div class="col-6">
+                                                        <strong class="text-danger fs-5"
+                                                            id="display_total_cost">HK$<?php echo number_format($final_total_cost, 2); ?></strong>
                                                     </div>
                                                 </div>
-
-                                                <div class="d-flex gap-2">
+                                                <div class="row gap-2">
                                                     <button type="submit" class="btn btn-success flex-grow-1">
                                                         <i class="fas fa-check me-2"></i>Save
                                                     </button>
@@ -1341,8 +1378,8 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                                         <i class="fas fa-times me-2"></i>Cancel
                                                     </button>
                                                 </div>
-                                            </div>
-                                        </form>
+                                            </form>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
