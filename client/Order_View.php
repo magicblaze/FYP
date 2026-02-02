@@ -255,7 +255,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </div>
                         <div class="mb-3"><label class="fw-bold text-muted small">Status</label>
                             <p class="mb-0"><span
-                                    class="badge <?php echo ($status === 'complete') ? 'bg-success' : (($status === 'reject') ? 'bg-danger' : 'bg-info'); ?>"><?php echo htmlspecialchars($status); ?></span>
+                                    class="badge <?php echo ($status === 'complete') ? 'bg-success' : (($status === 'rejected') ? 'bg-danger' : 'bg-info'); ?>"><?php echo htmlspecialchars($status); ?></span>
                             </p>
                         </div>
                         <div class="text-muted mb-0 small">Requirements</div>
@@ -328,7 +328,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                                 $badgeClass = 'bg-warning';
                                             if (in_array($refStatus, ['confirmed', 'approved']))
                                                 $badgeClass = 'bg-success';
-                                            if (in_array($refStatus, ['rejected', 'reject']))
+                                            if (in_array($refStatus, ['rejected']))
                                                 $badgeClass = 'bg-danger';
                                             ?>
                                             <tr>

@@ -74,7 +74,7 @@ $stats_sql = "SELECT
                 COUNT(DISTINCT CASE WHEN o.ostatus = 'waiting confirm' THEN o.orderid END) as pending_orders,
                 COUNT(DISTINCT CASE WHEN o.ostatus = 'designing' THEN o.orderid END) as designing_orders,
                 COUNT(DISTINCT CASE WHEN o.ostatus = 'complete' THEN o.orderid END) as completed_orders,
-                COUNT(DISTINCT CASE WHEN o.ostatus = 'reject' THEN o.orderid END) as rejected_orders,
+                COUNT(DISTINCT CASE WHEN o.ostatus IN ('reject','rejected') THEN o.orderid END) as rejected_orders,
                 COUNT(DISTINCT CASE WHEN d.designerid IS NOT NULL THEN o.orderid END) as assigned_orders,
                 COUNT(DISTINCT CASE WHEN d.designerid IS NULL THEN o.orderid END) as unassigned_orders,
                 SUM(CASE WHEN o.ostatus IN ('waiting confirm', 'designing') THEN o.budget ELSE 0 END) as active_budget,

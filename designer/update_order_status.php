@@ -26,8 +26,8 @@ try {
     $newStatus = null;
     if ($action === 'confirm') {
         $newStatus = 'designing';
-    } elseif ($action === 'reject') {
-        $newStatus = 'reject';
+    } elseif ($action === 'rejected') {
+        $newStatus = 'rejected';
     } elseif ($action === 'submit_proposal') {
         $newStatus = 'reviewing design proposal';
     }

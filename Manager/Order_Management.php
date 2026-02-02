@@ -146,8 +146,8 @@ $stats = mysqli_fetch_assoc($stats_result);
                         class="btn btn-sm <?php echo $status_filter == 'complete' ? 'btn-active' : 'btn'; ?>">
                         Completed
                     </a>
-                    <a href="?status=reject"
-                        class="btn btn-sm <?php echo $status_filter == 'reject' ? 'btn-active' : 'btn'; ?>">
+                    <a href="?status=rejected"
+                        class="btn btn-sm <?php echo $status_filter == 'rejected' ? 'btn-active' : 'btn'; ?>">
                         Rejected
                     </a>
                     <div class="ms-auto"> Total: <?php echo $total_orders; ?>

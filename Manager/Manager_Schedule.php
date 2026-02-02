@@ -142,7 +142,6 @@ function getStatusBadgeClass($status) {
             return 'bg-warning';
         case 'cancelled':
         case 'rejected':
-        case 'reject':
             return 'bg-danger';
         default:
             return 'bg-secondary';

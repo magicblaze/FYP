@@ -342,7 +342,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
     if (isset($_POST['reject_order'])) {
         $reject_reason = mysqli_real_escape_string($mysqli, $_POST['reject_reason'] ?? '');
-        $reject_status = 'reject';
+        $reject_status = 'rejected';
 
         // Update order status and reason
         $update_reject_sql = "UPDATE `Order` SET ostatus = ?, Requirements = ? WHERE orderid = ?";
@@ -351,16 +351,20 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         mysqli_stmt_bind_param($reject_stmt, "ssi", $reject_status, $reject_note, $orderid);
 
         if (mysqli_stmt_execute($reject_stmt)) {
+            mysqli_stmt_close($reject_stmt);
             header("Location: Order_Edit.php?id=" . $orderid . "&msg=rejected");
             exit();
+        } else {
+            // capture DB error for display and debugging
+            $error_msg = 'Failed to reject order: ' . mysqli_error($mysqli);
+            mysqli_stmt_close($reject_stmt);
         }
-        mysqli_stmt_close($reject_stmt);
     }
 }
 // Normalize status strings
 $status = strtolower($order['ostatus'] ?? 'waiting confirm');
-$isProposalConfirmed = !in_array($status, ['waiting confirm', 'designing', 'drafting 2nd proposal', 'reviewing design proposal', 'submit_proposal', 'reject']);
-$hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing design proposal', 'waiting client review', 'reject', 'waiting client payment', 'complete']);
+$isProposalConfirmed = !in_array($status, ['waiting confirm', 'designing', 'drafting 2nd proposal', 'reviewing design proposal', 'submit_proposal', 'rejected']);
+$hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing design proposal', 'waiting client review', 'rejected', 'waiting client payment', 'complete']);
 
 ?>
 
@@ -551,7 +555,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                 'waiting payment' => ['class' => 'alert-warning', 'icon' => 'fa-credit-card', 'title' => 'Waiting Payment', 'text' => 'Waiting for client payment to proceed.'],
                 'waiting client payment' => ['class' => 'alert-warning', 'icon' => 'fa-credit-card', 'title' => 'Waiting Payment', 'text' => 'Waiting for client payment to proceed.'],
                 'complete' => ['class' => 'alert-success', 'icon' => 'fa-check-circle', 'title' => 'Complete', 'text' => 'Order completed successfully.'],
-                'reject' => ['class' => 'alert-danger', 'icon' => 'fa-times-circle', 'title' => 'Rejected', 'text' => 'Order has been rejected. See notes for reason.'],
+                'rejected' => ['class' => 'alert-danger', 'icon' => 'fa-times-circle', 'title' => 'Rejected', 'text' => 'Order has been rejected. See notes for reason.'],
             ];
 
             $banner = $status_map[$banner_status] ?? ['class' => 'alert-info', 'icon' => 'fa-info-circle', 'title' => ucwords($banner_status), 'text' => 'Status: ' . $banner_status];
@@ -872,9 +876,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                                 <?php echo $error_msg; ?>
                                             </div>
                                         <?php endif; ?>
-                                        <p class="text-muted mb-3">Please review all details and assign a designer. Then confirm
-                                            or
-                                            reject the order.</p>
+                                        <p class="text-muted mb-3">Please review all details.</p>
 
                                         <div class="row">
                                             <div class="col-md-6 mb-2">
@@ -882,13 +884,13 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                                     <input type="hidden" name="confirm_order" value="1">
                                                     <button type="submit" class="btn btn-success w-100"
                                                         onclick="return confirm('Confirm this order?');">
-                                                        <i class="fas fa-check-circle me-2"></i>Confirm Order
+                                                        <i class="fas fa-check-circle me-2"></i>Confirm
                                                     </button>
                                                 </form>
                                             </div>
                                             <div class="col-md-6 mb-2">
                                                 <button type="button" class="btn btn-danger w-100" onclick="showRejectModal()">
-                                                    <i class="fas fa-times-circle me-2"></i>Reject Order
+                                                    <i class="fas fa-times-circle me-2"></i>Reject
                                                 </button>
                                             </div>
                                         </div>
@@ -904,7 +906,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                 <div class="modal-content">
                                     <div class="modal-header bg-danger bg-opacity-10">
                                         <h5 class="modal-title" id="rejectModalLabel">
-                                            <i class="fas fa-times-circle me-2"></i>Reject Order
+                                            <i class="fas fa-times-circle me-2"></i>Reject
                                         </h5>
                                         <button type="button" class="btn-close" data-bs-dismiss="modal"
                                             aria-label="Close"></button>
@@ -936,7 +938,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                             <div class="card border-primary mb-4">
                                 <div class="card-body text-center">
                                     <h5 class="text-info"><i class="fas fa-search me-2"></i>Design Proposal</h5>
-                                    <p>The designer has submitted a proposal. Please review the design details.</p>
+                                    <p>A proposal has been submitted. Please review the design details.</p>
                                     <div class="mt-3">
                                         <?php if ($latest_picture): ?>
                                             <button type="button" class="btn btn-primary me-2"
