@@ -1,15 +1,12 @@
 function initApp(config = {}) {
   const API = config.apiPath || (location.pathname + '?action=');
-  // expose the resolved API base so non-widget helpers (handleChat) can reuse it
   try { window.chatApiBase = API; } catch (e) {}
   const userId = config.userId ?? 0;
-  const userType = (config.userType || 'client').toLowerCase().trim();
+  const userType = (config.userType || '').toLowerCase().trim();
   const userName = config.userName || '';
-  // expose current user globally so URL handlers can access it
   try { window.chatUserId = userId; window.chatUserType = userType; } catch (e) {}
   const items = config.items || [];
 
-  // Optionally namespace element ids when used as an embeddable widget.
   const prefix = config.rootId ? (config.rootId + '_') : '';
   const el = id => document.getElementById(prefix + id);
   const elements = {
@@ -27,7 +24,6 @@ function initApp(config = {}) {
     catalogOffcanvasEl: el('catalogOffcanvas'),
   };
 
-  // Ensure any attach preview columns are hidden by default (remove visibility classes)
   try {
     ['chatwidget_attachPreviewColumn','attachPreviewColumn'].forEach(id => {
       const el1 = document.getElementById(prefix + id);
@@ -42,7 +38,6 @@ function initApp(config = {}) {
 
   let currentAgent = null;
   let currentRoomId = null;
-  // cache of references for current order room
   let currentOrderReferences = { messageIds: new Set(), designIds: new Set() };
   let lastMessageId = 0;
   let widgetPendingFile = null;
@@ -54,7 +49,7 @@ function initApp(config = {}) {
   if (elements.openCatalogBtn && bsOff) {
     elements.openCatalogBtn.addEventListener('click', () => bsOff.show());
   }
-  // multipart/form-data POST helper (returns parsed JSON or text)
+
   async function apiPostForm(path, formData) {
     try {
       const res = await fetch(API + path, { method: 'POST', body: formData });
@@ -105,33 +100,42 @@ function initApp(config = {}) {
     }
   }
 
-  // Add a reference for an order (designer action)
   async function addReference(roomId, messageId, designId, btn) {
     if (!confirm('Add this item to the order references?')) return;
     try {
       if (btn) { btn.disabled = true; btn.textContent = 'Adding...'; }
-      const payload = { room: roomId };
-      if (messageId) payload.messageid = messageId;
-      if (designId) payload.designid = designId;
+      const payload = {};
+      const rid = (typeof roomId !== 'undefined' && roomId !== null) ? parseInt(String(roomId).replace(/[^0-9]/g,''), 10) : 0;
+      if (rid && !isNaN(rid)) payload.room = rid;
+      const mid = (typeof messageId !== 'undefined' && messageId !== null && String(messageId).trim() !== '') ? parseInt(String(messageId).replace(/[^0-9]/g,''), 10) : null;
+      const did = (typeof designId !== 'undefined' && designId !== null && String(designId).trim() !== '') ? parseInt(String(designId).replace(/[^0-9]/g,''), 10) : null;
+      if (mid) payload.messageid = mid;
+      if (did) payload.designid = did;
+      if (!payload.room) {
+        try {
+          const rn = currentAgent && (currentAgent.roomname || currentAgent.roomName || '');
+          const m = rn && rn.toString().match(/^order-(\d+)$/i);
+          if (m) payload.orderid = parseInt(m[1], 10);
+        } catch (e) {}
+      }
+
       const res = await apiPost('addReference', payload);
       if (res && res.ok) {
         if (res.already) {
-          if (btn) { btn.disabled = true; btn.textContent = 'Added'; btn.classList.remove('btn-outline-secondary'); btn.classList.add('btn-secondary'); }
+          if (btn) { btn.disabled = true; btn.textContent = 'Added'; btn.classList.remove('btn-outline-secondary'); btn.classList.add('btn-success'); }
           return res;
         }
-        // mark caches so subsequent messages/buttons show added state
         try {
-          if (designId && currentOrderReferences && currentOrderReferences.designIds) currentOrderReferences.designIds.add(String(designId));
-          if (messageId && currentOrderReferences && currentOrderReferences.messageIds) currentOrderReferences.messageIds.add(String(messageId));
+          if (did && currentOrderReferences && currentOrderReferences.designIds) currentOrderReferences.designIds.add(String(did));
+          if (mid && currentOrderReferences && currentOrderReferences.messageIds) currentOrderReferences.messageIds.add(String(mid));
         } catch (e) {}
         if (btn) { btn.textContent = 'Added'; btn.classList.remove('btn-outline-secondary'); btn.classList.add('btn-success'); }
-        // update any other matching buttons in the DOM
         try {
-          if (designId) {
-            document.querySelectorAll('.add-ref-btn[data-did="' + String(designId) + '"]').forEach(b => { b.disabled = true; b.textContent = 'Added'; b.classList.remove('btn-outline-secondary'); b.classList.add('btn-secondary'); });
+          if (did) {
+            document.querySelectorAll('.add-ref-btn[data-did="' + String(did) + '"]').forEach(b => { b.disabled = true; b.textContent = 'Added'; b.classList.remove('btn-outline-secondary'); b.classList.add('btn-success'); });
           }
-          if (messageId) {
-            document.querySelectorAll('.add-ref-btn[data-mid="' + String(messageId) + '"]').forEach(b => { b.disabled = true; b.textContent = 'Added'; b.classList.remove('btn-outline-secondary'); b.classList.add('btn-secondary'); });
+          if (mid) {
+            document.querySelectorAll('.add-ref-btn[data-mid="' + String(mid) + '"]').forEach(b => { b.disabled = true; b.textContent = 'Added'; b.classList.remove('btn-outline-secondary'); b.classList.add('btn-success'); });
           }
         } catch (e) {}
         return res;
@@ -151,7 +155,6 @@ function initApp(config = {}) {
   function escapeHtml(s) { return String(s || '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
   function stripHtml(html) { return String(html || '').replace(/<[^>]*>?/gm, ''); }
 
-  // Format timestamps: prefix with "Today" or MM/DD, then show the time (English)
   function formatMessageTimestamp(ts) {
     try {
       const d = new Date(ts);
@@ -167,7 +170,6 @@ function initApp(config = {}) {
     } catch (e) { return ''; }
   }
 
-  // --- Unread helpers: store simple per-room unread counts in localStorage and update UI badges
   function getUnreadKey(roomId) {
     return 'chat_unread_' + roomId;
   }
@@ -445,18 +447,13 @@ function initApp(config = {}) {
 
   function appendMessageToUI(msgObj, who) {
     if (!elements.messages) return;
-    // Avoid adding duplicate messages: if this message has an id and
-    // we've already rendered it, skip appending. This prevents duplicates
-    // when a poll and a send response arrive around the same time.
     const existingId = msgObj.id || msgObj.messageid || msgObj.messageId || msgObj.messageID || msgObj.id;
     if (existingId) {
       try {
         if (elements.messages.querySelector('[data-mid="' + existingId + '"]')) return;
       } catch (e) {}
     }
-    const senderName = msgObj.sender_name || msgObj.sender || (msgObj.sender_type ? (msgObj.sender_type + ' ' + (msgObj.sender_id||'')) : '');
-    // Determine a room name candidate (used as fallback). Prefer showing the actual
-    // sender's name for message lines in group rooms; use roomname for lists/headers.
+    const senderName = msgObj.sender_name || msgObj.sender || (msgObj.share && (msgObj.share.owner_name || msgObj.share.sender_name || msgObj.share.owner)) || (msgObj.sender_type ? (msgObj.sender_type + ' ' + (msgObj.sender_id||'')) : '');
     let roomNameCandidate = '';
     let isGroup = false;
     try {
@@ -558,6 +555,7 @@ function initApp(config = {}) {
           const isOrderRoom = String(roomName).toLowerCase().startsWith('order-');
           const mid = existingId || msgObj.messageid || msgObj.id || '';
           const did = (msgObj.share && msgObj.share.designid) ? msgObj.share.designid : (msgObj.content && /^\d+$/.test(String(msgObj.content).trim()) ? String(msgObj.content).trim() : '');
+          const hasDesignId = (did && String(did).trim() !== '');
           if (isOrderRoom) {
             // determine initial button state using preloaded references
             const midStr = String(mid || '');
@@ -567,12 +565,15 @@ function initApp(config = {}) {
               // show added to all roles
               refButtonHtml = `<div style="margin-top:6px"><button class="btn btn-sm btn-secondary" disabled>Added</button></div>`;
             } else {
-              if (isDesigner) {
+              // If the item already contains a design id, do not offer the "Add" button
+              if (hasDesignId) {
+                refButtonHtml = '';
+              } else if (isDesigner) {
                 // designers can add
                 refButtonHtml = `<div style="margin-top:6px"><button class="btn btn-sm btn-outline-secondary add-ref-btn" data-mid="${escapeHtml(midStr)}" data-did="${escapeHtml(didStr)}">Add to Reference</button></div>`;
               } else {
                 // clients/managers see the status but cannot add
-                refButtonHtml = `<div style="margin-top:6px"><span class="small text-muted">Not added</span></div>`;
+                refButtonHtml = '';
               }
             }
           }

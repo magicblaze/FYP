@@ -1130,7 +1130,7 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
               // fallback to immediate send if preview area missing
               const attachmentUrl = payload.image || payload.url || null;
               const attachmentName = payload.title ? (payload.title + '.jpg') : (attachmentUrl ? (attachmentUrl.split('/').pop() || 'design') : 'design');
-              const resp = await inst.apiPost('sendMessage', { sender_type: 'client', sender_id: <?= json_encode($uid) ?>, content: (payload.design_id || payload.id) ? (payload.design_id || payload.id) : (payload.url || payload.title || ''), room: roomId, attachment_url: attachmentUrl, attachment_name: attachmentName, message_type: 'design', design_id: (payload.design_id || payload.id) || null, share_title: payload.title || '', share_url: payload.url || '', share_type: 'design' });
+              const resp = await inst.apiPost('sendMessage', { sender_type: <?= json_encode($role) ?>, sender_id: <?= json_encode($uid) ?>, content: (payload.design_id || payload.id) ? (payload.design_id || payload.id) : (payload.url || payload.title || ''), room: roomId, attachment_url: attachmentUrl, attachment_name: attachmentName, message_type: 'design', design_id: (payload.design_id || payload.id) || null, share_title: payload.title || '', share_url: payload.url || '', share_type: 'design' });
               try { if (resp && (resp.ok || resp.message)) inst.appendMessageToUI(resp.message || resp, 'me'); } catch(e){}
               return;
             }
@@ -1213,7 +1213,7 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
                   e.preventDefault(); e.stopImmediatePropagation();
                   try {
                     const p = previewPendingShare;
-                    const payload = { sender_type: 'client', sender_id: <?= json_encode($uid) ?>, content: (p.design_id || p.designid) ? (p.design_id || p.designid) : (p.share_url || p.attachmentName || ''), room: p.roomId, attachment_url: p.attachmentUrl, attachment_name: p.attachmentName, message_type: 'design', design_id: p.design_id || null, share_title: p.share_title, share_url: p.share_url, share_type: 'design', text: (document.getElementById('chatwidget_share_preview_text') ? document.getElementById('chatwidget_share_preview_text').value : '') };
+                    const payload = { sender_type: <?= json_encode($role) ?>, sender_id: <?= json_encode($uid) ?>, content: (p.design_id || p.designid) ? (p.design_id || p.designid) : (p.share_url || p.attachmentName || ''), room: p.roomId, attachment_url: p.attachmentUrl, attachment_name: p.attachmentName, message_type: 'design', design_id: p.design_id || null, share_title: p.share_title, share_url: p.share_url, share_type: 'design', text: (document.getElementById('chatwidget_share_preview_text') ? document.getElementById('chatwidget_share_preview_text').value : '') };
                     const resp = (inst && typeof inst.apiPost === 'function') ? await inst.apiPost('sendMessage', payload) : await (fetch(<?= json_encode($CHAT_API_PATH) ?> + 'sendMessage', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) }).then(r=>r.json()));
                     if (resp && (resp.ok || resp.message || resp.id)) {
                       try { if (inst && inst.appendMessageToUI) inst.appendMessageToUI(resp.message || resp, 'me'); } catch(e){}
@@ -1407,7 +1407,7 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
           if (statusEl) statusEl.textContent = `Sending 0 / ${total}...`;
             for (const sd of selectedDesigns) {
             const payload = {
-              sender_type: 'client', sender_id: <?= json_encode($uid) ?>,
+              sender_type: <?= json_encode($role) ?>, sender_id: <?= json_encode($uid) ?>,
               content: sd.url || sd.title || '', room: roomId,
               attachment_url: sd.image || sd.url || '', attachment_name: (sd.title||sd.type||'item') + '.jpg',
               message_type: 'design', share_title: sd.title || '', share_url: sd.url || '', share_type: sd.type === 'product' ? 'product' : 'design',
@@ -1439,7 +1439,7 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
               const inst2 = window.chatApps && window.chatApps['chatwidget'];
               if (inst2) {
                 const mtype = 'design';
-                await inst2.apiPost('sendMessage', { sender_type: 'client', sender_id: <?= json_encode($uid) ?>, content: sd.url || sd.title || '', room: roomId, attachment_url: sd.image || sd.url || '', attachment_name: (sd.title||sd.type||'item') + '.jpg', message_type: mtype, share_title: sd.title || '', share_url: sd.url || '', item_id: sd.id || sd.productid || sd.designid || sd.id });
+                await inst2.apiPost('sendMessage', { sender_type: <?= json_encode($role) ?>, sender_id: <?= json_encode($uid) ?>, content: sd.url || sd.title || '', room: roomId, attachment_url: sd.image || sd.url || '', attachment_name: (sd.title||sd.type||'item') + '.jpg', message_type: mtype, share_title: sd.title || '', share_url: sd.url || '', item_id: sd.id || sd.productid || sd.designid || sd.id });
               }
             }
           } catch(e) { console.error('send to designer failed', e); }

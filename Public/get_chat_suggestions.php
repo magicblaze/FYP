@@ -477,9 +477,6 @@ if (isset($_GET['debug']) && $_GET['debug']) {
     'liked_ids' => array_map(function($d){ return isset($d['designid']) ? (int)$d['designid'] : null; }, $liked_designs)
   ];
 }
-// If no liked or recommended designs/users were found, include a minimal debug block
-// so the widget can display why the lists are empty (helpful when called from browser).
-// keep response minimal; do not include internal debug data in normal responses
 
 echo json_encode($out);
 

@@ -101,10 +101,8 @@ if (!empty($references)) {
 
 $final_total_cost = $design_price + $total_fees + $references_total;
 
-// Determine workflow state
 $order_status = $order['ostatus'] ?? 'waiting confirm';
 $show_edit_cards = ($order_status !== 'waiting confirm' && !empty($order['designid']));
-$show_confirm_reject = ($order_status === 'waiting confirm');
 $error_msg = null;
 
 $edit_status = isset($_GET['edit']) && $_GET['edit'] == 'status';
@@ -232,7 +230,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     }
                 }
             } else {
-                // Design exists, just update order
                 $design = mysqli_fetch_assoc($design_check_result);
                 $update_order_sql = "UPDATE `Order` SET designid = ?, ostatus = 'designing' WHERE orderid = ?";
                 $update_order_stmt = mysqli_prepare($mysqli, $update_order_sql);
@@ -295,7 +292,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     }
 
     if (isset($_POST['confirm_proposal'])) {
-        // After confirming a design proposal, move to drafting a 2nd proposal
         $confirm_status = 'drafting 2nd proposal';
         $update_confirm_sql = "UPDATE `Order` SET ostatus = ? WHERE orderid = ?";
         $confirm_stmt = mysqli_prepare($mysqli, $update_confirm_sql);
@@ -798,9 +794,11 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                 </div>
 
 
-                <?php if ($show_confirm_reject): ?>
-                    <!-- Assign Designer Section (Only shown when waiting confirm) -->
-                    <div class="row mb-4">
+
+
+                <!-- Edit Sections -->
+                <div class="row mt-3">
+                    <?php if ($status == 'waiting confirm'): ?>
                         <div class="col-lg-6">
                             <div class="card h-100">
                                 <div class="card-header bg-light">
@@ -813,8 +811,8 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                     <div id="designer-view" class="<?php echo $edit_designer ? 'd-none' : ''; ?>">
                                         <button type="button" class="btn btn-primary w-100"
                                             onclick="toggleEdit('designer', true)">
-                                            <i
-                                                class="fas fa-edit me-2"></i><?php echo isset($current_designer) && $current_designer ? 'Change Designer' : 'Reassign Designer'; ?>
+                                            <i class="fas fa-edit me-2"></i>
+                                            <?php echo isset($current_designer) && $current_designer ? 'Change Designer' : 'Reassign Designer'; ?>
                                         </button>
                                     </div>
 
@@ -857,14 +855,83 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                     </div>
                                 </div>
                             </div>
+                        </div> 
+                        <!-- Confirm/Reject Order Section -->
+                        <div class="row mt-4">
+                            <div class="col-lg-12">
+                                <div class="card border-warning">
+                                    <div class="card-header bg-warning bg-opacity-10">
+                                        <h5 class="card-title mb-0">
+                                            <i class="fas fa-check-circle me-2"></i>Order Action
+                                        </h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <?php if ($error_msg): ?>
+                                            <div class="alert alert-danger mb-3" role="alert">
+                                                <i class="fas fa-exclamation-circle me-2"></i>
+                                                <?php echo $error_msg; ?>
+                                            </div>
+                                        <?php endif; ?>
+                                        <p class="text-muted mb-3">Please review all details and assign a designer. Then confirm
+                                            or
+                                            reject the order.</p>
+
+                                        <div class="row">
+                                            <div class="col-md-6 mb-2">
+                                                <form method="post" style="display: inline;">
+                                                    <input type="hidden" name="confirm_order" value="1">
+                                                    <button type="submit" class="btn btn-success w-100"
+                                                        onclick="return confirm('Confirm this order?');">
+                                                        <i class="fas fa-check-circle me-2"></i>Confirm Order
+                                                    </button>
+                                                </form>
+                                            </div>
+                                            <div class="col-md-6 mb-2">
+                                                <button type="button" class="btn btn-danger w-100" onclick="showRejectModal()">
+                                                    <i class="fas fa-times-circle me-2"></i>Reject Order
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                <?php endif; ?>
 
-
-                <!-- Edit Sections -->
-                <div class="row mt-3">
-                    <?php if ($status === 'reviewing design proposal'): ?>
+                        <!-- Reject Modal -->
+                        <div class="modal fade" id="rejectModal" tabindex="-1" aria-labelledby="rejectModalLabel"
+                            aria-hidden="true">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <div class="modal-header bg-danger bg-opacity-10">
+                                        <h5 class="modal-title" id="rejectModalLabel">
+                                            <i class="fas fa-times-circle me-2"></i>Reject Order
+                                        </h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal"
+                                            aria-label="Close"></button>
+                                    </div>
+                                    <form method="post">
+                                        <div class="modal-body">
+                                            <input type="hidden" name="reject_order" value="1">
+                                            <div class="mb-3">
+                                                <label for="reject_reason" class="form-label fw-bold">Reason for
+                                                    Rejection</label>
+                                                <textarea id="reject_reason" name="reject_reason" class="form-control" rows="4"
+                                                    placeholder="Enter reason for rejecting this order..." required></textarea>
+                                            </div>
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-secondary"
+                                                data-bs-dismiss="modal">Cancel</button>
+                                            <button type="submit" class="btn btn-danger"
+                                                onclick="return confirm('Are you sure you want to reject this order?');">
+                                                <i class="fas fa-times-circle me-2"></i>Reject
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    <?php elseif ($status === 'reviewing design proposal'): ?>
                         <div class="col-12 mt-3">
                             <div class="card border-primary mb-4">
                                 <div class="card-body text-center">
@@ -884,10 +951,8 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                    <?php endif; ?>
-
-                    <?php if ($status === 'drafting 2nd proposal'): ?>
+                                </div>
+                    <?php elseif ($status === 'drafting 2nd proposal'): ?>
                         <!-- Update Order Information Section -->
                         <div class="col-lg-6 mb-4">
                             <div class="card h-100">
@@ -1269,17 +1334,17 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                 </div>
                             </div>
                             <?php
-                                // Ensure $allRefsConfirmed is defined before use (check referenced product statuses)
-                                $allRefsConfirmed = true;
-                                if (!empty($references)) {
-                                    foreach ($references as $r) {
-                                        $rs = strtolower(trim($r['status'] ?? ''));
-                                        if (!in_array($rs, ['confirmed', 'approved'])) {
-                                            $allRefsConfirmed = false;
-                                            break;
-                                        }
+                            // Ensure $allRefsConfirmed is defined before use (check referenced product statuses)
+                            $allRefsConfirmed = true;
+                            if (!empty($references)) {
+                                foreach ($references as $r) {
+                                    $rs = strtolower(trim($r['status'] ?? ''));
+                                    if (!in_array($rs, ['confirmed', 'approved'])) {
+                                        $allRefsConfirmed = false;
+                                        break;
                                     }
                                 }
+                            }
                             ?>
 
                             <div class="col-12 mt-3">
@@ -1348,81 +1413,6 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                             </div>
                         </div>
                     </div>
-                    <!-- Confirm/Reject Order Section -->
-                    <div class="row mt-4" style="<?php echo !$show_confirm_reject ? 'display: none;' : ''; ?>">
-                        <div class="col-lg-12">
-                            <div class="card border-warning">
-                                <div class="card-header bg-warning bg-opacity-10">
-                                    <h5 class="card-title mb-0">
-                                        <i class="fas fa-check-circle me-2"></i>Order Action
-                                    </h5>
-                                </div>
-                                <div class="card-body">
-                                    <?php if ($error_msg): ?>
-                                        <div class="alert alert-danger mb-3" role="alert">
-                                            <i class="fas fa-exclamation-circle me-2"></i><?php echo $error_msg; ?>
-                                        </div>
-                                    <?php endif; ?>
-                                    <p class="text-muted mb-3">Please review all details and assign a designer. Then confirm
-                                        or
-                                        reject the order.</p>
-
-                                    <div class="row">
-                                        <div class="col-md-6 mb-2">
-                                            <form method="post" style="display: inline;">
-                                                <input type="hidden" name="confirm_order" value="1">
-                                                <button type="submit" class="btn btn-success w-100"
-                                                    onclick="return confirm('Confirm this order?');">
-                                                    <i class="fas fa-check-circle me-2"></i>Confirm Order
-                                                </button>
-                                            </form>
-                                        </div>
-                                        <div class="col-md-6 mb-2">
-                                            <button type="button" class="btn btn-danger w-100" onclick="showRejectModal()">
-                                                <i class="fas fa-times-circle me-2"></i>Reject Order
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Reject Modal -->
-                    <div class="modal fade" id="rejectModal" tabindex="-1" aria-labelledby="rejectModalLabel"
-                        aria-hidden="true">
-                        <div class="modal-dialog">
-                            <div class="modal-content">
-                                <div class="modal-header bg-danger bg-opacity-10">
-                                    <h5 class="modal-title" id="rejectModalLabel">
-                                        <i class="fas fa-times-circle me-2"></i>Reject Order
-                                    </h5>
-                                    <button type="button" class="btn-close" data-bs-dismiss="modal"
-                                        aria-label="Close"></button>
-                                </div>
-                                <form method="post">
-                                    <div class="modal-body">
-                                        <input type="hidden" name="reject_order" value="1">
-                                        <div class="mb-3">
-                                            <label for="reject_reason" class="form-label fw-bold">Reason for
-                                                Rejection</label>
-                                            <textarea id="reject_reason" name="reject_reason" class="form-control" rows="4"
-                                                placeholder="Enter reason for rejecting this order..." required></textarea>
-                                        </div>
-                                    </div>
-                                    <div class="modal-footer">
-                                        <button type="button" class="btn btn-secondary"
-                                            data-bs-dismiss="modal">Cancel</button>
-                                        <button type="submit" class="btn btn-danger"
-                                            onclick="return confirm('Are you sure you want to reject this order?');">
-                                            <i class="fas fa-times-circle me-2"></i>Reject
-                                        </button>
-                                    </div>
-                                </form>
-                            </div>
-                        </div>
-                    </div>
-
                 <?php else: ?>
                     <div class="alert alert-danger" role="alert">
                         <i class="fas fa-exclamation-circle me-2"></i>
