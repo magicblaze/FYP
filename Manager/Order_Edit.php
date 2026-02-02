@@ -292,7 +292,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     }
 
     if (isset($_POST['confirm_proposal'])) {
-        $confirm_status = 'drafting 2nd proposal';
+        $confirm_status = 'waiting for review design';
         $update_confirm_sql = "UPDATE `Order` SET ostatus = ? WHERE orderid = ?";
         $confirm_stmt = mysqli_prepare($mysqli, $update_confirm_sql);
         mysqli_stmt_bind_param($confirm_stmt, "si", $confirm_status, $orderid);
@@ -304,7 +304,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     }
 
     if (isset($_POST['reject_proposal'])) {
-        $reject_status = 'drafting 2nd proposal';
+        $reject_status = 'designing';
         $update_reject_sql = "UPDATE `Order` SET ostatus = ? WHERE orderid = ?";
         $reject_stmt = mysqli_prepare($mysqli, $update_reject_sql);
         mysqli_stmt_bind_param($reject_stmt, "si", $reject_status, $orderid);
@@ -472,7 +472,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         // Update order status and reason
         $update_reject_sql = "UPDATE `Order` SET ostatus = ?, Requirements = ? WHERE orderid = ?";
         $reject_stmt = mysqli_prepare($mysqli, $update_reject_sql);
-        $reject_note = "REJECTED - Reason: " . $reject_reason;
+        $reject_note = "reject reason: " . $reject_reason;
         mysqli_stmt_bind_param($reject_stmt, "ssi", $reject_status, $reject_note, $orderid);
 
         if (mysqli_stmt_execute($reject_stmt)) {
@@ -676,7 +676,8 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                 'designing' => ['class' => 'alert-info', 'icon' => 'fa-pencil-alt', 'title' => 'Designing', 'text' => 'Design is in progress. Please contact via chat if needed.'],
                 'drafting 2nd proposal' => ['class' => 'alert-info', 'icon' => 'fa-pencil-alt', 'title' => 'Drafting 2nd Proposal', 'text' => 'Please preparing a 2nd proposal. Update all info if needed.'],
                 'reviewing design proposal' => ['class' => 'alert-info', 'icon' => 'fa-search', 'title' => 'Proposal Review', 'text' => 'A design proposal has been submitted. Please review and confirm or request changes.'],
-                'waiting client review' => ['class' => 'alert-warning', 'icon' => 'fa-eye', 'title' => 'Waiting Client Review', 'text' => '2nd Proposal has been submitted, please wait for client to review.'],
+                'waiting for review design' => ['class' => 'alert-warning', 'icon' => 'fa-eye', 'title' => 'Waiting Client to Review Design Proposal', 'text' => 'Design Proposal has been submitted, please wait for client to review.'],
+                'waiting client review' => ['class' => 'alert-warning', 'icon' => 'fa-eye', 'title' => 'Waiting Client Review 2nd Proposal', 'text' => '2nd Proposal has been submitted, please wait for client to review.'],
                 'waiting payment' => ['class' => 'alert-warning', 'icon' => 'fa-credit-card', 'title' => 'Waiting Payment', 'text' => 'Waiting for client payment to proceed.'],
                 'waiting client payment' => ['class' => 'alert-warning', 'icon' => 'fa-credit-card', 'title' => 'Waiting Payment', 'text' => 'Waiting for client payment to proceed.'],
                 'complete' => ['class' => 'alert-success', 'icon' => 'fa-check-circle', 'title' => 'Complete', 'text' => 'Order completed successfully.'],

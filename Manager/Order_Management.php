@@ -66,7 +66,7 @@ $stats_sql = "SELECT
                 SUM(c.budget) as total_budget,
                 AVG(c.budget) as avg_budget,
                 SUM(CASE WHEN o.ostatus = 'waiting confirm' THEN 1 ELSE 0 END) as pending_count,
-                 SUM(CASE WHEN o.ostatus IN ('designing', 'drafting 2nd proposal', 'reviewing design proposal') THEN 1 ELSE 0 END) as designing_count,
+                 SUM(CASE WHEN o.ostatus IN ('designing', 'drafting 2nd proposal', 'reviewing design proposal', 'waiting for review design') THEN 1 ELSE 0 END) as designing_count,
                 SUM(CASE WHEN o.ostatus = 'complete' THEN 1 ELSE 0 END) as completed_count
                FROM `Order` o
               LEFT JOIN `Client` c ON o.clientid = c.clientid
@@ -182,6 +182,7 @@ $stats = mysqli_fetch_assoc($stats_result);
                             case 'designing':
                             case 'drafting 2nd proposal':
                             case 'reviewing design proposal':
+                            case 'waiting for review design':
                                 $status_class = 'status-designing';
                                 break;
                             case 'waiting confirm':

@@ -136,6 +136,39 @@ if (!$referencesStmt) {
     $references = $referencesStmt->get_result();
 }
 
+// Handle client accept/reject actions for design proposal
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Accept: move to 'drafting 2nd proposal'
+    if (isset($_POST['accept_design']) && $clientId && $orderId) {
+        $next_status = 'drafting 2nd proposal';
+        $u_sql = "UPDATE `Order` SET ostatus = ? WHERE orderid = ? AND clientid = ?";
+        $u_stmt = $mysqli->prepare($u_sql);
+        if ($u_stmt) {
+            $u_stmt->bind_param('sii', $next_status, $orderId, $clientId);
+            $u_stmt->execute();
+            $u_stmt->close();
+        }
+        header('Location: order_detail.php?orderid=' . $orderId);
+        exit;
+    }
+
+    // Reject: move back to 'designing' and optionally record a reason
+    if (isset($_POST['reject_design']) && $clientId && $orderId) {
+        $next_status = 'designing';
+        $reason = trim($_POST['reject_reason'] ?? 'Client rejected the proposal');
+        $safeReason = $mysqli->real_escape_string($reason);
+        $u_sql = "UPDATE `Order` SET ostatus = ?, Requirements = CONCAT(IFNULL(Requirements,''), 'reject message: ', ?) WHERE orderid = ? AND clientid = ?";
+        $u_stmt = $mysqli->prepare($u_sql);
+        if ($u_stmt) {
+            $u_stmt->bind_param('ssii', $next_status, $safeReason, $orderId, $clientId);
+            $u_stmt->execute();
+            $u_stmt->close();
+        }
+        header('Location: order_detail.php?orderid=' . $orderId);
+        exit;
+    }
+}
+
 // Calculate totals
 $productTotal = 0;
 $productsTemp = $products->fetch_all(MYSQLI_ASSOC);
@@ -611,7 +644,7 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€
                                     <span class="price-highlight">$<?= number_format($price, 2) ?></span>
                                 </div>
                             </div>
-                        <?php
+                            <?php
                             // design reference
                         elseif (!empty($ref['designid']) && !empty($ref['design_name'])):
                             $dprice = (float) ($ref['design_price'] ?? 0);
@@ -748,62 +781,6 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€
                 </div>
             <?php endif; ?>
 
-
-            <!-- Schedule/Timeline Section -->
-            <div class="section-title">
-                <i class="fas fa-calendar-check me-2"></i>Project Timeline
-            </div>
-            <?php if ($schedules->num_rows > 0): ?>
-                <table class="schedule-table">
-                    <thead>
-                        <tr>
-                            <th>Scheduled Finish Date</th>
-                            <th>Manager in Charge</th>
-                            <th>Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php while ($schedule = $schedules->fetch_assoc()): ?>
-                            <?php
-                            $finishDate = strtotime($schedule['OrderFinishDate']);
-                            $today = strtotime(date('Y-m-d'));
-                            $isOverdue = $finishDate < $today;
-                            $isUpcoming = $finishDate >= $today && $finishDate <= strtotime('+7 days');
-                            ?>
-                            <tr>
-                                <td>
-                                    <strong><?= date('M d, Y H:i', $finishDate) ?></strong>
-                                    <?php if ($isOverdue): ?>
-                                        <br><small class="text-danger"><i class="fas fa-exclamation-circle me-1"></i>Overdue</small>
-                                    <?php elseif ($isUpcoming): ?>
-                                        <br><small class="text-warning"><i class="fas fa-clock me-1"></i>Upcoming</small>
-                                    <?php endif; ?>
-                                </td>
-                                <td>
-                                    <span class="manager-badge">
-                                        <i class="fas fa-user-tie me-1"></i><?= htmlspecialchars($schedule['manager_name']) ?>
-                                    </span>
-                                </td>
-                                <td>
-                                    <?php if ($isOverdue): ?>
-                                        <span class="badge bg-danger">Overdue</span>
-                                    <?php elseif ($isUpcoming): ?>
-                                        <span class="badge bg-warning">Upcoming</span>
-                                    <?php else: ?>
-                                        <span class="badge bg-success">On Track</span>
-                                    <?php endif; ?>
-                                </td>
-                            </tr>
-                        <?php endwhile; ?>
-                    </tbody>
-                </table>
-            <?php else: ?>
-                <div class="empty-message">
-                    <i class="fas fa-calendar-check"></i>
-                    <p>No schedule information available yet.</p>
-                </div>
-            <?php endif; ?>
-
             <!-- Summary Section -->
             <div class="section-title">
                 <i class="fas fa-chart-bar me-2"></i>Order Summary
@@ -832,6 +809,34 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€
 
             <!-- Back Button -->
             <div style="margin-top: 2rem; text-align: center;">
+                <?php if ($statusLower === 'waiting for review design'): ?>
+                    <form id="client_action_form" method="post" style="display:inline-block;">
+                        <input type="hidden" name="reject_reason" id="reject_reason_input" value="" />
+                        <button type="submit" name="accept_design" class="btn btn-success me-2" onclick="return confirm('Accept this proposal and proceed to drafting 2nd proposal?');">
+                            <i class="fas fa-check me-1"></i>Accept
+                        </button>
+                        <button type="button" id="reject_btn" class="btn btn-danger">
+                            <i class="fas fa-times me-1"></i>Reject
+                        </button>
+                    </form>
+                    <script>
+                        (function(){
+                            const rejectBtn = document.getElementById('reject_btn');
+                            const form = document.getElementById('client_action_form');
+                            const reasonInput = document.getElementById('reject_reason_input');
+                            if (rejectBtn && form && reasonInput) {
+                                rejectBtn.addEventListener('click', function(){
+                                    const r = prompt('Please enter a reason for rejection (optional):');
+                                    if (r === null) return; // user cancelled
+                                    reasonInput.value = r || 'Client rejected the proposal';
+                                    // set a hidden input to indicate rejection and submit
+                                    const hidden = document.createElement('input'); hidden.type='hidden'; hidden.name='reject_design'; hidden.value='1'; form.appendChild(hidden);
+                                    form.submit();
+                                });
+                            }
+                        })();
+                    </script>
+                <?php endif; ?>
                 <a href="order_history.php" class="btn btn-primary">
                     <i class="fas fa-arrow-left me-2"></i>Back to Order History
                 </a>
