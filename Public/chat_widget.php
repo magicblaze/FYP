@@ -210,6 +210,16 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
   }
   function clearPosStyles(el){ el.style.left=''; el.style.top=''; el.style.right=''; el.style.bottom=''; }
   function applyDefaultTogglePos(el){ clearPosStyles(el); el.style.right = '20px'; el.style.bottom = '20px'; }
+  function setDefaultPosition() {
+    try {
+      if (!panel) return;
+      clearPosStyles(panel);
+      if (isSmallScreen()) return; // bottom-sheet handles placement
+      panel.style.left = '20px';
+      panel.style.top = '20px';
+      panel.style.right = 'auto';
+    } catch (e) { console.debug('setDefaultPosition failed', e); }
+  }
 
   // makeDraggable accepts a handle element and a target element to move
   function makeDraggable(handleEl, storageKey, targetEl){
@@ -492,6 +502,8 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
 
   // Apply responsive mode initially and reapply on resize (use saved percent values)
   applyResponsiveMode();
+  // Set default panel position on initial page show (top-left for non-small screens)
+  try { setDefaultPosition(); } catch(e) {}
   window.addEventListener('resize', () => {
     applyResponsiveMode();
     const t = loadPos('chatwidget_toggle_pos'); if (t) applyPosTo(toggle, t); else applyDefaultTogglePos(toggle);
@@ -557,6 +569,8 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
       panel.style.transformOrigin = o.ox + '% ' + o.oy + '%';
       // ensure panel is renderable before animating (override CSS display:none)
       panel.style.display = 'flex';
+      // hide the floating toggle button while the panel is open
+      try { if (toggle) toggle.style.display = 'none'; } catch(e) {}
       panel.classList.remove('chatwidget-hidden');
       // set starting small scale at the origin, then grow to full size
       panel.style.transition = 'transform 320ms cubic-bezier(.2,.9,.2,1), opacity 220ms ease, box-shadow 260ms ease';

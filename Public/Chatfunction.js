@@ -202,20 +202,53 @@ function initApp(config = {}) {
 
   function updateTotalUnreadBadge(total) {
     try {
-      const t = (typeof total === 'undefined' || total === null) ? getAllLocalUnreadTotal() : (parseInt(total||0,10) || 0);
+      // Normalize incoming total. If not provided or invalid, compute from localStorage.
+      let tRaw = (typeof total === 'undefined' || total === null) ? null : total;
+      let t = 0;
+      if (tRaw === null) {
+        t = getAllLocalUnreadTotal();
+      } else {
+        t = parseInt(tRaw || 0, 10);
+        if (isNaN(t)) t = getAllLocalUnreadTotal();
+      }
+      t = Math.max(0, t || 0);
+
+      // dedupe rapid / duplicate calls: keep last applied value
+      try {
+        const last = (typeof window.__chat_last_total !== 'undefined') ? parseInt(window.__chat_last_total || 0, 10) : (parseInt(localStorage.getItem('chat_total_unread')||'0',10) || 0);
+        if (!isNaN(last) && Number(last) === Number(t)) {
+          // nothing to do
+          return;
+        }
+      } catch (e) {}
+
       try { localStorage.setItem('chat_total_unread', String(t)); } catch(e){}
-      console.debug('chatwidget: updateTotalUnreadBadge called, total=', t);
+      try { window.__chat_last_total = t; } catch(e){}
+      try { console.debug && console.debug('chatwidget: updateTotalUnreadBadge called, total=', t); } catch(e){}
+
       // find toggle element (support optional prefix)
       const toggle = document.getElementById((prefix || '') + 'toggle') || document.getElementById('chatwidget_toggle') || document.querySelector('[data-chat-toggle]');
-      if (!toggle) { console.debug('chatwidget: toggle element not found when updating total badge'); }
-      if (!toggle) return;
+
+      // If toggle isn't present yet (render timing), schedule a small number of retries
+      if (!toggle) {
+        try {
+          window.__chat_badge_retry = window.__chat_badge_retry || { count: 0 };
+          if (window.__chat_badge_retry.count < 5) {
+            window.__chat_badge_retry.count++;
+            setTimeout(() => { try { updateTotalUnreadBadge(); } catch(e){} }, 200 * window.__chat_badge_retry.count);
+          }
+        } catch (e) {}
+        return;
+      }
+      try { if (window.__chat_badge_retry) window.__chat_badge_retry.count = 0; } catch(e){}
+
+      // find/create badge element and update text; keep element creation stable
       let badge = toggle.querySelector('.chatwidget_total_unread');
       if (!badge && t > 0) {
-        // ensure toggle is positioned so absolute badge can be placed
         try { if (toggle && window.getComputedStyle(toggle).position === 'static') toggle.style.position = 'relative'; } catch(e){}
         badge = document.createElement('span');
         badge.className = 'chatwidget_total_unread';
-        // inline styles so badge shows even when Bootstrap CSS is not present
+        badge.setAttribute('aria-hidden', 'false');
         badge.style.position = 'absolute';
         badge.style.top = '-6px';
         badge.style.left = '-6px';
@@ -233,10 +266,18 @@ function initApp(config = {}) {
         badge.style.zIndex = '9999';
         toggle.appendChild(badge);
       }
+
       if (badge) {
-        if (t > 0) badge.textContent = (t > 99 ? '99+' : String(t)); else badge.remove();
+        if (t > 0) {
+          const txt = (t > 99 ? '99+' : String(t));
+          // update only if changed
+          if (badge.textContent !== txt) badge.textContent = txt;
+        } else {
+          // remove only if present and no unread
+          try { badge.remove(); } catch(e) {}
+        }
       }
-    } catch (e) { console.error('updateTotalUnreadBadge error', e); }
+    } catch (e) { try { console.error('updateTotalUnreadBadge error', e); } catch(err){} }
   }
   function updateAgentBadge(roomId, count) {
     try {
@@ -1578,6 +1619,30 @@ function initApp(config = {}) {
 
   // Restore persisted total unread badge immediately (in case widget was closed or toggle not present earlier)
   try { const persisted = parseInt(localStorage.getItem('chat_total_unread') || '0', 10) || 0; if (persisted) updateTotalUnreadBadge(persisted); } catch(e){}
+
+  // Keep badges in sync when localStorage changes (other tabs/windows or async updates)
+  try {
+    window.addEventListener('storage', function(e) {
+      try {
+        if (!e || !e.key) return;
+        // total unread changed
+        if (e.key === 'chat_total_unread') {
+          const v = parseInt(e.newValue || '0', 10) || 0;
+          updateTotalUnreadBadge(v);
+          return;
+        }
+        // per-room unread changed
+        const prefixKey = 'chat_unread_';
+        if (e.key.indexOf(prefixKey) === 0) {
+          const roomId = e.key.substring(prefixKey.length);
+          const cnt = parseInt(e.newValue || '0', 10) || 0;
+          try { updateAgentBadge(roomId, cnt); } catch(err){}
+          // also refresh total computed from storage
+          try { updateTotalUnreadBadge(); } catch(err){}
+        }
+      } catch(err) { console.debug('storage event handler failed', err); }
+    });
+  } catch(e) {}
 
   // Short-poll for total unread to reduce latency (lightweight endpoint)
   let totalPollTimer = null;
