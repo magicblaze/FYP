@@ -109,10 +109,45 @@ $edit_status = isset($_GET['edit']) && $_GET['edit'] == 'status';
 $edit_order = isset($_GET['edit']) && $_GET['edit'] == 'order';
 $edit_requirements = isset($_GET['edit']) && $_GET['edit'] == 'requirements';
 $edit_designer = isset($_GET['edit']) && $_GET['edit'] == 'designer';
-$edit_cost = isset($_GET['edit']) && $_GET['edit'] == 'cost';
-$edit_reference = isset($_GET['edit']) && $_GET['edit'] == 'reference';
-
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+	$edit_cost = isset($_GET['edit']) && $_GET['edit'] == 'cost';
+	$edit_reference = isset($_GET['edit']) && $_GET['edit'] == 'reference';
+	$edit_delivery = isset($_GET['edit']) && $_GET['edit'] == 'delivery';
+	
+	if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+	    // Handle OrderDelivery update
+	    if (isset($_POST['update_delivery'])) {
+	        $od_id = (int)$_POST['orderdeliveryid'];
+	        $od_status = mysqli_real_escape_string($mysqli, $_POST['status']);
+	        $od_date = mysqli_real_escape_string($mysqli, $_POST['deliverydate']);
+	        $od_qty = (int)$_POST['quantity'];
+	        $od_color = mysqli_real_escape_string($mysqli, $_POST['color']);
+	
+	        $update_od_sql = "UPDATE OrderDelivery SET status = ?, deliverydate = ?, quantity = ?, color = ? WHERE orderdeliveryid = ?";
+	        $update_od_stmt = mysqli_prepare($mysqli, $update_od_sql);
+	        mysqli_stmt_bind_param($update_od_stmt, "ssisi", $od_status, $od_date, $od_qty, $od_color, $od_id);
+	        mysqli_stmt_execute($update_od_stmt);
+	        mysqli_stmt_close($update_od_stmt);
+	        header("Location: Order_Edit.php?id=" . $orderid);
+	        exit();
+	    }
+	
+	    // Handle adding new OrderDelivery
+	    if (isset($_POST['add_delivery'])) {
+	        $prod_id = (int)$_POST['productid'];
+	        $qty = (int)$_POST['quantity'];
+	        $status = mysqli_real_escape_string($mysqli, $_POST['status']);
+	        $date = mysqli_real_escape_string($mysqli, $_POST['deliverydate']);
+	        $color = mysqli_real_escape_string($mysqli, $_POST['color']);
+	        $rid = (int)$_POST['rid'];
+	
+	        $insert_od_sql = "INSERT INTO OrderDelivery (productid, quantity, orderid, deliverydate, status, managerid, color, rid) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+	        $insert_od_stmt = mysqli_prepare($mysqli, $insert_od_sql);
+	        mysqli_stmt_bind_param($insert_od_stmt, "iiissisi", $prod_id, $qty, $orderid, $date, $status, $user_id, $color, $rid);
+	        mysqli_stmt_execute($insert_od_stmt);
+	        mysqli_stmt_close($insert_od_stmt);
+	        header("Location: Order_Edit.php?id=" . $orderid);
+	        exit();
+	    }
     if (isset($_POST['update_status'])) {
         $new_status = mysqli_real_escape_string($mysqli, $_POST['ostatus'] ?? '');
         $order_finish_date = mysqli_real_escape_string($mysqli, $_POST['OrderFinishDate'] ?? '');
@@ -1202,46 +1237,141 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                             </div>
                         </div>
 
-                        <!-- Update Requirements Section -->
-                        <div class="col-lg-6 mb-4">
-                            <div class="card h-100">
-                                <div class="card-header bg-light">
-                                    <h5 class="card-title mb-0">
-                                        <i class="fas fa-clipboard-list me-2"></i>Update Requirements
-                                    </h5>
-                                </div>
-                                <div class="card-body">
-                                    <!-- View Mode -->
-                                    <div id="requirements-view" class="<?php echo $edit_requirements ? 'd-none' : ''; ?>">
-                                        <button type="button" class="btn btn-primary w-100"
-                                            onclick="toggleEdit('requirements', true)">
-                                            <i class="fas fa-edit me-2"></i>Update Requirements
-                                        </button>
-                                    </div>
-
-                                    <!-- Edit Mode -->
-                                    <div id="requirements-edit" class="<?php echo $edit_requirements ? '' : 'd-none'; ?>">
-                                        <form method="post">
-                                            <input type="hidden" name="update_requirements" value="1">
-                                            <div class="mb-3">
-                                                <label class="form-label fw-bold">Requirements</label>
-                                                <textarea name="Requirements" class="form-control" rows="6"
-                                                    required><?php echo htmlspecialchars($order['Requirements'] ?? ''); ?></textarea>
-                                            </div>
-                                            <div class="d-flex gap-2">
-                                                <button type="submit" class="btn btn-success flex-grow-1">
-                                                    <i class="fas fa-save me-2"></i>Save Changes
-                                                </button>
-                                                <button type="button" class="btn btn-secondary"
-                                                    onclick="toggleEdit('requirements', false)">
-                                                    <i class="fas fa-times me-2"></i>Cancel
-                                                </button>
-                                            </div>
-                                        </form>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+	                        <!-- Update Requirements Section -->
+	                        <div class="col-lg-6 mb-4">
+	                            <div class="card h-100">
+	                                <div class="card-header bg-light">
+	                                    <h5 class="card-title mb-0">
+	                                        <i class="fas fa-clipboard-list me-2"></i>Update Requirements
+	                                    </h5>
+	                                </div>
+	                                <div class="card-body">
+	                                    <!-- View Mode -->
+	                                    <div id="requirements-view" class="<?php echo $edit_requirements ? 'd-none' : ''; ?>">
+	                                        <button type="button" class="btn btn-primary w-100"
+	                                            onclick="toggleEdit('requirements', true)">
+	                                            <i class="fas fa-edit me-2"></i>Update Requirements
+	                                        </button>
+	                                    </div>
+	
+	                                    <!-- Edit Mode -->
+	                                    <div id="requirements-edit" class="<?php echo $edit_requirements ? '' : 'd-none'; ?>">
+	                                        <form method="post">
+	                                            <input type="hidden" name="update_requirements" value="1">
+	                                            <div class="mb-3">
+	                                                <label class="form-label fw-bold">Requirements</label>
+	                                                <textarea name="Requirements" class="form-control" rows="6"
+	                                                    required><?php echo htmlspecialchars($order['Requirements'] ?? ''); ?></textarea>
+	                                            </div>
+	                                            <div class="d-flex gap-2">
+	                                                <button type="submit" class="btn btn-success flex-grow-1">
+	                                                    <i class="fas fa-save me-2"></i>Save Changes
+	                                                </button>
+	                                                <button type="button" class="btn btn-secondary"
+	                                                    onclick="toggleEdit('requirements', false)">
+	                                                    <i class="fas fa-times me-2"></i>Cancel
+	                                                </button>
+	                                            </div>
+	                                        </form>
+	                                    </div>
+	                                </div>
+	                            </div>
+	                        </div>
+	
+	                        <!-- Order Delivery Section (New Box) -->
+	                        <div class="col-lg-6 mb-4">
+	                            <div class="card h-100">
+	                                <div class="card-header bg-light">
+	                                    <h5 class="card-title mb-0">
+	                                        <i class="fas fa-truck me-2"></i>Order Delivery
+	                                    </h5>
+	                                </div>
+	                                <div class="card-body">
+	                                    <!-- View Mode -->
+	                                    <div id="delivery-view" class="<?php echo $edit_delivery ? 'd-none' : ''; ?>">
+	                                        <?php
+	                                        $od_sql = "SELECT od.*, p.pname FROM OrderDelivery od JOIN Product p ON od.productid = p.productid WHERE od.orderid = ?";
+	                                        $od_stmt = mysqli_prepare($mysqli, $od_sql);
+	                                        mysqli_stmt_bind_param($od_stmt, "i", $orderid);
+	                                        mysqli_stmt_execute($od_stmt);
+	                                        $od_res = mysqli_stmt_get_result($od_stmt);
+	                                        if ($od_res->num_rows > 0): ?>
+	                                            <div class="table-responsive mb-3">
+	                                                <table class="table table-sm table-hover">
+	                                                    <thead>
+	                                                        <tr>
+	                                                            <th>Product</th>
+	                                                            <th>Status</th>
+	                                                            <th>Date</th>
+	                                                        </tr>
+	                                                    </thead>
+	                                                    <tbody>
+	                                                        <?php while ($od = mysqli_fetch_assoc($od_res)): ?>
+	                                                            <tr>
+	                                                                <td><small><?php echo htmlspecialchars($od['pname']); ?> (<?php echo $od['quantity']; ?>)</small></td>
+	                                                                <td><span class="badge bg-info"><?php echo htmlspecialchars($od['status']); ?></span></td>
+	                                                                <td><small><?php echo $od['deliverydate']; ?></small></td>
+	                                                            </tr>
+	                                                        <?php endwhile; ?>
+	                                                    </tbody>
+	                                                </table>
+	                                            </div>
+	                                        <?php else: ?>
+	                                            <p class="text-muted small text-center">No delivery info yet.</p>
+	                                        <?php endif; ?>
+	                                        <button type="button" class="btn btn-primary w-100" onclick="toggleEdit('delivery', true)">
+	                                            <i class="fas fa-plus me-2"></i>Add / Update Delivery
+	                                        </button>
+	                                    </div>
+	
+	                                    <!-- Edit Mode -->
+	                                    <div id="delivery-edit" class="<?php echo $edit_delivery ? '' : 'd-none'; ?>">
+	                                        <form method="post" class="mb-4">
+	                                            <input type="hidden" name="add_delivery" value="1">
+	                                            <h6 class="fw-bold mb-2 small">Add New Delivery</h6>
+	                                            <div class="row g-2 mb-3">
+	                                                <div class="col-12">
+	                                                    <select name="rid" class="form-select form-select-sm" required>
+	                                                        <option value="">-- Select Product Reference --</option>
+	                                                        <?php foreach ($references as $ref): ?>
+	                                                            <option value="<?php echo $ref['id']; ?>" data-pid="<?php echo $ref['productid']; ?>">
+	                                                                <?php echo htmlspecialchars($ref['pname']); ?>
+	                                                            </option>
+	                                                        <?php endforeach; ?>
+	                                                    </select>
+	                                                    <!-- hidden pid to be set by JS or simplified -->
+	                                                    <input type="hidden" name="productid" id="delivery_pid">
+	                                                    <script>
+	                                                        document.querySelector('select[name="rid"]').addEventListener('change', function() {
+	                                                            const opt = this.options[this.selectedIndex];
+	                                                            document.getElementById('delivery_pid').value = opt.getAttribute('data-pid');
+	                                                        });
+	                                                    </script>
+	                                                </div>
+	                                                <div class="col-6">
+	                                                    <input type="number" name="quantity" class="form-control form-control-sm" placeholder="Qty" required>
+	                                                </div>
+	                                                <div class="col-6">
+	                                                    <input type="text" name="color" class="form-control form-control-sm" placeholder="Color">
+	                                                </div>
+	                                                <div class="col-6">
+	                                                    <select name="status" class="form-select form-select-sm">
+	                                                        <option value="Pending">Pending</option>
+	                                                        <option value="Shipped">Shipped</option>
+	                                                        <option value="Delivered">Delivered</option>
+	                                                    </select>
+	                                                </div>
+	                                                <div class="col-6">
+	                                                    <input type="date" name="deliverydate" class="form-control form-control-sm">
+	                                                </div>
+	                                            </div>
+	                                            <button type="submit" class="btn btn-success btn-sm w-100 mb-2">Add Delivery</button>
+	                                        </form>
+	                                        <button type="button" class="btn btn-secondary btn-sm w-100" onclick="toggleEdit('delivery', false)">Cancel</button>
+	                                    </div>
+	                                </div>
+	                            </div>
+	                        </div>
 
                         <!-- Edit Cost Section -->
                         <div class="col-lg-6 mb-4">
