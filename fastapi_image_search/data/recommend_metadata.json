@@ -1,0 +1,92 @@
+[
+  {
+    "item_type": "design",
+    "item_id": 1,
+    "name": "Modern Full House Design",
+    "description": "A modern full house design",
+    "price": 500.0,
+    "category": null,
+    "image_path": "uploads/designs/design.jpg"
+  },
+  {
+    "item_type": "design",
+    "item_id": 2,
+    "name": "Minimalist Kitchen Remodel Design",
+    "description": "A minimalist kitchen remodel design",
+    "price": 1000.0,
+    "category": null,
+    "image_path": "uploads/designs/design5.jpg"
+  },
+  {
+    "item_type": "design",
+    "item_id": 3,
+    "name": "Cozy Living Room Design",
+    "description": "A cozy living room design",
+    "price": 800.0,
+    "category": null,
+    "image_path": "uploads/designs/design3.jpg"
+  },
+  {
+    "item_type": "design",
+    "item_id": 4,
+    "name": "Elegant Bedroom Design",
+    "description": "An elegant bedroom design",
+    "price": 1200.0,
+    "category": null,
+    "image_path": "uploads/designs/design4.jpg"
+  },
+  {
+    "item_type": "furniture",
+    "item_id": 1,
+    "name": "Modern Sofa",
+    "description": "A comfortable modern sofa.",
+    "price": 2000.0,
+    "category": "Furniture",
+    "image_path": "uploads/products/sofa_grey.jpg"
+  },
+  {
+    "item_type": "furniture",
+    "item_id": 2,
+    "name": "Oak Chair",
+    "description": "Solid wood chair.",
+    "price": 800.0,
+    "category": "Furniture",
+    "image_path": "uploads/products/chair_brown.jpg"
+  },
+  {
+    "item_type": "material",
+    "item_id": 3,
+    "name": "Brick",
+    "description": "A brick.",
+    "price": 200.0,
+    "category": "Material",
+    "image_path": "uploads/products/brick.jpg"
+  },
+  {
+    "item_type": "material",
+    "item_id": 4,
+    "name": "Wood Plank",
+    "description": "A wood.",
+    "price": 800.0,
+    "category": "Material",
+    "image_path": "uploads/products/wood.jpg"
+  },
+  {
+    "item_type": "material",
+    "item_id": 5,
+    "name": "Glass",
+    "description": "A glass.",
+    "price": 800.0,
+    "category": "Material",
+    "image_path": "uploads/products/glass.jpg"
+  },
+  {
+    "item_type": "furniture",
+    "item_id": 6,
+    "name": "Modern Table",
+    "description": "A modern table.",
+    "price": 800.0,
+    "category": "Furniture",
+    "image_path": "uploads/products/table.jpg"
+  }
+]

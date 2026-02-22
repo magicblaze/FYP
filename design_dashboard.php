@@ -9,6 +9,49 @@ $max_price = isset($_GET['max_price']) && is_numeric($_GET['max_price']) ? (int)
 $designer_id = isset($_GET['designer_id']) && is_numeric($_GET['designer_id']) ? (int) $_GET['designer_id'] : '';
 $sort_by = isset($_GET['sort_by']) ? $_GET['sort_by'] : 'recent';
 
+$ai_design_ids = [];
+$ai_search_used = false;
+
+if (!empty($search)) {
+    $aiApiUrl = 'http://127.0.0.1:8001/recommend/text';
+    $aiPayload = json_encode([
+        'query' => $search,
+        'top_k' => 100,
+        'item_types' => ['design']
+    ], JSON_UNESCAPED_UNICODE);
+
+    if ($aiPayload !== false && function_exists('curl_init')) {
+        $ch = curl_init($aiApiUrl);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $aiPayload);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 2);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 4);
+
+        $response = curl_exec($ch);
+        $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($response !== false && $httpCode === 200) {
+            $decoded = json_decode($response, true);
+            if (is_array($decoded) && !empty($decoded['results']) && is_array($decoded['results'])) {
+                foreach ($decoded['results'] as $item) {
+                    $itemType = strtolower((string) ($item['item_type'] ?? ''));
+                    $itemId = (int) ($item['item_id'] ?? 0);
+                    if ($itemType === 'design' && $itemId > 0) {
+                        $ai_design_ids[] = $itemId;
+                    }
+                }
+                $ai_design_ids = array_values(array_unique($ai_design_ids));
+                if (!empty($ai_design_ids)) {
+                    $ai_search_used = true;
+                }
+            }
+        }
+    }
+}
+
 $sql = "SELECT d.designid, d.designName, d.expect_price, d.likes, d.tag, dz.dname, dz.designerid, di.image_filename
         FROM Design d
         JOIN Designer dz ON d.designerid = dz.designerid
@@ -20,7 +63,14 @@ $params = [];
 $types = "";
 
 // 關鍵字搜尋
-if (!empty($search)) {
+if ($ai_search_used) {
+    $placeholders = implode(',', array_fill(0, count($ai_design_ids), '?'));
+    $sql .= " AND d.designid IN ($placeholders)";
+    foreach ($ai_design_ids as $aiDesignId) {
+        $params[] = (int) $aiDesignId;
+        $types .= "i";
+    }
+} elseif (!empty($search)) {
     $sql .= " AND d.tag LIKE ?";
     $params[] = "%$search%";
     $types .= "s";
@@ -42,20 +92,30 @@ if (!empty($designer_id)) {
 }
 
 // 排序
-switch ($sort_by) {
-    case 'price_low':
-        $sql .= " ORDER BY d.expect_price ASC";
-        break;
-    case 'price_high':
-        $sql .= " ORDER BY d.expect_price DESC";
-        break;
-    case 'likes':
-        $sql .= " ORDER BY d.likes DESC";
-        break;
-    case 'recent':
-    default:
-        $sql .= " ORDER BY d.designid DESC";
-        break;
+if ($ai_search_used && $sort_by === 'recent') {
+    $rankClauses = [];
+    $rank = 1;
+    foreach ($ai_design_ids as $aiDesignId) {
+        $rankClauses[] = "WHEN " . (int) $aiDesignId . " THEN " . $rank;
+        $rank++;
+    }
+    $sql .= " ORDER BY CASE d.designid " . implode(' ', $rankClauses) . " ELSE 999999 END ASC, d.designid DESC";
+} else {
+    switch ($sort_by) {
+        case 'price_low':
+            $sql .= " ORDER BY d.expect_price ASC";
+            break;
+        case 'price_high':
+            $sql .= " ORDER BY d.expect_price DESC";
+            break;
+        case 'likes':
+            $sql .= " ORDER BY d.likes DESC";
+            break;
+        case 'recent':
+        default:
+            $sql .= " ORDER BY d.designid DESC";
+            break;
+    }
 }
 
 $stmt = $mysqli->prepare($sql);

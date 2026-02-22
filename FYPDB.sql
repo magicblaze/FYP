@@ -44,6 +44,7 @@ DROP TABLE IF EXISTS `OrderReference`;
 DROP TABLE IF EXISTS `DesignReference`;
 DROP TABLE IF EXISTS `UserLike`;
 DROP TABLE IF EXISTS `workerallocation`;
+DROP TABLE IF EXISTS `AIRecommendItem`;
 
 -- Client table
 CREATE TABLE `Client` (
@@ -543,6 +544,18 @@ CREATE TABLE `DesignedPicture` (
   CONSTRAINT `fk_designed_picture_orderid` FOREIGN KEY (`orderid`) REFERENCES `Order` (`orderid`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE `AIRecommendItem` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `item_type` VARCHAR(32) NOT NULL,
+  `item_id` INT NOT NULL,
+  `name` VARCHAR(255) DEFAULT NULL,
+  `description` TEXT DEFAULT NULL,
+  `price` DECIMAL(10,2) DEFAULT NULL,
+  `category` VARCHAR(64) DEFAULT NULL,
+  `image_path` VARCHAR(500) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_item` (`item_type`, `item_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 -- Re-enable Foreign Key Checks
 SET FOREIGN_KEY_CHECKS = 1;
 
@@ -585,6 +598,18 @@ INSERT INTO `Order_Contractors` (`order_Contractorid`, `contractorid`, `orderid`
 
 INSERT INTO `Schedule` (`scheduleid`,`managerid`,`OrderFinishDate`,`DesignFinishDate`,`orderid`) VALUES
 (3,1,'2026-01-02','2026-01-01',3);
+
+INSERT INTO `AIRecommendItem` (`item_type`, `item_id`, `name`, `description`, `price`, `category`, `image_path`) VALUES
+('design', 1, 'Modern Full House Design', 'A modern full house design', 500.0, NULL, 'uploads/designs/design.jpg'),
+('design', 2, 'Minimalist Kitchen Remodel Design', 'A minimalist kitchen remodel design', 1000.0, NULL, 'uploads/designs/design5.jpg'),
+('design', 3, 'Cozy Living Room Design', 'A cozy living room design', 800.0, NULL, 'uploads/designs/design3.jpg'),
+('design', 4, 'Elegant Bedroom Design', 'An elegant bedroom design', 1200.0, NULL, 'uploads/designs/design4.jpg'),
+('furniture', 1, 'Modern Sofa', 'A comfortable modern sofa.', 2000.0, 'Furniture', 'uploads/products/sofa_grey.jpg'),
+('furniture', 2, 'Oak Chair', 'Solid wood chair.', 800.0, 'Furniture', 'uploads/products/chair_brown.jpg'),
+('material', 3, 'Brick', 'A brick.', 200.0, 'Material', 'uploads/products/brick.jpg'),
+('material', 4, 'Wood Plank', 'A wood.', 800.0, 'Material', 'uploads/products/wood.jpg'),
+('material', 5, 'Glass', 'A glass.', 800.0, 'Material', 'uploads/products/glass.jpg'),
+('furniture', 6, 'Modern Table', 'A modern table.', 800.0, 'Furniture', 'uploads/products/table.jpg');
 
 -- Add foreign key from Message.fileid to UploadedFiles.fileid
 ALTER TABLE `Message`

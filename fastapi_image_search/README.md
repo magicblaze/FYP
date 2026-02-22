@@ -1,4 +1,4 @@
-# FastAPI Image Search Service (for PHP project)
+# FastAPI Image Search Service
 
 This service provides CLIP + FAISS image search endpoints that your PHP app can call.
 
@@ -8,6 +8,9 @@ This service provides CLIP + FAISS image search endpoints that your PHP app can 
 - `POST /index/rebuild` — scan image folder, compute embeddings, rebuild FAISS index
 - `POST /search/text` — text-to-image search
 - `POST /search/image` — image-to-image search
+- `POST /recommend/text` — recommend across design + furniture + material
+- `POST /recommend/image` — image-based recommend across design + furniture + material
+- `POST /search/image/recommend` — alias of image-based mixed recommendation
 
 ## Folder assumptions
 
@@ -44,11 +47,70 @@ Open docs at:
 Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8001/index/rebuild"
 ```
 
+## Train recommendation model
+
+This builds a mixed FAISS index from local SQL dump data by default (`FYPDB.sql`):
+
+- `Design` + first image from `DesignImage`
+- `Product` where category is `Furniture` / `Material` + first image from `ProductColorImage`
+
+Run:
+
+```powershell
+cd c:\xampp\htdocs\FYP\fastapi_image_search
+C:\Users\boot\AppData\Local\Programs\Python\Python312\python.exe -m pip install -r requirements.txt
+C:\Users\boot\AppData\Local\Programs\Python\Python312\python.exe -m app.train_recommender
+```
+
+Use a custom SQL dump file:
+
+```powershell
+C:\Users\boot\AppData\Local\Programs\Python\Python312\python.exe -m app.train_recommender --source sql --sql-file "c:\xampp\htdocs\FYP\FYPDB.sql"
+```
+
+If you still want MySQL mode:
+
+```powershell
+C:\Users\boot\AppData\Local\Programs\Python\Python312\python.exe -m app.train_recommender --source mysql
+```
+
+Generated files:
+
+- `data/recommend.index`
+- `data/recommend_metadata.json`
+- `data/recommend_metadata.sql` (SQL table + inserts for trained recommendation data)
+
+Optional DB env vars (defaults match your `config.php`):
+
+- `DB_HOST` (default `127.0.0.1`)
+- `DB_USER` (default `root`)
+- `DB_PASSWORD` (default empty)
+- `DB_NAME` (default `fypdb`)
+
 ## Example request (text search)
 
 ```powershell
 $body = @{ query = "modern living room sofa"; top_k = 8 } | ConvertTo-Json
 Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8001/search/text" -ContentType "application/json" -Body $body
+```
+
+## Example request (recommend text)
+
+```powershell
+$body = @{ query = "modern living room"; top_k = 10; item_types = @("design","furniture","material") } | ConvertTo-Json
+Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8001/recommend/text" -ContentType "application/json" -Body $body
+```
+
+## Example request (recommend image)
+
+```powershell
+curl.exe -X POST "http://127.0.0.1:8001/recommend/image?top_k=8&item_types=design,furniture,material" -F "file=@c:/path/to/query.jpg"
+```
+
+Alias endpoint (same behavior):
+
+```powershell
+curl.exe -X POST "http://127.0.0.1:8001/search/image/recommend?top_k=8&item_types=design,furniture,material" -F "file=@c:/path/to/query.jpg"
 ```
 
 ## Example request (image search)

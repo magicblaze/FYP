@@ -3,7 +3,7 @@ import json
 import os
 from pathlib import Path
 from threading import Lock
-from typing import List
+from typing import List, Optional
 
 import faiss
 import numpy as np
@@ -31,6 +31,29 @@ class SearchResponse(BaseModel):
     results: List[SearchResult]
 
 
+class RecommendTextRequest(BaseModel):
+    query: str = Field(..., min_length=1)
+    top_k: int = Field(10, ge=1, le=100)
+    item_types: Optional[List[str]] = None
+
+
+class RecommendItem(BaseModel):
+    item_type: str
+    item_id: int
+    name: str
+    score: float
+    image_path: Optional[str] = None
+    description: Optional[str] = None
+    price: Optional[float] = None
+    category: Optional[str] = None
+
+
+class RecommendResponse(BaseModel):
+    query_type: str
+    top_k: int
+    results: List[RecommendItem]
+
+
 class ImageSearchEngine:
     def __init__(self) -> None:
         self.base_dir = Path(__file__).resolve().parent.parent
@@ -39,6 +62,8 @@ class ImageSearchEngine:
 
         self.index_path = self.data_dir / "faiss.index"
         self.meta_path = self.data_dir / "metadata.json"
+        self.recommend_index_path = self.data_dir / "recommend.index"
+        self.recommend_meta_path = self.data_dir / "recommend_metadata.json"
 
         self.model_name = os.getenv("CLIP_MODEL", "openai/clip-vit-base-patch32")
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -47,6 +72,8 @@ class ImageSearchEngine:
         self.model: CLIPModel | None = None
         self.index: faiss.Index | None = None
         self.image_paths: List[str] = []
+        self.recommend_index: faiss.Index | None = None
+        self.recommend_items: List[dict] = []
         self.lock = Lock()
 
         self.data_dir.mkdir(parents=True, exist_ok=True)
@@ -164,6 +191,74 @@ class ImageSearchEngine:
                     detail="Index not loaded. Call /index/rebuild first.",
                 )
 
+    def load_recommend_assets(self) -> bool:
+        if not self.recommend_index_path.exists() or not self.recommend_meta_path.exists():
+            return False
+        self.recommend_index = faiss.read_index(str(self.recommend_index_path))
+        with self.recommend_meta_path.open("r", encoding="utf-8") as f:
+            self.recommend_items = json.load(f)
+        return self.recommend_index is not None and len(self.recommend_items) > 0
+
+    def ensure_recommend_ready(self) -> None:
+        self.load_model()
+        if self.recommend_index is None or not self.recommend_items:
+            loaded = self.load_recommend_assets()
+            if not loaded:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Recommendation index not loaded. Run: python -m app.train_recommender",
+                )
+
+    def _normalize_item_types(self, item_types: Optional[List[str]]) -> Optional[set[str]]:
+        if not item_types:
+            return None
+        allowed = {"design", "furniture", "material"}
+        normalized = {t.strip().lower() for t in item_types if isinstance(t, str) and t.strip()}
+        normalized = {t for t in normalized if t in allowed}
+        return normalized or None
+
+    def search_recommendations(
+        self,
+        query_vector: np.ndarray,
+        top_k: int,
+        item_types: Optional[List[str]] = None,
+    ) -> RecommendResponse:
+        assert self.recommend_index is not None
+        allowed_types = self._normalize_item_types(item_types)
+
+        total = self.recommend_index.ntotal
+        if total <= 0:
+            return RecommendResponse(query_type="vector", top_k=top_k, results=[])
+
+        search_k = min(total, max(top_k * 6, 60))
+        distances, indices = self.recommend_index.search(query_vector.astype(np.float32), search_k)
+
+        results: List[RecommendItem] = []
+        for idx, score in zip(indices[0].tolist(), distances[0].tolist()):
+            if idx < 0 or idx >= len(self.recommend_items):
+                continue
+            item = self.recommend_items[idx]
+            item_type = str(item.get("item_type", "")).lower()
+            if allowed_types and item_type not in allowed_types:
+                continue
+
+            results.append(
+                RecommendItem(
+                    item_type=item_type,
+                    item_id=int(item.get("item_id", 0)),
+                    name=str(item.get("name", "")),
+                    score=float(score),
+                    image_path=item.get("image_path"),
+                    description=item.get("description"),
+                    price=float(item["price"]) if item.get("price") is not None else None,
+                    category=item.get("category"),
+                )
+            )
+            if len(results) >= top_k:
+                break
+
+        return RecommendResponse(query_type="vector", top_k=top_k, results=results)
+
     def search_vector(self, query_vector: np.ndarray, top_k: int) -> SearchResponse:
         assert self.index is not None
         distances, indices = self.index.search(query_vector.astype(np.float32), top_k)
@@ -229,3 +324,45 @@ async def search_image(top_k: int = 10, file: UploadFile = File(...)) -> SearchR
     result = engine.search_vector(query_vec, top_k)
     result.query_type = "image"
     return result
+
+
+@app.post("/recommend/text", response_model=RecommendResponse)
+def recommend_text(payload: RecommendTextRequest) -> RecommendResponse:
+    engine.ensure_recommend_ready()
+    query_vec = engine._embed_text(payload.query)
+    result = engine.search_recommendations(query_vec, payload.top_k, payload.item_types)
+    result.query_type = "text"
+    return result
+
+
+@app.post("/recommend/image", response_model=RecommendResponse)
+async def recommend_image(
+    top_k: int = 10,
+    item_types: Optional[str] = None,
+    file: UploadFile = File(...),
+) -> RecommendResponse:
+    if top_k < 1 or top_k > 100:
+        raise HTTPException(status_code=400, detail="top_k must be between 1 and 100")
+
+    engine.ensure_recommend_ready()
+    image_bytes = await file.read()
+    if not image_bytes:
+        raise HTTPException(status_code=400, detail="Empty file")
+
+    normalized_types: Optional[List[str]] = None
+    if item_types:
+        normalized_types = [t.strip() for t in item_types.split(",") if t.strip()]
+
+    query_vec = engine._embed_query_image(image_bytes)
+    result = engine.search_recommendations(query_vec, top_k, normalized_types)
+    result.query_type = "image"
+    return result
+
+
+@app.post("/search/image/recommend", response_model=RecommendResponse)
+async def search_image_recommend(
+    top_k: int = 10,
+    item_types: Optional[str] = None,
+    file: UploadFile = File(...),
+) -> RecommendResponse:
+    return await recommend_image(top_k=top_k, item_types=item_types, file=file)
