@@ -230,7 +230,7 @@ $designer_stats = mysqli_fetch_assoc($designer_stats_result);
                 <div class="card-body">
                     <i class="fas fa-calendar-alt fa-2x text-info mb-2"></i>
                     <h6 class="card-title">Schedule</h6>
-                    <a href="Manager_Schedule.php" class="btn btn-sm btn-info">
+                    <a href="/FYP/project_management.php" class="btn btn-sm btn-info">
                         <i class="fas fa-arrow-right me-1"></i>View Schedule
                     </a>
                 </div>

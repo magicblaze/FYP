@@ -34,12 +34,16 @@ $sql = "
         c.cname,
         c.cemail,
         c.address,
-        pci.image
+        pci.image,
+        orr.status as ref_status,
+        orr.note as ref_note,
+        orr.price as ref_price
     FROM OrderDelivery op
     JOIN Product p ON op.productid = p.productid
     JOIN `Order` o ON op.orderid = o.orderid
     JOIN Client c ON o.clientid = c.clientid
     LEFT JOIN ProductColorImage pci ON p.productid = pci.productid
+    LEFT JOIN OrderReference orr ON op.rid = orr.id
     WHERE p.supplierid = ?
     GROUP BY op.orderdeliveryid
     ORDER BY op.orderdeliveryid DESC
@@ -307,6 +311,20 @@ $availableStatuses = ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelle
                             <div class="product-price">HK$<?= number_format($product['price']) ?></div>
                             <div class="product-id">Product ID: <?= $product['productid'] ?></div>
                         </div>
+                    </div>
+
+                    <!-- Reference Information (New) -->
+                    <div class="order-info mb-3">
+                        <div class="order-info-item">
+                            <span class="order-info-label">Reference Status:</span>
+                            <span class="badge bg-secondary"><?= htmlspecialchars($product['ref_status'] ?? 'N/A') ?></span>
+                        </div>
+                        <?php if(!empty($product['ref_note'])): ?>
+                        <div class="order-info-item">
+                            <span class="order-info-label">Manager Note:</span>
+                            <span class="order-info-value"><?= htmlspecialchars($product['ref_note']) ?></span>
+                        </div>
+                        <?php endif; ?>
                     </div>
 
                     <!-- Product Details -->
