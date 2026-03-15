@@ -11,6 +11,7 @@ if (!isset($_SESSION['user'])) {
 $user = $_SESSION['user'];
 $role = $user['role'];
 $userId = $user['id'];
+$isEmbed = isset($_GET['embed']) && $_GET['embed'] === '1';
 
 // Build query based on role
 $query = "SELECT o.*, c.cname as client_name, d.designName, s.OrderFinishDate, s.DesignFinishDate 
@@ -123,35 +124,36 @@ foreach($orders as $o) {
     <style>
         /* Layout: Using standard container width like Manager_dashboard.php */
         main.container {
-            max-width: 1140px; /* Standard Bootstrap container width */
+            max-width: 100%; /* Standard Bootstrap container width */
             margin: 0 auto;
             padding: 20px;
         }
 
         .stat-card {
-            border-radius: 8px;
-            padding: 20px;
+            width: 100%;
+            border-radius: 6px;
+            padding: 10px 14px;
             background-color: white;
             color: #444;
             text-align: center;
-            margin-bottom: 15px;
+            margin-bottom: 10px;
             transition: all 0.3s ease;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
         }
 
         .stat-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+            transform: translateY(-3px);
+            box-shadow: 0 5px 12px rgba(0, 0, 0, 0.12);
         }
 
         .stat-number {
-            font-size: 32px;
+            font-size: 20px;
             font-weight: bold;
-            margin-bottom: 5px;
+            margin-bottom: 2px;
         }
 
         .stat-label {
-            font-size: 14px;
+            font-size: 11px;
             opacity: 0.9;
         }
 
@@ -304,10 +306,45 @@ foreach($orders as $o) {
         /* Hide horizontal scrollbar if any */
         .kanban-container::-webkit-scrollbar { display: none; }
         .kanban-container { -ms-overflow-style: none; scrollbar-width: none; }
+
+        <?php if ($isEmbed): ?>
+        body {
+            background: #fff;
+        }
+
+        main.container {
+            margin-top: 0 !important;
+            max-width: 100%;
+            padding-top: 12px;
+            padding-left: 12px;
+            padding-right: 12px;
+        }
+
+        /* In right-side app panel, stack Kanban columns vertically for readability */
+        .kanban-container {
+            flex-direction: column;
+            flex-wrap: nowrap;
+            align-items: stretch;
+            justify-content: flex-start;
+            gap: 12px;
+        }
+
+        .kanban-column {
+            min-width: 100%;
+            max-width: 100%;
+            max-height: none;
+        }
+
+        .task-list {
+            max-height: 340px;
+        }
+        <?php endif; ?>
     </style>
 </head>
 <body>
-    <?php include_once __DIR__ . '/includes/header.php'; ?>
+    <?php if (!$isEmbed): ?>
+        <?php include_once __DIR__ . '/includes/header.php'; ?>
+    <?php endif; ?>
 
     <main class="container mt-4">
 
@@ -406,6 +443,8 @@ foreach($orders as $o) {
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
-    <?php include __DIR__ . '/Public/chat_widget.php'; ?>
+    <?php if (!$isEmbed): ?>
+        <?php include __DIR__ . '/Public/chat_widget.php'; ?>
+    <?php endif; ?>
 </body>
 </html>

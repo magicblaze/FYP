@@ -110,15 +110,37 @@ $baseUrl = $scheme . '://' . $host . $appRoot;
         </li>
       <?php endif; ?>
       <?php if (!empty($_SESSION['user'])): ?>
-        <li class=""><a class="nav-link" href="<?= $baseUrl ?>/my_likes.php">Liked</a></li>
         <?php if ($role === 'client'): ?>
           <li class=""><a class="nav-link" href="<?= $baseUrl ?>/client/order_history.php">Order History</a></li>
           <li class=""><a class="nav-link" href="<?= $baseUrl ?>/client/payment_manager.php">Payment Manager</a></li>
         <?php endif; ?>
         <li class=""><a class="nav-link" href="<?= $baseUrl ?>/logout.php">Logout</a></li>
+        <?php if ($role != 'client'): ?>
+          <li class=""><a class="nav-link" href="<?= $baseUrl ?>/my_likes.php">Liked</a></li>
+          <li class="nav-item">
+            <button class="nav-link btn btn-link text-decoration-none p-0" type="button" data-bs-toggle="offcanvas"
+              data-bs-target="#projectAppPanel" aria-controls="projectAppPanel">
+              Project View
+            </button>
+          </li>
+        <?php endif; ?>
       <?php else: ?>
         <li class=""><a class="nav-link" href="<?= $baseUrl ?>/login.php">Login</a></li>
       <?php endif; ?>
     </ul>
   </nav>
 </header>
+
+<?php if (!empty($_SESSION['user'])): ?>
+  <div class="offcanvas offcanvas-end" tabindex="-1" id="projectAppPanel" aria-labelledby="projectAppPanelLabel"
+    style="width: 30vw; min-width: 320px;">
+    <div class="offcanvas-header border-bottom">
+      <h5 class="offcanvas-title" id="projectAppPanelLabel">Project Overview</h5>
+      <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body p-0">
+      <iframe src="<?= $baseUrl ?>/project_management.php?embed=1" title="Project Overview"
+        style="width: 100%; height: calc(100vh - 58px); border: 0; background: #fff;"></iframe>
+    </div>
+  </div>
+<?php endif; ?>
