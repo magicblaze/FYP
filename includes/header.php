@@ -115,7 +115,6 @@ $baseUrl = $scheme . '://' . $host . $appRoot;
           <li class=""><a class="nav-link" href="<?= $baseUrl ?>/client/payment_manager.php">Payment Manager</a></li>
         <?php endif; ?>
         <li class=""><a class="nav-link" href="<?= $baseUrl ?>/logout.php">Logout</a></li>
-        <?php if ($role != 'client'): ?>
           <li class=""><a class="nav-link" href="<?= $baseUrl ?>/my_likes.php">Liked</a></li>
           <li class="nav-item">
             <button class="nav-link btn btn-link text-decoration-none p-0" type="button" data-bs-toggle="offcanvas"
@@ -123,7 +122,6 @@ $baseUrl = $scheme . '://' . $host . $appRoot;
               Project View
             </button>
           </li>
-        <?php endif; ?>
       <?php else: ?>
         <li class=""><a class="nav-link" href="<?= $baseUrl ?>/login.php">Login</a></li>
       <?php endif; ?>
