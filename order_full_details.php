@@ -12,6 +12,7 @@ $user = $_SESSION['user'];
 $role = $user['role'];
 $userId = $user['id'];
 $orderId = isset($_GET['id']) ? intval($_GET['id']) : 0;
+$isEmbed = isset($_GET['embed']) && $_GET['embed'] === '1';
 
 if ($orderId <= 0) {
     die("Invalid Order ID");
@@ -123,7 +124,7 @@ $grandTotal = $productTotal + $feeTotal + ($order['cost'] ?? 0);
             border-radius: 12px;
             padding: 25px;
             margin-bottom: 25px;
-            box-shadow: 0 2px 12px rgba(0,0,0,0.05);
+            box-shadow: 0 2px 12px rgba(0,0,0,0.05 );
         }
         .section-title {
             font-size: 18px;
@@ -147,8 +148,37 @@ $grandTotal = $productTotal + $feeTotal + ($order['cost'] ?? 0);
         }
         .table thead th { background-color: #f8f9fa; border-top: none; font-size: 13px; color: #7f8c8d; }
         .total-row { font-size: 16px; font-weight: 700; background: #f8f9fa; }
-        .back-btn { margin-bottom: 20px; display: inline-block; color: #3498db; text-decoration: none; font-weight: 600; }
-        .back-btn:hover { color: #2980b9; }
+        .back-btn { 
+            margin-bottom: 20px; 
+            display: inline-flex; 
+            align-items: center;
+            color: #7f8c8d; 
+            text-decoration: none; 
+            font-weight: 600; 
+            transition: all 0.3s ease;
+            padding: 8px 16px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+        .back-btn:hover { 
+            color: #3498db; 
+            transform: translateX(-5px);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+
+        /* Embed-specific overrides */
+        <?php if ($isEmbed): ?>
+        body { background-color: #fff !important; }
+        main.container { margin-top: 0 !important; padding: 15px !important; max-width: 100% !important; }
+        .detail-card { padding: 15px !important; margin-bottom: 15px !important; box-shadow: 0 1px 5px rgba(0,0,0,0.05) !important; }
+        .section-title { font-size: 16px !important; margin-bottom: 15px !important; }
+        .info-value { font-size: 14px !important; margin-bottom: 10px !important; }
+        .status-badge { padding: 4px 10px !important; font-size: 11px !important; }
+        .manager-action-box { padding: 15px !important; margin-bottom: 15px !important; }
+        .btn-update-schedule { padding: 0.5rem 1rem !important; font-size: 14px !important; }
+        .row > * { width: 100% !important; max-width: 100% !important; flex: 0 0 100% !important; }
+        <?php endif; ?>
         
         /* Updated Manager Action Box Style */
         .manager-action-box {
@@ -196,20 +226,35 @@ $grandTotal = $productTotal + $feeTotal + ($order['cost'] ?? 0);
     </style>
 </head>
 <body>
-    <?php include_once __DIR__ . '/includes/header.php'; ?>
+    <?php if (!$isEmbed): ?>
+        <?php include_once __DIR__ . '/includes/header.php'; ?>
+    <?php endif; ?>
 
     <main class="container mt-4 mb-5">
-        <a href="project_management.php" class="back-btn">
-            <i class="fas fa-arrow-left me-2"></i>Back to Dashboard
-        </a>
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <a href="project_management.php<?= $isEmbed ? '?embed=1' : '' ?>" class="back-btn mb-0">
+                <i class="fas fa-arrow-left me-2"></i>Back
+            </a>
+            <?php if (!$isEmbed): ?>
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-primary btn-sm" type="button" data-bs-toggle="offcanvas"
+                  data-bs-target="#projectAppPanel" aria-controls="projectAppPanel">
+                  <i class="fas fa-tasks me-1"></i> Project View
+                </button>
+            </div>
+            <?php endif; ?>
+        </div>
 
         <div class="container-fluid px-0">
             <?= $updateMessage ?>
         </div>
 
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h2 class="fw-bold">Order #<?= $orderId ?></h2>
-            <span class="status-badge bg-primary text-white"><?= htmlspecialchars($order['ostatus']) ?></span>
+        <div class="d-flex justify-content-between align-items-center mb-4 bg-white p-4 rounded-3 shadow-sm">
+            <div>
+                <h2 class="fw-bold mb-1">Order #<?= $orderId ?></h2>
+                <p class="text-muted mb-0"><i class="far fa-calendar-alt me-1"></i> Placed on <?= date('F d, Y', strtotime($order['odate'])) ?></p>
+            </div>
+            <span class="status-badge bg-primary text-white px-4 py-2 fs-6"><?= htmlspecialchars($order['ostatus']) ?></span>
         </div>
 
         <!-- Manager Exclusive Area - Styled to match system -->

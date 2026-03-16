@@ -136,9 +136,9 @@ $baseUrl = $scheme . '://' . $host . $appRoot;
       <h5 class="offcanvas-title" id="projectAppPanelLabel">Project Overview</h5>
       <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Close"></button>
     </div>
-    <div class="offcanvas-body p-0">
+    <div class="offcanvas-body p-0" style="overflow: hidden;">
       <iframe src="<?= $baseUrl ?>/project_management.php?embed=1" title="Project Overview"
-        style="width: 100%; height: calc(100vh - 58px); border: 0; background: #fff;"></iframe>
+        style="width: 100%; height: 100%; border: 0; background: #fff; display: block;"></iframe>
     </div>
   </div>
 <?php endif; ?>

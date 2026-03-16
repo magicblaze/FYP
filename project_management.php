@@ -138,7 +138,7 @@ foreach($orders as $o) {
             text-align: center;
             margin-bottom: 10px;
             transition: all 0.3s ease;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08 );
         }
 
         .stat-card:hover {
@@ -171,13 +171,14 @@ foreach($orders as $o) {
             background-color: #f8f9fa;
             border-radius: 10px;
             flex: 1; /* Allow columns to grow and shrink equally */
-            min-width: 200px; /* Minimum width to keep it readable */
-            max-width: 250px; /* Maximum width to fit all in one row if possible */
+            min-width: 250px; /* Increased minimum width for better stability */
+            max-width: 320px; /* Increased maximum width */
             display: flex;
             flex-direction: column;
-            max-height: 600px; /* Fixed height with internal scroll */
+            max-height: 700px; /* Slightly taller */
             box-shadow: 0 2px 5px rgba(0,0,0,0.05);
             border: 1px solid #dee2e6;
+            transition: all 0.3s ease; /* Smooth transition for any layout changes */
         }
 
         .column-header {
@@ -307,36 +308,45 @@ foreach($orders as $o) {
         .kanban-container::-webkit-scrollbar { display: none; }
         .kanban-container { -ms-overflow-style: none; scrollbar-width: none; }
 
+        /* Embed-specific overrides to ensure layout stability */
         <?php if ($isEmbed): ?>
         body {
-            background: #fff;
+            background: #fff !important;
+            overflow-x: hidden;
         }
 
         main.container {
             margin-top: 0 !important;
-            max-width: 100%;
-            padding-top: 12px;
-            padding-left: 12px;
-            padding-right: 12px;
+            max-width: 100% !important;
+            width: 100% !important;
+            padding: 12px !important;
         }
 
         /* In right-side app panel, stack Kanban columns vertically for readability */
         .kanban-container {
-            flex-direction: column;
-            flex-wrap: nowrap;
-            align-items: stretch;
-            justify-content: flex-start;
-            gap: 12px;
+            display: flex !important;
+            flex-direction: column !important;
+            flex-wrap: nowrap !important;
+            align-items: stretch !important;
+            justify-content: flex-start !important;
+            gap: 15px !important;
+            width: 100% !important;
         }
 
         .kanban-column {
-            min-width: 100%;
-            max-width: 100%;
-            max-height: none;
+            min-width: 100% !important;
+            max-width: 100% !important;
+            max-height: none !important;
+            flex: none !important;
         }
 
         .task-list {
-            max-height: 340px;
+            max-height: 400px !important; /* Slightly more space */
+        }
+
+        /* Ensure stat cards also look good in embed */
+        .stat-card {
+            margin-bottom: 15px !important;
         }
         <?php endif; ?>
     </style>
@@ -399,7 +409,7 @@ foreach($orders as $o) {
                             <?php foreach ($subTasks as $task): 
                                 $isOverdue = (isset($task['OrderFinishDate']) && strtotime($task['OrderFinishDate']) < time() && !in_array(strtolower($task['ostatus']), ['complete', 'rejected']));
                             ?>
-                                <div class="task-card" onclick="location.href='order_full_details.php?id=<?= $task['orderid'] ?>'">
+                                <div class="task-card" onclick="location.href='order_full_details.php?id=<?= $task['orderid'] ?><?= $isEmbed ? '&embed=1' : '' ?>'">
                                     <div class="task-id">#<?= $task['orderid'] ?></div>
                                     <div class="task-title"><?= htmlspecialchars($task['designName'] ?? 'Custom Project Request') ?></div>
                                     <div class="task-meta">
@@ -420,7 +430,7 @@ foreach($orders as $o) {
                         foreach ($tasks as $task): 
                             $isOverdue = (isset($task['OrderFinishDate']) && strtotime($task['OrderFinishDate']) < time() && !in_array(strtolower($task['ostatus']), ['complete', 'rejected']));
                         ?>
-                        <div class="task-card" onclick="location.href='order_full_details.php?id=<?= $task['orderid'] ?>'">
+                        <div class="task-card" onclick="location.href='order_full_details.php?id=<?= $task['orderid'] ?><?= $isEmbed ? '&embed=1' : '' ?>'">
                             <div class="task-id">#<?= $task['orderid'] ?></div>
                             <div class="task-title"><?= htmlspecialchars($task['designName'] ?? 'Custom Project Request') ?></div>
                             <div class="task-meta">
@@ -443,7 +453,7 @@ foreach($orders as $o) {
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
-    <?php if (!$isEmbed): ?>
+    <?php if (!$isEmbed ): ?>
         <?php include __DIR__ . '/Public/chat_widget.php'; ?>
     <?php endif; ?>
 </body>
