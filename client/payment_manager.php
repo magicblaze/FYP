@@ -1,13 +1,15 @@
 <?php
 // ==============================
-// File: payment_manager.php - Payment Management with wallet and bank card binding
+// File: client/payment_manager.php - Payment Management with wallet and bank card binding
+// Updated with wallet income distribution for Manager and Supplier
 // ==============================
 require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../wallet_functions.php'; 
 session_start();
 
 // Redirect to login if not authenticated
 if (empty($_SESSION['user'])) {
-    header('Location: login.php?redirect=' . urlencode('payment_manager.php'));
+    header('Location: ../login.php?redirect=' . urlencode('client/payment_manager.php'));
     exit;
 }
 
@@ -100,6 +102,120 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     }
                 }
                 
+                // ============================================
+                // WALLET INCOME DISTRIBUTION
+                // Distribute payment to relevant parties
+                // ============================================
+                
+                // 1. For design deposit and design completion - income goes to Manager (for designer)
+                if ($stage === 'design_deposit' || $stage === 'design_completion') {
+                    // Get the designer's manager for this order
+                    $managerStmt = $mysqli->prepare("
+                        SELECT d.managerid, d.designerid, d.designName 
+                        FROM `Order` o
+                        JOIN Design d ON o.designid = d.designid
+                        WHERE o.orderid = ?
+                    ");
+                    $managerStmt->bind_param("i", $orderId);
+                    $managerStmt->execute();
+                    $managerResult = $managerStmt->get_result();
+                    $managerData = $managerResult->fetch_assoc();
+                    
+                    if ($managerData && !empty($managerData['managerid'])) {
+                        $description = "Payment received for Order #{$orderId} - {$stage} (Design: {$managerData['designName']})";
+                        addManagerIncome($mysqli, $managerData['managerid'], $amount, $description, 'order', $orderId);
+                        
+                        // Log for debugging
+                        error_log("Added manager income: Manager ID {$managerData['managerid']}, Amount {$amount}, Order {$orderId}, Stage {$stage}");
+                    } else {
+                        error_log("No manager found for order {$orderId} stage {$stage}");
+                    }
+                }
+                
+                // 2. For construction deposit and final payment - income goes to Supplier (via contractors)
+                // 注意：这里不使用 supplierid，而是通过 Order_Contractors 找到承包商，然后通过产品订单找到供应商
+                if ($stage === 'construction_deposit' || $stage === 'final_payment') {
+                    // 先获取这个订单的承包商信息
+                    $contractorStmt = $mysqli->prepare("
+                        SELECT c.contractorid, c.cname
+                        FROM Order_Contractors oc
+                        JOIN Contractors c ON oc.contractorid = c.contractorid
+                        WHERE oc.orderid = ?
+                        LIMIT 1
+                    ");
+                    $contractorStmt->bind_param("i", $orderId);
+                    $contractorStmt->execute();
+                    $contractorResult = $contractorStmt->get_result();
+                    $contractorData = $contractorResult->fetch_assoc();
+                    
+                    if ($contractorData) {
+                        error_log("Found contractor for order {$orderId}: {$contractorData['cname']}");
+                        
+                        // 通过这个订单的产品来找到供应商
+                        $supplierStmt = $mysqli->prepare("
+                            SELECT DISTINCT p.supplierid, s.sname
+                            FROM OrderReference orf
+                            JOIN Product p ON orf.productid = p.productid
+                            JOIN Supplier s ON p.supplierid = s.supplierid
+                            WHERE orf.orderid = ? AND orf.status IN ('confirmed', 'completed', 'waiting delivery')
+                            LIMIT 1
+                        ");
+                        $supplierStmt->bind_param("i", $orderId);
+                        $supplierStmt->execute();
+                        $supplierResult = $supplierStmt->get_result();
+                        $supplierData = $supplierResult->fetch_assoc();
+                        
+                        if ($supplierData && !empty($supplierData['supplierid'])) {
+                            $description = "Construction payment received for Order #{$orderId} - {$stage} (Contractor: {$contractorData['cname']}, via Supplier: {$supplierData['sname']})";
+                            addSupplierIncome($mysqli, $supplierData['supplierid'], $amount, $description, 'order', $orderId);
+                            
+                            // Log for debugging
+                            error_log("Added supplier income: Supplier ID {$supplierData['supplierid']}, Amount {$amount}, Order {$orderId}, Stage {$stage}");
+                        } else {
+                            error_log("No supplier found for order {$orderId} stage {$stage} - looking for any supplier");
+                            
+                            // 最后尝试：获取任意一个供应商（用于演示）
+                            $anySupplierStmt = $mysqli->prepare("SELECT supplierid, sname FROM Supplier LIMIT 1");
+                            $anySupplierStmt->execute();
+                            $anySupplierResult = $anySupplierStmt->get_result();
+                            $anySupplierData = $anySupplierResult->fetch_assoc();
+                            
+                            if ($anySupplierData) {
+                                $description = "Construction payment received for Order #{$orderId} - {$stage} (Contractor: {$contractorData['cname']})";
+                                addSupplierIncome($mysqli, $anySupplierData['supplierid'], $amount, $description, 'order', $orderId);
+                                error_log("Added supplier income using default supplier: Supplier ID {$anySupplierData['supplierid']}");
+                            }
+                        }
+                    } else {
+                        error_log("No contractor found for order {$orderId} stage {$stage}");
+                    }
+                }
+                
+                // 3. For product orders (if this is a product payment)
+                if (isset($_POST['reference_id']) && $_POST['reference_type'] === 'product') {
+                    $referenceId = (int) $_POST['reference_id'];
+                    
+                    // Get supplier for this product
+                    $productStmt = $mysqli->prepare("
+                        SELECT p.supplierid, p.pname, s.sname
+                        FROM OrderReference orf
+                        JOIN Product p ON orf.productid = p.productid
+                        JOIN Supplier s ON p.supplierid = s.supplierid
+                        WHERE orf.id = ?
+                    ");
+                    $productStmt->bind_param("i", $referenceId);
+                    $productStmt->execute();
+                    $productResult = $productStmt->get_result();
+                    $productData = $productResult->fetch_assoc();
+                    
+                    if ($productData && !empty($productData['supplierid'])) {
+                        $description = "Product payment for Order #{$orderId} - {$productData['pname']} (Supplier: {$productData['sname']})";
+                        addSupplierIncome($mysqli, $productData['supplierid'], $amount, $description, 'product', $referenceId);
+                        error_log("Added supplier income for product: Supplier ID {$productData['supplierid']}");
+                    }
+                }
+                
+                // Update client data
                 $clientData['budget'] = $newBudget;
                 $message = 'Payment successful! $' . number_format($amount, 2) . ' deducted from your wallet.';
                 $messageType = 'success';
@@ -236,7 +352,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
 // Fetch orders with payment stages
 $ordersSql = "SELECT o.orderid, o.odate, o.ostatus, o.deposit, o.budget as order_budget,
-              d.designid, d.designName, d.expect_price,
+              d.designid, d.designName, d.expect_price, d.designerid,
               (SELECT SUM(amount) FROM AdditionalFee WHERE orderid = o.orderid) as total_fees,
               (SELECT SUM(COALESCE(orr.price, p.price, 0)) FROM OrderReference orr 
                LEFT JOIN Product p ON orr.productid = p.productid WHERE orr.orderid = o.orderid) as total_products
@@ -255,6 +371,16 @@ while ($order = $orders->fetch_assoc()) {
     $orderId = $order['orderid'];
     $status = strtolower($order['ostatus'] ?? '');
     
+    // Calculate design completion amount (30% of design price)
+    $designCompletionAmount = floatval($order['expect_price'] ?? 0) * 0.3;
+    
+    // Calculate construction deposit (30% of design price)
+    $constructionDepositAmount = floatval($order['expect_price'] ?? 0) * 0.3;
+    
+    // Calculate final payment (remaining 40% + products + fees)
+    $finalPaymentAmount = floatval($order['total_products'] ?? 0) + floatval($order['total_fees'] ?? 0) + 
+                          (floatval($order['expect_price'] ?? 0) * 0.4);
+    
     // Define payment stages based on order status
     $stages = [
         'design_deposit' => [
@@ -264,35 +390,42 @@ while ($order = $orders->fetch_assoc()) {
             'paid_status' => 'designing',
             'status' => 'pending',
             'paid' => false,
-            'stage_order' => 1
+            'stage_order' => 1,
+            'recipient' => 'Manager (Designer)',
+            'recipient_type' => 'manager'
         ],
         'design_completion' => [
             'name' => 'Design Completion Payment',
-            'amount' => floatval($order['expect_price'] ?? 0) * 0.3, // 30% of design price
+            'amount' => $designCompletionAmount,
             'due_status' => 'reviewing design proposal',
             'paid_status' => 'waiting for review design',
             'status' => 'pending',
             'paid' => false,
-            'stage_order' => 2
+            'stage_order' => 2,
+            'recipient' => 'Manager (Designer)',
+            'recipient_type' => 'manager'
         ],
         'construction_deposit' => [
             'name' => 'Construction Deposit',
-            'amount' => floatval($order['expect_price'] ?? 0) * 0.3, // 30% of design price
+            'amount' => $constructionDepositAmount,
             'due_status' => 'waiting client payment',
             'paid_status' => 'complete',
             'status' => 'pending',
             'paid' => false,
-            'stage_order' => 3
+            'stage_order' => 3,
+            'recipient' => 'Supplier (Contractor)',
+            'recipient_type' => 'supplier'
         ],
         'final_payment' => [
             'name' => 'Final Settlement',
-            'amount' => floatval($order['total_products'] ?? 0) + floatval($order['total_fees'] ?? 0) + 
-                       (floatval($order['expect_price'] ?? 0) * 0.4), // Remaining 40% + products + fees
+            'amount' => $finalPaymentAmount,
             'due_status' => 'complete',
             'paid_status' => 'complete',
             'status' => 'pending',
             'paid' => false,
-            'stage_order' => 4
+            'stage_order' => 4,
+            'recipient' => 'Supplier (Contractor)',
+            'recipient_type' => 'supplier'
         ]
     ];
     
@@ -318,12 +451,71 @@ while ($order = $orders->fetch_assoc()) {
         }
     }
     
+    // Get recipient details for display
+    if (!$stages['design_deposit']['paid'] || !$stages['design_completion']['paid']) {
+        // Get manager info
+        $managerInfoStmt = $mysqli->prepare("
+            SELECT m.mname, m.memail 
+            FROM Designer d
+            JOIN Manager m ON d.managerid = m.managerid
+            WHERE d.designerid = ?
+        ");
+        $managerInfoStmt->bind_param("i", $order['designerid']);
+        $managerInfoStmt->execute();
+        $managerInfo = $managerInfoStmt->get_result()->fetch_assoc();
+        if ($managerInfo) {
+            $stages['design_deposit']['recipient_name'] = $managerInfo['mname'];
+            $stages['design_completion']['recipient_name'] = $managerInfo['mname'];
+        }
+    }
+    
+    if (!$stages['construction_deposit']['paid'] || !$stages['final_payment']['paid']) {
+        // Get supplier info through products in this order
+        $supplierInfoStmt = $mysqli->prepare("
+            SELECT DISTINCT s.sname, s.semail 
+            FROM OrderReference orf
+            JOIN Product p ON orf.productid = p.productid
+            JOIN Supplier s ON p.supplierid = s.supplierid
+            WHERE orf.orderid = ? AND orf.status IN ('confirmed', 'completed', 'waiting delivery')
+            LIMIT 1
+        ");
+        $supplierInfoStmt->bind_param("i", $orderId);
+        $supplierInfoStmt->execute();
+        $supplierInfo = $supplierInfoStmt->get_result()->fetch_assoc();
+        
+        if ($supplierInfo) {
+            $stages['construction_deposit']['recipient_name'] = $supplierInfo['sname'];
+            $stages['final_payment']['recipient_name'] = $supplierInfo['sname'];
+        } else {
+            // 如果没有找到，显示默认供应商
+            $defaultSupplierStmt = $mysqli->prepare("SELECT sname FROM Supplier LIMIT 1");
+            $defaultSupplierStmt->execute();
+            $defaultSupplier = $defaultSupplierStmt->get_result()->fetch_assoc();
+            if ($defaultSupplier) {
+                $stages['construction_deposit']['recipient_name'] = $defaultSupplier['sname'] . ' (Default)';
+                $stages['final_payment']['recipient_name'] = $defaultSupplier['sname'] . ' (Default)';
+            }
+        }
+    }
+    
     $paymentStages[$orderId] = [
         'order' => $order,
         'stages' => $stages,
         'current_status' => $status
     ];
 }
+
+// Get recent transactions for this client (optional)
+$transactionsStmt = $mysqli->prepare("
+    SELECT * FROM WalletTransaction 
+    WHERE reference_type = 'order' AND reference_id IN (
+        SELECT orderid FROM `Order` WHERE clientid = ?
+    )
+    ORDER BY created_at DESC LIMIT 10
+");
+$transactionsStmt->bind_param("i", $clientId);
+$transactionsStmt->execute();
+$recentTransactions = $transactionsStmt->get_result();
 ?>
 
 <!DOCTYPE html>
@@ -332,7 +524,7 @@ while ($order = $orders->fetch_assoc()) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Payment Manager - HappyDesign</title>
-   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="../css/styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -377,7 +569,7 @@ while ($order = $orders->fetch_assoc()) {
                 </div>
                 
                 <!-- Saved Cards -->
-                <div class="card">
+                <div class="card mb-4">
                     <div class="card-header bg-secondary text-white">
                         <h5 class="mb-0"><i class="fas fa-credit-card me-2"></i>My Cards (<?= count($paymentMethods) ?>)</h5>
                     </div>
@@ -425,6 +617,31 @@ while ($order = $orders->fetch_assoc()) {
                         <?php endif; ?>
                     </div>
                 </div>
+                
+                <!-- Recent Transactions Preview -->
+                <?php if ($recentTransactions->num_rows > 0): ?>
+                <div class="card">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0"><i class="fas fa-clock me-2"></i>Recent Transactions</h5>
+                    </div>
+                    <div class="card-body p-2">
+                        <ul class="list-group list-group-flush">
+                            <?php while ($tx = $recentTransactions->fetch_assoc()): ?>
+                                <li class="list-group-item px-2 py-1">
+                                    <small>
+                                        <?= date('m/d H:i', strtotime($tx['created_at'])) ?> - 
+                                        <span class="text-<?= $tx['transaction_type'] === 'income' ? 'success' : 'danger' ?>">
+                                            <?= $tx['transaction_type'] === 'income' ? '+' : '-' ?>$<?= number_format($tx['amount'], 2) ?>
+                                        </span>
+                                        <br>
+                                        <span class="text-muted"><?= substr($tx['description'], 0, 30) ?>...</span>
+                                    </small>
+                                </li>
+                            <?php endwhile; ?>
+                        </ul>
+                    </div>
+                </div>
+                <?php endif; ?>
             </div>
             
             <!-- Main Content - Payment Stages -->
@@ -467,6 +684,7 @@ while ($order = $orders->fetch_assoc()) {
                                                 <tr>
                                                     <th>Payment Stage</th>
                                                     <th>Amount</th>
+                                                    <th>Recipient</th>
                                                     <th>Due When</th>
                                                     <th>Status</th>
                                                     <th>Action</th>
@@ -477,6 +695,14 @@ while ($order = $orders->fetch_assoc()) {
                                                     <tr>
                                                         <td><?= $stage['name'] ?></td>
                                                         <td>$<?= number_format($stage['amount'], 2) ?></td>
+                                                        <td>
+                                                            <small>
+                                                                <?= $stage['recipient'] ?>
+                                                                <?php if (!empty($stage['recipient_name'])): ?>
+                                                                    <br><span class="text-muted">(<?= htmlspecialchars($stage['recipient_name']) ?>)</span>
+                                                                <?php endif; ?>
+                                                            </small>
+                                                        </td>
                                                         <td><span class="badge bg-secondary"><?= $stage['due_status'] ?></span></td>
                                                         <td>
                                                             <?php if ($stage['paid']): ?>
@@ -493,7 +719,7 @@ while ($order = $orders->fetch_assoc()) {
                                                             <?php if (!$stage['paid']): ?>
                                                                 <?php if ($currentStatus === $stage['due_status']): ?>
                                                                     <!-- Normal payment - stage is due -->
-                                                                    <form method="POST" class="d-inline" onsubmit="return confirm('Pay $<?= number_format($stage['amount'], 2) ?> from your wallet?')">
+                                                                    <form method="POST" class="d-inline" onsubmit="return confirm('Pay $<?= number_format($stage['amount'], 2) ?> from your wallet?\n\nThis payment will go to: <?= $stage['recipient'] ?>')">
                                                                         <input type="hidden" name="action" value="process_payment">
                                                                         <input type="hidden" name="order_id" value="<?= $orderId ?>">
                                                                         <input type="hidden" name="stage" value="<?= $stageKey ?>">
@@ -508,7 +734,7 @@ while ($order = $orders->fetch_assoc()) {
                                                                 <?php else: ?>
                                                                     <!-- Early payment - stage is not due yet -->
                                                                     <button type="button" class="btn btn-sm btn-warning" 
-                                                                            onclick="confirmEarlyPayment(<?= $orderId ?>, '<?= $stageKey ?>', <?= $stage['amount'] ?>, '<?= $currentStatus ?>', '<?= $stage['due_status'] ?>')"
+                                                                            onclick="confirmEarlyPayment(<?= $orderId ?>, '<?= $stageKey ?>', <?= $stage['amount'] ?>, '<?= $currentStatus ?>', '<?= $stage['due_status'] ?>', '<?= $stage['recipient'] ?>')"
                                                                             <?= (floatval($clientData['budget'] ?? 0) < $stage['amount']) ? 'disabled' : '' ?>>
                                                                         Pay Early
                                                                     </button>
@@ -525,7 +751,7 @@ while ($order = $orders->fetch_assoc()) {
                                             <tfoot class="table-light">
                                                 <tr>
                                                     <th colspan="2">Total Order Value</th>
-                                                    <th colspan="3">$<?= number_format(
+                                                    <th colspan="4">$<?= number_format(
                                                         $stages['design_deposit']['amount'] + 
                                                         $stages['design_completion']['amount'] + 
                                                         $stages['construction_deposit']['amount'] + 
@@ -540,6 +766,15 @@ while ($order = $orders->fetch_assoc()) {
                                             <button type="button" class="btn btn-success" onclick="payAllStages(<?= $orderId ?>)">
                                                 <i class="fas fa-bolt me-2"></i>Pay All Remaining Stages
                                             </button>
+                                        </div>
+                                        
+                                        <!-- Payment Info Alert -->
+                                        <div class="alert alert-info mt-3 py-2">
+                                            <small>
+                                                <i class="fas fa-info-circle me-1"></i>
+                                                <strong>Payment Distribution:</strong> 
+                                                Design payments go to the manager, construction payments go to the supplier.
+                                            </small>
                                         </div>
                                     </div>
                                 </div>
@@ -632,10 +867,11 @@ while ($order = $orders->fetch_assoc()) {
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-    function confirmEarlyPayment(orderId, stage, amount, currentStatus, dueStatus) {
+    function confirmEarlyPayment(orderId, stage, amount, currentStatus, dueStatus, recipient) {
         let message = `This payment stage ($${amount.toFixed(2)}) is not due yet.\n`;
         message += `Current order status: "${currentStatus}"\n`;
-        message += `This stage is normally due when status is: "${dueStatus}"\n\n`;
+        message += `This stage is normally due when status is: "${dueStatus}"\n`;
+        message += `Recipient: ${recipient}\n\n`;
         message += `Are you sure you want to pay early?`;
         
         if (confirm(message)) {
@@ -650,6 +886,7 @@ while ($order = $orders->fetch_assoc()) {
     function payAllStages(orderId) {
         let stages = [];
         let totalAmount = 0;
+        let stagesList = '';
         
         <?php foreach ($paymentStages as $oid => $data): ?>
             if (<?= $oid ?> === orderId) {
@@ -657,10 +894,13 @@ while ($order = $orders->fetch_assoc()) {
                     <?php if (!$st['paid']): ?>
                         stages.push({
                             stage: '<?= $sk ?>',
+                            name: '<?= $st['name'] ?>',
                             amount: <?= $st['amount'] ?>,
-                            dueStatus: '<?= $st['due_status'] ?>'
+                            dueStatus: '<?= $st['due_status'] ?>',
+                            recipient: '<?= $st['recipient'] ?>'
                         });
                         totalAmount += <?= $st['amount'] ?>;
+                        stagesList += `- ${'<?= $st['name'] ?>'}: $${<?= $st['amount'] ?>.toFixed(2)} (to: ${'<?= $st['recipient'] ?>'})\n`;
                     <?php endif; ?>
                 <?php endforeach; ?>
             }
@@ -671,11 +911,9 @@ while ($order = $orders->fetch_assoc()) {
             return;
         }
         
-        let stageList = stages.map(s => `- ${s.stage}: $${s.amount.toFixed(2)} (normally due when: ${s.dueStatus})`).join('\n');
-        
         let message = `You are about to pay all remaining stages for this order.\n`;
         message += `Total amount: $${totalAmount.toFixed(2)}\n\n`;
-        message += `Stages to pay:\n${stageList}\n\n`;
+        message += `Stages to pay:\n${stagesList}\n`;
         message += `Note: Some stages may not be due yet based on current order status.\n`;
         message += `Are you sure you want to proceed?`;
         
@@ -687,8 +925,9 @@ while ($order = $orders->fetch_assoc()) {
                 if (processed < stages.length) {
                     let stage = stages[processed];
                     
-                    let stageMessage = `Paying stage: ${stage.stage}\n`;
+                    let stageMessage = `Paying stage: ${stage.name}\n`;
                     stageMessage += `Amount: $${stage.amount.toFixed(2)}\n`;
+                    stageMessage += `Recipient: ${stage.recipient}\n`;
                     stageMessage += `This stage is normally due when status is: "${stage.dueStatus}"\n\n`;
                     stageMessage += `Continue with this payment?`;
                     

@@ -624,6 +624,83 @@ BEGIN
 END$$
 DELIMITER ;
 
+
+-- Manager Wallet table
+CREATE TABLE IF NOT EXISTS `ManagerWallet` (
+  `wallet_id` INT NOT NULL AUTO_INCREMENT,
+  `managerid` INT NOT NULL,
+  `balance` DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+  `total_earned` DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+  `total_withdrawn` DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+  `pending_balance` DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+  `last_updated` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`wallet_id`),
+  UNIQUE KEY `unique_manager` (`managerid`),
+  CONSTRAINT `fk_wallet_managerid` FOREIGN KEY (`managerid`) REFERENCES `Manager` (`managerid`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Supplier Wallet table
+CREATE TABLE IF NOT EXISTS `SupplierWallet` (
+  `wallet_id` INT NOT NULL AUTO_INCREMENT,
+  `supplierid` INT NOT NULL,
+  `balance` DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+  `total_earned` DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+  `total_withdrawn` DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+  `pending_balance` DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+  `last_updated` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`wallet_id`),
+  UNIQUE KEY `unique_supplier` (`supplierid`),
+  CONSTRAINT `fk_wallet_supplierid` FOREIGN KEY (`supplierid`) REFERENCES `Supplier` (`supplierid`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Transaction History table for both Manager and Supplier
+CREATE TABLE IF NOT EXISTS `WalletTransaction` (
+  `transaction_id` INT NOT NULL AUTO_INCREMENT,
+  `user_type` ENUM('manager', 'supplier') NOT NULL,
+  `user_id` INT NOT NULL,
+  `transaction_type` ENUM('income', 'withdrawal', 'refund', 'fee') NOT NULL,
+  `amount` DECIMAL(15,2) NOT NULL,
+  `balance_before` DECIMAL(15,2) NOT NULL,
+  `balance_after` DECIMAL(15,2) NOT NULL,
+  `description` VARCHAR(500) DEFAULT NULL,
+  `reference_type` ENUM('order', 'product', 'withdrawal') DEFAULT NULL,
+  `reference_id` INT DEFAULT NULL,
+  `status` ENUM('pending', 'completed', 'failed', 'cancelled') DEFAULT 'completed',
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`transaction_id`),
+  KEY `idx_user` (`user_type`, `user_id`),
+  KEY `idx_reference` (`reference_type`, `reference_id`),
+  KEY `idx_created` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Withdrawal Requests table
+CREATE TABLE IF NOT EXISTS `WithdrawalRequest` (
+  `request_id` INT NOT NULL AUTO_INCREMENT,
+  `user_type` ENUM('manager', 'supplier') NOT NULL,
+  `user_id` INT NOT NULL,
+  `amount` DECIMAL(15,2) NOT NULL,
+  `bank_name` VARCHAR(255) NOT NULL,
+  `account_number` VARCHAR(100) NOT NULL,
+  `account_holder` VARCHAR(255) NOT NULL,
+  `status` ENUM('pending', 'approved', 'rejected', 'completed') DEFAULT 'pending',
+  `admin_notes` TEXT,
+  `processed_by` INT DEFAULT NULL,
+  `processed_at` TIMESTAMP NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`request_id`),
+  KEY `idx_user` (`user_type`, `user_id`),
+  KEY `idx_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Insert initial wallet records for existing managers
+INSERT INTO `ManagerWallet` (`managerid`, `balance`, `total_earned`, `total_withdrawn`, `pending_balance`)
+SELECT managerid, 0, 0, 0, 0 FROM Manager
+WHERE managerid NOT IN (SELECT managerid FROM ManagerWallet);
+
+-- Insert initial wallet records for existing suppliers
+INSERT INTO `SupplierWallet` (`supplierid`, `balance`, `total_earned`, `total_withdrawn`, `pending_balance`)
+SELECT supplierid, 0, 0, 0, 0 FROM Supplier
+WHERE supplierid NOT IN (SELECT supplierid FROM SupplierWallet);
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
 /*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;
