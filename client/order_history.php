@@ -134,6 +134,16 @@ if (!empty($_GET['msg'])) {
             color: #004085;
         }
 
+        .status-selection {
+            background-color: #ffe0b2;
+            color: #e67e22;
+        }
+
+        .status-preparing {
+            background-color: #e1f5fe;
+            color: #039be5;
+        }
+
         .order-body {
             display: flex;
             gap: 1.25rem;
@@ -253,6 +263,10 @@ if (!empty($_GET['msg'])) {
                         $statusClass = 'status-completed';
                     } elseif (strpos($statusLower, 'cancel') !== false) {
                         $statusClass = 'status-cancelled';
+                    } elseif ($statusLower === 'waiting for selection') {
+                        $statusClass = 'status-selection';
+                    } elseif ($statusLower === 'preparing') {
+                        $statusClass = 'status-preparing';
                     }
 
                     // Fetch the first image from DesignImage table
@@ -336,7 +350,6 @@ if (!empty($_GET['msg'])) {
                         <?php endif; ?>
                         <div style="margin-top: 0.75rem; display:flex; gap:8px;">
                             <!-- Primary view/proposal/details button -->
-
                             <?php if ($statusLower === 'waiting client review' || $statusLower === 'waiting client payment' || $statusLower === 'complete'): ?>
                                 <a href="Order_View.php?id=<?= (int) $order['orderid'] ?>" class="view-details-btn"
                                     onclick="event.stopPropagation();">
@@ -351,12 +364,18 @@ if (!empty($_GET['msg'])) {
                                     <i class="fas fa-arrow-right me-1"></i>View Details</a>
                             <?php endif; ?>
 
-
                             <!-- Proceed to Payment button (separate) -->
                             <?php if ($statusLower === 'waiting client payment'): ?>
                                 <a href="payment.php?orderid=<?= (int) $order['orderid'] ?>" class="view-details-btn"
                                     onclick="event.stopPropagation();">
                                     <i class="fas fa-credit-card me-1"></i>Proceed to Payment
+                                </a>
+                            <?php endif; ?>
+                            <!-- Proceed to Construction Payment button -->
+                            <?php if ($statusLower === 'waiting for selection'): ?>
+                                <a href="payment_construction.php?orderid=<?= (int) $order['orderid'] ?>" class="view-details-btn"
+                                    onclick="event.stopPropagation();">
+                                    <i class="fas fa-hard-hat me-1"></i>Proceed to Construction Payment
                                 </a>
                             <?php endif; ?>
                         </div>
