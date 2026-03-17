@@ -110,6 +110,7 @@ $grandTotal = $productTotal + $feeTotal + ($order['cost'] ?? 0);
 ?>
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -118,14 +119,18 @@ $grandTotal = $productTotal + $feeTotal + ($order['cost'] ?? 0);
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="css/styles.css">
     <style>
-        body { background-color: #f4f7f6; }
+        body {
+            background-color: #f4f7f6;
+        }
+
         .detail-card {
             background: white;
             border-radius: 12px;
             padding: 25px;
             margin-bottom: 25px;
-            box-shadow: 0 2px 12px rgba(0,0,0,0.05 );
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
         }
+
         .section-title {
             font-size: 18px;
             font-weight: 700;
@@ -137,8 +142,19 @@ $grandTotal = $productTotal + $feeTotal + ($order['cost'] ?? 0);
             align-items: center;
             gap: 10px;
         }
-        .info-label { color: #7f8c8d; font-size: 13px; margin-bottom: 2px; }
-        .info-value { color: #2c3e50; font-weight: 600; margin-bottom: 15px; }
+
+        .info-label {
+            color: #7f8c8d;
+            font-size: 13px;
+            margin-bottom: 2px;
+        }
+
+        .info-value {
+            color: #2c3e50;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+
         .status-badge {
             padding: 5px 15px;
             border-radius: 20px;
@@ -146,40 +162,91 @@ $grandTotal = $productTotal + $feeTotal + ($order['cost'] ?? 0);
             font-weight: 700;
             text-transform: uppercase;
         }
-        .table thead th { background-color: #f8f9fa; border-top: none; font-size: 13px; color: #7f8c8d; }
-        .total-row { font-size: 16px; font-weight: 700; background: #f8f9fa; }
-        .back-btn { 
-            margin-bottom: 20px; 
-            display: inline-flex; 
+
+        .table thead th {
+            background-color: #f8f9fa;
+            border-top: none;
+            font-size: 13px;
+            color: #7f8c8d;
+        }
+
+        .total-row {
+            font-size: 16px;
+            font-weight: 700;
+            background: #f8f9fa;
+        }
+
+        .back-btn {
+            margin-bottom: 20px;
+            display: inline-flex;
             align-items: center;
-            color: #7f8c8d; 
-            text-decoration: none; 
-            font-weight: 600; 
+            color: #7f8c8d;
+            text-decoration: none;
+            font-weight: 600;
             transition: all 0.3s ease;
             padding: 8px 16px;
             background: white;
             border-radius: 8px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
         }
-        .back-btn:hover { 
-            color: #3498db; 
+
+        .back-btn:hover {
+            color: #3498db;
             transform: translateX(-5px);
-            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
         }
 
         /* Embed-specific overrides */
         <?php if ($isEmbed): ?>
-        body { background-color: #fff !important; }
-        main.container { margin-top: 0 !important; padding: 15px !important; max-width: 100% !important; }
-        .detail-card { padding: 15px !important; margin-bottom: 15px !important; box-shadow: 0 1px 5px rgba(0,0,0,0.05) !important; }
-        .section-title { font-size: 16px !important; margin-bottom: 15px !important; }
-        .info-value { font-size: 14px !important; margin-bottom: 10px !important; }
-        .status-badge { padding: 4px 10px !important; font-size: 11px !important; }
-        .manager-action-box { padding: 15px !important; margin-bottom: 15px !important; }
-        .btn-update-schedule { padding: 0.5rem 1rem !important; font-size: 14px !important; }
-        .row > * { width: 100% !important; max-width: 100% !important; flex: 0 0 100% !important; }
+            body {
+                background-color: #fff !important;
+            }
+
+            main.container {
+                margin-top: 0 !important;
+                padding: 15px !important;
+                max-width: 100% !important;
+            }
+
+            .detail-card {
+                padding: 15px !important;
+                margin-bottom: 15px !important;
+                box-shadow: 0 1px 5px rgba(0, 0, 0, 0.05) !important;
+            }
+
+            .section-title {
+                font-size: 16px !important;
+                margin-bottom: 15px !important;
+            }
+
+            .info-value {
+                font-size: 14px !important;
+                margin-bottom: 10px !important;
+            }
+
+            .status-badge {
+                padding: 4px 10px !important;
+                font-size: 11px !important;
+            }
+
+            .manager-action-box {
+                padding: 15px !important;
+                margin-bottom: 15px !important;
+            }
+
+            .btn-update-schedule {
+                padding: 0.5rem 1rem !important;
+                font-size: 14px !important;
+            }
+
+            .row>* {
+                width: 100% !important;
+                max-width: 100% !important;
+                flex: 0 0 100% !important;
+            }
+
         <?php endif; ?>
-        
+
         /* Updated Manager Action Box Style */
         .manager-action-box {
             background: white;
@@ -189,24 +256,29 @@ $grandTotal = $productTotal + $feeTotal + ($order['cost'] ?? 0);
             box-shadow: 0 4px 15px rgba(52, 152, 219, 0.1);
             border: 1px solid rgba(52, 152, 219, 0.2);
         }
+
         .manager-action-box .section-title {
             border-bottom: 2px solid #eef2f7;
             color: #3498db;
         }
+
         .manager-action-box .form-label {
             color: #34495e;
             font-weight: 600;
         }
+
         .manager-action-box .form-control {
             border: 2px solid #ecf0f1;
             border-radius: 8px;
             padding: 0.6rem 0.75rem;
             transition: all 0.3s;
         }
+
         .manager-action-box .form-control:focus {
             border-color: #3498db;
             box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.1);
         }
+
         .btn-update-schedule {
             background: #3498db;
             border: none;
@@ -217,6 +289,7 @@ $grandTotal = $productTotal + $feeTotal + ($order['cost'] ?? 0);
             transition: all 0.3s;
             box-shadow: 0 4px 6px rgba(52, 152, 219, 0.2);
         }
+
         .btn-update-schedule:hover {
             background: #2980b9;
             transform: translateY(-2px);
@@ -225,6 +298,7 @@ $grandTotal = $productTotal + $feeTotal + ($order['cost'] ?? 0);
         }
     </style>
 </head>
+
 <body>
     <?php if (!$isEmbed): ?>
         <?php include_once __DIR__ . '/includes/header.php'; ?>
@@ -236,12 +310,12 @@ $grandTotal = $productTotal + $feeTotal + ($order['cost'] ?? 0);
                 <i class="fas fa-arrow-left me-2"></i>Back
             </a>
             <?php if (!$isEmbed): ?>
-            <div class="d-flex gap-2">
-                <button class="btn btn-outline-primary btn-sm" type="button" data-bs-toggle="offcanvas"
-                  data-bs-target="#projectAppPanel" aria-controls="projectAppPanel">
-                  <i class="fas fa-tasks me-1"></i> Project View
-                </button>
-            </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-primary btn-sm" type="button" data-bs-toggle="offcanvas"
+                        data-bs-target="#projectAppPanel" aria-controls="projectAppPanel">
+                        <i class="fas fa-tasks me-1"></i> Project View
+                    </button>
+                </div>
             <?php endif; ?>
         </div>
 
@@ -252,39 +326,45 @@ $grandTotal = $productTotal + $feeTotal + ($order['cost'] ?? 0);
         <div class="d-flex justify-content-between align-items-center mb-4 bg-white p-4 rounded-3 shadow-sm">
             <div>
                 <h2 class="fw-bold mb-1">Order #<?= $orderId ?></h2>
-                <p class="text-muted mb-0"><i class="far fa-calendar-alt me-1"></i> Placed on <?= date('F d, Y', strtotime($order['odate'])) ?></p>
+                <p class="text-muted mb-0"><i class="far fa-calendar-alt me-1"></i> Placed on
+                    <?= date('F d, Y', strtotime($order['odate'])) ?></p>
             </div>
-            <span class="status-badge bg-primary text-white px-4 py-2 fs-6"><?= htmlspecialchars($order['ostatus']) ?></span>
+            <span
+                class="status-badge bg-primary text-white px-4 py-2 fs-6"><?= htmlspecialchars($order['ostatus']) ?></span>
         </div>
 
         <!-- Manager Exclusive Area - Styled to match system -->
         <?php if ($role === 'manager'): ?>
-        <div class="manager-action-box">
-            <div class="section-title">
-                <i class="fas fa-calendar-alt"></i>Schedule Management
+            <div class="manager-action-box">
+                <div class="section-title">
+                    <i class="fas fa-calendar-alt"></i>Schedule Management
+                </div>
+                <form method="POST" class="row g-4 align-items-end">
+                    <div class="col-md-4">
+                        <label class="form-label small">Design Finish Date</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light border-end-0"><i
+                                    class="fas fa-pencil-ruler text-muted"></i></span>
+                            <input type="date" name="design_finish_date" class="form-control border-start-0"
+                                value="<?= $order['DesignFinishDate'] ?>">
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small">Order Finish Date</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light border-end-0"><i
+                                    class="fas fa-check-double text-muted"></i></span>
+                            <input type="date" name="order_finish_date" class="form-control border-start-0"
+                                value="<?= $order['OrderFinishDate'] ?>">
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <button type="submit" name="update_dates" class="btn btn-update-schedule w-100">
+                            <i class="fas fa-sync-alt me-2"></i>Update Schedule
+                        </button>
+                    </div>
+                </form>
             </div>
-            <form method="POST" class="row g-4 align-items-end">
-                <div class="col-md-4">
-                    <label class="form-label small">Design Finish Date</label>
-                    <div class="input-group">
-                        <span class="input-group-text bg-light border-end-0"><i class="fas fa-pencil-ruler text-muted"></i></span>
-                        <input type="date" name="design_finish_date" class="form-control border-start-0" value="<?= $order['DesignFinishDate'] ?>">
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <label class="form-label small">Order Finish Date</label>
-                    <div class="input-group">
-                        <span class="input-group-text bg-light border-end-0"><i class="fas fa-check-double text-muted"></i></span>
-                        <input type="date" name="order_finish_date" class="form-control border-start-0" value="<?= $order['OrderFinishDate'] ?>">
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <button type="submit" name="update_dates" class="btn btn-update-schedule w-100">
-                        <i class="fas fa-sync-alt me-2"></i>Update Schedule
-                    </button>
-                </div>
-            </form>
-        </div>
         <?php endif; ?>
 
         <div class="row">
@@ -298,15 +378,18 @@ $grandTotal = $productTotal + $feeTotal + ($order['cost'] ?? 0);
                     <div class="row">
                         <div class="col-md-6">
                             <div class="info-label">Design Name</div>
-                            <div class="info-value"><?= htmlspecialchars($order['designName'] ?? 'Custom Request') ?></div>
-                            
+                            <div class="info-value"><?= htmlspecialchars($order['designName'] ?? 'Custom Request') ?>
+                            </div>
+
                             <div class="info-label">Order Date</div>
                             <div class="info-value"><?= date('F d, Y', strtotime($order['odate'])) ?></div>
                         </div>
                         <div class="col-md-6">
                             <div class="info-label">Requirements</div>
-                            <div class="info-value"><?= nl2br(htmlspecialchars($order['Requirements'] ?? 'No specific requirements')) ?></div>
-                            
+                            <div class="info-value">
+                                <?= nl2br(htmlspecialchars($order['Requirements'] ?? 'No specific requirements')) ?>
+                            </div>
+
                             <div class="info-label">Estimated Completion</div>
                             <div class="info-value text-primary">
                                 <?= $order['OrderFinishDate'] ? date('F d, Y', strtotime($order['OrderFinishDate'])) : 'TBD' ?>
@@ -332,18 +415,23 @@ $grandTotal = $productTotal + $feeTotal + ($order['cost'] ?? 0);
                             </thead>
                             <tbody>
                                 <?php if (empty($references)): ?>
-                                    <tr><td colspan="4" class="text-center py-4 text-muted">No items added yet</td></tr>
+                                    <tr>
+                                        <td colspan="4" class="text-center py-4 text-muted">No items added yet</td>
+                                    </tr>
                                 <?php else: ?>
                                     <?php foreach ($references as $ref): ?>
-                                    <tr>
-                                        <td>
-                                            <div class="fw-bold"><?= htmlspecialchars($ref['pname'] ?? 'Unknown Item') ?></div>
-                                            <small class="text-muted"><?= htmlspecialchars($ref['note'] ?? '') ?></small>
-                                        </td>
-                                        <td><span class="badge bg-light text-dark"><?= htmlspecialchars($ref['category'] ?? 'N/A') ?></span></td>
-                                        <td><?= htmlspecialchars($ref['status'] ?? 'Pending') ?></td>
-                                        <td class="text-end">$<?= number_format($ref['price'] ?? 0, 2) ?></td>
-                                    </tr>
+                                        <tr>
+                                            <td>
+                                                <div class="fw-bold"><?= htmlspecialchars($ref['pname'] ?? 'Unknown Item') ?>
+                                                </div>
+                                                <small class="text-muted"><?= htmlspecialchars($ref['note'] ?? '') ?></small>
+                                            </td>
+                                            <td><span
+                                                    class="badge bg-light text-dark"><?= htmlspecialchars($ref['category'] ?? 'N/A') ?></span>
+                                            </td>
+                                            <td><?= htmlspecialchars($ref['status'] ?? 'Pending') ?></td>
+                                            <td class="text-end">$<?= number_format($ref['price'] ?? 0, 2) ?></td>
+                                        </tr>
                                     <?php endforeach; ?>
                                 <?php endif; ?>
                             </tbody>
@@ -353,31 +441,31 @@ $grandTotal = $productTotal + $feeTotal + ($order['cost'] ?? 0);
 
                 <!-- Additional Fees -->
                 <?php if (!empty($fees)): ?>
-                <div class="detail-card">
-                    <div class="section-title">
-                        <i class="fas fa-plus-circle"></i> Additional Fees
+                    <div class="detail-card">
+                        <div class="section-title">
+                            <i class="fas fa-plus-circle"></i> Additional Fees
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table align-middle">
+                                <thead>
+                                    <tr>
+                                        <th>Fee Name</th>
+                                        <th>Description</th>
+                                        <th class="text-end">Amount</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($fees as $fee): ?>
+                                        <tr>
+                                            <td class="fw-bold"><?= htmlspecialchars($fee['fee_name']) ?></td>
+                                            <td><?= htmlspecialchars($fee['description']) ?></td>
+                                            <td class="text-end">$<?= number_format($fee['amount'], 2) ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
-                    <div class="table-responsive">
-                        <table class="table align-middle">
-                            <thead>
-                                <tr>
-                                    <th>Fee Name</th>
-                                    <th>Description</th>
-                                    <th class="text-end">Amount</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <?php foreach ($fees as $fee): ?>
-                                <tr>
-                                    <td class="fw-bold"><?= htmlspecialchars($fee['fee_name']) ?></td>
-                                    <td><?= htmlspecialchars($fee['description']) ?></td>
-                                    <td class="text-end">$<?= number_format($fee['amount'], 2) ?></td>
-                                </tr>
-                                <?php endforeach; ?>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
                 <?php endif; ?>
             </div>
 
@@ -390,13 +478,13 @@ $grandTotal = $productTotal + $feeTotal + ($order['cost'] ?? 0);
                     </div>
                     <div class="info-label">Name</div>
                     <div class="info-value"><?= htmlspecialchars($order['cname']) ?></div>
-                    
+
                     <div class="info-label">Phone</div>
                     <div class="info-value"><?= htmlspecialchars($order['ctel']) ?></div>
-                    
+
                     <div class="info-label">Email</div>
                     <div class="info-value"><?= htmlspecialchars($order['cemail']) ?></div>
-                    
+
                     <div class="info-label">Address</div>
                     <div class="info-value"><?= htmlspecialchars($order['address'] ?? 'N/A') ?></div>
                 </div>
@@ -434,10 +522,11 @@ $grandTotal = $productTotal + $feeTotal + ($order['cost'] ?? 0);
                         <p class="text-muted small">No contractors assigned yet.</p>
                     <?php else: ?>
                         <?php foreach ($contractors as $con): ?>
-                        <div class="mb-3">
-                            <div class="fw-bold"><?= htmlspecialchars($con['contractor_name']) ?></div>
-                            <div class="small text-muted"><i class="fas fa-phone me-1"></i> <?= htmlspecialchars($con['contractor_tel']) ?></div>
-                        </div>
+                            <div class="mb-3">
+                                <div class="fw-bold"><?= htmlspecialchars($con['contractor_name']) ?></div>
+                                <div class="small text-muted"><i class="fas fa-phone me-1"></i>
+                                    <?= htmlspecialchars($con['contractor_tel']) ?></div>
+                            </div>
                         <?php endforeach; ?>
                     <?php endif; ?>
                 </div>
@@ -446,6 +535,8 @@ $grandTotal = $productTotal + $feeTotal + ($order['cost'] ?? 0);
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
-    <?php include __DIR__ . '/Public/chat_widget.php'; ?>
+    <?php if (!$isEmbed): ?>
+        <?php include __DIR__ . '/Public/chat_widget.php'; ?>
+    <?php endif; ?>
 </body>
 </html>
