@@ -24,7 +24,7 @@ $clientStmt->execute();
 $clientData = $clientStmt->get_result()->fetch_assoc();
 
 // Fetch orders for the logged-in client
-$sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.deposit,
+$sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.deposit, o.final_payment,
          d.designid, d.expect_price, d.tag, dz.dname,
          c.budget
         FROM `Order` o
@@ -47,6 +47,12 @@ if (!empty($_GET['msg'])) {
     } elseif ($_GET['msg'] === 'refund_requested') {
         $flash_msg = 'Refund requested. We will process it shortly.';
         $flash_class = 'alert alert-info';
+    } elseif ($_GET['msg'] === 'deposit_paid') {
+        $flash_msg = 'Deposit paid successfully.';
+        $flash_class = 'alert alert-success';
+    } elseif ($_GET['msg'] === 'final_paid') {
+        $flash_msg = 'Final payment completed successfully.';
+        $flash_class = 'alert alert-success';
     }
 }
 ?>
@@ -238,6 +244,26 @@ if (!empty($_GET['msg'])) {
             color: white;
             text-decoration: none;
         }
+        
+        .btn-deposit {
+            background-color: #f39c12;
+            color: white;
+        }
+        
+        .btn-deposit:hover {
+            background-color: #e67e22;
+            color: white;
+        }
+        
+        .btn-final {
+            background-color: #27ae60;
+            color: white;
+        }
+        
+        .btn-final:hover {
+            background-color: #229954;
+            color: white;
+        }
     </style>
 </head>
 
@@ -280,6 +306,7 @@ if (!empty($_GET['msg'])) {
                     // Compute aggregated cost: design price + references + additional fees
                     $orderId = (int) $order['orderid'];
                     $design_price = isset($order['expect_price']) ? (float) $order['expect_price'] : 0.0;
+                    $final_payment = isset($order['final_payment']) ? (float) $order['final_payment'] : 0.0;
 
                     // Sum additional fees
                     $fees_total = 0.0;
@@ -307,6 +334,9 @@ if (!empty($_GET['msg'])) {
 
                     $deposit = isset($order['deposit']) ? (float) $order['deposit'] : 0.0;
                     $computed_cost = $design_price + $fees_total + $refs_total + $deposit;
+                    
+                    // Calculate final payment amount (final payment + references)
+                    $final_payment_amount = $final_payment + $refs_total;
                     ?>
                     <div class="order-card"
                         onclick="window.location.href='order_detail.php?orderid=<?= (int) $order['orderid'] ?>'">
@@ -362,6 +392,22 @@ if (!empty($_GET['msg'])) {
                                 <a href="order_detail.php?orderid=<?= (int) $order['orderid'] ?>" class="view-details-btn"
                                     onclick="event.stopPropagation();">
                                     <i class="fas fa-arrow-right me-1"></i>View Details</a>
+                            <?php endif; ?>
+
+                            <!-- NEW: Pay Deposit button for designing status -->
+                            <?php if ($statusLower === 'designing'): ?>
+                                <a href="payment_deposit.php?orderid=<?= (int) $order['orderid'] ?>&amount=<?= $design_price ?>" class="view-details-btn btn-deposit"
+                                    onclick="event.stopPropagation();">
+                                    <i class="fas fa-credit-card me-1"></i>Pay Deposit
+                                </a>
+                            <?php endif; ?>
+
+                            <!-- NEW: Pay Final Payment button for drafting 2nd proposal status -->
+                            <?php if ($statusLower === 'drafting 2nd proposal' && $final_payment_amount > 0): ?>
+                                <a href="payment_final.php?orderid=<?= (int) $order['orderid'] ?>&amount=<?= $final_payment_amount ?>" class="view-details-btn btn-final"
+                                    onclick="event.stopPropagation();">
+                                    <i class="fas fa-credit-card me-1"></i>Pay Final Design & Products
+                                </a>
                             <?php endif; ?>
 
                             <!-- Proceed to Payment button (separate) -->
