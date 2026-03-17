@@ -27,7 +27,8 @@ if ($orderId <= 0) {
 }
 
 // Fetch order details with verification that it belongs to the client
-$orderSql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.gross_floor_area, o.deposit,
+// --- MODIFIED: Added o.final_payment to the query ---
+$orderSql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.gross_floor_area, o.deposit, o.final_payment,
               d.designid, d.expect_price, d.tag, dz.dname, dz.designerid,
               c.budget
              FROM `Order` o
@@ -46,6 +47,10 @@ if ($orderResult->num_rows === 0) {
 }
 
 $order = $orderResult->fetch_assoc();
+// --- NEW: Get final payment value ---
+$final_payment = isset($order['final_payment']) ? floatval($order['final_payment']) : 0;
+// --- END NEW ---
+
 // expose gross floor area
 $gfaDisplay = isset($order['gross_floor_area']) ? (float) $order['gross_floor_area'] : 0.0;
 
@@ -176,6 +181,11 @@ foreach ($productsTemp as $product) {
     $productTotal += $product['price'] * $product['quantity'];
 }
 $products->data_seek(0);
+
+// --- NEW: Calculate design total (Design Cost + Final Design Price) ---
+$design_cost = (float) $order['expect_price'];
+$design_total = $design_cost + $final_payment;
+// --- END NEW ---
 
 // Format display variables
 $budgetDisplay = $order['budget'] ?? 0;
@@ -545,10 +555,24 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€
                         <span class="info-value"><?= htmlspecialchars($order['dname']) ?></span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label">Design Price:</span>
+                        <span class="info-label">Design Cost:</span>
                         <span
                             class="info-value price-highlight">$<?= number_format((float) $order['expect_price'], 2) ?></span>
                     </div>
+                    <!-- --- NEW: Display Final Design Payment --- -->
+                    <div class="info-row">
+                        <span class="info-label">Final Design Payment:</span>
+                        <span
+                            class="info-value price-highlight">$<?= number_format($final_payment, 2) ?></span>
+                    </div>
+                    <!-- --- END NEW --- -->
+                    <!-- --- NEW: Display Design Total (Design Cost + Final Design Payment) --- -->
+                    <div class="info-row" style="border-top: 2px solid #3498db; margin-top: 0.5rem; padding-top: 0.75rem;">
+                        <span class="info-label"><strong>Design Total:</strong></span>
+                        <span
+                            class="info-value price-highlight"><strong>$<?= number_format($design_total, 2) ?></strong></span>
+                    </div>
+                    <!-- --- END NEW --- -->
                     <div class="info-row">
                         <span class="info-label">Design Tags:</span>
                         <span class="info-value">
@@ -791,10 +815,24 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€
                     <span
                         class="info-value price-highlight">$<?= number_format((float) $order['expect_price'], 2) ?></span>
                 </div>
+                <!-- --- NEW: Display Final Design Payment in Summary --- -->
+                <div class="info-row">
+                    <span class="info-label">Final Design Payment:</span>
+                    <span
+                        class="info-value price-highlight">$<?= number_format($final_payment, 2) ?></span>
+                </div>
+                <!-- --- END NEW --- -->
                 <div class="info-row">
                     <span class="info-label">Products/Materials:</span>
                     <span class="info-value price-highlight">$<?= number_format($productTotal, 2) ?></span>
                 </div>
+                <!-- --- NEW: Display Design Total in Summary --- -->
+                <div class="info-row" style="border-top: 2px solid #3498db; margin-top: 0.5rem; padding-top: 0.75rem;">
+                    <span class="info-label"><strong>Design Total (Cost + Final):</strong></span>
+                    <span
+                        class="info-value price-highlight"><strong>$<?= number_format($design_total, 2) ?></strong></span>
+                </div>
+                <!-- --- END NEW --- -->
                 <div class="info-row">
                     <span class="info-label">Budget Allocated:</span>
                     <span class="info-value price-highlight">$<?= number_format((float) $order['budget'], 2) ?></span>
@@ -802,7 +840,7 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€
                 <div class="info-row">
                     <span class="info-label">Remaining Budget:</span>
                     <span class="info-value price-highlight">
-                        $<?= number_format((float) $order['budget'] - $order['expect_price'] - $productTotal, 2) ?>
+                        $<?= number_format((float) $order['budget'] - $order['expect_price'] - $final_payment - $productTotal, 2) ?>
                     </span>
                 </div>
             </div>

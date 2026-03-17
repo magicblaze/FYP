@@ -27,7 +27,7 @@ if ($order_check['count'] == 0) {
 }
 
 // Use prepared statement to prevent SQL injection - ADDED cost field
-$sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.cost, o.deposit,
+$sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.cost, o.deposit, o.final_payment,
          c.clientid, c.cname as client_name, c.ctel, c.cemail, c.budget,
                d.designid, d.designName, d.expect_price as design_price, d.tag as design_tag,
                s.scheduleid, s.OrderFinishDate, s.DesignFinishDate
@@ -42,6 +42,24 @@ mysqli_stmt_bind_param($stmt, "i", $orderid);
 mysqli_stmt_execute($stmt);
 $result = mysqli_stmt_get_result($stmt);
 $order = mysqli_fetch_assoc($result);
+
+// --- 定义所有需要的变量 ---
+$design_price = isset($order["design_price"]) ? floatval($order["design_price"]) : 0;
+$final_payment = isset($order['final_payment']) ? floatval($order['final_payment']) : 0;
+$original_budget = floatval($order['budget'] ?? 0);
+
+// --- 预算计算 ---
+$deducted_amount = $design_price; 
+$remaining_budget = $original_budget - $deducted_amount;
+
+// 检查设计是否已确认
+$is_design_confirmed = in_array(strtolower($order['ostatus'] ?? ''), ['waiting payment', 'waiting client payment', 'complete']);
+
+// 如果状态是 drafting 2nd proposal，减去 Final Design Payment
+$current_status = strtolower($order['ostatus'] ?? '');
+if ($current_status === 'drafting 2nd proposal' && $final_payment > 0) {
+    $remaining_budget = $remaining_budget - $final_payment;
+}
 
 // Fetch order references
 $ref_sql = "SELECT 
@@ -89,8 +107,6 @@ $pic_result = mysqli_stmt_get_result($pic_stmt);
 $latest_picture = mysqli_fetch_assoc($pic_result);
 
 // Calculate final total cost
-$design_price = isset($order["design_price"]) ? floatval($order["design_price"]) : 0;
-$deposit = isset($order['deposit']) ? floatval($order['deposit']) : 2000.0;
 $references_total = 0.0;
 if (!empty($references)) {
     foreach ($references as $r) {
@@ -109,9 +125,11 @@ $edit_status = isset($_GET['edit']) && $_GET['edit'] == 'status';
 $edit_order = isset($_GET['edit']) && $_GET['edit'] == 'order';
 $edit_requirements = isset($_GET['edit']) && $_GET['edit'] == 'requirements';
 $edit_designer = isset($_GET['edit']) && $_GET['edit'] == 'designer';
-	$edit_cost = isset($_GET['edit']) && $_GET['edit'] == 'cost';
-	$edit_reference = isset($_GET['edit']) && $_GET['edit'] == 'reference';
-	$edit_delivery = isset($_GET['edit']) && $_GET['edit'] == 'delivery';
+$edit_cost = isset($_GET['edit']) && $_GET['edit'] == 'cost';
+$edit_reference = isset($_GET['edit']) && $_GET['edit'] == 'reference';
+$edit_delivery = isset($_GET['edit']) && $_GET['edit'] == 'delivery';
+
+// ... 其余代码保持不变 ...
 	
 	if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 	    // Handle OrderDelivery update
@@ -260,17 +278,45 @@ $edit_designer = isset($_GET['edit']) && $_GET['edit'] == 'designer';
                         mysqli_stmt_execute($update_designer_stmt);
                         mysqli_stmt_close($update_designer_stmt);
 
+                        // --- NEW: Deduct expected price from client budget ---
+                        $update_budget_sql = "UPDATE Client SET budget = budget - ? WHERE clientid = (SELECT clientid FROM `Order` WHERE orderid = ?)";
+                        $update_budget_stmt = mysqli_prepare($mysqli, $update_budget_sql);
+                        mysqli_stmt_bind_param($update_budget_stmt, "di", $expect_price, $orderid);
+                        mysqli_stmt_execute($update_budget_stmt);
+                        mysqli_stmt_close($update_budget_stmt);
+                        // --- END NEW ---
+
                         header("Location: Order_Edit.php?id=" . $orderid);
                         exit();
                     }
                 }
             } else {
                 $design = mysqli_fetch_assoc($design_check_result);
+                
+                // --- NEW: Get expected price for existing design ---
+                $get_price_sql = "SELECT expect_price FROM Design WHERE designid = ?";
+                $get_price_stmt = mysqli_prepare($mysqli, $get_price_sql);
+                mysqli_stmt_bind_param($get_price_stmt, "i", $design['designid']);
+                mysqli_stmt_execute($get_price_stmt);
+                $price_result = mysqli_stmt_get_result($get_price_stmt);
+                $design_data = mysqli_fetch_assoc($price_result);
+                $expect_price = floatval($design_data['expect_price'] ?? 0);
+                mysqli_stmt_close($get_price_stmt);
+                // --- END NEW ---
+                
                 $update_order_sql = "UPDATE `Order` SET designid = ?, ostatus = 'designing' WHERE orderid = ?";
                 $update_order_stmt = mysqli_prepare($mysqli, $update_order_sql);
                 mysqli_stmt_bind_param($update_order_stmt, "ii", $design['designid'], $orderid);
 
                 if (mysqli_stmt_execute($update_order_stmt)) {
+                    // --- NEW: Deduct expected price from client budget ---
+                    $update_budget_sql = "UPDATE Client SET budget = budget - ? WHERE clientid = (SELECT clientid FROM `Order` WHERE orderid = ?)";
+                    $update_budget_stmt = mysqli_prepare($mysqli, $update_budget_sql);
+                    mysqli_stmt_bind_param($update_budget_stmt, "di", $expect_price, $orderid);
+                    mysqli_stmt_execute($update_budget_stmt);
+                    mysqli_stmt_close($update_budget_stmt);
+                    // --- END NEW ---
+                    
                     header("Location: Order_Edit.php?id=" . $orderid);
                     exit();
                 }
@@ -828,12 +874,29 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                 </div>
                             <?php endif; ?>
                             <hr>
-                            <div class="mb-0">
-                                <label class="fw-bold text-muted small">Budget</label>
+                            <div class="mb-3">
+                                <label class="fw-bold text-muted small">Original Budget</label>
                                 <p class="mb-0"><strong
                                         class="text-success fs-5">HK$<?php echo number_format($order["budget"], 2); ?></strong>
                                 </p>
                             </div>
+                            <!-- NEW: Display deducted amount and remaining budget -->
+                            <div class="mb-3">
+                                <label class="fw-bold text-muted small">Deducted Amount (Expected Price)</label>
+                                <p class="mb-0"><strong
+                                        class="text-danger">HK$<?php echo number_format($deducted_amount, 2); ?></strong>
+                                </p>
+                            </div>
+                            <div class="mb-0">
+                                <label class="fw-bold text-muted small">Remaining Budget</label>
+                                <p class="mb-0"><strong
+                                        class="<?php echo $remaining_budget > 0 ? 'text-success' : 'text-danger'; ?> fs-5">HK$<?php echo number_format($remaining_budget, 2); ?></strong>
+                                </p>
+                                <?php if ($is_design_confirmed): ?>
+                                    <small class="text-success">Design confirmed - budget updated</small>
+                                <?php endif; ?>
+                            </div>
+                            <!-- END NEW -->
                         </div>
                     </div>
                 </div>
@@ -863,7 +926,22 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                 <p class="mb-0"><strong
                                         class="text-info">HK$<?php echo number_format($order["design_price"] ?? 0, 0); ?></strong>
                                 </p>
+                                <small class="text-muted">Deducted from budget</small>
                             </div>
+                            <!-- NEW: Display Final Design Payment -->
+                            <div class="mb-3">
+                           <label class="fw-bold text-muted small">Final Design Payment</label>
+                            <p class="mb-0"><strong
+                            class="
+                            <?php echo ($current_status === 'drafting 2nd proposal' || $is_design_confirmed) ? 'text-success' : 'text-warning'; ?>">HK$<?php echo number_format($final_payment, 2); ?></strong>
+                                </p>
+                                <?php if ($is_design_confirmed): ?>
+                                    <small class="text-success">✓ Payment processed</small>
+                                <?php else: ?>
+                                    <small class="text-warning">⏳ Pending client confirmation</small>
+                                <?php endif; ?>
+                            </div>
+                            <!-- END NEW -->
                             <hr>
                             <div class="mb-0">
                                 <label class="fw-bold text-muted small">Design Tag</label>
@@ -1657,10 +1735,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                             <?php else: ?>
                                                 <div class="alert alert-warning mb-0">
                                                     <i class="fas fa-exclamation-triangle me-2"></i>
-                                                    Not all referenced products have been confirmed. Please confirm all product
-                                                    references
-                                                    before
-                                                    submitting the 2nd proposal.
+                                                    Please wait for the supplier's confirmation.
                                                 </div>
                                             <?php endif; ?>
                                         </div>

@@ -29,6 +29,8 @@ if ($orderId > 0) {
         o.ostatus,
         o.designid,
         o.Requirements,
+        COALESCE(o.deposit_amount, c.budget * 0.25, 0) as deposit_amount,
+        COALESCE(o.final_payment, 0) as final_payment,
         d.designName,
         d.expect_price,
         d.tag,
@@ -62,6 +64,8 @@ if ($orderId > 0) {
         o.ostatus,
         o.designid,
         o.Requirements,
+        COALESCE(o.deposit_amount, c.budget * 0.25, 0) as deposit_amount,
+        COALESCE(o.final_payment, 0) as final_payment,
         d.designName,
         d.expect_price,
         d.tag,
@@ -752,6 +756,91 @@ foreach ($orders as $o) {
             font-size: 0.85rem;
             color: #6c757d;
         }
+
+        /* Payment Section Styles */
+        .payment-section {
+            background: #e8f5e9;
+            border-left: 4px solid #4caf50;
+            padding: 1rem;
+            border-radius: 6px;
+            margin-top: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .payment-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid rgba(0,0,0,0.05);
+        }
+
+        .payment-item:last-child {
+            border-bottom: none;
+        }
+
+        .payment-label {
+            font-weight: 500;
+            color: #2c3e50;
+        }
+
+        .payment-value {
+            font-weight: 600;
+            color: #27ae60;
+            font-size: 1.1rem;
+        }
+
+        .payment-input-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .payment-input-group input {
+            width: 150px;
+            padding: 0.25rem 0.5rem;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-size: 0.95rem;
+        }
+
+        .payment-input-group input:focus {
+            border-color: #4caf50;
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.25);
+        }
+
+        .payment-hint {
+            font-size: 0.8rem;
+            color: #6c757d;
+            margin-top: 0.25rem;
+        }
+
+        .payment-warning {
+            color: #e74c3c;
+            font-size: 0.85rem;
+            margin-top: 0.5rem;
+        }
+
+        .btn-save-payment {
+            background: #4caf50;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .btn-save-payment:hover {
+            background: #45a049;
+        }
+
+        .btn-save-payment:disabled {
+            background: #a5d6a7;
+            cursor: not-allowed;
+        }
     </style>
 </head>
 
@@ -772,7 +861,14 @@ foreach ($orders as $o) {
         <?php if (count($orders) > 0): ?>
 
             <?php foreach ($orders as $order): ?>
-                <?php $canEdit = (strtolower(trim($order['ostatus'] ?? '')) === 'designing'); ?>
+                <?php 
+                $canEdit = (strtolower(trim($order['ostatus'] ?? '')) === 'designing');
+                // Calculate max final payment based on Expected Price ÷ 0.25
+                $expectedPrice = floatval($order['expect_price'] ?? 0);
+                $maxFinalPayment = $expectedPrice > 0 ? $expectedPrice / 0.25 : 0;
+                $currentFinalPayment = floatval($order['final_payment'] ?? 0);
+                $depositAmount = floatval($order['deposit_amount'] ?? 0);
+                ?>
                 <div class="order-card">
                     <!-- Order Title and Status (Main Focus) -->
                     <div class="order-title-bar">
@@ -836,6 +932,52 @@ foreach ($orders as $o) {
                         <div class="detail-item">
                             <div class="detail-label"><i class="fas fa-ruler-combined me-1"></i>Floor Area</div>
                             <div class="detail-value"><?= isset($order['gross_floor_area']) && $order['gross_floor_area'] > 0 ? htmlspecialchars(number_format((float)$order['gross_floor_area'],2)) . ' m²' : '&mdash;' ?></div>
+                        </div>
+                    </div>
+
+                    <!-- Payment Section: Deposit and Final Payment -->
+                    <div class="payment-section">
+                        <h6 class="mb-3 section-title"><i class="fas fa-credit-card me-2"></i>Payment Information</h6>
+                        
+                        <!-- Expected Price (Read-only) -->
+                        <div class="payment-item">
+                            <span class="payment-label"><i class="fas fa-tag me-2"></i>Expected Price:</span>
+                            <span class="payment-value">HK$<?= number_format($expectedPrice, 2) ?></span>
+                        </div>
+                        
+                        <!-- Final Payment (Editable in design mode) -->
+                        <div class="payment-item">
+                            <span class="payment-label"><i class="fas fa-check-circle me-2"></i>Final Design Payment (Completion):</span>
+                            <?php if ($canEdit && $expectedPrice > 0): ?>
+                                <div class="payment-input-group">
+                                    <span>HK$</span>
+                                    <input type="number" 
+                                           id="finalPayment_<?= $order['orderid'] ?>" 
+                                           value="<?= $currentFinalPayment > 0 ? $currentFinalPayment : '' ?>" 
+                                           min="0" 
+                                           max="<?= $maxFinalPayment ?>" 
+                                           step="0.01"
+                                           placeholder="Enter amount"
+                                           oninput="validateFinalPayment(<?= $order['orderid'] ?>, <?= $maxFinalPayment ?>)">
+                                    <button class="btn-save-payment" 
+                                            id="savePaymentBtn_<?= $order['orderid'] ?>"
+                                            onclick="saveFinalPayment(<?= $order['orderid'] ?>, <?= $maxFinalPayment ?>)"
+                                            style="display: none;">
+                                        <i class="fas fa-save me-1"></i>Save
+                                    </button>
+                                </div>
+                                <div class="payment-hint">
+                                    Max: HK$<?= number_format($maxFinalPayment, 2) ?> (Expected Price ÷ 0.25)
+                                </div>
+                                <div id="paymentWarning_<?= $order['orderid'] ?>" class="payment-warning" style="display: none;">
+                                    <i class="fas fa-exclamation-triangle me-1"></i>Amount exceeds maximum allowed
+                                </div>
+                            <?php else: ?>
+                                <span class="payment-value"><?= $currentFinalPayment > 0 ? 'HK$' . number_format($currentFinalPayment, 2) : 'Not set' ?></span>
+                                <?php if ($expectedPrice == 0): ?>
+                                    <div class="payment-hint">Expected price not set</div>
+                                <?php endif; ?>
+                            <?php endif; ?>
                         </div>
                     </div>
 
@@ -928,6 +1070,7 @@ foreach ($orders as $o) {
                         </div>
                     </div>
 
+                    <!-- References Section -->
                     <?php if (!empty($order['references'])): ?>
                     <div class="order-info" style="background:#fff7e6;border-left:4px solid #ffc107;margin-top:1rem">
                         <div class="order-info-item" style="display: flex; justify-content: space-between; align-items: center;">
@@ -943,13 +1086,11 @@ foreach ($orders as $o) {
                                         $pid = (int)$ref['productid'];
                                         $refName = $productMap[$pid] ?? ('Product #' . $pid);
                                         $refLink = '../product_detail.php?id=' . $pid;
-                                        // Use pre-fetched image
                                     if (!empty($ref['product_image'])) {
                                         $refImg = '../uploads/products/' . $ref['product_image']; 
                                     }
                                     } elseif (!empty($ref['designid'])) {
                                         $did = (int)$ref['designid'];
-                                        // fetch design name
                                         $dstmt = $mysqli->prepare('SELECT designName FROM Design WHERE designid = ? LIMIT 1');
                                         if ($dstmt) {
                                             $dstmt->bind_param('i', $did);
@@ -958,7 +1099,6 @@ foreach ($orders as $o) {
                                             if ($drow = $dres->fetch_assoc()) $refName = $drow['designName'];
                                             $dstmt->close();
                                         }
-                                        // Use pre-fetched image
                                         if (!empty($ref['design_image'])) {
                                             $refImg = '../uploads/designs/' . $ref['design_image'];
                                         }
@@ -973,7 +1113,6 @@ foreach ($orders as $o) {
                                             if ($mrow = $mres->fetch_assoc()) {
                                                 $ct = $mrow['content'] ?? '';
                                                 $mt = $mrow['message_type'] ?? '';
-                                                // try to parse JSON content for a share/design id
                                                 $maybe = null;
                                                 $js = @json_decode($ct, true);
                                                 if (is_array($js)) $maybe = $js;
@@ -987,7 +1126,6 @@ foreach ($orders as $o) {
                                                     $did = null;
                                                 }
                                                 if (!empty($did)) {
-                                                    // fetch design info
                                                     $dstmt = $mysqli->prepare('SELECT designName FROM Design WHERE designid = ? LIMIT 1');
                                                     if ($dstmt) {
                                                         $dstmt->bind_param('i', $did);
@@ -1006,7 +1144,6 @@ foreach ($orders as $o) {
                                                     }
                                                     $refLink = '../design_detail.php?designid=' . $did;
                                                 }
-                                                // if message had uploaded file, try to show that as thumbnail
                                                 if (empty($refImg) && !empty($mrow['fileid'])) {
                                                     $fid = (int)$mrow['fileid'];
                                                     $fstmt = $mysqli->prepare('SELECT filepath, filename FROM UploadedFiles WHERE fileid = ? LIMIT 1');
@@ -1015,7 +1152,6 @@ foreach ($orders as $o) {
                                                         $fstmt->execute();
                                                         $fres = $fstmt->get_result();
                                                         if ($fr = $fres->fetch_assoc()) {
-                                                            // use filepath if points to uploads/designs or uploads/chat
                                                             $path = $fr['filepath'] ?? '';
                                                             if ($path) $refImg = $path;
                                                             if (empty($refName)) $refName = $fr['filename'] ?? null;
@@ -1140,10 +1276,16 @@ foreach ($orders as $o) {
                                 $canSubmit = in_array($status, ['designing']);
                                 $hasPictures = !empty($order['pictures']);
                                 $hasReferences = !empty($order['references']);
-                                $disableSubmit = !$hasPictures || !$hasReferences;
+                                $hasFinalPayment = $currentFinalPayment > 0;
+                                $disableSubmit = !$hasPictures || !$hasReferences || !$hasFinalPayment;
                             ?>
                             <?php if ($canSubmit): ?>
-                                <button class="btn <?php echo $disableSubmit ? 'btn-secondary' : 'btn-primary'; ?>" onclick="updateOrder(<?= $order['orderid'] ?>,'submit_proposal', this)" <?php if ($disableSubmit): ?>disabled title="Add at least one proposal and one reference before submitting."<?php endif; ?>>
+                                <button class="btn <?php echo $disableSubmit ? 'btn-secondary' : 'btn-primary'; ?>" onclick="updateOrder(<?= $order['orderid'] ?>,'submit_proposal', this)" <?php if ($disableSubmit): ?>disabled title="<?php 
+                                    if (!$hasPictures) echo 'Add at least one design proposal';
+                                    elseif (!$hasReferences) echo 'Add at least one reference';
+                                    elseif (!$hasFinalPayment) echo 'Set the final payment amount';
+                                    else echo 'Complete all requirements before submitting';
+                                ?>"<?php endif; ?>>
                                     <i class="fas fa-paper-plane me-1"></i>Submit Proposal
                                 </button>
                             <?php endif; ?>
@@ -1220,6 +1362,7 @@ foreach ($orders as $o) {
             const refAddBtn = document.getElementById('refAddBtn_' + orderId);
             const refActionBtns = document.querySelectorAll('.ref-actions[data-order="' + orderId + '"]');
             const pictureDeleteBtns = document.querySelectorAll('.picture-delete-actions[data-order="' + orderId + '"]');
+            const savePaymentBtn = document.getElementById('savePaymentBtn_' + orderId);
 
             if (!editBtn || !saveBtn) return;
 
@@ -1233,6 +1376,7 @@ foreach ($orders as $o) {
                 if (refAddBtn) refAddBtn.style.display = 'inline-block';
                 refActionBtns.forEach(el => el.style.display = 'flex');
                 pictureDeleteBtns.forEach(el => el.style.display = 'flex');
+                if (savePaymentBtn) savePaymentBtn.style.display = 'inline-block';
             } else {
                 editBtn.style.display = 'inline-block';
                 saveBtn.style.display = 'none';
@@ -1241,6 +1385,7 @@ foreach ($orders as $o) {
                 if (refAddBtn) refAddBtn.style.display = 'none';
                 refActionBtns.forEach(el => el.style.display = 'none');
                 pictureDeleteBtns.forEach(el => el.style.display = 'none');
+                if (savePaymentBtn) savePaymentBtn.style.display = 'none';
                 cancelPreview(orderId);
                 toggleReferenceEdit(orderId, false);
             }
@@ -1255,6 +1400,16 @@ foreach ($orders as $o) {
             const isRefFormActive = refForm && refForm.classList.contains('active');
             const hasSelectedProduct = productSelect && productSelect.value;
             const pending = pendingReferences[orderId] || [];
+            
+            // Check if final payment is set
+            const finalPaymentInput = document.getElementById('finalPayment_' + orderId);
+            const hasFinalPayment = finalPaymentInput && finalPaymentInput.value && parseFloat(finalPaymentInput.value) > 0;
+            
+            // Validate final payment
+            if (!hasFinalPayment) {
+                alert('Please set the final payment amount before saving.');
+                return;
+            }
 
             let attemptMade = false;
             let successCount = 0;
@@ -1277,7 +1432,7 @@ foreach ($orders as $o) {
                 if (res) successCount++;
             }
 
-            if (successCount > 0) {
+            if (successCount > 0 || hasFinalPayment) {
                 location.reload();
                 return;
             }
@@ -1551,6 +1706,7 @@ foreach ($orders as $o) {
                 alert('An error occurred: ' + (error.message || error));
             });
         }
+        
         function openFloorPlanPreview(src) {
             try {
                 const img = document.getElementById('floorPlanImg');
@@ -1742,6 +1898,86 @@ foreach ($orders as $o) {
                 console.error(e);
                 status.textContent = 'Failed to load liked items.';
             }
+        }
+
+        // Payment functions
+        function validateFinalPayment(orderId, maxAmount) {
+            const input = document.getElementById('finalPayment_' + orderId);
+            const warning = document.getElementById('paymentWarning_' + orderId);
+            const saveBtn = document.getElementById('savePaymentBtn_' + orderId);
+            
+            if (!input || !warning || !saveBtn) return;
+            
+            const value = parseFloat(input.value) || 0;
+            
+            if (value > maxAmount) {
+                warning.style.display = 'block';
+                saveBtn.disabled = true;
+            } else {
+                warning.style.display = 'none';
+                saveBtn.disabled = false;
+            }
+            
+            // Show save button when value changes and is valid
+            if (value > 0 && value <= maxAmount) {
+                saveBtn.style.display = 'inline-block';
+            } else {
+                saveBtn.style.display = 'none';
+            }
+        }
+
+        function saveFinalPayment(orderId, maxAmount) {
+            const input = document.getElementById('finalPayment_' + orderId);
+            const saveBtn = document.getElementById('savePaymentBtn_' + orderId);
+            
+            if (!input) return;
+            
+            const value = parseFloat(input.value) || 0;
+            
+            if (value <= 0) {
+                alert('Please enter a valid final payment amount.');
+                return;
+            }
+            
+            if (value > maxAmount) {
+                alert('Final payment cannot exceed HK$' + maxAmount.toFixed(2));
+                return;
+            }
+            
+            const originalText = saveBtn.innerHTML;
+            saveBtn.disabled = true;
+            saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Saving...';
+            
+            fetch('update_final_payment.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    orderid: orderId,
+                    final_payment: value
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Final payment amount saved successfully!');
+                    // Keep the save button visible but maybe change appearance
+                    saveBtn.innerHTML = '<i class="fas fa-check me-1"></i>Saved';
+                    setTimeout(() => {
+                        saveBtn.innerHTML = originalText;
+                        saveBtn.disabled = false;
+                    }, 2000);
+                } else {
+                    alert('Error: ' + (data.message || 'Failed to save final payment'));
+                    saveBtn.innerHTML = originalText;
+                    saveBtn.disabled = false;
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                alert('Request failed: ' + err.message);
+                saveBtn.innerHTML = originalText;
+                saveBtn.disabled = false;
+            });
         }
     </script>
     <script>
