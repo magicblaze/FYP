@@ -701,6 +701,13 @@ WHERE managerid NOT IN (SELECT managerid FROM ManagerWallet);
 INSERT INTO `SupplierWallet` (`supplierid`, `balance`, `total_earned`, `total_withdrawn`, `pending_balance`)
 SELECT supplierid, 0, 0, 0, 0 FROM Supplier
 WHERE supplierid NOT IN (SELECT supplierid FROM SupplierWallet);
+
+
+ALTER TABLE `Order` ADD COLUMN `deposit_amount` DECIMAL(10,2) DEFAULT 0.00 AFTER `Requirements`;
+
+ALTER TABLE `Order` ADD COLUMN `final_payment` DECIMAL(10,2) DEFAULT 0.00 AFTER `deposit_amount`;
+
+UPDATE `Order` SET `deposit_amount` = `budget` * 0.25 WHERE `deposit_amount` = 0 OR `deposit_amount` IS NULL;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
 /*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;
