@@ -6,8 +6,8 @@ require_once __DIR__ . '/../config.php';
 session_start();
 
 if (empty($_SESSION['user'])) {
-    $redirect = 'order.php' . (isset($_GET['designid']) ? ('?designid=' . urlencode((string) $_GET['designid'])) : '');
-    header('Location: login.php?redirect=' . urlencode($redirect));
+    $redirect = 'client/order.php' . (isset($_GET['designid']) ? ('?designid=' . urlencode((string) $_GET['designid'])) : '');
+    header('Location: ../login.php?redirect=' . urlencode($redirect));
     exit;
 }
 

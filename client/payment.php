@@ -4,7 +4,7 @@ require_once dirname(__DIR__) . '/config.php';
 
 // Only allow logged-in clients
 if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'client') {
-    header('Location: ../login.php?redirect=' . urlencode($_SERVER['REQUEST_URI']));
+    header('Location: ../login.php?redirect=' . urlencode($current_page));
     exit;
 }
 

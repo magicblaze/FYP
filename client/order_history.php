@@ -7,7 +7,7 @@ session_start();
 
 // Redirect to login if not authenticated
 if (empty($_SESSION['user'])) {
-    header('Location: login.php?redirect=' . urlencode('order_history.php'));
+    header('Location: ../login.php?redirect=' . urlencode($current_page));
     exit;
 }
 
