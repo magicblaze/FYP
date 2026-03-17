@@ -388,10 +388,6 @@ $current_step = 1;
                                 <button type="button" class="btn btn-success" disabled>
                                     <i class="fas fa-check-circle me-1"></i>Deposit Paid
                                 </button>
-                                <!-- 添加一个按钮去下一个支付页面 -->
-                                <a href="payment_final.php?orderid=<?php echo $orderid; ?>&amount=<?php echo ($final_payment + $refs_total); ?>" class="btn btn-primary">
-                                    <i class="fas fa-arrow-right me-1"></i>Proceed to Final Payment
-                                </a>
                             <?php else: ?>
                                 <button type="submit" name="proceed_pay" class="btn btn-warning">
                                     <i class="fas fa-credit-card me-1"></i>

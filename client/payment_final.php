@@ -398,10 +398,6 @@ if ($final_paid) $current_step = 3;
                                 <button type="button" class="btn btn-success" disabled>
                                     <i class="fas fa-check-circle me-1"></i>Final Payment Completed
                                 </button>
-                                <!-- 添加一个按钮去下一个支付页面 -->
-                                <a href="payment.php?orderid=<?php echo $orderid; ?>" class="btn btn-primary">
-                                    <i class="fas fa-arrow-right me-1"></i>Proceed to Construction Fee
-                                </a>
                             <?php else: ?>
                                 <button type="submit" name="proceed_pay" class="btn btn-success">
                                     <i class="fas fa-credit-card me-1"></i>
