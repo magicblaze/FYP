@@ -881,12 +881,36 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                 </p>
                             </div>
                             <!-- NEW: Display deducted amount and remaining budget -->
-                            <div class="mb-3">
-                                <label class="fw-bold text-muted small">Deducted Amount (Expected Price)</label>
-                                <p class="mb-0"><strong
-                                        class="text-danger">HK$<?php echo number_format($deducted_amount, 2); ?></strong>
-                                </p>
-                            </div>
+<div class="mb-3">
+    <label class="fw-bold text-muted small">Deducted Amount</label>
+    <?php 
+    $total_deducted = $deducted_amount;
+    $status_message = 'Expected Price only';
+    $status_class = 'text-danger';
+    
+    if ($current_status === 'drafting 2nd proposal' || $is_design_confirmed) {
+        $total_deducted += $final_payment;
+        $status_message = 'Expected + Final Payment';
+        $status_class = 'text-success';
+    }
+    
+    if (!empty($references) && $current_status === 'complete') {
+        foreach ($references as $ref) {
+            $rprice = isset($ref['price']) && $ref['price'] !== null ? (float)$ref['price'] : (float)($ref['product_price'] ?? 0);
+            $total_deducted += $rprice;
+        }
+        $status_message = 'All costs included';
+        $status_class = 'text-success';
+    }
+    ?>
+    <p class="mb-0">
+        <strong class="<?php echo $status_class; ?> fs-5">
+            HK$<?php echo number_format($total_deducted, 2); ?>
+        </strong>
+        <small class="text-muted d-block"><?php echo $status_message; ?></small>
+    </p>
+</div>
+<?php $remaining_budget = $order["budget"] - $total_deducted; ?>
                             <div class="mb-0">
                                 <label class="fw-bold text-muted small">Remaining Budget</label>
                                 <p class="mb-0"><strong
@@ -1067,7 +1091,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                 <div class="mb-2">
                                     <ul class="list-unstyled mb-0">
                                         <li class="d-flex justify-content-between">
-                                            <small class="text-muted">Design Price</small>
+                                            <small class="text-muted">Design deposit</small>
                                             <strong>HK$<?php echo number_format($design_price, 2); ?></strong>
                                         </li>
                                         <?php if (!empty($references)): ?>
