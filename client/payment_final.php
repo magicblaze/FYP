@@ -403,9 +403,6 @@ if ($final_paid) $current_step = 3;
                                     <i class="fas fa-credit-card me-1"></i>
                                     Pay Final HK$<?php echo number_format($amount, 2); ?>
                                 </button>
-                                <button type="button" class="btn btn-danger" onclick="document.getElementById('rejectForm').submit();">
-                                    <i class="fas fa-times me-1"></i>Reject Payment
-                                </button>
                             <?php endif; ?>
                         <?php else: ?>
                             <button type="button" class="btn btn-success" disabled>Proceed to Pay</button>
