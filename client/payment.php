@@ -15,9 +15,7 @@ $orderid = isset($_GET['orderid']) ? intval($_GET['orderid']) : 0;
 if ($orderid <= 0) die('Order ID missing');
 
 // Load order and ensure ownership
-$sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.cost, o.designid, o.deposit, o.final_payment,
-               d.expect_price as design_price, d.tag, 
-               c.clientid, c.cname, c.payment_method
+$sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.cost, o.designid, d.expect_price as design_price, d.tag, c.clientid, c.cname, c.payment_method
         FROM `Order` o
         LEFT JOIN `Design` d ON o.designid = d.designid
         LEFT JOIN `Client` c ON o.clientid = c.clientid
@@ -59,9 +57,12 @@ if ($fees_stmt) {
     mysqli_stmt_close($fees_stmt);
 }
 
-// --- Calculate totals ---
-$order_total = $design_deposit + $refs_total + $fees_total + $final_payment;
-$construction_fee = $order_total * 1.5; // 150% of order total
+$design_price = isset($order['design_price']) ? (float)$order['design_price'] : 0.0;
+$total_cost = $design_price + $refs_total + $fees_total;
+
+// Deposit: stored on the order (default 2000). Subtract from amount due at final payment.
+$deposit = isset($order['deposit']) ? (float)$order['deposit'] : 2000.0;
+$amount_due = $total_cost - $deposit;
 
 // Parse saved payment method
 $paymentMethodData = [];
@@ -414,18 +415,12 @@ if ($construction_accepted) $current_step = 4;
                 <form method="post">
                     <input type="hidden" name="proceed_pay" value="1">
                     <div class="d-flex gap-2">
-                        <a href="order_history.php?orderid=<?php echo $orderid; ?>" class="btn btn-secondary">Cancel</a>
-                        
+                        <a href="order_detail.php?orderid=<?php echo $orderid; ?>" class="btn btn-secondary">Cancel</a>
                         <?php if (!empty($paymentMethodData) && !empty($paymentMethodData['method'])): ?>
-                            <?php if ($construction_accepted): ?>
-                                <button type="submit" class="btn btn-success" onclick="return confirm('Pay construction fee of HK$<?php echo number_format($construction_fee, 2); ?>?');">
-                                    <i class="fas fa-credit-card me-1"></i>
-                                    Pay Construction Fee HK$<?php echo number_format($construction_fee, 2); ?>
-                                </button>
+                            <?php if ($amount_due < 0): ?>
+                                <button type="submit" class="btn btn-primary">Request Refund HK$<?php echo number_format(abs($amount_due),2); ?></button>
                             <?php else: ?>
-                                <button type="button" class="btn btn-secondary" disabled>
-                                    Please accept construction fee first
-                                </button>
+                                <button type="submit" class="btn btn-success">Proceed to Pay HK$<?php echo number_format($amount_due,2); ?></button>
                             <?php endif; ?>
                         <?php else: ?>
                             <button type="button" class="btn btn-success" disabled>Proceed to Pay</button>

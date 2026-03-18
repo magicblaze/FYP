@@ -127,45 +127,80 @@ $edit_requirements = isset($_GET['edit']) && $_GET['edit'] == 'requirements';
 $edit_designer = isset($_GET['edit']) && $_GET['edit'] == 'designer';
 $edit_cost = isset($_GET['edit']) && $_GET['edit'] == 'cost';
 $edit_reference = isset($_GET['edit']) && $_GET['edit'] == 'reference';
-$edit_delivery = isset($_GET['edit']) && $_GET['edit'] == 'delivery';
+ $edit_delivery = isset($_GET['edit']) && $_GET['edit'] == 'delivery';
 
-// ... 其余代码保持不变 ...
-	
-	if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-	    // Handle OrderDelivery update
-	    if (isset($_POST['update_delivery'])) {
-	        $od_id = (int)$_POST['orderdeliveryid'];
-	        $od_status = mysqli_real_escape_string($mysqli, $_POST['status']);
-	        $od_date = mysqli_real_escape_string($mysqli, $_POST['deliverydate']);
-	        $od_qty = (int)$_POST['quantity'];
-	        $od_color = mysqli_real_escape_string($mysqli, $_POST['color']);
-	
-	        $update_od_sql = "UPDATE OrderDelivery SET status = ?, deliverydate = ?, quantity = ?, color = ? WHERE orderdeliveryid = ?";
-	        $update_od_stmt = mysqli_prepare($mysqli, $update_od_sql);
-	        mysqli_stmt_bind_param($update_od_stmt, "ssisi", $od_status, $od_date, $od_qty, $od_color, $od_id);
-	        mysqli_stmt_execute($update_od_stmt);
-	        mysqli_stmt_close($update_od_stmt);
-	        header("Location: Order_Edit.php?id=" . $orderid);
-	        exit();
-	    }
-	
-	    // Handle adding new OrderDelivery
-	    if (isset($_POST['add_delivery'])) {
-	        $prod_id = (int)$_POST['productid'];
-	        $qty = (int)$_POST['quantity'];
-	        $status = mysqli_real_escape_string($mysqli, $_POST['status']);
-	        $date = mysqli_real_escape_string($mysqli, $_POST['deliverydate']);
-	        $color = mysqli_real_escape_string($mysqli, $_POST['color']);
-	        $rid = (int)$_POST['rid'];
-	
-	        $insert_od_sql = "INSERT INTO OrderDelivery (productid, quantity, orderid, deliverydate, status, managerid, color, rid) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
-	        $insert_od_stmt = mysqli_prepare($mysqli, $insert_od_sql);
-	        mysqli_stmt_bind_param($insert_od_stmt, "iiissisi", $prod_id, $qty, $orderid, $date, $status, $user_id, $color, $rid);
-	        mysqli_stmt_execute($insert_od_stmt);
-	        mysqli_stmt_close($insert_od_stmt);
-	        header("Location: Order_Edit.php?id=" . $orderid);
-	        exit();
-	    }
+if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+    // Handle placing order for a reference item
+    if (isset($_POST['place_order_reference']) && isset($_POST['reference_id'])) {
+        $reference_id = intval($_POST['reference_id']);
+        // Fetch reference details
+        $ref_sql = "SELECT * FROM OrderReference WHERE id = ? AND orderid = ?";
+        $ref_stmt = mysqli_prepare($mysqli, $ref_sql);
+        mysqli_stmt_bind_param($ref_stmt, "ii", $reference_id, $orderid);
+        mysqli_stmt_execute($ref_stmt);
+        $ref_result = mysqli_stmt_get_result($ref_stmt);
+        $ref = mysqli_fetch_assoc($ref_result);
+        mysqli_stmt_close($ref_stmt);
+        if ($ref) {
+            // Check if already in OrderDelivery
+            $check_sql = "SELECT COUNT(*) as cnt FROM OrderDelivery WHERE rid = ? AND orderid = ?";
+            $check_stmt = mysqli_prepare($mysqli, $check_sql);
+            mysqli_stmt_bind_param($check_stmt, "ii", $reference_id, $orderid);
+            mysqli_stmt_execute($check_stmt);
+            $check_result = mysqli_stmt_get_result($check_stmt);
+            $check = mysqli_fetch_assoc($check_result);
+            mysqli_stmt_close($check_stmt);
+            if ($check['cnt'] == 0) {
+                // Insert into OrderDelivery
+                $productid = (int)$ref['productid'];
+                $qty = 1;
+                $status = 'Pending';
+                $date = null;
+                $color = null;
+                $insert_sql = "INSERT INTO OrderDelivery (productid, quantity, orderid, deliverydate, status, managerid, color, rid) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+                $insert_stmt = mysqli_prepare($mysqli, $insert_sql);
+                mysqli_stmt_bind_param($insert_stmt, "iiissisi", $productid, $qty, $orderid, $date, $status, $user_id, $color, $reference_id);
+                mysqli_stmt_execute($insert_stmt);
+                mysqli_stmt_close($insert_stmt);
+            }
+        }
+        header("Location: Order_Edit.php?id=" . $orderid);
+        exit();
+    }
+    // Handle OrderDelivery update
+    if (isset($_POST['update_delivery'])) {
+        $od_id = (int)$_POST['orderdeliveryid'];
+        $od_status = mysqli_real_escape_string($mysqli, $_POST['status']);
+        $od_date = mysqli_real_escape_string($mysqli, $_POST['deliverydate']);
+        $od_qty = (int)$_POST['quantity'];
+        $od_color = mysqli_real_escape_string($mysqli, $_POST['color']);
+
+        $update_od_sql = "UPDATE OrderDelivery SET status = ?, deliverydate = ?, quantity = ?, color = ? WHERE orderdeliveryid = ?";
+        $update_od_stmt = mysqli_prepare($mysqli, $update_od_sql);
+        mysqli_stmt_bind_param($update_od_stmt, "ssisi", $od_status, $od_date, $od_qty, $od_color, $od_id);
+        mysqli_stmt_execute($update_od_stmt);
+        mysqli_stmt_close($update_od_stmt);
+        header("Location: Order_Edit.php?id=" . $orderid);
+        exit();
+    }
+
+    // Handle adding new OrderDelivery
+    if (isset($_POST['add_delivery'])) {
+        $prod_id = (int)$_POST['productid'];
+        $qty = (int)$_POST['quantity'];
+        $status = mysqli_real_escape_string($mysqli, $_POST['status']);
+        $date = mysqli_real_escape_string($mysqli, $_POST['deliverydate']);
+        $color = mysqli_real_escape_string($mysqli, $_POST['color']);
+        $rid = (int)$_POST['rid'];
+
+        $insert_od_sql = "INSERT INTO OrderDelivery (productid, quantity, orderid, deliverydate, status, managerid, color, rid) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+        $insert_od_stmt = mysqli_prepare($mysqli, $insert_od_sql);
+        mysqli_stmt_bind_param($insert_od_stmt, "iiissisi", $prod_id, $qty, $orderid, $date, $status, $user_id, $color, $rid);
+        mysqli_stmt_execute($insert_od_stmt);
+        mysqli_stmt_close($insert_od_stmt);
+        header("Location: Order_Edit.php?id=" . $orderid);
+        exit();
+    }
     if (isset($_POST['update_status'])) {
         $new_status = mysqli_real_escape_string($mysqli, $_POST['ostatus'] ?? '');
         $order_finish_date = mysqli_real_escape_string($mysqli, $_POST['OrderFinishDate'] ?? '');
@@ -828,6 +863,8 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                 'waiting client review' => ['class' => 'alert-warning', 'icon' => 'fa-eye', 'title' => 'Waiting Client Review 2nd Proposal', 'text' => '2nd Proposal has been submitted, please wait for client to review.'],
                 'waiting payment' => ['class' => 'alert-warning', 'icon' => 'fa-credit-card', 'title' => 'Waiting Payment', 'text' => 'Waiting for client payment to proceed.'],
                 'waiting client payment' => ['class' => 'alert-warning', 'icon' => 'fa-credit-card', 'title' => 'Waiting Payment', 'text' => 'Waiting for client payment to proceed.'],
+                'waiting for selection' => ['class' => 'alert-warning', 'icon' => 'fa-list', 'title' => 'Waiting for Selection', 'text' => 'Waiting for client to select construction items.'],
+                'preparing' => ['class' => 'alert-info', 'icon' => 'fa-truck-loading', 'title' => 'Preparing', 'text' => 'Order is being prepared for construction/delivery.'],
                 'complete' => ['class' => 'alert-success', 'icon' => 'fa-check-circle', 'title' => 'Complete', 'text' => 'Order completed successfully.'],
                 'rejected' => ['class' => 'alert-danger', 'icon' => 'fa-times-circle', 'title' => 'Rejected', 'text' => 'Order has been rejected. See notes for reason.'],
             ];
@@ -1379,101 +1416,6 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
 	                                </div>
 	                            </div>
 	                        </div>
-	
-	                        <!-- Order Delivery Section (New Box) -->
-	                        <div class="col-lg-6 mb-4">
-	                            <div class="card h-100">
-	                                <div class="card-header bg-light">
-	                                    <h5 class="card-title mb-0">
-	                                        <i class="fas fa-truck me-2"></i>Order Delivery
-	                                    </h5>
-	                                </div>
-	                                <div class="card-body">
-	                                    <!-- View Mode -->
-	                                    <div id="delivery-view" class="<?php echo $edit_delivery ? 'd-none' : ''; ?>">
-	                                        <?php
-	                                        $od_sql = "SELECT od.*, p.pname FROM OrderDelivery od JOIN Product p ON od.productid = p.productid WHERE od.orderid = ?";
-	                                        $od_stmt = mysqli_prepare($mysqli, $od_sql);
-	                                        mysqli_stmt_bind_param($od_stmt, "i", $orderid);
-	                                        mysqli_stmt_execute($od_stmt);
-	                                        $od_res = mysqli_stmt_get_result($od_stmt);
-	                                        if ($od_res->num_rows > 0): ?>
-	                                            <div class="table-responsive mb-3">
-	                                                <table class="table table-sm table-hover">
-	                                                    <thead>
-	                                                        <tr>
-	                                                            <th>Product</th>
-	                                                            <th>Status</th>
-	                                                            <th>Date</th>
-	                                                        </tr>
-	                                                    </thead>
-	                                                    <tbody>
-	                                                        <?php while ($od = mysqli_fetch_assoc($od_res)): ?>
-	                                                            <tr>
-	                                                                <td><small><?php echo htmlspecialchars($od['pname']); ?> (<?php echo $od['quantity']; ?>)</small></td>
-	                                                                <td><span class="badge bg-info"><?php echo htmlspecialchars($od['status']); ?></span></td>
-	                                                                <td><small><?php echo $od['deliverydate']; ?></small></td>
-	                                                            </tr>
-	                                                        <?php endwhile; ?>
-	                                                    </tbody>
-	                                                </table>
-	                                            </div>
-	                                        <?php else: ?>
-	                                            <p class="text-muted small text-center">No delivery info yet.</p>
-	                                        <?php endif; ?>
-	                                        <button type="button" class="btn btn-primary w-100" onclick="toggleEdit('delivery', true)">
-	                                            <i class="fas fa-plus me-2"></i>Add / Update Delivery
-	                                        </button>
-	                                    </div>
-	
-	                                    <!-- Edit Mode -->
-	                                    <div id="delivery-edit" class="<?php echo $edit_delivery ? '' : 'd-none'; ?>">
-	                                        <form method="post" class="mb-4">
-	                                            <input type="hidden" name="add_delivery" value="1">
-	                                            <h6 class="fw-bold mb-2 small">Add New Delivery</h6>
-	                                            <div class="row g-2 mb-3">
-	                                                <div class="col-12">
-	                                                    <select name="rid" class="form-select form-select-sm" required>
-	                                                        <option value="">-- Select Product Reference --</option>
-	                                                        <?php foreach ($references as $ref): ?>
-	                                                            <option value="<?php echo $ref['id']; ?>" data-pid="<?php echo $ref['productid']; ?>">
-	                                                                <?php echo htmlspecialchars($ref['pname']); ?>
-	                                                            </option>
-	                                                        <?php endforeach; ?>
-	                                                    </select>
-	                                                    <!-- hidden pid to be set by JS or simplified -->
-	                                                    <input type="hidden" name="productid" id="delivery_pid">
-	                                                    <script>
-	                                                        document.querySelector('select[name="rid"]').addEventListener('change', function() {
-	                                                            const opt = this.options[this.selectedIndex];
-	                                                            document.getElementById('delivery_pid').value = opt.getAttribute('data-pid');
-	                                                        });
-	                                                    </script>
-	                                                </div>
-	                                                <div class="col-6">
-	                                                    <input type="number" name="quantity" class="form-control form-control-sm" placeholder="Qty" required>
-	                                                </div>
-	                                                <div class="col-6">
-	                                                    <input type="text" name="color" class="form-control form-control-sm" placeholder="Color">
-	                                                </div>
-	                                                <div class="col-6">
-	                                                    <select name="status" class="form-select form-select-sm">
-	                                                        <option value="Pending">Pending</option>
-	                                                        <option value="Shipped">Shipped</option>
-	                                                        <option value="Delivered">Delivered</option>
-	                                                    </select>
-	                                                </div>
-	                                                <div class="col-6">
-	                                                    <input type="date" name="deliverydate" class="form-control form-control-sm">
-	                                                </div>
-	                                            </div>
-	                                            <button type="submit" class="btn btn-success btn-sm w-100 mb-2">Add Delivery</button>
-	                                        </form>
-	                                        <button type="button" class="btn btn-secondary btn-sm w-100" onclick="toggleEdit('delivery', false)">Cancel</button>
-	                                    </div>
-	                                </div>
-	                            </div>
-	                        </div>
 
                         <!-- Edit Cost Section -->
                         <div class="col-lg-6 mb-4">
@@ -1767,6 +1709,111 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                 </div>
                             </div>
                         </div>
+                    <?php endif; // end of drafting 2nd proposal section ?>
+                    <?php if ($status === 'preparing'): ?>
+                    <!-- Order Reference Table for Placing Order -->
+                    <div class="col-12 mb-4">
+                        <div class="card h-100">
+                            <div class="card-header bg-light">
+                                <h5 class="card-title mb-0">
+                                    <i class="fas fa-list me-2"></i>Order Reference Items
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-hover">
+                                        <thead>
+                                            <tr>
+                                                <th>Product</th>
+                                                <th>Category</th>
+                                                <th>Requested Price</th>
+                                                <th>Status</th>
+                                                <th>Note</th>
+                                                <th>Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php foreach ($references as $ref): ?>
+                                                <tr>
+                                                    <td><?php echo htmlspecialchars($ref['pname'] ?? ('Product #' . $ref['productid'])); ?></td>
+                                                    <td><?php echo htmlspecialchars($ref['category'] ?? '—'); ?></td>
+                                                    <td>HK$<?php echo number_format(isset($ref['price']) ? $ref['price'] : (isset($ref['product_price']) ? $ref['product_price'] : 0), 2); ?></td>
+                                                    <td><?php echo htmlspecialchars($ref['status'] ?? '—'); ?></td>
+                                                    <td><?php echo htmlspecialchars($ref['note'] ?? '—'); ?></td>
+                                                        <td>
+                                                            <?php
+                                                            // Check if this reference's product is already pending in OrderDelivery for this order
+                                                            $pending_sql = "SELECT COUNT(*) AS cnt FROM OrderDelivery WHERE orderid = ? AND productid = ? AND status IN ('pending', 'preparing', 'ordered')";
+                                                            $pending_stmt = mysqli_prepare($mysqli, $pending_sql);
+                                                            mysqli_stmt_bind_param($pending_stmt, "ii", $orderid, $ref['productid']);
+                                                            mysqli_stmt_execute($pending_stmt);
+                                                            $pending_res = mysqli_stmt_get_result($pending_stmt);
+                                                            $pending_row = mysqli_fetch_assoc($pending_res);
+                                                            mysqli_stmt_close($pending_stmt);
+                                                            if ($pending_row['cnt'] == 0):
+                                                            ?>
+                                                                <form method="post" style="display:inline-block">
+                                                                    <input type="hidden" name="place_order_reference" value="1">
+                                                                    <input type="hidden" name="reference_id" value="<?php echo (int)$ref['id']; ?>">
+                                                                    <button type="submit" class="btn btn-sm btn-primary">Place Order</button>
+                                                                </form>
+                                                            <?php else: ?>
+                                                                <span class="text-muted small">Order Pending</span>
+                                                            <?php endif; ?>
+                                                        </td>
+                                                </tr>
+                                            <?php endforeach; ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Order Delivery Section (New Box) -->
+                            <div class="col-lg-6 mb-4">
+                                <div class="card h-100">
+                                    <div class="card-header bg-light">
+                                        <h5 class="card-title mb-0">
+                                            <i class="fas fa-truck me-2"></i>Order Delivery
+                                        </h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <!-- View Mode -->
+                                        <div id="delivery-view" class="<?php echo $edit_delivery ? 'd-none' : ''; ?>">
+                                            <?php
+                                            $od_sql = "SELECT od.*, p.pname FROM OrderDelivery od JOIN Product p ON od.productid = p.productid WHERE od.orderid = ?";
+                                            $od_stmt = mysqli_prepare($mysqli, $od_sql);
+                                            mysqli_stmt_bind_param($od_stmt, "i", $orderid);
+                                            mysqli_stmt_execute($od_stmt);
+                                            $od_res = mysqli_stmt_get_result($od_stmt);
+                                            if ($od_res->num_rows > 0): ?>
+                                                <div class="table-responsive mb-3">
+                                                    <table class="table table-sm table-hover">
+                                                        <thead>
+                                                            <tr>
+                                                                <th>Product</th>
+                                                                <th>Status</th>
+                                                                <th>Date</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            <?php while ($od = mysqli_fetch_assoc($od_res)): ?>
+                                                                <tr>
+                                                                    <td><small><?php echo htmlspecialchars($od['pname']); ?> (<?php echo $od['quantity']; ?>)</small></td>
+                                                                    <td><span class="badge bg-info"><?php echo htmlspecialchars($od['status']); ?></span></td>
+                                                                    <td><small><?php echo $od['deliverydate']; ?></small></td>
+                                                                </tr>
+                                                            <?php endwhile; ?>
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            <?php else: ?>
+                                                <p class="text-muted small text-center">No delivery info yet.</p>
+                                            <?php endif; ?>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>            
                     <?php endif; ?>
                     <!-- Proposal Preview Modal -->
                     <div class="modal fade" id="proposalPreviewModal" tabindex="-1" aria-hidden="true">
@@ -1806,7 +1853,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                 </div>
                             </div>
                         </div>
-                    </div>
+                    </div>       
                 <?php else: ?>
                     <div class="alert alert-danger" role="alert">
                         <i class="fas fa-exclamation-circle me-2"></i>
@@ -1837,4 +1884,5 @@ if (isset($result))
 if (isset($ref_result))
     mysqli_free_result($ref_result);
 mysqli_close($mysqli);
+// No extra closing brace needed; all blocks are now properly closed.
 ?>
