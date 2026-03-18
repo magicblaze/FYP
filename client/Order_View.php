@@ -217,10 +217,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <div class="budget-info">
                             <h6 class="mb-3"><i class="fas fa-chart-pie me-2"></i>Budget Overview</h6>
                             
-                            <div class="budget-item">
-                                <span class="budget-label">Original Budget:</span>
-                                <span class="budget-value">HK$<?php echo number_format($original_budget, 2); ?></span>
-                            </div>
                             
                             <div class="budget-item">
                                 <span class="budget-label">Design Deposit:</span>
@@ -231,14 +227,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 <span class="budget-label">Final Design Payment:</span>
                                 <span class="budget-value text-warning">- HK$<?php echo number_format($final_payment, 2); ?></span>
                             </div>
-                            
-                            <div class="budget-item">
+
+                            <div class="budget-item" style="border-top: 2px solid #10f176; margin-top: 0.5rem; padding-top: 0.75rem;">
                                 <span class="budget-label">Total Cost:</span>
+                                <?php $final_total_cost = $design_price + $final_payment; ?>
                                 <span class="budget-value text-danger">- HK$<?php echo number_format($final_total_cost, 2); ?></span>
                             </div>
                             
                             <div class="budget-item" style="border-top: 2px solid #3498db; margin-top: 0.5rem; padding-top: 0.75rem;">
                                 <span class="budget-label"><strong>Remaining Budget:</strong></span>
+                               <?php $remaining_budget = $original_budget;?>
                                 <span class="budget-value budget-remaining"><strong>HK$<?php echo number_format($remaining_budget, 2); ?></strong></span>
                             </div>
                             

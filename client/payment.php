@@ -4,7 +4,7 @@ require_once dirname(__DIR__) . '/config.php';
 
 // Only allow logged-in clients
 if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'client') {
-    header('Location: ../login.php?redirect=' . urlencode($current_page));
+    header('Location: ../login.php?redirect=' . urlencode($_SERVER['REQUEST_URI']));
     exit;
 }
 
@@ -15,7 +15,9 @@ $orderid = isset($_GET['orderid']) ? intval($_GET['orderid']) : 0;
 if ($orderid <= 0) die('Order ID missing');
 
 // Load order and ensure ownership
-$sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.cost, o.designid, d.expect_price as design_price, d.tag, c.clientid, c.cname, c.payment_method
+$sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.cost, o.designid, o.deposit, o.final_payment,
+               d.expect_price as design_price, d.tag, 
+               c.clientid, c.cname, c.payment_method, c.budget
         FROM `Order` o
         LEFT JOIN `Design` d ON o.designid = d.designid
         LEFT JOIN `Client` c ON o.clientid = c.clientid
@@ -32,6 +34,7 @@ if (!$order) {
 // Get values
 $final_payment = isset($order['final_payment']) ? floatval($order['final_payment']) : 0;
 $design_deposit = isset($order['design_price']) ? (float)$order['design_price'] : 0.0;
+$current_budget = isset($order['budget']) ? floatval($order['budget']) : 0;
 
 // Gather references total
 $refs_total = 0.0;
@@ -57,12 +60,9 @@ if ($fees_stmt) {
     mysqli_stmt_close($fees_stmt);
 }
 
-$design_price = isset($order['design_price']) ? (float)$order['design_price'] : 0.0;
-$total_cost = $design_price + $refs_total + $fees_total;
-
-// Deposit: stored on the order (default 2000). Subtract from amount due at final payment.
-$deposit = isset($order['deposit']) ? (float)$order['deposit'] : 2000.0;
-$amount_due = $total_cost - $deposit;
+// Calculate totals
+$order_total = $design_deposit + $refs_total + $fees_total + $final_payment;
+$construction_fee = $order_total * 1.5; // 150% of order total
 
 // Parse saved payment method
 $paymentMethodData = [];
@@ -70,47 +70,50 @@ if (!empty($order['payment_method'])) {
     $paymentMethodData = json_decode($order['payment_method'], true) ?? [];
 }
 
-// Payment status
+// Payment status from session (for display only)
 $deposit_paid = isset($_SESSION['deposit_paid_' . $orderid]) ? $_SESSION['deposit_paid_' . $orderid] : false;
 $final_paid = isset($_SESSION['final_paid_' . $orderid]) ? $_SESSION['final_paid_' . $orderid] : false;
-$construction_accepted = isset($_SESSION['construction_accepted_' . $orderid]) ? $_SESSION['construction_accepted_' . $orderid] : false;
-$payment_rejected = isset($_SESSION['payment_rejected_' . $orderid]) ? $_SESSION['payment_rejected_' . $orderid] : false;
 
-// Handle payment actions
+// Handle payment action
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_POST['accept_construction'])) {
-        $_SESSION['construction_accepted_' . $orderid] = true;
-        $construction_accepted = true;
-        header('Location: payment.php?orderid=' . $orderid . '&accepted=1');
-        exit;
-    }
-    
-    if (isset($_POST['reject_construction'])) {
-        $_SESSION['construction_accepted_' . $orderid] = false;
-        $construction_accepted = false;
-        header('Location: payment.php?orderid=' . $orderid . '&rejected=1');
-        exit;
-    }
-    
     if (isset($_POST['proceed_pay'])) {
-        // Update order status to complete
-        $u_sql = "UPDATE `Order` SET ostatus = 'complete' WHERE orderid = ? AND clientid = ?";
-        $u_stmt = mysqli_prepare($mysqli, $u_sql);
-        mysqli_stmt_bind_param($u_stmt, "ii", $orderid, $client_id);
-        mysqli_stmt_execute($u_stmt);
-        mysqli_stmt_close($u_stmt);
+        // Begin transaction
+        mysqli_begin_transaction($mysqli);
         
-        // Clear session
-        unset($_SESSION['construction_accepted_' . $orderid]);
-        
-        header('Location: order_history.php?msg=paid');
-        exit;
+        try {
+            // Deduct from client budget
+            $new_budget = $current_budget - $construction_fee;
+            $b_sql = "UPDATE Client SET budget = ? WHERE clientid = ?";
+            $b_stmt = mysqli_prepare($mysqli, $b_sql);
+            mysqli_stmt_bind_param($b_stmt, "di", $new_budget, $client_id);
+            mysqli_stmt_execute($b_stmt);
+            mysqli_stmt_close($b_stmt);
+            
+            // Update order status to complete
+            $u_sql = "UPDATE `Order` SET ostatus = 'complete' WHERE orderid = ? AND clientid = ?";
+            $u_stmt = mysqli_prepare($mysqli, $u_sql);
+            mysqli_stmt_bind_param($u_stmt, "ii", $orderid, $client_id);
+            mysqli_stmt_execute($u_stmt);
+            mysqli_stmt_close($u_stmt);
+            
+            // Update session budget
+            $_SESSION['user']['budget'] = $new_budget;
+            
+            mysqli_commit($mysqli);
+            
+            header('Location: order_history.php?msg=paid');
+            exit;
+            
+        } catch (Exception $e) {
+            mysqli_rollback($mysqli);
+            error_log("Construction fee payment error: " . $e->getMessage());
+            die("Payment processing failed. Please try again.");
+        }
     }
 }
 
-// Determine current step (for Construction Fee page, step 3 is current)
+// Current step (step 3 is current for construction fee page)
 $current_step = 3;
-if ($construction_accepted) $current_step = 4;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -128,9 +131,9 @@ if ($construction_accepted) $current_step = 4;
             padding: 1.5rem;
             margin-bottom: 1.5rem;
         }
-        .construction-section {
-            background: #fff3cd;
-            border-left: 4px solid #ffc107;
+        .payment-section {
+            background: #e8f5e9;
+            border-left: 4px solid #27ae60;
             padding: 1.5rem;
             border-radius: 8px;
             margin-bottom: 1.5rem;
@@ -153,13 +156,19 @@ if ($construction_accepted) $current_step = 4;
             font-weight: 600;
             font-size: 1.1rem;
         }
-        .construction-value {
-            color: #e67e22;
+        .payment-amount {
             font-size: 1.5rem;
             font-weight: 700;
+            color: #27ae60;
         }
         .alert-message {
             margin-top: 1rem;
+        }
+        .budget-info {
+            background: #e3f2fd;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
         }
         
         /* Progress Steps */
@@ -263,6 +272,19 @@ if ($construction_accepted) $current_step = 4;
                 
                 <h4>Payment for Order #<?php echo $orderid; ?></h4>
                 
+                <!-- Budget Info -->
+                <div class="budget-info">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span><i class="fas fa-wallet me-2"></i>Your Current Budget:</span>
+                        <strong class="text-primary">HK$<?php echo number_format($current_budget, 2); ?></strong>
+                    </div>
+                    <?php if ($construction_fee > $current_budget): ?>
+                        <div class="alert alert-danger mt-2 mb-0">
+                            <i class="fas fa-exclamation-triangle me-2"></i>Insufficient budget! You need HK$<?php echo number_format($construction_fee - $current_budget, 2); ?> more.
+                        </div>
+                    <?php endif; ?>
+                </div>
+                
                 <!-- Progress Steps -->
                 <div class="progress-steps">
                     <!-- Step 1: Deposit - Completed (Green) -->
@@ -296,16 +318,6 @@ if ($construction_accepted) $current_step = 4;
                         <span class="step-label">Complete</span>
                     </div>
                 </div>
-                
-                <?php if (isset($_GET['accepted'])): ?>
-                    <div class="alert alert-success alert-message">
-                        <i class="fas fa-check-circle me-2"></i>Construction fee accepted. Please proceed with payment.
-                    </div>
-                <?php elseif (isset($_GET['rejected'])): ?>
-                    <div class="alert alert-danger alert-message">
-                        <i class="fas fa-exclamation-triangle me-2"></i>Construction fee rejected. You may contact support for further assistance.
-                    </div>
-                <?php endif; ?>
 
                 <!-- Order Summary -->
                 <div class="total-section">
@@ -336,69 +348,30 @@ if ($construction_accepted) $current_step = 4;
                     </div>
                     
                     <div class="total-item" style="border-top: 2px solid #3498db; margin-top: 0.5rem; padding-top: 0.75rem;">
-                        <span class="total-label"><strong>Order Total:</strong></span>
+                        <span class="total-label"><strong>Order Total(Settled):</strong></span>
                         <span class="total-value"><strong>HK$<?php echo number_format($order_total, 2); ?></strong></span>
                     </div>
                 </div>
 
-                <!-- Construction Fee Section -->
-                <div class="construction-section">
-                    <h5 class="mb-3"><i class="fas fa-hard-hat me-2"></i>Construction Fee (150% of Order Total)</h5>
+                <!-- Construction Fee Payment Section -->
+                <div class="payment-section">
+                    <h5 class="mb-3"><i class="fas fa-hard-hat me-2"></i>Construction Fee Payment</h5>
                     
                     <div class="total-item">
-                        <span class="total-label">Order Total:</span>
+                        <span class="total-label">Order Total(Settled):</span>
                         <span class="total-value">HK$<?php echo number_format($order_total, 2); ?></span>
                     </div>
                     
                     <div class="total-item">
                         <span class="total-label">Construction Fee (150%):</span>
-                        <span class="construction-value">HK$<?php echo number_format($construction_fee, 2); ?></span>
+                        <span class="total-value">HK$<?php echo number_format($construction_fee, 2); ?></span>
                     </div>
                     
-                    <div class="total-item" style="border-top: 2px solid #ffc107; margin-top: 0.5rem; padding-top: 0.75rem;">
+                    <div class="total-item" style="border-top: 2px solid #27ae60; margin-top: 0.5rem; padding-top: 0.75rem;">
                         <span class="total-label"><strong>Total to Pay:</strong></span>
-                        <span class="construction-value"><strong>HK$<?php echo number_format($construction_fee, 2); ?></strong></span>
+                        <span class="total-value payment-amount"><strong>HK$<?php echo number_format($construction_fee, 2); ?></strong></span>
                     </div>
-                    
-                    <?php if (!$construction_accepted): ?>
-                        <div class="mt-3 d-flex gap-2">
-                            <form method="post" style="display: inline;">
-                                <input type="hidden" name="accept_construction" value="1">
-                                <button type="submit" class="btn btn-success" onclick="return confirm('Accept the construction fee of HK$<?php echo number_format($construction_fee, 2); ?>?');">
-                                    <i class="fas fa-check me-1"></i>Accept Construction Fee
-                                </button>
-                            </form>
-                            <form method="post" style="display: inline;">
-                                <input type="hidden" name="reject_construction" value="1">
-                                <button type="submit" class="btn btn-danger" onclick="return confirm('Reject the construction fee? You may need to contact support.');">
-                                    <i class="fas fa-times me-1"></i>Reject Construction Fee
-                                </button>
-                            </form>
-                        </div>
-                    <?php endif; ?>
                 </div>
-
-                <!-- Payment Summary (shown only if construction accepted) -->
-                <?php if ($construction_accepted): ?>
-                    <div class="total-section">
-                        <h5 class="mb-3"><i class="fas fa-calculator me-2"></i>Payment Summary</h5>
-                        
-                        <div class="total-item">
-                            <span class="total-label">Order Total:</span>
-                            <span class="total-value">HK$<?php echo number_format($order_total, 2); ?></span>
-                        </div>
-                        
-                        <div class="total-item">
-                            <span class="total-label">Construction Fee (150%):</span>
-                            <span class="total-value">HK$<?php echo number_format($construction_fee, 2); ?></span>
-                        </div>
-                        
-                        <div class="total-item" style="border-top: 2px solid #28a745; margin-top: 0.5rem; padding-top: 0.75rem;">
-                            <span class="total-label"><strong>Final Amount to Pay:</strong></span>
-                            <span class="total-value" style="color: #28a745; font-size: 1.5rem; font-weight: 700;">HK$<?php echo number_format($construction_fee, 2); ?></span>
-                        </div>
-                    </div>
-                <?php endif; ?>
 
                 <hr>
 
@@ -413,17 +386,22 @@ if ($construction_accepted) $current_step = 4;
                 <?php endif; ?>
 
                 <form method="post">
-                    <input type="hidden" name="proceed_pay" value="1">
                     <div class="d-flex gap-2">
-                        <a href="order_detail.php?orderid=<?php echo $orderid; ?>" class="btn btn-secondary">Cancel</a>
+                        <a href="order_detail.php?orderid=<?php echo $orderid; ?>" class="btn btn-secondary">Back to Order</a>
+                        
                         <?php if (!empty($paymentMethodData) && !empty($paymentMethodData['method'])): ?>
-                            <?php if ($amount_due < 0): ?>
-                                <button type="submit" class="btn btn-primary">Request Refund HK$<?php echo number_format(abs($amount_due),2); ?></button>
+                            <?php if ($construction_fee > $current_budget): ?>
+                                <button type="button" class="btn btn-success" disabled title="Insufficient budget">
+                                    <i class="fas fa-exclamation-triangle me-1"></i>Insufficient Budget
+                                </button>
                             <?php else: ?>
-                                <button type="submit" class="btn btn-success">Proceed to Pay HK$<?php echo number_format($amount_due,2); ?></button>
+                                <button type="submit" name="proceed_pay" class="btn btn-success" onclick="return confirm('Pay construction fee of HK$<?php echo number_format($construction_fee, 2); ?> from your budget? Your remaining budget will be HK$<?php echo number_format($current_budget - $construction_fee, 2); ?>');">
+                                    <i class="fas fa-credit-card me-1"></i>
+                                    Pay Construction Fee HK$<?php echo number_format($construction_fee, 2); ?>
+                                </button>
                             <?php endif; ?>
                         <?php else: ?>
-                            <button type="button" class="btn btn-success" disabled>Proceed to Pay</button>
+                            <button type="button" class="btn btn-secondary" disabled>No payment method configured</button>
                         <?php endif; ?>
                     </div>
                 </form>

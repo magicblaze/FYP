@@ -43,23 +43,20 @@ mysqli_stmt_execute($stmt);
 $result = mysqli_stmt_get_result($stmt);
 $order = mysqli_fetch_assoc($result);
 
-// --- 定义所有需要的变量 ---
+// --- 预算计算（简化版）---
 $design_price = isset($order["design_price"]) ? floatval($order["design_price"]) : 0;
 $final_payment = isset($order['final_payment']) ? floatval($order['final_payment']) : 0;
 $original_budget = floatval($order['budget'] ?? 0);
 
-// --- 预算计算 ---
+// 只扣除设计定金
 $deducted_amount = $design_price; 
 $remaining_budget = $original_budget - $deducted_amount;
 
 // 检查设计是否已确认
 $is_design_confirmed = in_array(strtolower($order['ostatus'] ?? ''), ['waiting payment', 'waiting client payment', 'complete']);
 
-// 如果状态是 drafting 2nd proposal，减去 Final Design Payment
+// 获取当前状态
 $current_status = strtolower($order['ostatus'] ?? '');
-if ($current_status === 'drafting 2nd proposal' && $final_payment > 0) {
-    $remaining_budget = $remaining_budget - $final_payment;
-}
 
 // Fetch order references
 $ref_sql = "SELECT 
@@ -313,14 +310,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         mysqli_stmt_execute($update_designer_stmt);
                         mysqli_stmt_close($update_designer_stmt);
 
-                        // --- NEW: Deduct expected price from client budget ---
-                        $update_budget_sql = "UPDATE Client SET budget = budget - ? WHERE clientid = (SELECT clientid FROM `Order` WHERE orderid = ?)";
-                        $update_budget_stmt = mysqli_prepare($mysqli, $update_budget_sql);
-                        mysqli_stmt_bind_param($update_budget_stmt, "di", $expect_price, $orderid);
-                        mysqli_stmt_execute($update_budget_stmt);
-                        mysqli_stmt_close($update_budget_stmt);
-                        // --- END NEW ---
-
+                        // REMOVED: 移除了预算扣除逻辑
+                        
                         header("Location: Order_Edit.php?id=" . $orderid);
                         exit();
                     }
@@ -328,29 +319,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             } else {
                 $design = mysqli_fetch_assoc($design_check_result);
                 
-                // --- NEW: Get expected price for existing design ---
-                $get_price_sql = "SELECT expect_price FROM Design WHERE designid = ?";
-                $get_price_stmt = mysqli_prepare($mysqli, $get_price_sql);
-                mysqli_stmt_bind_param($get_price_stmt, "i", $design['designid']);
-                mysqli_stmt_execute($get_price_stmt);
-                $price_result = mysqli_stmt_get_result($get_price_stmt);
-                $design_data = mysqli_fetch_assoc($price_result);
-                $expect_price = floatval($design_data['expect_price'] ?? 0);
-                mysqli_stmt_close($get_price_stmt);
-                // --- END NEW ---
-                
                 $update_order_sql = "UPDATE `Order` SET designid = ?, ostatus = 'designing' WHERE orderid = ?";
                 $update_order_stmt = mysqli_prepare($mysqli, $update_order_sql);
                 mysqli_stmt_bind_param($update_order_stmt, "ii", $design['designid'], $orderid);
 
                 if (mysqli_stmt_execute($update_order_stmt)) {
-                    // --- NEW: Deduct expected price from client budget ---
-                    $update_budget_sql = "UPDATE Client SET budget = budget - ? WHERE clientid = (SELECT clientid FROM `Order` WHERE orderid = ?)";
-                    $update_budget_stmt = mysqli_prepare($mysqli, $update_budget_sql);
-                    mysqli_stmt_bind_param($update_budget_stmt, "di", $expect_price, $orderid);
-                    mysqli_stmt_execute($update_budget_stmt);
-                    mysqli_stmt_close($update_budget_stmt);
-                    // --- END NEW ---
+                    // REMOVED: 移除了预算扣除逻辑
                     
                     header("Location: Order_Edit.php?id=" . $orderid);
                     exit();
@@ -912,52 +886,23 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                             <?php endif; ?>
                             <hr>
                             <div class="mb-3">
-                                <label class="fw-bold text-muted small">Original Budget</label>
+                                <label class="fw-bold text-muted small">Remaining Budget</label>
                                 <p class="mb-0"><strong
                                         class="text-success fs-5">HK$<?php echo number_format($order["budget"], 2); ?></strong>
                                 </p>
                             </div>
-                            <!-- NEW: Display deducted amount and remaining budget -->
-<div class="mb-3">
-    <label class="fw-bold text-muted small">Deducted Amount</label>
-    <?php 
-    $total_deducted = $deducted_amount;
-    $status_message = 'Expected Price only';
-    $status_class = 'text-danger';
-    
-    if ($current_status === 'drafting 2nd proposal' || $is_design_confirmed) {
-        $total_deducted += $final_payment;
-        $status_message = 'Expected + Final Payment';
-        $status_class = 'text-success';
-    }
-    
-    if (!empty($references) && $current_status === 'complete') {
-        foreach ($references as $ref) {
-            $rprice = isset($ref['price']) && $ref['price'] !== null ? (float)$ref['price'] : (float)($ref['product_price'] ?? 0);
-            $total_deducted += $rprice;
-        }
-        $status_message = 'All costs included';
-        $status_class = 'text-success';
-    }
-    ?>
-    <p class="mb-0">
-        <strong class="<?php echo $status_class; ?> fs-5">
-            HK$<?php echo number_format($total_deducted, 2); ?>
-        </strong>
-        <small class="text-muted d-block"><?php echo $status_message; ?></small>
-    </p>
-</div>
-<?php $remaining_budget = $order["budget"] - $total_deducted; ?>
-                            <div class="mb-0">
-                                <label class="fw-bold text-muted small">Remaining Budget</label>
-                                <p class="mb-0"><strong
-                                        class="<?php echo $remaining_budget > 0 ? 'text-success' : 'text-danger'; ?> fs-5">HK$<?php echo number_format($remaining_budget, 2); ?></strong>
+                            <div class="mb-3">
+                                <label class="fw-bold text-muted small">Deducted Amount</label>
+                                <?php 
+                                $total_deducted = $deducted_amount + $final_payment + $references_total;
+                                ?>
+                                <p class="mb-0">
+                                    <strong class="text-danger fs-5">
+                                        HK$<?php echo number_format($total_deducted, 2); ?>
+                                    </strong>
                                 </p>
-                                <?php if ($is_design_confirmed): ?>
-                                    <small class="text-success">Design confirmed - budget updated</small>
-                                <?php endif; ?>
                             </div>
-                            <!-- END NEW -->
+
                         </div>
                     </div>
                 </div>
@@ -987,22 +932,18 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                 <p class="mb-0"><strong
                                         class="text-info">HK$<?php echo number_format($order["design_price"] ?? 0, 0); ?></strong>
                                 </p>
-                                <small class="text-muted">Deducted from budget</small>
+                                <small class="text-muted">Design Deposit</small>
                             </div>
-                            <!-- NEW: Display Final Design Payment -->
                             <div class="mb-3">
-                           <label class="fw-bold text-muted small">Final Design Payment</label>
-                            <p class="mb-0"><strong
-                            class="
-                            <?php echo ($current_status === 'drafting 2nd proposal' || $is_design_confirmed) ? 'text-success' : 'text-warning'; ?>">HK$<?php echo number_format($final_payment, 2); ?></strong>
+                                <label class="fw-bold text-muted small">Final Design Payment</label>
+                                <p class="mb-0">
+                                    <strong class="text-warning">
+                                        HK$<?php echo number_format($final_payment, 2); ?>
+                                    </strong>
                                 </p>
-                                <?php if ($is_design_confirmed): ?>
-                                    <small class="text-success">✓ Payment processed</small>
-                                <?php else: ?>
-                                    <small class="text-warning">⏳ Pending client confirmation</small>
-                                <?php endif; ?>
+                                <small class="text-muted">Pending client confirmation</small>
                             </div>
-                            <!-- END NEW -->
+                         
                             <hr>
                             <div class="mb-0">
                                 <label class="fw-bold text-muted small">Design Tag</label>
@@ -1884,5 +1825,4 @@ if (isset($result))
 if (isset($ref_result))
     mysqli_free_result($ref_result);
 mysqli_close($mysqli);
-// No extra closing brace needed; all blocks are now properly closed.
 ?>

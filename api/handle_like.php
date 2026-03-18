@@ -20,7 +20,7 @@ $user = $_SESSION['user'];
 $user_type = strtolower(trim($user['role'] ?? '')) ?: 'guest';
 $user_id = 0;
 // Map common id fields present in session
-if (!empty($user['clientid'])) $user_id = (int)$user['clientid'];
+if (!empty($user['clientio'])) $user_id = (int)$user['clientid'];
 elseif (!empty($user['designerid'])) $user_id = (int)$user['designerid'];
 elseif (!empty($user['supplierid'])) $user_id = (int)$user['supplierid'];
 elseif (!empty($user['managerid'])) $user_id = (int)$user['managerid'];

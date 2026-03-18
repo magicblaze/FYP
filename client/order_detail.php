@@ -821,12 +821,7 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€
                     <span
                         class="info-value price-highlight">$<?= number_format($final_payment, 2) ?></span>
                 </div>
-                <!-- --- END NEW --- -->
-                <div class="info-row">
-                    <span class="info-label">Products/Materials:</span>
-                    <span class="info-value price-highlight">$<?= number_format($productTotal, 2) ?></span>
-                </div>
-                <!-- --- NEW: Display Design Total in Summary --- -->
+
                 <div class="info-row" style="border-top: 2px solid #3498db; margin-top: 0.5rem; padding-top: 0.75rem;">
                     <span class="info-label"><strong>Design Total (Cost + Final):</strong></span>
                     <span
@@ -836,12 +831,6 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€
                 <div class="info-row">
                     <span class="info-label">Budget Allocated:</span>
                     <span class="info-value price-highlight">$<?= number_format((float) $order['budget'], 2) ?></span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Remaining Budget:</span>
-                    <span class="info-value price-highlight">
-                        $<?= number_format((float) $order['budget'] - $order['expect_price'] - $final_payment - $productTotal, 2) ?>
-                    </span>
                 </div>
             </div>
 

@@ -4,7 +4,7 @@ require_once dirname(__DIR__) . '/config.php';
 
 // Only allow logged-in clients
 if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'client') {
-    header('Location: ../login.php?redirect=' . urlencode($current_page));
+    header('Location: ../login.php?redirect=' . urlencode($_SERVER['REQUEST_URI']));
     exit;
 }
 
@@ -19,7 +19,7 @@ $amount = isset($_GET['amount']) ? floatval($_GET['amount']) : 0;
 // Load order and ensure ownership
 $sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.cost, o.designid, o.deposit, o.final_payment,
                d.expect_price as design_price, d.tag, 
-               c.clientid, c.cname, c.payment_method
+               c.clientid, c.cname, c.payment_method, c.budget
         FROM `Order` o
         LEFT JOIN `Design` d ON o.designid = d.designid
         LEFT JOIN `Client` c ON o.clientid = c.clientid
@@ -36,6 +36,7 @@ if (!$order) {
 // Get values
 $final_payment = isset($order['final_payment']) ? floatval($order['final_payment']) : 0;
 $design_deposit = isset($order['design_price']) ? (float)$order['design_price'] : 0.0;
+$current_budget = isset($order['budget']) ? floatval($order['budget']) : 0;
 
 // Gather references total
 $refs_total = 0.0;
@@ -84,16 +85,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     
     if (isset($_POST['proceed_pay'])) {
-        $_SESSION['deposit_paid_' . $orderid] = true;
-        // Update order deposit field
-        $u_sql = "UPDATE `Order` SET deposit = ? WHERE orderid = ? AND clientid = ?";
-        $u_stmt = mysqli_prepare($mysqli, $u_sql);
-        mysqli_stmt_bind_param($u_stmt, "dii", $amount, $orderid, $client_id);
-        mysqli_stmt_execute($u_stmt);
-        mysqli_stmt_close($u_stmt);
-        // 停留在当前页面，显示成功消息
-        header('Location: payment_deposit.php?orderid=' . $orderid . '&amount=' . $amount . '&success=1');
-        exit;
+        // Begin transaction
+        mysqli_begin_transaction($mysqli);
+        
+        try {
+            // Update order deposit field
+            $u_sql = "UPDATE `Order` SET deposit = ? WHERE orderid = ? AND clientid = ?";
+            $u_stmt = mysqli_prepare($mysqli, $u_sql);
+            mysqli_stmt_bind_param($u_stmt, "dii", $amount, $orderid, $client_id);
+            mysqli_stmt_execute($u_stmt);
+            mysqli_stmt_close($u_stmt);
+            
+            // Deduct from client budget
+            $new_budget = $current_budget - $amount;
+            $b_sql = "UPDATE Client SET budget = ? WHERE clientid = ?";
+            $b_stmt = mysqli_prepare($mysqli, $b_sql);
+            mysqli_stmt_bind_param($b_stmt, "di", $new_budget, $client_id);
+            mysqli_stmt_execute($b_stmt);
+            mysqli_stmt_close($b_stmt);
+            
+            // Update session budget
+            $_SESSION['user']['budget'] = $new_budget;
+            
+            mysqli_commit($mysqli);
+            
+            $_SESSION['deposit_paid_' . $orderid] = true;
+            header('Location: payment_deposit.php?orderid=' . $orderid . '&amount=' . $amount . '&success=1');
+            exit;
+            
+        } catch (Exception $e) {
+            mysqli_rollback($mysqli);
+            error_log("Payment deposit error: " . $e->getMessage());
+            die("Payment processing failed. Please try again.");
+        }
     }
 }
 
@@ -148,6 +172,12 @@ $current_step = 1;
         }
         .alert-message {
             margin-top: 1rem;
+        }
+        .budget-info {
+            background: #e3f2fd;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
         }
         
         /* Progress Steps */
@@ -261,10 +291,23 @@ $current_step = 1;
                 
                 <h4>Payment for Order #<?php echo $orderid; ?></h4>
                 
+                <!-- Budget Info -->
+                <div class="budget-info">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span><i class="fas fa-wallet me-2"></i>Your Current Budget:</span>
+                        <strong class="text-primary">HK$<?php echo number_format($current_budget, 2); ?></strong>
+                    </div>
+                    <?php if ($amount > $current_budget): ?>
+                        <div class="alert alert-danger mt-2 mb-0">
+                            <i class="fas fa-exclamation-triangle me-2"></i>Insufficient budget! You need HK$<?php echo number_format($amount - $current_budget, 2); ?> more.
+                        </div>
+                    <?php endif; ?>
+                </div>
+                
                 <!-- 成功消息 -->
                 <?php if (isset($_GET['success'])): ?>
                     <div class="alert alert-success alert-message">
-                        <i class="fas fa-check-circle me-2"></i>Deposit paid successfully!
+                        <i class="fas fa-check-circle me-2"></i>Deposit paid successfully! HK$<?php echo number_format($amount, 2); ?> deducted from your budget.
                     </div>
                 <?php endif; ?>
                 
@@ -362,7 +405,7 @@ $current_step = 1;
                     
                     <?php if ($deposit_paid): ?>
                         <div class="alert alert-success mt-3">
-                            <i class="fas fa-check-circle me-2"></i>Deposit paid successfully!
+                            <i class="fas fa-check-circle me-2"></i>Deposit paid successfully! HK$<?php echo number_format($amount, 2); ?> deducted from your budget.
                         </div>
                     <?php endif; ?>
                 </div>
@@ -388,8 +431,12 @@ $current_step = 1;
                                 <button type="button" class="btn btn-success" disabled>
                                     <i class="fas fa-check-circle me-1"></i>Deposit Paid
                                 </button>
+                            <?php elseif ($amount > $current_budget): ?>
+                                <button type="button" class="btn btn-warning" disabled title="Insufficient budget">
+                                    <i class="fas fa-exclamation-triangle me-1"></i>Insufficient Budget
+                                </button>
                             <?php else: ?>
-                                <button type="submit" name="proceed_pay" class="btn btn-warning">
+                                <button type="submit" name="proceed_pay" class="btn btn-warning" onclick="return confirm('Pay HK$<?php echo number_format($amount, 2); ?> from your budget? Your remaining budget will be HK$<?php echo number_format($current_budget - $amount, 2); ?>');">
                                     <i class="fas fa-credit-card me-1"></i>
                                     Pay Deposit HK$<?php echo number_format($amount, 2); ?>
                                 </button>
