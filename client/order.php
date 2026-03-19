@@ -277,11 +277,83 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $total_amount = $first_design_fee + $deposit;
 
     if (!$error) {
-        // Persist per-order budget and deposit; cost left NULL until later updates
-        $stmt = $mysqli->prepare("INSERT INTO `Order` (odate, clientid, budget, deposit, cost, gross_floor_area, Requirements, designid, ostatus) VALUES (NOW(), ?, ?, ?, NULL, ?, ?, ?, 'waiting confirm')");
-        $stmt->bind_param("idddsi", $clientId, $budget, $deposit, $gfa, $requirements, $designid);
+        // Calculate OrderPayment breakdown based on budget (total_cost)
+        // Formula: Design 10% (d5% m5%), material 45%, contractor 30%, inspector 5%, commission 10%
+        $total_cost = $budget;
+        $design_fee_designer_1st = $total_cost * 0.025;  // 2.5%
+        $design_fee_designer_2nd = $total_cost * 0.025;  // 2.5%
+        $design_fee_manager_1st = $total_cost * 0.025;   // 2.5%
+        $design_fee_manager_2nd = $total_cost * 0.025;   // 2.5%
+        $design_deposit = 2000.00;                        // Fixed deposit
+        $commission_1st = $total_cost * 0.05;            // 5% (from design phase)
+        
+        $construction_main_price = $total_cost * 0.90;   // 90% of total goes to construction
+        $construction_deposit = $construction_main_price * 0.20;  // 20% of main price
+        $materials_cost = $total_cost * 0.45;            // 45% of total
+        $inspection_fee = $total_cost * 0.05;            // 5% of total
+        $contractor_fee = $total_cost * 0.30;            // 30% of total
+        $commission_final = $total_cost * 0.10;          // 10% (from construction phase)
+        
+        $total_design_payment = $design_fee_designer_1st + $design_fee_designer_2nd + 
+                                $design_fee_manager_1st + $design_fee_manager_2nd + 
+                                $design_deposit + $commission_1st;
+        $total_construction_payment = $construction_deposit + $materials_cost + 
+                                      $inspection_fee + $contractor_fee + $commission_final;
+        $total_amount_due = $total_design_payment + $total_construction_payment;
+        
+        // Create OrderPayment record first
+        $insPayment = $mysqli->prepare("INSERT INTO OrderPayment (orderid, total_cost, design_fee_designer_1st, design_fee_designer_2nd, design_fee_manager_1st, design_fee_manager_2nd, design_deposit, commission_1st, construction_main_price, construction_deposit, materials_cost, inspection_fee, contractor_fee, commission_final, total_design_payment, total_construction_payment, total_amount_due, total_amount_paid, payment_status) VALUES (0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0.00, 'pending')");
+        
+        $paymentId = null;
+        if ($insPayment) {
+            $insPayment->bind_param(
+                "ddddddddddddddd",
+                $total_cost,
+                $design_fee_designer_1st,
+                $design_fee_designer_2nd,
+                $design_fee_manager_1st,
+                $design_fee_manager_2nd,
+                $design_deposit,
+                $commission_1st,
+                $construction_main_price,
+                $construction_deposit,
+                $materials_cost,
+                $inspection_fee,
+                $contractor_fee,
+                $commission_final,
+                $total_design_payment,
+                $total_construction_payment,
+                $total_amount_due
+            );
+            if ($insPayment->execute()) {
+                $paymentId = $insPayment->insert_id;
+            }
+            $insPayment->close();
+        }
+        
+        // Check if OrderPayment was created successfully
+        if (!$paymentId) {
+            $error = 'Failed to create payment record. Please try again.';
+        } else {
+            // Now insert Order with payment_id linked
+            $stmt = $mysqli->prepare("INSERT INTO `Order` (odate, clientid, budget, deposit, payment_id, cost, gross_floor_area, Requirements, designid, ostatus) VALUES (NOW(), ?, ?, ?, ?, NULL, ?, ?, ?, 'waiting confirm')");
+        }
+        
+        if (!$error && isset($stmt)) {
+        $stmt->bind_param("iddiidsi", $clientId, $budget, $deposit, $paymentId, $gfa, $requirements, $designid);
         if ($stmt && $stmt->execute()) {
             $orderId = $stmt->insert_id;
+            
+            // Update OrderPayment with the correct orderid
+            if ($paymentId) {
+                $updPayment = $mysqli->prepare("UPDATE OrderPayment SET orderid = ? WHERE payment_id = ?");
+                if ($updPayment) {
+                    $updPayment->bind_param("ii", $orderId, $paymentId);
+                    $updPayment->execute();
+                    $updPayment->close();
+                }
+            }
+            
             // If product references exist, insert them into OrderReference table so they persist with the order
             if (!empty($product_refs) && $orderId) {
                 $insRef = $mysqli->prepare('INSERT INTO OrderReference (orderid, productid, added_by_type, added_by_id) VALUES (?,?,?,?)');
@@ -446,6 +518,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         } else {
             $error = 'Failed to create order: ' . $stmt->error;
+            }
         }
     }
 }
