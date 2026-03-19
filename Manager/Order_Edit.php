@@ -317,7 +317,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             
             $est_completion = $schedule_data['OrderFinishDate'] ?? date('Y-m-d', strtotime('+30 days'));
 
-            // Insert into workerallocation instead of updating Order table
+            // Insert into workerallocation
             $insert_alloc_sql = "INSERT INTO workerallocation (orderid, workerid, managerid, allocation_date, estimated_completion, estimated_hours, status) 
                                 VALUES (?, ?, ?, NOW(), ?, 40.0, 'Assigned')";
             $insert_alloc_stmt = mysqli_prepare($mysqli, $insert_alloc_sql);
@@ -330,7 +330,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 exit();
             }
         } else {
-            $error_message = "No available workers at the moment.";
+            $error_message = "No available constructors at the moment.";
         }
     }
 
@@ -1720,9 +1720,10 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                             <div class="card-body">
                                 <?php
                                 // Check if constructor is already assigned via workerallocation
-                                $constructor_sql = "SELECT wa.workerid, w.name, w.phone 
+                                $constructor_sql = "SELECT wa.workerid, s.sname, s.stel, s.semail 
                                                    FROM workerallocation wa 
                                                    JOIN Worker w ON wa.workerid = w.workerid 
+                                                   JOIN Supplier s ON w.supplierid = s.supplierid
                                                    WHERE wa.orderid = ? AND wa.status != 'Cancelled' 
                                                    LIMIT 1";
                                 $constructor_stmt = mysqli_prepare($mysqli, $constructor_sql);
@@ -1736,8 +1737,8 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                     $cons_info = $constructor_row;
                                 ?>
                                     <div class="alert alert-info mb-3">
-                                        <strong>Constructor Assigned:</strong> <?php echo htmlspecialchars($cons_info['name'] ?? 'Unknown'); ?>
-                                        <br><small>Contact: <?php echo htmlspecialchars($cons_info['phone'] ?? '—'); ?></small>
+                                        <strong>Constructor Assigned:</strong> <?php echo htmlspecialchars($cons_info['sname'] ?? 'Unknown'); ?>
+                                        <br><small>Contact: <?php echo htmlspecialchars($cons_info['stel'] ?? '—'); ?> | <?php echo htmlspecialchars($cons_info['semail'] ?? '—'); ?></small>
                                     </div>
                                 <?php else: ?>
                                     <form method="post" class="mb-0">
