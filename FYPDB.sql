@@ -174,10 +174,10 @@ CREATE TABLE `Design` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 INSERT INTO `Design` (`designid`,`designName`,`expect_price`,`description`,`tag`,`likes`,`designerid`) VALUES
-(1, 'Modern Full House Design', 500 , 'A modern full house design','full house,modern','200',1),
-(2, 'Minimalist Kitchen Remodel Design', 1000, 'A minimalist kitchen remodel design','kitchen remodel,minimalist','20',1),
-(3, 'Cozy Living Room Design', 800, 'A cozy living room design','living room,cozy','50',2),
-(4, 'Elegant Bedroom Design', 1200, 'An elegant bedroom design','bedroom,elegant','75',2);
+(1, 'Modern Full House Design', 1200000 , 'A modern full house design','full house,modern','200',1),
+(2, 'Minimalist Kitchen Remodel Design', 600000, 'A minimalist kitchen remodel design','kitchen remodel,minimalist','20',1),
+(3, 'Cozy Living Room Design', 800000, 'A cozy living room design','living room,cozy','50',2),
+(4, 'Elegant Bedroom Design', 1200000, 'An elegant bedroom design','bedroom,elegant','75',2);
 
 -- Comment_design table
 CREATE TABLE `Comment_design` (
@@ -246,8 +246,8 @@ CREATE TABLE `Order` (
 
 INSERT INTO `Order`
 (`orderid`, `odate`, `clientid`, `budget`, `deposit`, `cost`, `gross_floor_area`, `Requirements`,`designid`,`ostatus`,`designedPicture`) VALUES
-(1, '2025-04-12 17:50:00', 1, NULL, 2000.00, NULL, NULL, 'abc',2,'designing',NULL),
-(2, '2025-05-10 12:00:00', 2, NULL, 2000.00, NULL, NULL, 'abc',1,'complete',NULL);
+(1, '2025-04-12 17:50:00', 1, 500000, 2000.00, NULL, NULL, 'abc',2,'designing',NULL),
+(2, '2025-05-10 12:00:00', 2, 500000, 2000.00, NULL, NULL, 'abc',1,'complete',NULL);
 
 -- OrderReference table to store design references for each order
 CREATE TABLE `OrderReference` (

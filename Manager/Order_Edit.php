@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 session_start();
 require_once dirname(__DIR__) . '/config.php';
 
@@ -271,6 +271,40 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         if (mysqli_stmt_execute($update_req_stmt)) {
             header("Location: Order_Edit.php?id=" . $orderid);
             exit();
+        }
+    }
+
+    if (isset($_POST['auto_assign_constructor'])) {
+        // Get the least busy available constructor/worker
+        $available_constructor_sql = "SELECT workerid, name FROM Worker WHERE status = 'Available' ORDER BY workerid ASC LIMIT 1";
+        $available_constructor_stmt = mysqli_prepare($mysqli, $available_constructor_sql);
+        mysqli_stmt_execute($available_constructor_stmt);
+        $available_constructor_result = mysqli_stmt_get_result($available_constructor_stmt);
+        mysqli_stmt_close($available_constructor_stmt);
+
+        if ($available_constructor_result->num_rows > 0) {
+            $constructor = mysqli_fetch_assoc($available_constructor_result);
+            $constructor_id = $constructor['workerid'];
+
+            // Update the Order with the assigned constructor
+            $update_constructor_sql = "UPDATE `Order` SET constructor_id = ? WHERE orderid = ?";
+            $update_constructor_stmt = mysqli_prepare($mysqli, $update_constructor_sql);
+            mysqli_stmt_bind_param($update_constructor_stmt, "ii", $constructor_id, $orderid);
+
+            if (mysqli_stmt_execute($update_constructor_stmt)) {
+                // Update worker status to Busy
+                $update_worker_sql = "UPDATE Worker SET status = 'Busy' WHERE workerid = ?";
+                $update_worker_stmt = mysqli_prepare($mysqli, $update_worker_sql);
+                mysqli_stmt_bind_param($update_worker_stmt, "i", $constructor_id);
+                mysqli_stmt_execute($update_worker_stmt);
+                mysqli_stmt_close($update_worker_stmt);
+
+                header("Location: Order_Edit.php?id=" . $orderid);
+                exit();
+            }
+        } else {
+            // No available constructor found - show error message
+            $error_message = "No available constructors at the moment. Please check back later.";
         }
     }
 
@@ -1652,6 +1686,51 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                         </div>
                     <?php endif; // end of drafting 2nd proposal section ?>
                     <?php if ($status === 'preparing'): ?>
+                        
+                    <!-- Assign Constructor Card -->
+                    <div class="col-lg-6 mb-4">
+                        <div class="card h-100">
+                            <div class="card-header bg-light">
+                                <h5 class="card-title mb-0">
+                                    <i class="fas fa-user-hard-hat me-2"></i>Assign Constructor
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                <?php
+                                // Check if constructor is already assigned
+                                $constructor_sql = "SELECT constructor_id FROM `Order` WHERE orderid = ?";
+                                $constructor_stmt = mysqli_prepare($mysqli, $constructor_sql);
+                                mysqli_stmt_bind_param($constructor_stmt, "i", $orderid);
+                                mysqli_stmt_execute($constructor_stmt);
+                                $constructor_result = mysqli_stmt_get_result($constructor_stmt);
+                                $constructor_row = mysqli_fetch_assoc($constructor_result);
+                                mysqli_stmt_close($constructor_stmt);
+                                
+                                if (!empty($constructor_row['constructor_id'])):
+                                    // Get constructor info
+                                    $cons_info_sql = "SELECT * FROM Worker WHERE workerid = ?";
+                                    $cons_info_stmt = mysqli_prepare($mysqli, $cons_info_sql);
+                                    mysqli_stmt_bind_param($cons_info_stmt, "i", $constructor_row['constructor_id']);
+                                    mysqli_stmt_execute($cons_info_stmt);
+                                    $cons_info = mysqli_fetch_assoc(mysqli_stmt_get_result($cons_info_stmt));
+                                    mysqli_stmt_close($cons_info_stmt);
+                                ?>
+                                    <div class="alert alert-info mb-3">
+                                        <strong>Constructor Assigned:</strong> <?php echo htmlspecialchars($cons_info['name'] ?? 'Unknown'); ?>
+                                        <br><small>Contact: <?php echo htmlspecialchars($cons_info['phone'] ?? '—'); ?></small>
+                                    </div>
+                                <?php else: ?>
+                                    <form method="post" class="mb-0">
+                                        <input type="hidden" name="auto_assign_constructor" value="1">
+                                        <button type="submit" class="btn btn-primary w-100">
+                                            <i class="fas fa-magic me-2"></i>Auto Assign Constructor
+                                        </button>
+                                    </form>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+                    
                     <!-- Order Reference Table for Placing Order -->
                     <div class="col-12 mb-4">
                         <div class="card h-100">
