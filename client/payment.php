@@ -62,7 +62,10 @@ if ($fees_stmt) {
 
 // Calculate totals
 $order_total = $design_deposit + $refs_total + $fees_total + $final_payment;
-$construction_fee = $order_total * 1.5; // 150% of order total
+// Updated calculations: Construction Fee = Design deposit * 15%, Manager commission = Design deposit * 2%
+$construction_fee = $design_deposit * 0.15; // 15% of design deposit
+$manager_commission = $design_deposit * 0.02; // 2% of design deposit
+$total_to_pay = $construction_fee + $manager_commission;
 
 // Parse saved payment method
 $paymentMethodData = [];
@@ -82,7 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         try {
             // Deduct from client budget
-            $new_budget = $current_budget - $construction_fee;
+            $new_budget = $current_budget - $total_to_pay;
             $b_sql = "UPDATE Client SET budget = ? WHERE clientid = ?";
             $b_stmt = mysqli_prepare($mysqli, $b_sql);
             mysqli_stmt_bind_param($b_stmt, "di", $new_budget, $client_id);
@@ -160,6 +163,11 @@ $current_step = 3;
             font-size: 1.5rem;
             font-weight: 700;
             color: #27ae60;
+        }
+        .commission-amount {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #3498db;
         }
         .alert-message {
             margin-top: 1rem;
@@ -278,9 +286,9 @@ $current_step = 3;
                         <span><i class="fas fa-wallet me-2"></i>Your Current Budget:</span>
                         <strong class="text-primary">HK$<?php echo number_format($current_budget, 2); ?></strong>
                     </div>
-                    <?php if ($construction_fee > $current_budget): ?>
+                    <?php if ($total_to_pay > $current_budget): ?>
                         <div class="alert alert-danger mt-2 mb-0">
-                            <i class="fas fa-exclamation-triangle me-2"></i>Insufficient budget! You need HK$<?php echo number_format($construction_fee - $current_budget, 2); ?> more.
+                            <i class="fas fa-exclamation-triangle me-2"></i>Insufficient budget! You need HK$<?php echo number_format($total_to_pay - $current_budget, 2); ?> more.
                         </div>
                     <?php endif; ?>
                 </div>
@@ -319,14 +327,26 @@ $current_step = 3;
                     </div>
                 </div>
 
-                <!-- Order Summary -->
+                <!-- Order Summary - Matching Budget Overview from Order_View -->
                 <div class="total-section">
-                    <h5 class="mb-3"><i class="fas fa-shopping-cart me-2"></i>Order Summary</h5>
+                    <h5 class="mb-3"><i class="fas fa-chart-pie me-2"></i>Order Summary</h5>
                     
                     <div class="total-item">
-                        <span class="total-label">Design deposit:</span>
-                        <span class="total-value">HK$<?php echo number_format($design_deposit, 2); ?></span>
+                        <span class="total-label">Project Deposit:</span>
+                        <span class="total-value">HK$<?php echo number_format(2000, 2); ?></span>
                     </div>
+                    
+                    <div class="total-item">
+                        <span class="total-label">1st Design Fee (2.5%):</span>
+                        <span class="total-value">HK$<?php echo number_format($design_deposit * 0.025, 2); ?></span>
+                    </div>
+                    
+                    <?php if ($final_payment > 0): ?>
+                    <div class="total-item">
+                        <span class="total-label">2nd Design Fee:</span>
+                        <span class="total-value">HK$<?php echo number_format($final_payment, 2); ?></span>
+                    </div>
+                    <?php endif; ?>
                     
                     <?php if ($refs_total > 0): ?>
                         <div class="total-item">
@@ -341,35 +361,31 @@ $current_step = 3;
                             <span class="total-value">HK$<?php echo number_format($fees_total, 2); ?></span>
                         </div>
                     <?php endif; ?>
-                    
-                    <div class="total-item">
-                        <span class="total-label">Final Design payment:</span>
-                        <span class="total-value">HK$<?php echo number_format($final_payment, 2); ?></span>
-                    </div>
-                    
-                    <div class="total-item" style="border-top: 2px solid #3498db; margin-top: 0.5rem; padding-top: 0.75rem;">
-                        <span class="total-label"><strong>Order Total(Settled):</strong></span>
-                        <span class="total-value"><strong>HK$<?php echo number_format($order_total, 2); ?></strong></span>
+                    <?php $order_total = 2000 + ($design_deposit * 0.025) + $final_payment + $refs_total + $fees_total; ?>
+                    <div class="total-item" style="border-top: 2px solid #10f176; margin-top: 0.5rem; padding-top: 0.75rem;">
+                        <span class="total-label"><strong>Total Deducted:</strong></span>
+                        <span class="total-value text-danger"><strong>- HK$<?php echo number_format($order_total, 2); ?></strong></span>
                     </div>
                 </div>
 
                 <!-- Construction Fee Payment Section -->
                 <div class="payment-section">
-                    <h5 class="mb-3"><i class="fas fa-hard-hat me-2"></i>Construction Fee Payment</h5>
+                    <h5 class="mb-3"><i class="fas fa-hard-hat me-2"></i>Construction Fee & Commission</h5>
+                    
                     
                     <div class="total-item">
-                        <span class="total-label">Order Total(Settled):</span>
-                        <span class="total-value">HK$<?php echo number_format($order_total, 2); ?></span>
-                    </div>
-                    
-                    <div class="total-item">
-                        <span class="total-label">Construction Fee (150%):</span>
+                        <span class="total-label">Construction Fee (15% of Expected Price):</span>
                         <span class="total-value">HK$<?php echo number_format($construction_fee, 2); ?></span>
                     </div>
                     
+                    <div class="total-item">
+                        <span class="total-label">Manager Commission (2% of Expected Price):</span>
+                        <span class="total-value commission-amount">HK$<?php echo number_format($manager_commission, 2); ?></span>
+                    </div>
+                    <?php $total_to_pay = $construction_fee + $manager_commission; ?>
                     <div class="total-item" style="border-top: 2px solid #27ae60; margin-top: 0.5rem; padding-top: 0.75rem;">
                         <span class="total-label"><strong>Total to Pay:</strong></span>
-                        <span class="total-value payment-amount"><strong>HK$<?php echo number_format($construction_fee, 2); ?></strong></span>
+                        <span class="total-value payment-amount"><strong>HK$<?php echo number_format($total_to_pay, 2); ?></strong></span>
                     </div>
                 </div>
 
@@ -390,14 +406,14 @@ $current_step = 3;
                         <a href="order_detail.php?orderid=<?php echo $orderid; ?>" class="btn btn-secondary">Back to Order</a>
                         
                         <?php if (!empty($paymentMethodData) && !empty($paymentMethodData['method'])): ?>
-                            <?php if ($construction_fee > $current_budget): ?>
+                            <?php if ($total_to_pay > $current_budget): ?>
                                 <button type="button" class="btn btn-success" disabled title="Insufficient budget">
                                     <i class="fas fa-exclamation-triangle me-1"></i>Insufficient Budget
                                 </button>
                             <?php else: ?>
-                                <button type="submit" name="proceed_pay" class="btn btn-success" onclick="return confirm('Pay construction fee of HK$<?php echo number_format($construction_fee, 2); ?> from your budget? Your remaining budget will be HK$<?php echo number_format($current_budget - $construction_fee, 2); ?>');">
+                                <button type="submit" name="proceed_pay" class="btn btn-success" onclick="return confirm('Pay construction fee and commission of HK$<?php echo number_format($total_to_pay, 2); ?> from your budget? Your remaining budget will be HK$<?php echo number_format($current_budget - $total_to_pay, 2); ?>');">
                                     <i class="fas fa-credit-card me-1"></i>
-                                    Pay Construction Fee HK$<?php echo number_format($construction_fee, 2); ?>
+                                    Pay HK$<?php echo number_format($total_to_pay, 2); ?>
                                 </button>
                             <?php endif; ?>
                         <?php else: ?>

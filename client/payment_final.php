@@ -61,9 +61,10 @@ if ($fees_stmt) {
     $fees_total = isset($fees_row['sum_fees']) ? (float)$fees_row['sum_fees'] : 0.0;
     mysqli_stmt_close($fees_stmt);
 }
-
+$Project_Deposit = 2000; 
+$Design_Fee1 = $design_deposit*0.025;
 // Calculate totals
-$order_total = $design_deposit + $refs_total + $fees_total + $final_payment;
+$order_total = $design_deposit - $refs_total - $fees_total - $final_payment - $Project_Deposit - $Design_Fee1;
 
 // Parse saved payment method
 $paymentMethodData = [];
@@ -369,8 +370,13 @@ if ($final_paid) $current_step = 3;
                     <h5 class="mb-3"><i class="fas fa-shopping-cart me-2"></i>Order Summary</h5>
                     
                     <div class="total-item">
-                        <span class="total-label">Design deposit:</span>
-                        <span class="total-value">HK$<?php echo number_format($design_deposit, 2); ?></span>
+                        <span class="total-label">Project deposit:</span>
+                        <span class="total-value">HK$<?php echo number_format($Project_Deposit, 2); ?></span>
+                    </div>
+
+                    <div class="total-item">
+                        <span class="total-label">1st Design Fee (designer 2.5%):</span>
+                        <span class="total-value">HK$<?php echo number_format($Design_Fee1, 2); ?></span>
                     </div>
                     
                     <?php if ($refs_total > 0): ?>
@@ -386,9 +392,8 @@ if ($final_paid) $current_step = 3;
                             <span class="total-value">HK$<?php echo number_format($fees_total, 2); ?></span>
                         </div>
                     <?php endif; ?>
-                    
                     <div class="total-item">
-                        <span class="total-label">Final Design payment:</span>
+                        <span class="total-label">2nd Design Fee:</span>
                         <span class="total-value">HK$<?php echo number_format($final_payment, 2); ?></span>
                     </div>
                     

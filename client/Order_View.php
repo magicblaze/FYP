@@ -14,14 +14,16 @@ $client_id = $user['clientid'];
 $orderid = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
 // Verify order exists and belongs to this client
-// --- MODIFIED: Added o.final_payment to the query ---
+// Enhanced query to include more design and order details
 $check_order_sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.cost, o.deposit, o.final_payment,
                c.clientid, c.cname as client_name, c.ctel, c.cemail, c.budget,
                d.designid, d.designName, d.expect_price as design_price, d.tag as design_tag,
-               s.scheduleid, s.OrderFinishDate, s.DesignFinishDate
+               s.scheduleid, s.OrderFinishDate, s.DesignFinishDate,
+               des.dname as designer_name, des.status as designer_status
         FROM `Order` o
         LEFT JOIN `Client` c ON o.clientid = c.clientid
         LEFT JOIN `Design` d ON o.designid = d.designid
+        LEFT JOIN `Designer` des ON d.designerid = des.designerid
         LEFT JOIN `Schedule` s ON o.orderid = s.orderid
         WHERE o.orderid = ? AND o.clientid = ?";
 
@@ -95,11 +97,15 @@ if (!empty($references)) {
     }
 }
 
-$final_total_cost = $design_price + $total_fees + $references_total;
+// Calculate Design Fee (2.5% of design price as shown in Order_Edit)
+$Design_Fee1 = $design_price * 0.025;
+$Project_Deposit = 2000; // Fixed project deposit
 
-// --- Calculate remaining budget ---
-// Remaining budget = Original Budget - Final Design Payment - Total Cost
-$remaining_budget = $original_budget - $final_payment - $final_total_cost;
+$final_total_cost = $Design_Fee1 + $Project_Deposit + $total_fees + $references_total + $final_payment;
+
+// Calculate remaining budget
+$total_deducted = $final_total_cost;
+$remaining_budget = $original_budget;
 
 $status = strtolower($order['ostatus'] ?? 'waiting confirm');
 
@@ -173,6 +179,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             font-size: 1.2rem;
             color: #e74c3c;
         }
+        .designer-info {
+            background: #f0f7ff;
+            border-left: 4px solid #3498db;
+            padding: 0.75rem;
+            border-radius: 6px;
+            margin-top: 0.5rem;
+        }
     </style>
 </head>
 
@@ -199,6 +212,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <label class="fw-bold text-muted small">Client Name</label>
                             <p class="mb-0"><strong><?php echo htmlspecialchars($order["client_name"] ?? 'N/A'); ?></strong></p>
                         </div>
+                        <div class="mb-3">
+                            <label class="fw-bold text-muted small">Client ID</label>
+                            <p class="mb-0"><small>#<?php echo htmlspecialchars($order["clientid"] ?? 'N/A'); ?></small></p>
+                        </div>
                         <?php if (!empty($order["cemail"])): ?>
                             <div class="mb-3">
                                 <label class="fw-bold text-muted small">Email</label>
@@ -213,30 +230,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <?php endif; ?>
                         <hr>
                         
-                        <!-- --- NEW: Budget Information Section --- -->
+                        <!-- Budget Information Section (Enhanced like Order_Edit) -->
                         <div class="budget-info">
                             <h6 class="mb-3"><i class="fas fa-chart-pie me-2"></i>Budget Overview</h6>
                             
                             
                             <div class="budget-item">
-                                <span class="budget-label">Design Deposit:</span>
-                                <span class="budget-value text-info">- HK$<?php echo number_format($design_price, 2); ?></span>
+                                <span class="budget-label">Project Deposit:</span>
+                                <span class="budget-value text-info">- HK$<?php echo number_format($Project_Deposit, 2); ?></span>
                             </div>
                             
                             <div class="budget-item">
-                                <span class="budget-label">Final Design Payment:</span>
-                                <span class="budget-value text-warning">- HK$<?php echo number_format($final_payment, 2); ?></span>
+                                <span class="budget-label">1st Design Fee (2.5%):</span>
+                                <span class="budget-value text-info">- HK$<?php echo number_format($Design_Fee1, 2); ?></span>
                             </div>
+                            
+                            <?php if ($final_payment > 0): ?>
+                            <div class="budget-item">
+                                <span class="budget-label">2nd Design Fee:</span>
+                                <span class="budget-value text-info">- HK$<?php echo number_format($final_payment, 2); ?></span>
+                            </div>
+                            <?php endif; ?>
+
+                            <?php if (!empty($references)): ?>
+                                <?php foreach ($references as $ref): 
+                                    $refPrice = isset($ref['price']) && $ref['price'] !== null ? (float)$ref['price'] : (float)($ref['product_price'] ?? 0);
+                                ?>
+                                <div class="budget-item">
+                                    <span class="budget-label"><?php echo htmlspecialchars($ref['pname']); ?>:</span>
+                                    <span class="budget-value text-info">- HK$<?php echo number_format($refPrice, 2); ?></span>
+                                </div>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+
+                            <?php if (!empty($fees)): ?>
+                                <?php foreach ($fees as $fee): ?>
+                                <div class="budget-item">
+                                    <span class="budget-label"><?php echo htmlspecialchars($fee['fee_name']); ?>:</span>
+                                    <span class="budget-value text-info">- HK$<?php echo number_format($fee['amount'], 2); ?></span>
+                                </div>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
 
                             <div class="budget-item" style="border-top: 2px solid #10f176; margin-top: 0.5rem; padding-top: 0.75rem;">
-                                <span class="budget-label">Total Cost:</span>
-                                <?php $final_total_cost = $design_price + $final_payment; ?>
-                                <span class="budget-value text-danger">- HK$<?php echo number_format($final_total_cost, 2); ?></span>
+                                <span class="budget-label"><strong>Total Deducted:</strong></span>
+                                <span class="budget-value text-danger">- HK$<?php echo number_format($total_deducted, 2); ?></span>
                             </div>
                             
                             <div class="budget-item" style="border-top: 2px solid #3498db; margin-top: 0.5rem; padding-top: 0.75rem;">
                                 <span class="budget-label"><strong>Remaining Budget:</strong></span>
-                               <?php $remaining_budget = $original_budget;?>
                                 <span class="budget-value budget-remaining"><strong>HK$<?php echo number_format($remaining_budget, 2); ?></strong></span>
                             </div>
                             
@@ -247,7 +289,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 </div>
                             <?php endif; ?>
                         </div>
-                        <!-- --- END NEW --- -->
                     </div>
                 </div>
             </div>
@@ -267,14 +308,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <p class="mb-0"><small><?php echo htmlspecialchars($order["designName"] ?? 'N/A'); ?></small></p>
                         </div>
                         
-                        <!-- --- MODIFIED: Changed "Design Price" to "Design deposit" --- -->
+                        <!-- Designer Information (from Order_Edit) -->
+                        <?php if (!empty($order['designer_name'])): ?>
+                        <div class="designer-info mb-3">
+                            <label class="fw-bold text-muted small">Assigned Designer</label>
+                            <p class="mb-1"><?php echo htmlspecialchars($order['designer_name']); ?></p>
+                            <div class="badge <?php echo ($order['designer_status'] ?? 'Available') === 'Available' ? 'bg-success' : 'bg-warning'; ?>">
+                                <?php echo htmlspecialchars($order['designer_status'] ?? 'Available'); ?>
+                            </div>
+                        </div>
+                        <?php endif; ?>
+                        
                         <div class="mb-3">
-                            <label class="fw-bold text-muted small">Design deposit</label>
-                            <p class="mb-0"><strong class="text-info">HK$<?php echo number_format($design_price, 2); ?></strong></p>
-                            <small class="text-muted">Initial payment deducted from budget</small>
+                            <label class="fw-bold text-muted small">Design deposit (2.5%)</label>
+                            <p class="mb-0"><strong class="text-info">HK$<?php echo number_format($Design_Fee1, 2); ?></strong></p>
+                            <small class="text-muted">Based on design price: HK$<?php echo number_format($design_price, 2); ?></small>
                         </div>
                         
-                        <!-- --- NEW: Final Design Payment --- -->
+                        <div class="mb-3">
+                            <label class="fw-bold text-muted small">Project Deposit</label>
+                            <p class="mb-0"><strong class="text-info">HK$<?php echo number_format($Project_Deposit, 2); ?></strong></p>
+                            <small class="text-muted">Fixed project deposit</small>
+                        </div>
+                        
                         <div class="mb-3">
                             <label class="fw-bold text-muted small">Final Design payment</label>
                             <p class="mb-0">
@@ -288,7 +344,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 <small class="text-muted">Not yet set</small>
                             <?php endif; ?>
                         </div>
-                        <!-- --- END NEW --- -->
                         
                         <hr>
                         <div class="mb-0">
@@ -312,7 +367,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                             <li class="d-flex justify-content-between align-items-center mb-1 ps-2">
                                                 <small class="text-truncate" style="max-width: 60%;"
                                                     title="<?php echo htmlspecialchars($ref['pname']); ?>"><?php echo htmlspecialchars($ref['pname']); ?></small>
-                                                <small class="text-success fw-bold">HK$<?php echo number_format($ref['product_price'], 0); ?></small>
+                                                <small class="text-success fw-bold">HK$<?php echo number_format($ref['product_price'] ?? 0, 0); ?></small>
                                             </li>
                                         <?php endforeach; ?>
                                     </ul>
@@ -354,19 +409,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 </span>
                             </p>
                         </div>
+                        
+                        <?php if (!empty($order['OrderFinishDate']) || !empty($order['DesignFinishDate'])): ?>
+                        <div class="mb-3">
+                            <label class="fw-bold text-muted small">Schedule Dates</label>
+                            <?php if (!empty($order['DesignFinishDate'])): ?>
+                                <p class="mb-1"><small>Design Finish: <?php echo date('M d, Y', strtotime($order['DesignFinishDate'])); ?></small></p>
+                            <?php endif; ?>
+                            <?php if (!empty($order['OrderFinishDate'])): ?>
+                                <p class="mb-0"><small>Order Finish: <?php echo date('M d, Y', strtotime($order['OrderFinishDate'])); ?></small></p>
+                            <?php endif; ?>
+                        </div>
+                        <?php endif; ?>
+                        
                         <div class="text-muted mb-0 small">Requirements</div>
                         <?php echo nl2br(htmlspecialchars($order["Requirements"] ?? 'No requirements specified')); ?>
                         <hr>
                         
-                        <!-- --- MODIFIED: Cost Breakdown with all items --- -->
+                        <!-- Cost Breakdown (Enhanced like Order_Edit) -->
                         <div class="mb-0">
                             <label class="fw-bold text-muted small">Cost Breakdown</label>
                             <div class="mb-2">
                                 <ul class="list-unstyled mb-0">
                                     <li class="d-flex justify-content-between">
-                                        <small class="text-muted">Design Deposit</small>
-                                        <strong>HK$<?php echo number_format($design_price, 2); ?></strong>
+                                        <small class="text-muted">Project Deposit</small>
+                                        <strong>HK$<?php echo number_format($Project_Deposit, 2); ?></strong>
                                     </li>
+                                    <li class="d-flex justify-content-between">
+                                        <small class="text-muted">1st Design Fee (2.5%)</small>
+                                        <strong>HK$<?php echo number_format($Design_Fee1, 2); ?></strong>
+                                    </li>
+                                    
+                                    <?php if ($final_payment > 0): ?>
+                                    <li class="d-flex justify-content-between">
+                                        <small class="text-muted">2nd Design Fee</small>
+                                        <strong>HK$<?php echo number_format($final_payment, 2); ?></strong>
+                                    </li>
+                                    <?php endif; ?>
                                     
                                     <?php if (!empty($references)): ?>
                                         <li class="mt-2"><small class="text-muted">Product References</small></li>
@@ -389,28 +468,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                             </li>
                                         <?php endforeach; ?>
                                     <?php endif; ?>
-                                    
-                                    <!-- --- NEW: Final Design Payment in Cost Breakdown --- -->
-                                    <?php if ($final_payment > 0): ?>
-                                        <li class="mt-2 d-flex justify-content-between" style="border-top: 1px dashed #ccc; padding-top: 0.5rem;">
-                                            <small class="fw-bold">Final Design Payment</small>
-                                            <small class="text-warning fw-bold">HK$<?php echo number_format($final_payment, 2); ?></small>
-                                        </li>
-                                    <?php endif; ?>
-                                    <!-- --- END NEW --- -->
                                 </ul>
                             </div>
                             <label class="fw-bold text-muted small">Total Cost</label>
                             <p class="mb-0"><strong class="text-danger fs-5">HK$<?php echo number_format($final_total_cost, 2); ?></strong></p>
-                            
-                            <!-- --- NEW: Total including Final Design Payment --- -->
-                            <?php if ($final_payment > 0): ?>
-                                <p class="mb-0 mt-2"><small class="text-muted">Total with Final Payment: </small>
-                                <strong class="text-danger">HK$<?php echo number_format($final_total_cost + $final_payment, 2); ?></strong></p>
-                            <?php endif; ?>
-                            <!-- --- END NEW --- -->
                         </div>
-                        <!-- --- END MODIFIED --- -->
                     </div>
                 </div>
             </div>
