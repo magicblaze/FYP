@@ -392,7 +392,7 @@ if (!empty($_GET['msg'])) {
                                     <i class="fas fa-arrow-right me-1"></i>View Details</a>
                             <?php endif; ?>
 
-                            <?php if ($statusLower === 'waiting 2nd design phase payment'): ?>
+                            <?php if ($statusLower === 'drafting 2nd proposal'): ?>
                                 <a href="payment2.php?orderid=<?= (int) $order['orderid'] ?>&amount=<?= $final_payment_amount ?>" class="view-details-btn btn-final"
                                     onclick="event.stopPropagation();">
                                     <i class="fas fa-credit-card me-1"></i>Proceed to 2nd Payment
@@ -406,6 +406,11 @@ if (!empty($_GET['msg'])) {
                                 <a href="payment_construction.php?orderid=<?= (int) $order['orderid'] ?>" class="view-details-btn"
                                     onclick="event.stopPropagation();">
                                     <i class="fas fa-hard-hat me-1"></i>Proceed to Construction Payment
+                                </a>
+                            <?php elseif ($statusLower === 'preparing'): ?>
+                                <a href="payment_construction2.php?orderid=<?= (int) $order['orderid'] ?>" class="view-details-btn"
+                                    onclick="event.stopPropagation();">
+                                    <i class="fas fa-hard-hat me-1"></i>Proceed to Final Construction Payment
                                 </a>
                             <?php endif; ?>
                         </div>

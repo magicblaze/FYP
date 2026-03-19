@@ -41,14 +41,10 @@ if (!$order) {
 }
 
 // Get payment values from OrderPayment
-$construction_deposit = isset($order['construction_deposit']) ? floatval($order['construction_deposit']) : 0;
-$materials_cost = isset($order['materials_cost']) ? floatval($order['materials_cost']) : 0;
-$design_fee_manager_1st = isset($order['design_fee_manager_1st']) ? floatval($order['design_fee_manager_1st']) : 0;
-$design_fee_designer_2nd = isset($order['design_fee_designer_2nd']) ? floatval($order['design_fee_designer_2nd']) : 0;
-$design_fee_manager_2nd = isset($order['design_fee_manager_2nd']) ? floatval($order['design_fee_manager_2nd']) : 0;
-$commission_1st = isset($order['commission_1st']) ? floatval($order['commission_1st']) : 0;
-$commission_final = isset($order['commission_final']) ? floatval($order['commission_final']) : 0;
 $construction_main_price = isset($order['construction_main_price']) ? floatval($order['construction_main_price']) : 0;
+$construction_deposit = isset($order['construction_deposit']) ? floatval($order['construction_deposit']) : 0;
+$commission_final = isset($order['commission_final']) ? floatval($order['commission_final']) : 0;
+$materials_cost = isset($order['materials_cost']) ? floatval($order['materials_cost']) : 0;
 $inspection_fee = isset($order['inspection_fee']) ? floatval($order['inspection_fee']) : 0;
 $contractor_fee = isset($order['contractor_fee']) ? floatval($order['contractor_fee']) : 0;
 $total_amount_due = isset($order['total_amount_due']) ? floatval($order['total_amount_due']) : 0;
@@ -56,8 +52,9 @@ $total_amount_paid = isset($order['total_amount_paid']) ? floatval($order['total
 $design_price = isset($order['design_price']) ? floatval($order['design_price']) : 0;
 $current_budget = isset($order['budget']) ? floatval($order['budget']) : 0;
 
-// Calculate total for this payment stage (Construction Deposit + Materials Cost)
-$total_to_pay = $construction_deposit + $materials_cost;
+// Calculate final construction payment = (construction_main_price - construction_deposit) + commission_final
+$remaining_construction = $construction_main_price - $construction_deposit;
+$total_to_pay = $remaining_construction + $commission_final;
 
 // Parse saved payment method
 $paymentMethodData = [];
@@ -65,8 +62,8 @@ if (!empty($order['payment_method'])) {
     $paymentMethodData = json_decode($order['payment_method'], true) ?? [];
 }
 
-// Payment status - from session or URL
-$payment_success = isset($_GET['success']) ? true : (isset($_SESSION['payment_success_' . $orderid]) ? $_SESSION['payment_success_' . $orderid] : false);
+// Payment status - from session or URL (使用独立的session key)
+$payment_success = isset($_GET['success']) ? true : (isset($_SESSION['payment_final_construction_success_' . $orderid]) ? $_SESSION['payment_final_construction_success_' . $orderid] : false);
 $payment_rejected = isset($_GET['rejected']) ? true : (isset($_SESSION['payment_rejected_' . $orderid]) ? $_SESSION['payment_rejected_' . $orderid] : false);
 
 // Handle payment actions
@@ -74,7 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['reject_payment'])) {
         $_SESSION['payment_rejected_' . $orderid] = true;
         $payment_rejected = true;
-        header('Location: payment_construction.php?orderid=' . $orderid . '&rejected=1');
+        header('Location: payment_construction2.php?orderid=' . $orderid . '&rejected=1');
         exit;
     }
     
@@ -105,8 +102,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             mysqli_stmt_execute($b_stmt);
             mysqli_stmt_close($b_stmt);
             
-            // Update order status to preparing (like original payment_construction.php)
-            $u_sql = "UPDATE `Order` SET ostatus = 'preparing' WHERE orderid = ? AND clientid = ?";
+            // Update order status to complete
+            $u_sql = "UPDATE `Order` SET ostatus = 'complete' WHERE orderid = ? AND clientid = ?";
             $u_stmt = mysqli_prepare($mysqli, $u_sql);
             mysqli_stmt_bind_param($u_stmt, "ii", $orderid, $client_id);
             mysqli_stmt_execute($u_stmt);
@@ -117,14 +114,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             mysqli_commit($mysqli);
             
-            // Set session flag for successful payment
-            $payment_success = isset($_GET['success']) ? true : (isset($_SESSION['payment_construction_success_' . $orderid]) ? $_SESSION['payment_construction_success_' . $orderid] : false);
-
-            // 修改设置成功时的代码
-            $_SESSION['payment_construction_success_' . $orderid] = true;
+            // Set session flag for successful payment (使用独立的session key)
+            $_SESSION['payment_final_construction_success_' . $orderid] = true;
             
             // Redirect to same page with success parameter
-            header('Location: payment_construction.php?orderid=' . $orderid . '&amount=' . $total_to_pay . '&success=1');
+            header('Location: payment_construction2.php?orderid=' . $orderid . '&amount=' . $total_to_pay . '&success=1');
             exit;
             
         } catch (Exception $e) {
@@ -135,14 +129,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$stage_title = 'Construction Deposit';
+$stage_title = 'Final Construction Payment';
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>Construction Deposit - Order #<?php echo $orderid; ?></title>
+    <title>Final Construction Payment - Order #<?php echo $orderid; ?></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="../css/styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -300,7 +294,7 @@ $stage_title = 'Construction Deposit';
         <div class="card">
             <div class="card-body">
                 <div class="payment-type-badge">
-                    <i class="fas fa-hard-hat me-1"></i> Construction Deposit
+                    <i class="fas fa-check-circle me-1"></i> Final Construction Payment
                 </div>
                 
                 <h4>Payment for Order #<?php echo $orderid; ?></h4>
@@ -323,7 +317,7 @@ $stage_title = 'Construction Deposit';
                 <?php if (isset($_GET['success'])): ?>
                     <div class="alert alert-success alert-message">
                         <i class="fas fa-check-circle me-2"></i>
-                        Construction deposit completed successfully! HK$<?php echo number_format($total_to_pay, 2); ?> deducted from your budget.
+                        Final construction payment completed successfully! HK$<?php echo number_format($total_to_pay, 2); ?> deducted from your budget.
                     </div>
                 <?php endif; ?>
                 
@@ -364,7 +358,16 @@ $stage_title = 'Construction Deposit';
                     </div>
                     <div class="step-connector completed"></div>
                     
-                    <!-- Stage 4: Const. Deposit - Current (Yellow) -->
+                    <!-- Stage 4: Const. Deposit - Completed -->
+                    <div class="step completed">
+                        <div class="step-circle">
+                            <i class="fas fa-check"></i>
+                        </div>
+                        <span class="step-label">Const. Deposit</span>
+                    </div>
+                    <div class="step-connector completed"></div>
+                    
+                    <!-- Stage 5: Final Const. - Current (Yellow) -->
                     <div class="step <?php 
                         if ($payment_rejected) echo 'rejected';
                         elseif ($payment_success) echo 'completed';
@@ -376,19 +379,12 @@ $stage_title = 'Construction Deposit';
                             <?php elseif ($payment_rejected): ?>
                                 <i class="fas fa-times"></i>
                             <?php else: ?>
-                                4
+                                5
                             <?php endif; ?>
                         </div>
-                        <span class="step-label">Const. Deposit</span>
-                    </div>
-                    <div class="step-connector <?php echo ($payment_success) ? 'completed' : ''; ?>"></div>
-                    
-                    <!-- Stage 5: Final Const. - Future -->
-                    <div class="step future">
-                        <div class="step-circle">5</div>
                         <span class="step-label">Final Const.</span>
                     </div>
-                    <div class="step-connector"></div>
+                    <div class="step-connector <?php echo ($payment_success) ? 'completed' : ''; ?>"></div>
                     
                     <!-- Stage 6: Complete - Future -->
                     <div class="step future">
@@ -399,7 +395,7 @@ $stage_title = 'Construction Deposit';
 
                 <!-- Payment Section -->
                 <div class="payment-section">
-                    <h5 class="mb-3"><i class="fas fa-hard-hat me-2"></i>Construction Deposit</h5>
+                    <h5 class="mb-3"><i class="fas fa-hard-hat me-2"></i>Final Construction Payment</h5>
                     
                     <div class="payment-detail">
                         <div class="payment-detail-item">
@@ -410,17 +406,25 @@ $stage_title = 'Construction Deposit';
                         <!-- Show breakdown of fees -->
                         <div class="fee-breakdown">
                             <div class="d-flex justify-content-between mb-1">
-                                <span>Construction Deposit:</span>
-                                <span>HK$<?php echo number_format($construction_deposit, 2); ?></span>
+                                <span>Construction Main Price:</span>
+                                <span>HK$<?php echo number_format($construction_main_price, 2); ?></span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-1 text-info">
+                                <span>Less: Construction Deposit (paid):</span>
+                                <span>- HK$<?php echo number_format($construction_deposit, 2); ?></span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-1">
+                                <span>Remaining Construction:</span>
+                                <span>HK$<?php echo number_format($remaining_construction, 2); ?></span>
                             </div>
                             <div class="d-flex justify-content-between">
-                                <span>Materials Cost:</span>
-                                <span>HK$<?php echo number_format($materials_cost, 2); ?></span>
+                                <span>Final Commission:</span>
+                                <span>HK$<?php echo number_format($commission_final, 2); ?></span>
                             </div>
                         </div>
                         
                         <div class="payment-detail-item" style="border-top: 2px solid #27ae60; margin-top: 0.5rem; padding-top: 1rem;">
-                            <span class="fw-bold">Total Construction Deposit:</span>
+                            <span class="fw-bold">Total Final Construction Payment:</span>
                             <span class="fw-bold">HK$<?php echo number_format($total_to_pay, 2); ?></span>
                         </div>
                         
@@ -434,7 +438,7 @@ $stage_title = 'Construction Deposit';
                     <?php if ($payment_success): ?>
                         <div class="alert alert-success mt-3">
                             <i class="fas fa-check-circle me-2"></i>
-                            Construction deposit completed successfully! HK$<?php echo number_format($total_to_pay, 2); ?> deducted from your budget.
+                            Final construction payment completed successfully! HK$<?php echo number_format($total_to_pay, 2); ?> deducted from your budget.
                         </div>
                     <?php endif; ?>
                 </div>
@@ -454,9 +458,10 @@ $stage_title = 'Construction Deposit';
                 <form method="post">
                     <div class="d-flex gap-2">
                         <a href="order_history.php" class="btn btn-secondary">Back to Order History</a>
+                        
                         <?php if (!empty($paymentMethodData) && !empty($paymentMethodData['method'])): ?>
                             <?php if ($payment_success): ?>
-                                
+                                <!-- Payment成功后禁用按钮 -->
                                 <button type="button" class="btn btn-success" disabled>
                                     <i class="fas fa-check-circle me-1"></i>Payment Completed
                                 </button>

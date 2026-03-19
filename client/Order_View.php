@@ -14,17 +14,19 @@ $client_id = $user['clientid'];
 $orderid = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
 // Verify order exists and belongs to this client
-// Enhanced query to include more design and order details
 $check_order_sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.cost, o.deposit, o.final_payment,
                c.clientid, c.cname as client_name, c.ctel, c.cemail, c.budget,
                d.designid, d.designName, d.expect_price as design_price, d.tag as design_tag,
                s.scheduleid, s.OrderFinishDate, s.DesignFinishDate,
-               des.dname as designer_name, des.status as designer_status
+               des.dname as designer_name, des.status as designer_status,
+               op.total_design_payment, op.total_construction_payment, 
+               op.commission_1st, op.commission_final, op.total_amount_due
         FROM `Order` o
         LEFT JOIN `Client` c ON o.clientid = c.clientid
         LEFT JOIN `Design` d ON o.designid = d.designid
         LEFT JOIN `Designer` des ON d.designerid = des.designerid
         LEFT JOIN `Schedule` s ON o.orderid = s.orderid
+        LEFT JOIN `OrderPayment` op ON o.payment_id = op.payment_id
         WHERE o.orderid = ? AND o.clientid = ?";
 
 $stmt = mysqli_prepare($mysqli, $check_order_sql);
@@ -36,6 +38,17 @@ $order = mysqli_fetch_assoc($result);
 if (!$order) {
     die("Order not found or you don't have permission to view this order.");
 }
+
+// Get payment values
+$payment = [
+    'total_design_payment' => isset($order['total_design_payment']) ? (float) $order['total_design_payment'] : 0.0,
+    'total_construction_payment' => isset($order['total_construction_payment']) ? (float) $order['total_construction_payment'] : 0.0,
+    'commission_1st' => isset($order['commission_1st']) ? (float) $order['commission_1st'] : 0.0,
+    'commission_final' => isset($order['commission_final']) ? (float) $order['commission_final'] : 0.0,
+    'total_amount_due' => isset($order['total_amount_due']) ? (float) $order['total_amount_due'] : 0.0,
+];
+
+$commission_total = $payment['commission_1st'] + $payment['commission_final'];
 
 // Fetch order references
 $ref_sql = "SELECT 
@@ -99,30 +112,23 @@ if (!empty($references)) {
 
 $final_payment_amount = $final_payment + $references_total;
 
-// Calculate Design Fee (2.5% of design price as shown in Order_Edit)
+// Calculate Design Fee (2.5% of design price)
 $Design_Fee1 = $design_price * 0.025;
 $Project_Deposit = 2000; // Fixed project deposit
 
-$final_total_cost = $Design_Fee1 + $Project_Deposit + $total_fees + $references_total + $final_payment;
+$final_total_cost = $payment['total_amount_due'] + $total_fees + $references_total;
 
 // Calculate remaining budget
 $total_deducted = $final_total_cost;
-$remaining_budget = $original_budget;
+$remaining_budget = $original_budget - $total_deducted;
 
 $status = strtolower($order['ostatus'] ?? 'waiting confirm');
 
 // Handle client actions: confirm proposal or request revision
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_POST['client_confirm_proposal'])) {
-        // Set to waiting design phase payment and redirect to order detail/payment page
-        $next_status = 'waiting design phase payment';
-        $u_sql = "UPDATE `Order` SET ostatus = ? WHERE orderid = ? AND clientid = ?";
-        $u_stmt = mysqli_prepare($mysqli, $u_sql);
-        mysqli_stmt_bind_param($u_stmt, "sii", $next_status, $orderid, $client_id);
-        mysqli_stmt_execute($u_stmt);
-        mysqli_stmt_close($u_stmt);
-        header('Location: ../client/payment.php?orderid=' . $orderid);
-        exit;
+    if (isset($_POST['client_confirm_proposal'])) {  
+    header('Location: ../client/payment3.php?proposal_confirmed=1&orderid=' . $orderid);
+    exit;
     }
 
     if (isset($_POST['client_request_revision'])) {
@@ -187,6 +193,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             padding: 0.75rem;
             border-radius: 6px;
             margin-top: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        .card-header {
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+        }
+        .card-title {
+            color: #495057;
+            font-size: 1.1rem;
+        }
+        .status-badge {
+            font-size: 0.85rem;
+            padding: 0.35rem 0.65rem;
         }
     </style>
 </head>
@@ -204,15 +223,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
 
         <div class="row mb-4">
+            <!-- Customer Detail Card -->
             <div class="col-lg-4 mb-3 mb-lg-0">
                 <div class="card h-100">
                     <div class="card-header">
-                        <h5 class="card-title mb-0"><i class="fas fa-user me-2"></i>Customer</h5>
+                        <h5 class="card-title mb-0">
+                            <i class="fas fa-user me-2"></i>Customer Detail
+                        </h5>
                     </div>
                     <div class="card-body">
                         <div class="mb-3">
                             <label class="fw-bold text-muted small">Client Name</label>
-                            <p class="mb-0"><strong><?php echo htmlspecialchars($order["client_name"] ?? 'N/A'); ?></strong></p>
+                            <p class="mb-0">
+                                <strong><?php echo htmlspecialchars($order["client_name"] ?? 'N/A'); ?></strong>
+                            </p>
                         </div>
                         <div class="mb-3">
                             <label class="fw-bold text-muted small">Client ID</label>
@@ -232,28 +256,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <?php endif; ?>
                         <hr>
                         
-                        <!-- Budget Information Section (Enhanced like Order_Edit) -->
+                        <!-- Budget Information Section -->
                         <div class="budget-info">
                             <h6 class="mb-3"><i class="fas fa-chart-pie me-2"></i>Budget Overview</h6>
-                            
-                            
                             <div class="budget-item">
-                                <span class="budget-label">Project Deposit:</span>
-                                <span class="budget-value text-info">- HK$<?php echo number_format($Project_Deposit, 2); ?></span>
+                                <span class="budget-label">Design Cost:</span>
+                                <span class="budget-value text-info">- HK$<?php echo number_format($payment['total_design_payment'], 2); ?></span>
                             </div>
                             
                             <div class="budget-item">
-                                <span class="budget-label">1st Design Fee (2.5%):</span>
-                                <span class="budget-value text-info">- HK$<?php echo number_format($Design_Fee1, 2); ?></span>
+                                <span class="budget-label">Construction Cost:</span>
+                                <span class="budget-value text-info">- HK$<?php echo number_format($payment['total_construction_payment'], 2); ?></span>
                             </div>
                             
-                            <?php if ($final_payment > 0): ?>
                             <div class="budget-item">
-                                <span class="budget-label">2nd Design Fee:</span>
-                                <span class="budget-value text-info">- HK$<?php echo number_format($final_payment, 2); ?></span>
+                                <span class="budget-label">Commission:</span>
+                                <span class="budget-value text-info">- HK$<?php echo number_format($commission_total, 2); ?></span>
                             </div>
-                            <?php endif; ?>
 
+                            
                             <?php if (!empty($references)): ?>
                                 <?php foreach ($references as $ref): 
                                     $refPrice = isset($ref['price']) && $ref['price'] !== null ? (float)$ref['price'] : (float)($ref['product_price'] ?? 0);
@@ -295,10 +316,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
             </div>
 
+            <!-- Design Detail Card -->
             <div class="col-lg-4 mb-3 mb-lg-0">
                 <div class="card h-100">
                     <div class="card-header">
-                        <h5 class="card-title mb-0"><i class="fas fa-pencil-alt me-2"></i>Design</h5>
+                        <h5 class="card-title mb-0">
+                            <i class="fas fa-pencil-alt me-2"></i>Design Detail
+                        </h5>
                     </div>
                     <div class="card-body">
                         <div class="mb-3">
@@ -307,12 +331,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </div>
                         <div class="mb-3">
                             <label class="fw-bold text-muted small">Design Name</label>
-                            <p class="mb-0"><small><?php echo htmlspecialchars($order["designName"] ?? 'N/A'); ?></small></p>
+                            <p class="mb-0">
+                                <small><?php echo htmlspecialchars($order["designName"] ?? 'N/A'); ?></small>
+                            </p>
                         </div>
                         
-                        <!-- Designer Information (from Order_Edit) -->
+                        <!-- Designer Information -->
                         <?php if (!empty($order['designer_name'])): ?>
-                        <div class="designer-info mb-3">
+                        <div class="designer-info">
                             <label class="fw-bold text-muted small">Assigned Designer</label>
                             <p class="mb-1"><?php echo htmlspecialchars($order['designer_name']); ?></p>
                             <div class="badge <?php echo ($order['designer_status'] ?? 'Available') === 'Available' ? 'bg-success' : 'bg-warning'; ?>">
@@ -320,6 +346,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             </div>
                         </div>
                         <?php endif; ?>
+                        
+                        <div class="mb-3">
+                            <label class="fw-bold text-muted small">Expected Price</label>
+                            <p class="mb-0"><strong class="text-info">HK$<?php echo number_format($design_price, 2); ?></strong></p>
+                        </div>
                         
                         <div class="mb-3">
                             <label class="fw-bold text-muted small">Design deposit (2.5%)</label>
@@ -332,27 +363,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <p class="mb-0"><strong class="text-info">HK$<?php echo number_format($Project_Deposit, 2); ?></strong></p>
                             <small class="text-muted">Fixed project deposit</small>
                         </div>
-                        
-                        <div class="mb-3">
-                            <label class="fw-bold text-muted small">Final Design payment</label>
-                            <p class="mb-0">
-                                <strong class="<?php echo $final_payment > 0 ? 'text-warning' : 'text-muted'; ?>">
-                                    HK$<?php echo number_format($final_payment, 2); ?>
-                                </strong>
-                            </p>
-                            <?php if ($final_payment > 0): ?>
-                                <small class="text-warning">Will be deducted upon confirmation</small>
-                            <?php else: ?>
-                                <small class="text-muted">Not yet set</small>
-                            <?php endif; ?>
-                        </div>
-                        
+                         
                         <hr>
-                        <div class="mb-0">
+                        <div class="mb-3">
                             <label class="fw-bold text-muted small">Design Tag</label>
                             <p class="mb-0"><small class="text-muted"><?php echo htmlspecialchars($order["design_tag"] ?? 'N/A'); ?></small></p>
                         </div>
 
+                        <!-- Design References -->
                         <?php if (!empty($references)): ?>
                             <hr>
                             <div class="fw-bold text-muted small mb-2">Product References</div>
@@ -377,22 +395,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <?php endforeach; ?>
                         <?php endif; ?>
                         
-                        <div class="fw-bold text-muted small mb-2">Design proposal</div>
-                        <?php if ($latest_picture): ?>
-                            <button type="button" class="btn btn-outline-primary"
-                                onclick="openProposalPreview('../uploads/designed_Picture/<?php echo htmlspecialchars($latest_picture['filename']); ?>')">
-                                <i class="fas fa-file-image me-1"></i>Preview
-                            </button>
-                        <?php endif; ?>
-
+                        <!-- Design Proposal -->
+                        <div class="mt-3">
+                            <label class="fw-bold text-muted small mb-2">Design proposal</label>
+                            <?php if ($latest_picture): ?>
+                                <button type="button" class="btn btn-outline-primary btn-sm w-100"
+                                    onclick="openProposalPreview('../uploads/designed_Picture/<?php echo htmlspecialchars($latest_picture['filename']); ?>')">
+                                    <i class="fas fa-file-image me-1"></i>Preview Proposal
+                                </button>
+                            <?php else: ?>
+                                <p class="text-muted small">No proposal uploaded yet</p>
+                            <?php endif; ?>
+                        </div>
                     </div>
                 </div>
             </div>
 
+            <!-- Order Detail Card -->
             <div class="col-lg-4 mb-3 mb-lg-0">
                 <div class="card h-100">
                     <div class="card-header">
-                        <h5 class="card-title mb-0"><i class="fas fa-clipboard me-2"></i>Order</h5>
+                        <h5 class="card-title mb-0">
+                            <i class="fas fa-clipboard me-2"></i>Order Detail
+                        </h5>
                     </div>
                     <div class="card-body">
                         <div class="mb-3">
@@ -406,7 +431,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <div class="mb-3">
                             <label class="fw-bold text-muted small">Status</label>
                             <p class="mb-0">
-                                <span class="badge <?php echo ($status === 'complete') ? 'bg-success' : (($status === 'rejected') ? 'bg-danger' : 'bg-info'); ?>">
+                                <?php
+                                $status_class = '';
+                                switch ($status) {
+                                    case 'complete':
+                                        $status_class = 'bg-success';
+                                        break;
+                                    case 'designing':
+                                    case 'drafting 2nd proposal':
+                                    case 'reviewing design proposal':
+                                        $status_class = 'bg-info';
+                                        break;
+                                    case 'waiting confirm':
+                                    case 'waiting client review':
+                                    case 'waiting payment':
+                                    case 'waiting design phase payment':
+                                    case 'waiting 2nd design phase payment':
+                                    case 'waiting final design phase payment':
+                                        $status_class = 'bg-warning';
+                                        break;
+                                    case 'rejected':
+                                        $status_class = 'bg-danger';
+                                        break;
+                                    default:
+                                        $status_class = 'bg-secondary';
+                                }
+                                ?>
+                                <span class="badge <?php echo $status_class; ?> status-badge">
                                     <?php echo htmlspecialchars($status); ?>
                                 </span>
                             </p>
@@ -424,30 +475,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </div>
                         <?php endif; ?>
                         
-                        <div class="text-muted mb-0 small">Requirements</div>
-                        <?php echo nl2br(htmlspecialchars($order["Requirements"] ?? 'No requirements specified')); ?>
+                        <div class="mb-3">
+                            <label class="fw-bold text-muted small">Requirements</label>
+                            <div class="p-2 bg-light rounded">
+                                <?php echo nl2br(htmlspecialchars($order["Requirements"] ?? 'No requirements specified')); ?>
+                            </div>
+                        </div>
+                        
                         <hr>
                         
-                        <!-- Cost Breakdown (Enhanced like Order_Edit) -->
+                        <!-- Cost Breakdown -->
                         <div class="mb-0">
                             <label class="fw-bold text-muted small">Cost Breakdown</label>
                             <div class="mb-2">
                                 <ul class="list-unstyled mb-0">
                                     <li class="d-flex justify-content-between">
-                                        <small class="text-muted">Project Deposit</small>
-                                        <strong>HK$<?php echo number_format($Project_Deposit, 2); ?></strong>
+                                        <small class="text-muted">Design Cost</small>
+                                        <strong>HK$<?php echo number_format($payment['total_design_payment'], 2); ?></strong>
                                     </li>
                                     <li class="d-flex justify-content-between">
-                                        <small class="text-muted">1st Design Fee (2.5%)</small>
-                                        <strong>HK$<?php echo number_format($Design_Fee1, 2); ?></strong>
+                                        <small class="text-muted">Construction Cost</small>
+                                        <strong>HK$<?php echo number_format($payment['total_construction_payment'], 2); ?></strong>
                                     </li>
-                                    
-                                    <?php if ($final_payment > 0): ?>
                                     <li class="d-flex justify-content-between">
-                                        <small class="text-muted">2nd Design Fee</small>
-                                        <strong>HK$<?php echo number_format($final_payment, 2); ?></strong>
+                                        <small class="text-muted">Commission</small>
+                                        <strong>HK$<?php echo number_format($commission_total, 2); ?></strong>
                                     </li>
-                                    <?php endif; ?>
                                     
                                     <?php if (!empty($references)): ?>
                                         <li class="mt-2"><small class="text-muted">Product References</small></li>
@@ -480,12 +533,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
         </div>
 
+        <!-- Product Reference Status Table -->
         <?php if (!empty($references)): ?>
             <div class="row mb-4">
                 <div class="col-12">
-                    <div class="card h-100">
+                    <div class="card">
                         <div class="card-header">
-                            <h5 class="card-title mb-0"><i class="fas fa-tags me-2"></i>Product Reference Status</h5>
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-tags me-2"></i>Product Reference Status
+                            </h5>
                         </div>
                         <div class="card-body">
                             <div class="table-responsive">
@@ -528,7 +584,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
         <?php endif; ?>
 
-        <!-- Proposal Preview Modal (view-only) -->
+        <!-- Proposal Preview Modal -->
         <div class="modal fade" id="proposalPreviewModal" tabindex="-1" aria-hidden="true">
             <div class="modal-dialog modal-xl modal-dialog-centered">
                 <div class="modal-content">
@@ -552,6 +608,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
         </div>
 
+        <!-- Client Action Buttons -->
         <?php if ($status === 'waiting client review'): ?>
             <div class="row mb-4">
                 <div class="col-12">
@@ -624,8 +681,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
         <?php endif; ?>
 
+        <!-- Back Button -->
         <div class="d-flex justify-content-between align-items-center mt-4">
-            <a href="../client/order_history.php" class="btn btn-secondary"><i class="fas fa-arrow-left me-2"></i>Back</a>
+            <a href="../client/order_history.php" class="btn btn-secondary"><i class="fas fa-arrow-left me-2"></i>Back to Order History</a>
         </div>
 
     </div>

@@ -51,10 +51,9 @@ if (!empty($order['payment_method'])) {
     $paymentMethodData = json_decode($order['payment_method'], true) ?? [];
 }
 
-// Payment status
-$deposit_paid = isset($_SESSION['deposit_paid_' . $orderid]) ? $_SESSION['deposit_paid_' . $orderid] : false;
-$final_paid = isset($_SESSION['final_paid_' . $orderid]) ? $_SESSION['final_paid_' . $orderid] : false;
-$payment_rejected = isset($_SESSION['payment_rejected_' . $orderid]) ? $_SESSION['payment_rejected_' . $orderid] : false;
+// Payment status - 从 session 或 URL 参数获取
+$payment_success = isset($_GET['success']) ? true : (isset($_SESSION['payment_success_' . $orderid]) ? $_SESSION['payment_success_' . $orderid] : false);
+$payment_rejected = isset($_GET['rejected']) ? true : (isset($_SESSION['payment_rejected_' . $orderid]) ? $_SESSION['payment_rejected_' . $orderid] : false);
 
 // Handle payment actions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -70,12 +69,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         mysqli_begin_transaction($mysqli);
         
         try {
-            // Update order status
-            $u_sql = "UPDATE `Order` SET ostatus = 'drafting 2nd proposal' WHERE orderid = ? AND clientid = ?";
-            $u_stmt = mysqli_prepare($mysqli, $u_sql);
-            mysqli_stmt_bind_param($u_stmt, "ii", $orderid, $client_id);
-            mysqli_stmt_execute($u_stmt);
-            mysqli_stmt_close($u_stmt);
+            // DO NOT update order status - keep original status
             
             // Update OrderPayment
             $op_sql = "UPDATE OrderPayment SET 
@@ -105,11 +99,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             mysqli_commit($mysqli);
             
             // Set session flag for successful payment
-            $_SESSION['payment_success_' . $orderid] = true;
-            $_SESSION['payment_amount_' . $orderid] = $total_design_fees;
-            
-            // Redirect to order_history.php with success message
-            header('Location: order_history.php?payment_success=1&orderid=' . $orderid . '&amount=' . $total_design_fees);
+            $_SESSION['payment2_success_' . $orderid] = true;
+            // Redirect to same page with success parameter (like payment_final.php)
+            header('Location: payment2.php?orderid=' . $orderid . '&amount=' . $total_design_fees . '&success=1');
             exit;
             
         } catch (Exception $e) {
@@ -309,13 +301,21 @@ $stage_title = '2nd Payment';
                         <span><i class="fas fa-wallet me-2"></i>Your Current Budget:</span>
                         <strong class="text-primary">HK$<?php echo number_format($current_budget, 2); ?></strong>
                     </div>
-                    <?php if ($total_design_fees > $current_budget): ?>
+                    <?php if ($total_design_fees > $current_budget && !$payment_success): ?>
                         <div class="alert alert-danger mt-2 mb-0">
                             <i class="fas fa-exclamation-triangle me-2"></i>
                             Insufficient budget! You need HK$<?php echo number_format($total_design_fees - $current_budget, 2); ?> more.
                         </div>
                     <?php endif; ?>
                 </div>
+                
+                <!-- Success Message - 像 payment_final.php 一样 -->
+                <?php if (isset($_GET['success'])): ?>
+                    <div class="alert alert-success alert-message">
+                        <i class="fas fa-check-circle me-2"></i>
+                        2nd Payment completed successfully! HK$<?php echo number_format($total_design_fees, 2); ?> deducted from your budget.
+                    </div>
+                <?php endif; ?>
                 
                 <!-- Rejected Message -->
                 <?php if (isset($_GET['rejected'])): ?>
@@ -336,12 +336,24 @@ $stage_title = '2nd Payment';
                     </div>
                     <div class="step-connector completed"></div>
                     
-                    <!-- Stage 2: 2nd Payment - CURRENT (Yellow) -->
-                    <div class="step current">
-                        <div class="step-circle">2</div>
+                    <!-- Stage 2: 2nd Payment - 根据支付状态显示不同样式 -->
+                    <div class="step <?php 
+                        if ($payment_rejected) echo 'rejected';
+                        elseif ($payment_success) echo 'completed';
+                        else echo 'current';
+                    ?>">
+                        <div class="step-circle">
+                            <?php if ($payment_success): ?>
+                                <i class="fas fa-check"></i>
+                            <?php elseif ($payment_rejected): ?>
+                                <i class="fas fa-times"></i>
+                            <?php else: ?>
+                                2
+                            <?php endif; ?>
+                        </div>
                         <span class="step-label">2nd Payment</span>
                     </div>
-                    <div class="step-connector"></div>
+                    <div class="step-connector <?php echo ($payment_success) ? 'completed' : ''; ?>"></div>
                     
                     <!-- Stage 3: Final Design - Future -->
                     <div class="step future">
@@ -403,6 +415,13 @@ $stage_title = '2nd Payment';
                             <span class="payment-amount fw-bold">HK$<?php echo number_format($total_design_fees, 2); ?></span>
                         </div>
                     </div>
+                    
+                    <?php if ($payment_success): ?>
+                        <div class="alert alert-success mt-3">
+                            <i class="fas fa-check-circle me-2"></i>
+                            2nd Payment completed successfully! HK$<?php echo number_format($total_design_fees, 2); ?> deducted from your budget.
+                        </div>
+                    <?php endif; ?>
                 </div>
 
                 <hr>
@@ -422,7 +441,12 @@ $stage_title = '2nd Payment';
                         <a href="order_history.php" class="btn btn-secondary">Back to Order History</a>
                         
                         <?php if (!empty($paymentMethodData) && !empty($paymentMethodData['method'])): ?>
-                            <?php if ($total_design_fees > $current_budget): ?>
+                            <?php if ($payment_success): ?>
+                               
+                                <button type="button" class="btn btn-success" disabled>
+                                    <i class="fas fa-check-circle me-1"></i>2nd Payment Completed
+                                </button>
+                            <?php elseif ($total_design_fees > $current_budget): ?>
                                 <button type="button" class="btn btn-success" disabled title="Insufficient budget">
                                     <i class="fas fa-exclamation-triangle me-1"></i>Insufficient Budget
                                 </button>
