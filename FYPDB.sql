@@ -255,7 +255,6 @@ INSERT INTO `Order`
 
 CREATE TABLE `OrderPayment` (
   `payment_id` INT NOT NULL AUTO_INCREMENT,
-  `orderid` INT NOT NULL UNIQUE,
   `total_cost` DECIMAL(12, 2) NOT NULL,
   
   -- Designing Phase Payments (10% of total)
@@ -290,9 +289,7 @@ CREATE TABLE `OrderPayment` (
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   
   PRIMARY KEY (`payment_id`),
-  KEY `orderid_idx` (`orderid`),
-  KEY `payment_status_idx` (`payment_status`),
-  CONSTRAINT `fk_orderpayment_orderid` FOREIGN KEY (`orderid`) REFERENCES `Order` (`orderid`) ON DELETE CASCADE
+  KEY `payment_status_idx` (`payment_status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Sample OrderPayment data for existing orders
@@ -300,10 +297,10 @@ CREATE TABLE `OrderPayment` (
 -- Order 1: total_cost=400k, design=40k+2k, materials=180k, contractor=120k, inspector=20k, commission_1st=20k, deposit=64k, commission_final=40k
 -- Order 2: total_cost=350k, design=35k+2k, materials=157.5k, contractor=105k, inspector=17.5k, commission_1st=17.5k, deposit=56k, commission_final=35k
 -- Order 3: total_cost=300k, design=30k+2k, materials=135k, contractor=90k, inspector=15k, commission_1st=15k, deposit=48k, commission_final=30k
-INSERT INTO `OrderPayment` (`orderid`, `total_cost`, `design_fee_designer_1st`, `design_fee_designer_2nd`, `design_fee_manager_1st`, `design_fee_manager_2nd`, `design_deposit`, `commission_1st`, `construction_main_price`, `construction_deposit`, `materials_cost`, `inspection_fee`, `contractor_fee`, `commission_final`, `total_design_payment`, `total_construction_payment`, `total_amount_due`, `total_amount_paid`, `payment_status`) VALUES
-(1, 400000.00, 10000.00, 10000.00, 10000.00, 10000.00, 2000.00, 20000.00, 320000.00, 64000.00, 180000.00, 20000.00, 120000.00, 40000.00, 62000.00, 424000.00, 486000.00, 0.00, 'pending'),
-(2, 350000.00, 8750.00, 8750.00, 8750.00, 8750.00, 2000.00, 17500.00, 280000.00, 56000.00, 157500.00, 17500.00, 105000.00, 35000.00, 54500.00, 371000.00, 425500.00, 0.00, 'pending'),
-(3, 300000.00, 7500.00, 7500.00, 7500.00, 7500.00, 2000.00, 15000.00, 240000.00, 48000.00, 135000.00, 15000.00, 90000.00, 30000.00, 47500.00, 318000.00, 365500.00, 0.00, 'pending');
+INSERT INTO `OrderPayment` (`total_cost`, `design_fee_designer_1st`, `design_fee_designer_2nd`, `design_fee_manager_1st`, `design_fee_manager_2nd`, `design_deposit`, `commission_1st`, `construction_main_price`, `construction_deposit`, `materials_cost`, `inspection_fee`, `contractor_fee`, `commission_final`, `total_design_payment`, `total_construction_payment`, `total_amount_due`, `total_amount_paid`, `payment_status`) VALUES
+(400000.00, 10000.00, 10000.00, 10000.00, 10000.00, 2000.00, 20000.00, 320000.00, 64000.00, 180000.00, 20000.00, 120000.00, 40000.00, 62000.00, 424000.00, 486000.00, 0.00, 'pending'),
+(350000.00, 8750.00, 8750.00, 8750.00, 8750.00, 2000.00, 17500.00, 280000.00, 56000.00, 157500.00, 17500.00, 105000.00, 35000.00, 54500.00, 371000.00, 425500.00, 0.00, 'pending'),
+(300000.00, 7500.00, 7500.00, 7500.00, 7500.00, 2000.00, 15000.00, 240000.00, 48000.00, 135000.00, 15000.00, 90000.00, 30000.00, 47500.00, 318000.00, 365500.00, 0.00, 'pending');
 
 -- Update Order to link to OrderPayment for all orders
 UPDATE `Order` SET `payment_id` = 1 WHERE `orderid` = 1;
