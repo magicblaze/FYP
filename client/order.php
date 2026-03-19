@@ -277,7 +277,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Deposit default (HK$)
     $deposit = 2000.00;
     $first_design_fee = $main_price * 0.025; // 1st payment design fee (2.5% of design expected price)
-    // First payment total (spec): 1st design fee + project deposit
     $total_amount = $first_design_fee + $deposit;
 
     if (!$error) {
@@ -298,12 +297,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $contractor_fee = $total_cost * 0.30;            // 30% of total
         $commission_final = $total_cost * 0.10;          // 10% (from construction phase)
         
-        $total_design_payment = $design_fee_designer_1st + $design_fee_designer_2nd + 
-                                $design_fee_manager_1st + $design_fee_manager_2nd + 
-                                $design_deposit + $commission_1st;
-        $total_construction_payment = $construction_deposit + $materials_cost + 
-                                      $inspection_fee + $contractor_fee + $commission_final;
-        $total_amount_due = $total_design_payment + $total_construction_payment;
+        $total_design_payment = $first_design_fee; // Total design payment (10% of design expected price)
+        $total_construction_payment = $construction_main_price;
+        $total_amount_due = $total_design_payment + $total_construction_payment + $commission_final;
         
         $paymentId = null;
         $orderId = null;
