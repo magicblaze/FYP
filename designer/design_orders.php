@@ -1225,14 +1225,12 @@ foreach ($orders as $o) {
                                 $canSubmit = in_array($status, ['designing']);
                                 $hasPictures = !empty($order['pictures']);
                                 $hasReferences = !empty($order['references']);
-                                $hasFinalPayment = $currentFinalPayment > 0;
                                 $disableSubmit = !$hasPictures || !$hasReferences || !$hasFinalPayment;
                             ?>
                             <?php if ($canSubmit): ?>
                                 <button class="btn <?php echo $disableSubmit ? 'btn-secondary' : 'btn-primary'; ?>" onclick="updateOrder(<?= $order['orderid'] ?>,'submit_proposal', this)" <?php if ($disableSubmit): ?>disabled title="<?php 
                                     if (!$hasPictures) echo 'Add at least one design proposal';
                                     elseif (!$hasReferences) echo 'Add at least one reference';
-                                    elseif (!$hasFinalPayment) echo 'Set the final payment amount';
                                     else echo 'Complete all requirements before submitting';
                                 ?>"<?php endif; ?>>
                                     <i class="fas fa-paper-plane me-1"></i>Submit Proposal
