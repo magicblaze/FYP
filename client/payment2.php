@@ -71,7 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         try {
             // Update order status
-            $u_sql = "UPDATE `Order` SET ostatus = 'waiting for selection' WHERE orderid = ? AND clientid = ?";
+            $u_sql = "UPDATE `Order` SET ostatus = 'drafting 2nd proposal' WHERE orderid = ? AND clientid = ?";
             $u_stmt = mysqli_prepare($mysqli, $u_sql);
             mysqli_stmt_bind_param($u_stmt, "ii", $orderid, $client_id);
             mysqli_stmt_execute($u_stmt);

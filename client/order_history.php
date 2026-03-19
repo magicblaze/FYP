@@ -282,8 +282,6 @@ if (!empty($_GET['msg'])) {
 
                     // Determine status class
                     $statusLower = strtolower($order['ostatus'] ?? '');
-                    $designPaymentStatuses = ['waiting 2nd design phase payment'];
-                    $constructionPaymentStatuses = ['waiting 1st construction phase payment'];
                     $statusClass = 'status-pending';
                     if (strpos($statusLower, 'design') !== false) {
                         $statusClass = 'status-designing';
@@ -291,8 +289,6 @@ if (!empty($_GET['msg'])) {
                         $statusClass = 'status-completed';
                     } elseif (strpos($statusLower, 'cancel') !== false) {
                         $statusClass = 'status-cancelled';
-                    } elseif ($statusLower === 'waiting for selection') {
-                        $statusClass = 'status-selection';
                     } elseif ($statusLower === 'preparing') {
                         $statusClass = 'status-preparing';
                     }
@@ -401,17 +397,12 @@ if (!empty($_GET['msg'])) {
                                     onclick="event.stopPropagation();">
                                     <i class="fas fa-credit-card me-1"></i>Proceed to 2nd Payment
                                 </a>
-                            <?php endif; ?>
-
-                            <!-- Proceed to Payment button (separate) -->
-                            <?php if ($statusLower === 'waiting final design phase payment'): ?>
+                            <?php elseif ($statusLower === 'waiting final design phase payment'): ?>
                                 <a href="payment3.php?orderid=<?= (int) $order['orderid'] ?>" class="view-details-btn"
                                     onclick="event.stopPropagation();">
                                     <i class="fas fa-credit-card me-1"></i>Proceed to Final Design Payment
                                 </a>
-                            <?php endif; ?>
-                            <!-- Proceed to Construction Payment button -->
-                            <?php if ($statusLower === 'waiting for selection' || in_array($statusLower, $constructionPaymentStatuses, true)): ?>
+                            <?php elseif ($statusLower === 'waiting 1st construction phase payment'): ?>
                                 <a href="payment_construction.php?orderid=<?= (int) $order['orderid'] ?>" class="view-details-btn"
                                     onclick="event.stopPropagation();">
                                     <i class="fas fa-hard-hat me-1"></i>Proceed to Construction Payment

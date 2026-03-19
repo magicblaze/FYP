@@ -900,7 +900,6 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                 'waiting 2nd design phase payment' => ['class' => 'alert-warning', 'icon' => 'fa-credit-card', 'title' => 'Waiting Payment', 'text' => 'Waiting for client payment to proceed.'],
                 'waiting final design phase payment' => ['class' => 'alert-warning', 'icon' => 'fa-credit-card', 'title' => 'Waiting Payment', 'text' => 'Waiting for client payment to proceed.'],
                 'waiting 1st construction phase payment' => ['class' => 'alert-warning', 'icon' => 'fa-credit-card', 'title' => 'Waiting Construction Payment', 'text' => 'Waiting for client construction payment to proceed.'],
-                'waiting for selection' => ['class' => 'alert-warning', 'icon' => 'fa-list', 'title' => 'Waiting for Selection', 'text' => 'Waiting for client to select construction items.'],
                 'preparing' => ['class' => 'alert-info', 'icon' => 'fa-truck-loading', 'title' => 'Preparing', 'text' => 'Order is being prepared for construction/delivery.'],
                 'complete' => ['class' => 'alert-success', 'icon' => 'fa-check-circle', 'title' => 'Complete', 'text' => 'Order completed successfully.'],
                 'rejected' => ['class' => 'alert-danger', 'icon' => 'fa-times-circle', 'title' => 'Rejected', 'text' => 'Order has been rejected. See notes for reason.'],
