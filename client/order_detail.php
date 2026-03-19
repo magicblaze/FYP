@@ -213,8 +213,21 @@ foreach ($productsTemp as $product) {
 }
 $products->data_seek(0);
 
+<<<<<<< HEAD
+// --- NEW: Calculate all fees and totals ---
+$Project_Deposit = 2000; // Fixed project deposit
+$design_cost = (float) $order['expect_price'];
+$Design_Fee1 = (float) $order['expect_price'] * 0.025; // 1st design fee is 2.5% of expected price
+$construction_fee = $design_cost * 0.15; // Construction Fee (15% of design deposit)
+$manager_commission = $design_cost * 0.02; // Manager Commission (2% of design deposit)
+
+// Calculate Design Total: Design Cost - Project Deposit - 1st Design Fee - 2nd Design Fee - Construction Fee - Manager Commission
+$design_total = $design_cost - $Project_Deposit - $Design_Fee1 - $final_payment - $construction_fee - $manager_commission;
+// --- END NEW ---
+=======
 $design_cost = (float) $order['expect_price'];
 $design_total = $payment['total_design_payment'];
+>>>>>>> 7e19d0280dadc3865e0a8d0084ea80420a861540
 
 // Format display variables
 $budgetDisplay = $order['budget'] ?? 0;
@@ -502,6 +515,14 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€
             color: #c0392b;
         }
 
+        .fee-item {
+            color: #e67e22;
+        }
+        
+        .commission-item {
+            color: #3498db;
+        }
+
         @media (max-width: 768px) {
             .grid-2 {
                 grid-template-columns: 1fr;
@@ -583,6 +604,45 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€
                         <span class="info-label">Designer:</span>
                         <span class="info-value"><?= htmlspecialchars($order['dname']) ?></span>
                     </div>
+<<<<<<< HEAD
+                    <div class="info-row">
+                        <span class="info-label">Design Cost:</span>
+                        <span
+                            class="info-value price-highlight">$<?= number_format((float) $order['expect_price'], 2) ?></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Project Deposit:</span>
+                        <span
+                            class="info-value price-highlight">$<?= number_format($Project_Deposit, 2) ?></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">1st Design Fee (designer 2.5%):</span>
+                        <span
+                            class="info-value price-highlight">$<?= number_format($Design_Fee1, 2) ?></span>
+                    </div>
+                    <?php if ($final_payment != 0): ?>
+                    <div class="info-row">
+                        <span class="info-label">2nd Design Fee:</span>
+                        <span
+                            class="info-value price-highlight">$<?= number_format($final_payment, 2) ?></span>
+                    </div>
+                    <?php endif; ?>
+                    <?php if ($construction_fee != 0): ?>
+                    <div class="info-row">
+                        <span class="info-label">Construction Fee (15%):</span>
+                        <span
+                            class="info-value price-highlight">$<?= number_format($construction_fee, 2) ?></span>
+                    </div>
+                    <?php endif; ?>
+                    <?php if ($manager_commission != 0): ?>
+                    <div class="info-row">
+                        <span class="info-label">Manager Commission (2%):</span>
+                        <span
+                            class="info-value price-highlight">$<?= number_format($manager_commission, 2) ?></span>
+                    </div>
+                    <?php endif; ?>
+=======
+>>>>>>> 7e19d0280dadc3865e0a8d0084ea80420a861540
                     <div class="info-row" style="border-top: 2px solid #3498db; margin-top: 0.5rem; padding-top: 0.75rem;">
                         <span class="info-label">Design Cost:</span>
                         <span class="info-value price-highlight">$<?= number_format($design_total, 2) ?></span>
@@ -819,6 +879,68 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€
                 </div>
             <?php endif; ?>
 
+<<<<<<< HEAD
+            <!-- Summary Section -->
+            <div class="section-title">
+                <i class="fas fa-chart-bar me-2"></i>Order Summary
+            </div>
+            <div class="info-card">
+                <div class="info-row">
+                    <span class="info-label">Design Cost:</span>
+                    <span
+                        class="info-value price-highlight">$<?= number_format((float) $order['expect_price'], 2) ?></span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Project Deposit:</span>
+                    <span
+                        class="info-value price-highlight">$<?= number_format($Project_Deposit, 2) ?></span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">1st Design Fee (designer 2.5%):</span>
+                    <span
+                        class="info-value price-highlight">$<?= number_format($Design_Fee1, 2) ?></span>
+                </div>
+                <?php if ($final_payment != 0): ?>
+                <div class="info-row">
+                    <span class="info-label">2nd Design Fee:</span>
+                    <span
+                        class="info-value price-highlight">$<?= number_format($final_payment, 2) ?></span>
+                </div>
+                <?php endif; ?>
+                <?php if ($referencesTotal > 0): ?>
+                <div class="info-row">
+                    <span class="info-label">References Total:</span>
+                    <span
+                        class="info-value price-highlight">$<?= number_format($referencesTotal, 2) ?></span>
+                </div>
+                <?php endif; ?>
+                <?php if ($construction_fee != 0): ?>
+                <div class="info-row">
+                    <span class="info-label">Construction Fee (15%):</span>
+                    <span
+                        class="info-value price-highlight">$<?= number_format($construction_fee, 2) ?></span>
+                </div>
+                <?php endif; ?>
+                <?php if ($manager_commission != 0): ?>
+                <div class="info-row">
+                    <span class="info-label">Manager Commission (2%):</span>
+                    <span
+                        class="info-value price-highlight">$<?= number_format($manager_commission, 2) ?></span>
+                </div>
+                <?php endif; ?>
+                <div class="info-row" style="border-top: 2px solid #3498db; margin-top: 0.5rem; padding-top: 0.75rem;">
+                    <span class="info-label"><strong>Design Total:</strong></span>
+                    <span
+                        class="info-value price-highlight"><strong>$<?= number_format($design_total, 2) ?></strong></span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Budget Allocated:</span>
+                    <span class="info-value price-highlight">$<?= number_format((float) $order['budget'], 2) ?></span>
+                </div>
+            </div>
+
+=======
+>>>>>>> 7e19d0280dadc3865e0a8d0084ea80420a861540
             <!-- Back Button -->
             <div style="margin-top: 2rem; text-align: center;">
                 <?php if ($statusLower === 'waiting for review design'): ?>
