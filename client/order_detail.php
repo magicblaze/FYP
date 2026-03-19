@@ -28,13 +28,23 @@ if ($orderId <= 0) {
 
 // Fetch order details with verification that it belongs to the client
 // --- MODIFIED: Added o.final_payment to the query ---
-$orderSql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.gross_floor_area, o.deposit, o.final_payment,
+$orderSql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.gross_floor_area, o.deposit,
               d.designid, d.expect_price, d.tag, dz.dname, dz.designerid,
-              c.budget
+              c.budget,
+              op.payment_id, op.total_cost,
+              op.design_fee_designer_1st, op.design_fee_designer_2nd,
+              op.design_fee_manager_1st, op.design_fee_manager_2nd,
+              op.design_deposit, op.commission_1st,
+              op.construction_main_price, op.construction_deposit, op.materials_cost,
+              op.inspection_fee, op.contractor_fee, op.commission_final,
+              op.additional_fees,
+              op.total_design_payment, op.total_construction_payment,
+              op.total_amount_due, op.total_amount_paid, op.payment_status
              FROM `Order` o
              JOIN Design d ON o.designid = d.designid
              JOIN Designer dz ON d.designerid = dz.designerid
              JOIN Client c ON o.clientid = c.clientid
+             LEFT JOIN OrderPayment op ON o.payment_id = op.payment_id
              WHERE o.orderid = ? AND o.clientid = ?";
 $orderStmt = $mysqli->prepare($orderSql);
 $orderStmt->bind_param("ii", $orderId, $clientId);
@@ -47,9 +57,30 @@ if ($orderResult->num_rows === 0) {
 }
 
 $order = $orderResult->fetch_assoc();
-// --- NEW: Get final payment value ---
-$final_payment = isset($order['final_payment']) ? floatval($order['final_payment']) : 0;
-// --- END NEW ---
+
+$payment = [
+    'total_cost' => isset($order['total_cost']) ? (float) $order['total_cost'] : 0.0,
+    'design_fee_designer_1st' => isset($order['design_fee_designer_1st']) ? (float) $order['design_fee_designer_1st'] : 0.0,
+    'design_fee_designer_2nd' => isset($order['design_fee_designer_2nd']) ? (float) $order['design_fee_designer_2nd'] : 0.0,
+    'design_fee_manager_1st' => isset($order['design_fee_manager_1st']) ? (float) $order['design_fee_manager_1st'] : 0.0,
+    'design_fee_manager_2nd' => isset($order['design_fee_manager_2nd']) ? (float) $order['design_fee_manager_2nd'] : 0.0,
+    'design_deposit' => isset($order['design_deposit']) ? (float) $order['design_deposit'] : 0.0,
+    'commission_1st' => isset($order['commission_1st']) ? (float) $order['commission_1st'] : 0.0,
+    'construction_main_price' => isset($order['construction_main_price']) ? (float) $order['construction_main_price'] : 0.0,
+    'construction_deposit' => isset($order['construction_deposit']) ? (float) $order['construction_deposit'] : 0.0,
+    'materials_cost' => isset($order['materials_cost']) ? (float) $order['materials_cost'] : 0.0,
+    'inspection_fee' => isset($order['inspection_fee']) ? (float) $order['inspection_fee'] : 0.0,
+    'contractor_fee' => isset($order['contractor_fee']) ? (float) $order['contractor_fee'] : 0.0,
+    'commission_final' => isset($order['commission_final']) ? (float) $order['commission_final'] : 0.0,
+    'additional_fees' => isset($order['additional_fees']) ? (float) $order['additional_fees'] : 0.0,
+    'total_design_payment' => isset($order['total_design_payment']) ? (float) $order['total_design_payment'] : 0.0,
+    'total_construction_payment' => isset($order['total_construction_payment']) ? (float) $order['total_construction_payment'] : 0.0,
+    'total_amount_due' => isset($order['total_amount_due']) ? (float) $order['total_amount_due'] : 0.0,
+    'total_amount_paid' => isset($order['total_amount_paid']) ? (float) $order['total_amount_paid'] : 0.0,
+    'payment_status' => isset($order['payment_status']) ? (string) $order['payment_status'] : 'pending',
+];
+
+$commissionTotal = $payment['commission_1st'] + $payment['commission_final'];
 
 // expose gross floor area
 $gfaDisplay = isset($order['gross_floor_area']) ? (float) $order['gross_floor_area'] : 0.0;
@@ -182,6 +213,7 @@ foreach ($productsTemp as $product) {
 }
 $products->data_seek(0);
 
+<<<<<<< HEAD
 // --- NEW: Calculate all fees and totals ---
 $Project_Deposit = 2000; // Fixed project deposit
 $design_cost = (float) $order['expect_price'];
@@ -192,6 +224,10 @@ $manager_commission = $design_cost * 0.02; // Manager Commission (2% of design d
 // Calculate Design Total: Design Cost - Project Deposit - 1st Design Fee - 2nd Design Fee - Construction Fee - Manager Commission
 $design_total = $design_cost - $Project_Deposit - $Design_Fee1 - $final_payment - $construction_fee - $manager_commission;
 // --- END NEW ---
+=======
+$design_cost = (float) $order['expect_price'];
+$design_total = $payment['total_design_payment'];
+>>>>>>> 7e19d0280dadc3865e0a8d0084ea80420a861540
 
 // Format display variables
 $budgetDisplay = $order['budget'] ?? 0;
@@ -568,6 +604,7 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€
                         <span class="info-label">Designer:</span>
                         <span class="info-value"><?= htmlspecialchars($order['dname']) ?></span>
                     </div>
+<<<<<<< HEAD
                     <div class="info-row">
                         <span class="info-label">Design Cost:</span>
                         <span
@@ -604,21 +641,23 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€
                             class="info-value price-highlight">$<?= number_format($manager_commission, 2) ?></span>
                     </div>
                     <?php endif; ?>
+=======
+>>>>>>> 7e19d0280dadc3865e0a8d0084ea80420a861540
                     <div class="info-row" style="border-top: 2px solid #3498db; margin-top: 0.5rem; padding-top: 0.75rem;">
-                        <span class="info-label"><strong>Design Total:</strong></span>
-                        <span
-                            class="info-value price-highlight"><strong>$<?= number_format($design_total, 2) ?></strong></span>
+                        <span class="info-label">Design Cost:</span>
+                        <span class="info-value price-highlight">$<?= number_format($design_total, 2) ?></span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label">Design Tags:</span>
-                        <span class="info-value">
-                            <?php
-                            $tags = array_filter(array_map('trim', explode(',', $order['tag'] ?? '')));
-                            foreach ($tags as $tag) {
-                                echo '<span class="badge bg-primary me-1">' . htmlspecialchars($tag) . '</span>';
-                            }
-                            ?>
-                        </span>
+                        <span class="info-label">Construction Cost:</span>
+                        <span class="info-value price-highlight">$<?= number_format($payment['total_construction_payment'], 2) ?></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Commission:</span>
+                        <span class="info-value price-highlight">$<?= number_format($commissionTotal, 2) ?></span>
+                    </div>
+                    <div class="info-row" style="border-top: 2px solid #3498db; margin-top: 0.5rem; padding-top: 0.75rem;">
+                        <span class="info-label">Total Cost:</span>
+                        <span class="info-value price-highlight">$<?= number_format($payment['total_amount_due'], 2) ?></span>
                     </div>
                 </div>
             </div>
@@ -840,6 +879,7 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€
                 </div>
             <?php endif; ?>
 
+<<<<<<< HEAD
             <!-- Summary Section -->
             <div class="section-title">
                 <i class="fas fa-chart-bar me-2"></i>Order Summary
@@ -899,6 +939,8 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€
                 </div>
             </div>
 
+=======
+>>>>>>> 7e19d0280dadc3865e0a8d0084ea80420a861540
             <!-- Back Button -->
             <div style="margin-top: 2rem; text-align: center;">
                 <?php if ($statusLower === 'waiting for review design'): ?>

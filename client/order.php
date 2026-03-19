@@ -1492,7 +1492,11 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                     }
                     window.__termsAccepted = true;
                     if (termsModal) termsModal.hide();
-                    orderForm.submit();
+                    if (typeof orderForm.requestSubmit === 'function') {
+                        orderForm.requestSubmit();
+                    } else {
+                        orderForm.submit();
+                    }
                 });
             }
         });

@@ -648,6 +648,8 @@ INSERT INTO `MessageRead` (`messagereadid`, `messageid`, `ChatRoomMemberid`, `is
 INSERT INTO `Order` (`orderid`, `odate`, `clientid`, `deposit`, `Requirements`,`designid`,`ostatus`,`designedPicture`) VALUES
 (3, '2025-07-01 09:00:00', 1, 2000.00, 'Need quick remodel', 1, 'waiting confirm', NULL);
 
+UPDATE `Order` SET `payment_id` = 3 WHERE `orderid` = 3;
+
 INSERT INTO `OrderDelivery` (`orderdeliveryid`, `productid`, `quantity`, `orderid`, `deliverydate`, `status`, `managerid`, `color`,`rid`) VALUES
 (3, 3, 50, 3, '2026-01-13', 'Pending', 1, 'White',1);
 
