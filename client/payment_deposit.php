@@ -62,8 +62,11 @@ if ($fees_stmt) {
     mysqli_stmt_close($fees_stmt);
 }
 
-// Calculate totals
-$order_total = $design_deposit + $refs_total + $fees_total + $final_payment;
+
+$Project_Deposit = 2000;
+$Design_Fee1 = $design_deposit * 0.025;
+$order_total = $Design_Fee1 + $Project_Deposit;
+$amount = $order_total;
 
 // Parse saved payment method
 $paymentMethodData = [];
@@ -365,27 +368,12 @@ $current_step = 1;
                     <h5 class="mb-3"><i class="fas fa-shopping-cart me-2"></i>Order Summary</h5>
                     
                     <div class="total-item">
-                        <span class="total-label">Design deposit:</span>
-                        <span class="total-value">HK$<?php echo number_format($design_deposit, 2); ?></span>
+                        <span class="total-label">1st Design Fee (designer 2.5%):</span>
+                        <span class="total-value">HK$<?php echo number_format($Design_Fee1, 2); ?></span>
                     </div>
-                    
-                    <?php if ($refs_total > 0): ?>
-                        <div class="total-item">
-                            <span class="total-label">Product References:</span>
-                            <span class="total-value">HK$<?php echo number_format($refs_total, 2); ?></span>
-                        </div>
-                    <?php endif; ?>
-                    
-                    <?php if ($fees_total > 0): ?>
-                        <div class="total-item">
-                            <span class="total-label">Additional Fees:</span>
-                            <span class="total-value">HK$<?php echo number_format($fees_total, 2); ?></span>
-                        </div>
-                    <?php endif; ?>
-                    
                     <div class="total-item">
-                        <span class="total-label">Final Design payment:</span>
-                        <span class="total-value">HK$<?php echo number_format($final_payment, 2); ?></span>
+                        <span class="total-label">Project Deposit:</span>
+                        <span class="total-value">HK$<?php echo number_format($Project_Deposit, 2); ?></span>
                     </div>
                     
                     <div class="total-item" style="border-top: 2px solid #3498db; margin-top: 0.5rem; padding-top: 0.75rem;">
@@ -398,6 +386,7 @@ $current_step = 1;
                 <div class="payment-section">
                     <h5 class="mb-3"><i class="fas fa-hand-holding-usd me-2"></i>Deposit Payment</h5>
                     
+
                     <div class="total-item">
                         <span class="total-label">Design Deposit Amount:</span>
                         <span class="total-value payment-amount">HK$<?php echo number_format($amount, 2); ?></span>

@@ -333,7 +333,7 @@ if (!empty($_GET['msg'])) {
                     }
 
                     $deposit = isset($order['deposit']) ? (float) $order['deposit'] : 0.0;
-                    $computed_cost = $design_price + $fees_total + $refs_total + $deposit;
+                    $computed_cost = $design_price + $fees_total;
                     
                     // Calculate final payment amount (final payment + references)
                     $final_payment_amount = $final_payment + $refs_total;

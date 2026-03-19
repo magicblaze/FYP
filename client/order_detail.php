@@ -819,6 +819,35 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€
                 </div>
             <?php endif; ?>
 
+            <!-- Summary Section -->
+            <div class="section-title">
+                <i class="fas fa-chart-bar me-2"></i>Order Summary
+            </div>
+            <div class="info-card">
+                <div class="info-row">
+                    <span class="info-label">Design Cost:</span>
+                    <span
+                        class="info-value price-highlight">$<?= number_format((float) $order['expect_price'], 2) ?></span>
+                </div>
+                <!-- --- NEW: Display Final Design Payment in Summary --- -->
+                <div class="info-row">
+                    <span class="info-label">Final Design Payment:</span>
+                    <span
+                        class="info-value price-highlight">$<?= number_format($final_payment, 2) ?></span>
+                </div>
+
+                <div class="info-row" style="border-top: 2px solid #3498db; margin-top: 0.5rem; padding-top: 0.75rem;">
+                    <span class="info-label"><strong>Design Total (Cost + Final):</strong></span>
+                    <span
+                        class="info-value price-highlight"><strong>$<?= number_format($design_total, 2) ?></strong></span>
+                </div>
+                <!-- --- END NEW --- -->
+                <div class="info-row">
+                    <span class="info-label">Budget Allocated:</span>
+                    <span class="info-value price-highlight">$<?= number_format((float) $order['budget'], 2) ?></span>
+                </div>
+            </div>
+
             <!-- Back Button -->
             <div style="margin-top: 2rem; text-align: center;">
                 <?php if ($statusLower === 'waiting for review design'): ?>
