@@ -43,7 +43,11 @@ $error = '';
 $references_total = 0.0;
 // Default deposit (HK$)
 $deposit = 2000.00;
-$first_design_fee = (float) $design['expect_price'] * 0.025; // 2.5%
+$main_price = (float) $design['expect_price'];
+$ui_budget = isset($_POST['budget'])
+    ? (float) $_POST['budget']
+    : max((float) ($clientData['budget'] ?? 0), $main_price);
+$first_design_fee = $main_price * 0.025; // 2.5% of design expected price
 $total_amount = $first_design_fee + $deposit;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Support AJAX floor plan uploads: return JSON and exit
@@ -89,7 +93,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
     // Allow client to edit budget at order placement; fall back to profile or design expected price
-    $budget = isset($_POST['budget']) ? (float) $_POST['budget'] : (float) ($clientData['budget'] ?? $design['expect_price']);
+    $budget = isset($_POST['budget']) ? (float) $_POST['budget'] : max((float) ($clientData['budget'] ?? 0), $main_price);
     // Gross Floor Area (GFA) for this order (m2) — optional
     $gfa = isset($_POST['gross_floor_area']) ? (float) $_POST['gross_floor_area'] : 0.0;
     $requirements = trim($_POST['requirements'] ?? '');
@@ -272,14 +276,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // Deposit default (HK$)
     $deposit = 2000.00;
-    $first_design_fee = (float) $design['expect_price'] * 0.025; // 1st payment design fee (2.5%)
+    $first_design_fee = $main_price * 0.025; // 1st payment design fee (2.5% of design expected price)
     // First payment total (spec): 1st design fee + project deposit
     $total_amount = $first_design_fee + $deposit;
 
     if (!$error) {
-        // Calculate OrderPayment breakdown based on budget (total_cost)
+        // Calculate OrderPayment breakdown based on design expected price (main price)
         // Formula: Design 10% (d5% m5%), material 45%, contractor 30%, inspector 5%, commission 10%
-        $total_cost = $budget;
+        $total_cost = $main_price;
         $design_fee_designer_1st = $total_cost * 0.025;  // 2.5%
         $design_fee_designer_2nd = $total_cost * 0.025;  // 2.5%
         $design_fee_manager_1st = $total_cost * 0.025;   // 2.5%
@@ -301,13 +305,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                       $inspection_fee + $contractor_fee + $commission_final;
         $total_amount_due = $total_design_payment + $total_construction_payment;
         
-        // Create OrderPayment record first
-        $insPayment = $mysqli->prepare("INSERT INTO OrderPayment (orderid, total_cost, design_fee_designer_1st, design_fee_designer_2nd, design_fee_manager_1st, design_fee_manager_2nd, design_deposit, commission_1st, construction_main_price, construction_deposit, materials_cost, inspection_fee, contractor_fee, commission_final, total_design_payment, total_construction_payment, total_amount_due, total_amount_paid, payment_status) VALUES (0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0.00, 'pending')");
-        
         $paymentId = null;
-        if ($insPayment) {
+        $orderId = null;
+
+        // Create Order first, then OrderPayment, then back-link payment_id
+        try {
+            $mysqli->begin_transaction();
+
+            $stmt = $mysqli->prepare("INSERT INTO `Order` (odate, clientid, budget, deposit, payment_id, cost, gross_floor_area, Requirements, designid, ostatus) VALUES (NOW(), ?, ?, ?, NULL, NULL, ?, ?, ?, 'waiting confirm')");
+            if (!$stmt) {
+                throw new Exception('Prepare order insert failed');
+            }
+            $stmt->bind_param("idddsi", $clientId, $budget, $deposit, $gfa, $requirements, $designid);
+            if (!$stmt->execute()) {
+                throw new Exception('Order insert failed');
+            }
+            $orderId = (int) $stmt->insert_id;
+            $stmt->close();
+
+            $insPayment = $mysqli->prepare("INSERT INTO OrderPayment (total_cost, design_fee_designer_1st, design_fee_designer_2nd, design_fee_manager_1st, design_fee_manager_2nd, design_deposit, commission_1st, construction_main_price, construction_deposit, materials_cost, inspection_fee, contractor_fee, commission_final, total_design_payment, total_construction_payment, total_amount_due, total_amount_paid, payment_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0.00, 'pending')");
+            if (!$insPayment) {
+                throw new Exception('Prepare payment insert failed');
+            }
             $insPayment->bind_param(
-                "ddddddddddddddd",
+                "dddddddddddddddd",
                 $total_cost,
                 $design_fee_designer_1st,
                 $design_fee_designer_2nd,
@@ -325,34 +346,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $total_construction_payment,
                 $total_amount_due
             );
-            if ($insPayment->execute()) {
-                $paymentId = $insPayment->insert_id;
+            if (!$insPayment->execute()) {
+                throw new Exception('Payment insert failed');
             }
+            $paymentId = (int) $insPayment->insert_id;
             $insPayment->close();
-        }
-        
-        // Check if OrderPayment was created successfully
-        if (!$paymentId) {
-            $error = 'Failed to create payment record. Please try again.';
-        } else {
-            // Now insert Order with payment_id linked
-            $stmt = $mysqli->prepare("INSERT INTO `Order` (odate, clientid, budget, deposit, payment_id, cost, gross_floor_area, Requirements, designid, ostatus) VALUES (NOW(), ?, ?, ?, ?, NULL, ?, ?, ?, 'waiting confirm')");
-        }
-        
-        if (!$error && isset($stmt)) {
-        $stmt->bind_param("iddiidsi", $clientId, $budget, $deposit, $paymentId, $gfa, $requirements, $designid);
-        if ($stmt && $stmt->execute()) {
-            $orderId = $stmt->insert_id;
-            
-            // Update OrderPayment with the correct orderid
-            if ($paymentId) {
-                $updPayment = $mysqli->prepare("UPDATE OrderPayment SET orderid = ? WHERE payment_id = ?");
-                if ($updPayment) {
-                    $updPayment->bind_param("ii", $orderId, $paymentId);
-                    $updPayment->execute();
-                    $updPayment->close();
-                }
+
+            $updOrderPayment = $mysqli->prepare("UPDATE `Order` SET payment_id = ? WHERE orderid = ?");
+            if (!$updOrderPayment) {
+                throw new Exception('Prepare order update failed');
             }
+            $updOrderPayment->bind_param("ii", $paymentId, $orderId);
+            if (!$updOrderPayment->execute()) {
+                throw new Exception('Order payment_id update failed');
+            }
+            $updOrderPayment->close();
+
+            $mysqli->commit();
+        } catch (Throwable $e) {
+            $mysqli->rollback();
+            $dbErr = $mysqli->error;
+            $error = 'Failed to create payment record. Please try again.';
+            if (!empty($dbErr)) {
+                $error .= ' (' . $dbErr . ')';
+            }
+            error_log('[order.php] order/payment transaction failed: ' . $e->getMessage() . ' | DB: ' . $dbErr);
+        }
+
+        if (!$error && $orderId > 0) {
             
             // If product references exist, insert them into OrderReference table so they persist with the order
             if (!empty($product_refs) && $orderId) {
@@ -516,9 +537,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Redirect immediately to the order detail page to avoid timing issues
             header('Location: order_detail.php?orderid=' . $orderId);
             exit;
-        } else {
-            $error = 'Failed to create order: ' . $stmt->error;
-            }
         }
     }
 }
@@ -548,8 +566,8 @@ if (!empty($clientData['ctel'])) {
     $phoneDisplay = (string) $clientData['ctel'];
 }
 
-// Format budget display
-$budgetDisplay = $clientData['budget'] ?? 0;
+// Format budget display (keep POSTed value when validation fails)
+$budgetDisplay = $ui_budget;
 
 // Parse payment method data
 $paymentMethodData = [];
@@ -775,7 +793,7 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                             </div>
                             <div class="mt-3 mb-3">
                                 <label class="form-label fw-bold">Order budget</label>
-                                <?php $initialBudget = $budgetDisplay > 0 ? $budgetDisplay : (float) $design['expect_price']; ?>
+                                <?php $initialBudget = max((float) $budgetDisplay, (float) $design['expect_price']); ?>
                                 <div id="budgetView" class="d-flex align-items-center">
                                     <div id="budgetDisplayText" class="me-2">
                                         HK$
@@ -786,7 +804,7 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                                 </div>
 
                                 <div id="budgetEdit" style="display:none; margin-top:.5rem;">
-                                    <input type="number" step="1000" min="0" id="budgetInput" class="form-control"
+                                    <input type="number" step="1000" min="<?= htmlspecialchars((string) (float) $design['expect_price']) ?>" id="budgetInput" class="form-control"
                                         value="<?= htmlspecialchars($initialBudget) ?>">
                                     <div class="mt-2">
                                         <button type="button" id="budgetSaveBtn"
@@ -1093,6 +1111,7 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                     budgetDisplayText.textContent = 'HK$' + val.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
                     budgetEdit.style.display = 'none';
                     budgetView.style.display = 'flex';
+                    document.dispatchEvent(new Event('budgetChanged'));
                 });
             }
             if (budgetCancelBtn) {
@@ -1637,13 +1656,14 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
     </script>
     <script>
         (function () {
-            const firstDesignFee = <?= json_encode((float) $first_design_fee) ?>;
+            const mainPrice = <?= json_encode((float) $design['expect_price']) ?>;
             const deposit = <?= json_encode((float) ($deposit ?? 2000.0)) ?>;
             const refsInput = document.getElementById('references');
             const totalEl = document.getElementById('orderTotal');
             let debounceTimer = null;
 
             function setTotal() {
+                const firstDesignFee = mainPrice * 0.025;
                 const total = firstDesignFee + deposit;
                 if (totalEl) totalEl.textContent = 'HK$' + total.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
             }
@@ -1694,6 +1714,7 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                     }, 300);
                 });
             }
+
             // initialize: fetch itemized refs and set total
             (async function initRefs() {
                 const dids = refsInput ? refsInput.value.trim() : '';
