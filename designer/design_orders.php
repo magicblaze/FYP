@@ -1225,7 +1225,7 @@ foreach ($orders as $o) {
                                 $canSubmit = in_array($status, ['designing']);
                                 $hasPictures = !empty($order['pictures']);
                                 $hasReferences = !empty($order['references']);
-                                $disableSubmit = !$hasPictures || !$hasReferences || !$hasFinalPayment;
+                                $disableSubmit = !$hasPictures || !$hasReferences;
                             ?>
                             <?php if ($canSubmit): ?>
                                 <button class="btn <?php echo $disableSubmit ? 'btn-secondary' : 'btn-primary'; ?>" onclick="updateOrder(<?= $order['orderid'] ?>,'submit_proposal', this)" <?php if ($disableSubmit): ?>disabled title="<?php 
