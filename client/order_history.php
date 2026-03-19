@@ -398,17 +398,17 @@ if (!empty($_GET['msg'])) {
 
                             <!-- NEW: Pay Final Payment button for drafting 2nd proposal status -->
                             <?php if (in_array($statusLower, ['drafting 2nd proposal', 'waiting final design phase payment'], true) && $final_payment_amount > 0): ?>
-                                <a href="payment_final.php?orderid=<?= (int) $order['orderid'] ?>&amount=<?= $final_payment_amount ?>" class="view-details-btn btn-final"
+                                <a href="payment2.php?orderid=<?= (int) $order['orderid'] ?>&amount=<?= $final_payment_amount ?>" class="view-details-btn btn-final"
                                     onclick="event.stopPropagation();">
-                                    <i class="fas fa-credit-card me-1"></i>Pay Final Design & Products
+                                    <i class="fas fa-credit-card me-1"></i>2nd Payment
                                 </a>
                             <?php endif; ?>
 
                             <!-- Proceed to Payment button (separate) -->
                             <?php if (in_array($statusLower, ['waiting design phase payment', 'waiting 2nd design phase payment'], true)): ?>
-                                <a href="payment.php?orderid=<?= (int) $order['orderid'] ?>" class="view-details-btn"
+                                <a href="payment3.php?orderid=<?= (int) $order['orderid'] ?>" class="view-details-btn"
                                     onclick="event.stopPropagation();">
-                                    <i class="fas fa-credit-card me-1"></i>Proceed to Payment
+                                    <i class="fas fa-credit-card me-1"></i>Final Design Payment
                                 </a>
                             <?php endif; ?>
                             <!-- Proceed to Construction Payment button -->
