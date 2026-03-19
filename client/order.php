@@ -290,13 +290,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $design_deposit = 2000.00;                        // Fixed deposit
         $commission_1st = $total_cost * 0.05;            // 5% (from design phase)
         
-        $construction_main_price = $total_cost * 0.90;   // 90% of total goes to construction
-        $construction_deposit = $construction_main_price * 0.20;  // 20% of main price
+        $construction_main_price = $total_cost * 0.80;   // 80% of total goes to construction
+
         $materials_cost = $total_cost * 0.45;            // 45% of total
         $inspection_fee = $total_cost * 0.05;            // 5% of total
         $contractor_fee = $total_cost * 0.30;            // 30% of total
         $commission_final = $total_cost * 0.10;          // 10% (from construction phase)
-        
+
+        $construction_deposit = $construction_main_price * 0.20;  // 20% 
+
         $total_design_payment = $main_price * 0.10; // Total design payment (10% of design expected price)
         $total_construction_payment = $construction_main_price;
         $total_amount_due = $total_design_payment + $total_construction_payment + $commission_final;

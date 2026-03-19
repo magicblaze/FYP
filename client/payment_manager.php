@@ -57,7 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $expectedStatus = [
                 'design_deposit' => 'waiting confirm',
                 'design_completion' => 'reviewing design proposal',
-                'construction_deposit' => 'waiting client payment',
+                'construction_deposit' => 'waiting final payment',
                 'final_payment' => 'complete'
             ];
             
@@ -88,7 +88,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                         'waiting for review design' => 4,
                         'drafting 2nd proposal' => 5,
                         'waiting client review' => 6,
-                        'waiting client payment' => 7,
+                        'waiting final payment' => 7,
                         'complete' => 8
                     ];
                     
@@ -408,7 +408,7 @@ while ($order = $orders->fetch_assoc()) {
         'construction_deposit' => [
             'name' => 'Construction Deposit',
             'amount' => $constructionDepositAmount,
-            'due_status' => 'waiting client payment',
+            'due_status' => 'waiting final payment',
             'paid_status' => 'complete',
             'status' => 'pending',
             'paid' => false,
@@ -437,7 +437,7 @@ while ($order = $orders->fetch_assoc()) {
         'waiting for review design' => ['design_deposit', 'design_completion'],
         'drafting 2nd proposal' => ['design_deposit', 'design_completion'],
         'waiting client review' => ['design_deposit', 'design_completion'],
-        'waiting client payment' => ['design_deposit', 'design_completion'],
+        'waiting final payment' => ['design_deposit', 'design_completion'],
         'complete' => ['design_deposit', 'design_completion', 'construction_deposit', 'final_payment']
     ];
     
