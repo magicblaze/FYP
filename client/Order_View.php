@@ -97,6 +97,8 @@ if (!empty($references)) {
     }
 }
 
+$final_payment_amount = $final_payment + $references_total;
+
 // Calculate Design Fee (2.5% of design price as shown in Order_Edit)
 $Design_Fee1 = $design_price * 0.025;
 $Project_Deposit = 2000; // Fixed project deposit
@@ -112,8 +114,8 @@ $status = strtolower($order['ostatus'] ?? 'waiting confirm');
 // Handle client actions: confirm proposal or request revision
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['client_confirm_proposal'])) {
-        // Set to waiting final payment and redirect to order detail/payment page
-        $next_status = 'waiting final payment';
+        // Set to waiting design phase payment and redirect to order detail/payment page
+        $next_status = 'waiting design phase payment';
         $u_sql = "UPDATE `Order` SET ostatus = ? WHERE orderid = ? AND clientid = ?";
         $u_stmt = mysqli_prepare($mysqli, $u_sql);
         mysqli_stmt_bind_param($u_stmt, "sii", $next_status, $orderid, $client_id);
@@ -586,7 +588,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
         <?php endif; ?>
 
-        <?php if ($status === 'waiting final payment'): ?>
+        <?php if (in_array($status, ['waiting design phase payment', 'waiting 2nd design phase payment'], true)): ?>
             <div class="row mb-4">
                 <div class="col-12">
                     <div class="card border-success">
@@ -596,6 +598,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <div class="mt-3">
                                 <a href="payment.php?orderid=<?php echo $orderid; ?>" class="btn btn-success">
                                     <i class="fas fa-credit-card me-1"></i>Proceed to Payment
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        <?php endif; ?>
+
+        <?php if ($status === 'waiting final design phase payment' && $final_payment_amount > 0): ?>
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card border-success">
+                        <div class="card-body text-center">
+                            <h5 class="mb-2">Final Design Payment</h5>
+                            <p class="text-muted">Please complete the final design payment to proceed.</p>
+                            <div class="mt-3">
+                                <a href="payment_final.php?orderid=<?php echo $orderid; ?>&amount=<?php echo $final_payment_amount; ?>" class="btn btn-success">
+                                    <i class="fas fa-credit-card me-1"></i>Pay Final Design & Products
                                 </a>
                             </div>
                         </div>

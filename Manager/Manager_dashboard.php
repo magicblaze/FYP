@@ -72,12 +72,12 @@ if (!$orders_result) {
 $stats_sql = "SELECT 
                 COUNT(DISTINCT o.orderid) as total_orders,
                 COUNT(DISTINCT CASE WHEN o.ostatus = 'waiting confirm' THEN o.orderid END) as pending_orders,
-                COUNT(DISTINCT CASE WHEN o.ostatus = 'designing' THEN o.orderid END) as designing_orders,
+                COUNT(DISTINCT CASE WHEN o.ostatus IN ('designing', 'reviewing design proposal', 'waiting for review design', 'drafting 2nd proposal', 'waiting client review', 'waiting design phase payment', 'waiting 2nd design phase payment', 'waiting final design phase payment', 'waiting 1st construction phase payment') THEN o.orderid END) as designing_orders,
                 COUNT(DISTINCT CASE WHEN o.ostatus = 'complete' THEN o.orderid END) as completed_orders,
                 COUNT(DISTINCT CASE WHEN o.ostatus IN ('reject','rejected') THEN o.orderid END) as rejected_orders,
                 COUNT(DISTINCT CASE WHEN d.designerid IS NOT NULL THEN o.orderid END) as assigned_orders,
                 COUNT(DISTINCT CASE WHEN d.designerid IS NULL THEN o.orderid END) as unassigned_orders,
-                SUM(CASE WHEN o.ostatus IN ('waiting confirm', 'designing') THEN o.budget ELSE 0 END) as active_budget,
+                SUM(CASE WHEN o.ostatus IN ('waiting confirm', 'designing', 'reviewing design proposal', 'waiting for review design', 'drafting 2nd proposal', 'waiting client review', 'waiting design phase payment', 'waiting 2nd design phase payment', 'waiting final design phase payment', 'waiting 1st construction phase payment') THEN o.budget ELSE 0 END) as active_budget,
                 COUNT(DISTINCT des.designerid) as total_designers
                FROM `Order` o
                LEFT JOIN `Design` d ON o.designid = d.designid
