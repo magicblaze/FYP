@@ -262,12 +262,13 @@ CREATE TABLE `OrderPayment` (
   `design_fee_designer_2nd` DECIMAL(12, 2) DEFAULT 0.00,
   `design_fee_manager_1st` DECIMAL(12, 2) DEFAULT 0.00,
   `design_fee_manager_2nd` DECIMAL(12, 2) DEFAULT 0.00,
-  `design_deposit` DECIMAL(12, 2) DEFAULT 2000.00,
+  `design_deposit` DECIMAL(12, 2) DEFAULT 0.00,
+  
   `commission_1st` DECIMAL(12, 2) DEFAULT 0.00,
   
   -- Construction Phase Payments (90% of total)
   `construction_main_price` DECIMAL(12, 2) DEFAULT 0.00,
-  `construction_deposit` DECIMAL(12, 2) DEFAULT 0.00,
+  `construction_deposit` DECIMAL(12, 2) DEFAULT 2000.00,
   `materials_cost` DECIMAL(12, 2) DEFAULT 0.00,
   `inspection_fee` DECIMAL(12, 2) DEFAULT 0.00,
   `contractor_fee` DECIMAL(12, 2) DEFAULT 0.00,
