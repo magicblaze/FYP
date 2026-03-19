@@ -295,13 +295,13 @@ CREATE TABLE `OrderPayment` (
 
 -- Sample OrderPayment data for existing orders
 -- Calculation (per order.php): design fees 2.5% each, commission_1st 5%, construction main price 80%,
--- construction deposit 20% of main price, materials 45%, contractor 30%, inspector 5%, commission_final 10%.
+-- construction deposit 20% of main price, materials 45%, contractor 30%, inspector 5%, commission_final 5%.
 -- Totals: total_design_payment = 10% of total_cost; total_construction_payment = construction_main_price;
--- total_amount_due = total_design_payment + total_construction_payment + commission_final
+-- total_amount_due = total_design_payment + total_construction_payment + commission_final + commission_1st
 INSERT INTO `OrderPayment` (`total_cost`, `design_fee_designer_1st`, `design_fee_designer_2nd`, `design_fee_manager_1st`, `design_fee_manager_2nd`, `design_deposit`, `commission_1st`, `construction_main_price`, `construction_deposit`, `materials_cost`, `inspection_fee`, `contractor_fee`, `commission_final`, `total_design_payment`, `total_construction_payment`, `total_amount_due`, `total_amount_paid`, `payment_status`) VALUES
-(400000.00, 10000.00, 10000.00, 10000.00, 10000.00, 2000.00, 20000.00, 320000.00, 64000.00, 180000.00, 20000.00, 120000.00, 40000.00, 40000.00, 320000.00, 400000.00, 0.00, 'pending'),
-(350000.00, 8750.00, 8750.00, 8750.00, 8750.00, 2000.00, 17500.00, 280000.00, 56000.00, 157500.00, 17500.00, 105000.00, 35000.00, 35000.00, 280000.00, 350000.00, 0.00, 'pending'),
-(300000.00, 7500.00, 7500.00, 7500.00, 7500.00, 2000.00, 15000.00, 240000.00, 48000.00, 135000.00, 15000.00, 90000.00, 30000.00, 30000.00, 240000.00, 300000.00, 0.00, 'pending');
+(400000.00, 10000.00, 10000.00, 10000.00, 10000.00, 2000.00, 20000.00, 320000.00, 64000.00, 180000.00, 20000.00, 120000.00, 20000.00, 40000.00, 320000.00, 400000.00, 0.00, 'pending'),
+(350000.00, 8750.00, 8750.00, 8750.00, 8750.00, 2000.00, 17500.00, 280000.00, 56000.00, 157500.00, 17500.00, 105000.00, 17500.00, 35000.00, 280000.00, 350000.00, 0.00, 'pending'),
+(300000.00, 7500.00, 7500.00, 7500.00, 7500.00, 2000.00, 15000.00, 240000.00, 48000.00, 135000.00, 15000.00, 90000.00, 15000.00, 30000.00, 240000.00, 300000.00, 0.00, 'pending');
 
 -- Update Order to link to OrderPayment for all orders
 UPDATE `Order` SET `payment_id` = 1 WHERE `orderid` = 1;
