@@ -112,8 +112,8 @@ $status = strtolower($order['ostatus'] ?? 'waiting confirm');
 // Handle client actions: confirm proposal or request revision
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['client_confirm_proposal'])) {
-        // Set to waiting final payment and redirect to order detail/payment page
-        $next_status = 'waiting final payment';
+        // Set to waiting design phase payment and redirect to order detail/payment page
+        $next_status = 'waiting design phase payment';
         $u_sql = "UPDATE `Order` SET ostatus = ? WHERE orderid = ? AND clientid = ?";
         $u_stmt = mysqli_prepare($mysqli, $u_sql);
         mysqli_stmt_bind_param($u_stmt, "sii", $next_status, $orderid, $client_id);
@@ -586,7 +586,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
         <?php endif; ?>
 
-        <?php if ($status === 'waiting final payment'): ?>
+        <?php if ($status === 'waiting design phase payment'): ?>
             <div class="row mb-4">
                 <div class="col-12">
                     <div class="card border-success">

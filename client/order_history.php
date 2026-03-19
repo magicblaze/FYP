@@ -380,7 +380,7 @@ if (!empty($_GET['msg'])) {
                         <?php endif; ?>
                         <div style="margin-top: 0.75rem; display:flex; gap:8px;">
                             <!-- Primary view/proposal/details button -->
-                            <?php if ($statusLower === 'waiting client review' || $statusLower === 'waiting final payment' || $statusLower === 'complete'): ?>
+                            <?php if ($statusLower === 'waiting client review' || $statusLower === 'waiting design phase payment' || $statusLower === 'complete'): ?>
                                 <a href="Order_View.php?id=<?= (int) $order['orderid'] ?>" class="view-details-btn"
                                     onclick="event.stopPropagation();">
                                     <i class="fas fa-file-image me-1"></i>View Proposal</a>
@@ -403,7 +403,7 @@ if (!empty($_GET['msg'])) {
                             <?php endif; ?>
 
                             <!-- Proceed to Payment button (separate) -->
-                            <?php if ($statusLower === 'waiting final payment'): ?>
+                            <?php if ($statusLower === 'waiting design phase payment'): ?>
                                 <a href="payment.php?orderid=<?= (int) $order['orderid'] ?>" class="view-details-btn"
                                     onclick="event.stopPropagation();">
                                     <i class="fas fa-credit-card me-1"></i>Proceed to Payment
