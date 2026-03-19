@@ -65,7 +65,7 @@ $deducted_amount = $design_price;
 $remaining_budget = $original_budget - $deducted_amount;
 
 // 检查设计是否已确认
-$is_design_confirmed = in_array(strtolower($order['ostatus'] ?? ''), ['waiting payment', 'waiting client payment', 'complete']);
+$is_design_confirmed = in_array(strtolower($order['ostatus'] ?? ''), ['waiting payment', 'waiting final payment', 'complete']);
 
 // 获取当前状态
 $current_status = strtolower($order['ostatus'] ?? '');
@@ -660,7 +660,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 // Normalize status strings
 $status = strtolower($order['ostatus'] ?? 'waiting confirm');
 $isProposalConfirmed = !in_array($status, ['waiting confirm', 'designing', 'drafting 2nd proposal', 'reviewing design proposal', 'submit_proposal', 'rejected']);
-$hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing design proposal', 'waiting client review', 'rejected', 'waiting client payment', 'complete']);
+$hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing design proposal', 'waiting client review', 'rejected', 'waiting final payment', 'complete']);
 
 ?>
 
@@ -896,7 +896,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                 'waiting for review design' => ['class' => 'alert-warning', 'icon' => 'fa-eye', 'title' => 'Waiting Client to Review Design Proposal', 'text' => 'Design Proposal has been submitted, please wait for client to review.'],
                 'waiting client review' => ['class' => 'alert-warning', 'icon' => 'fa-eye', 'title' => 'Waiting Client Review 2nd Proposal', 'text' => '2nd Proposal has been submitted, please wait for client to review.'],
                 'waiting payment' => ['class' => 'alert-warning', 'icon' => 'fa-credit-card', 'title' => 'Waiting Payment', 'text' => 'Waiting for client payment to proceed.'],
-                'waiting client payment' => ['class' => 'alert-warning', 'icon' => 'fa-credit-card', 'title' => 'Waiting Payment', 'text' => 'Waiting for client payment to proceed.'],
+                'waiting final payment' => ['class' => 'alert-warning', 'icon' => 'fa-credit-card', 'title' => 'Waiting Payment', 'text' => 'Waiting for client payment to proceed.'],
                 'waiting for selection' => ['class' => 'alert-warning', 'icon' => 'fa-list', 'title' => 'Waiting for Selection', 'text' => 'Waiting for client to select construction items.'],
                 'preparing' => ['class' => 'alert-info', 'icon' => 'fa-truck-loading', 'title' => 'Preparing', 'text' => 'Order is being prepared for construction/delivery.'],
                 'complete' => ['class' => 'alert-success', 'icon' => 'fa-check-circle', 'title' => 'Complete', 'text' => 'Order completed successfully.'],
