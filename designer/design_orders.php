@@ -29,11 +29,8 @@ if ($orderId > 0) {
         o.ostatus,
         o.designid,
         o.Requirements,
-        COALESCE(op.total_design_payment, 0) as total_design_payment,
-        COALESCE(op.total_construction_payment, 0) as total_construction_payment,
-        COALESCE(op.commission_1st, 0) as commission_1st,
-        COALESCE(op.commission_final, 0) as commission_final,
-        COALESCE(op.total_amount_due, 0) as total_amount_due,
+        COALESCE(o.deposit_amount, c.budget * 0.25, 0) as deposit_amount,
+        COALESCE(o.final_payment, 0) as final_payment,
         d.designName,
         d.expect_price,
         d.tag,
@@ -44,7 +41,6 @@ if ($orderId > 0) {
     FROM `Order` o
     JOIN Design d ON o.designid = d.designid
     JOIN Client c ON o.clientid = c.clientid
-    LEFT JOIN OrderPayment op ON o.payment_id = op.payment_id
     WHERE d.designerid = ? AND o.orderid = ?
     LIMIT 1
     ";
@@ -68,11 +64,8 @@ if ($orderId > 0) {
         o.ostatus,
         o.designid,
         o.Requirements,
-        COALESCE(op.total_design_payment, 0) as total_design_payment,
-        COALESCE(op.total_construction_payment, 0) as total_construction_payment,
-        COALESCE(op.commission_1st, 0) as commission_1st,
-        COALESCE(op.commission_final, 0) as commission_final,
-        COALESCE(op.total_amount_due, 0) as total_amount_due,
+        COALESCE(o.deposit_amount, c.budget * 0.25, 0) as deposit_amount,
+        COALESCE(o.final_payment, 0) as final_payment,
         d.designName,
         d.expect_price,
         d.tag,
@@ -83,7 +76,6 @@ if ($orderId > 0) {
     FROM `Order` o
     JOIN Design d ON o.designid = d.designid
     JOIN Client c ON o.clientid = c.clientid
-    LEFT JOIN OrderPayment op ON o.payment_id = op.payment_id
     WHERE d.designerid = ?
     ORDER BY o.orderid DESC
     ";
@@ -278,8 +270,7 @@ foreach ($orders as $o) {
         }
 
         .order-info {
-            background: #fff;
-            border: 1px solid #dee2e6;
+            background: #f8fafd;
             padding: 0.75rem 1rem;
             border-radius: 6px;
             font-size: 0.9rem;
@@ -348,8 +339,8 @@ foreach ($orders as $o) {
 
         /* Designed Picture Section Styles */
         .designed-picture-section {
-            background: #fff;
-            border: 1px solid #dee2e6;
+            background: #f0f7ff;
+            border-left: 4px solid #3498db;
             padding: 1rem;
             border-radius: 6px;
             margin-top: 1rem;
@@ -454,23 +445,23 @@ foreach ($orders as $o) {
         }
 
         .upload-area {
-            border: 2px dashed #dee2e6;
+            border: 2px dashed #3498db;
             border-radius: 8px;
             padding: 2rem;
             text-align: center;
-            background: #fff;
+            background: #f8f9fa;
             cursor: pointer;
             transition: all 0.3s;
         }
 
         .upload-area:hover {
-            background: #fff;
-            border-color: #c9d2db;
+            background: #e8f4f8;
+            border-color: #2980b9;
         }
 
         .upload-area.dragover {
-            background: #fff;
-            border-color: #c9d2db;
+            background: #d4e9f7;
+            border-color: #2980b9;
         }
 
         .rejection-reason {
@@ -546,8 +537,8 @@ foreach ($orders as $o) {
         }
 
         .design-items-info {
-            background: #fff;
-            border: 1px solid #dee2e6;
+            background: #e3f2fd;
+            border-left: 4px solid #3498db;
             padding: 1rem;
             border-radius: 6px;
             margin-bottom: 1rem;
@@ -557,7 +548,7 @@ foreach ($orders as $o) {
 
         .design-items-info-title {
             font-weight: 600;
-            color: #2c3e50;
+            color: #1976d2;
             margin-bottom: 0.5rem;
         }
 
@@ -568,16 +559,16 @@ foreach ($orders as $o) {
         }
 
         .design-item-badge {
-            background: #f1f3f5;
+            background: #bbdefb;
             padding: 0.5rem 0.75rem;
             border-radius: 4px;
-            color: #2c3e50;
+            color: #0d47a1;
             font-weight: 500;
         }
 
         .reference-item {
             padding: 0.75rem;
-            border: 1px solid #dee2e6;
+            border: 1px solid #ffe8a6;
             border-radius: 6px;
             margin-bottom: 0.75rem;
             display: flex;
@@ -587,7 +578,7 @@ foreach ($orders as $o) {
         }
 
         .reference-item:hover {
-            background: #fff;
+            background: #fffbf0;
         }
 
         .reference-thumbnail {
@@ -623,8 +614,7 @@ foreach ($orders as $o) {
         }
 
         .add-reference-form {
-            background: #fff;
-            border: 1px solid #dee2e6;
+            background: #f8f9fa;
             padding: 1rem;
             border-radius: 6px;
             margin-top: 1rem;
@@ -769,8 +759,8 @@ foreach ($orders as $o) {
 
         /* Payment Section Styles */
         .payment-section {
-            background: #fff;
-            border: 1px solid #dee2e6;
+            background: #e8f5e9;
+            border-left: 4px solid #4caf50;
             padding: 1rem;
             border-radius: 6px;
             margin-top: 1.5rem;
@@ -873,6 +863,12 @@ foreach ($orders as $o) {
             <?php foreach ($orders as $order): ?>
                 <?php 
                 $canEdit = (strtolower(trim($order['ostatus'] ?? '')) === 'designing');
+                // Calculate max final payment based on Expected Price ÷ 0.25
+                $expectedPrice = floatval($order['expect_price'] ?? 0);
+                
+                $maxFinalPayment = $expectedPrice * 0.025 * 1.5; 
+                $currentFinalPayment = floatval($order['final_payment'] ?? 0);
+                $depositAmount = floatval($order['deposit_amount'] ?? 0);
                 ?>
                 <div class="order-card">
                     <!-- Order Title and Status (Main Focus) -->
@@ -899,7 +895,7 @@ foreach ($orders as $o) {
                     </div>
 
                     <!-- Client Information (Who the order is for) -->
-                    <div class="order-info">
+                    <div class="order-info" style="background: #e8f8f5; border-left: 4px solid #16a085; margin-bottom: 1rem;">
                         <div style="display: flex; gap: 2rem;">
                             <div style="flex: 1;">
                                 <div class="order-info-item">
@@ -923,25 +919,66 @@ foreach ($orders as $o) {
                     <!-- Order Details (Key Information) -->
                     <div class="order-details" style="margin-bottom: 1rem;">
                         <div class="detail-item">
-                            <div class="detail-label">Order Date</div>
+                            <div class="detail-label"><i class="fas fa-calendar me-1"></i>Order Date</div>
                             <div class="detail-value"><?= date('M d, Y H:i', strtotime($order['odate'])) ?></div>
                         </div>
                         <div class="detail-item">
-                            <div class="detail-label">Budget</div>
+                            <div class="detail-label"><i class="fas fa-money-bill-wave me-1"></i>Budget</div>
                             <div class="detail-value">HK$<?= number_format($order['budget']) ?></div>
                         </div>
                         <div class="detail-item">
-                            <div class="detail-label">Expected Price</div>
+                            <div class="detail-label"><i class="fas fa-tag me-1"></i>Expected Price</div>
                             <div class="detail-value">HK$<?= number_format($order['expect_price']) ?></div>
                         </div>
                         <div class="detail-item">
-                            <span class="detail-label">Design Cost:</span>
-                            <span class="detail-value">HK$<?= number_format((float) $order['total_design_payment'], 2) ?></span>
-                        </div>
-                        <div class="detail-item">
-                            <div class="detail-label">Floor Area</div>
+                            <div class="detail-label"><i class="fas fa-ruler-combined me-1"></i>Floor Area</div>
                             <div class="detail-value"><?= isset($order['gross_floor_area']) && $order['gross_floor_area'] > 0 ? htmlspecialchars(number_format((float)$order['gross_floor_area'],2)) . ' m²' : '&mdash;' ?></div>
                         </div>
+                    </div>
+
+                    <!-- Payment Section: Deposit and Final Payment -->
+                    <div class="payment-section">
+                        <h6 class="mb-3 section-title"><i class="fas fa-credit-card me-2"></i>Payment Information</h6>
+                        
+                        <!-- Expected Price (Read-only) -->
+                        <div class="payment-item">
+                            <span class="payment-label"><i class="fas fa-tag me-2"></i>Expected Price:</span>
+                            <span class="payment-value">HK$<?= number_format($expectedPrice, 2) ?></span>
+                        </div>
+                        
+                        <!-- Final Payment (Read Only) -->
+                        <div class="payment-item">
+                            <span class="payment-label"><i class="fas fa-check-circle me-2"></i>Final Design Payment (Completion):</span>
+                            <?php if ($canEdit && $expectedPrice > 0): ?>
+                                <div class="payment-input-group">
+                                    <span>HK$</span>
+                                    <input type="number" 
+                                           id="finalPayment_<?= $order['orderid'] ?>" 
+                                           value="<?= $currentFinalPayment > 0 ? $currentFinalPayment : '' ?>" 
+                                           min="0" 
+                                           max="<?= $maxFinalPayment ?>" 
+                                           step="0.01"
+                                           placeholder="Enter amount"
+                                           oninput="validateFinalPayment(<?= $order['orderid'] ?>, <?= $maxFinalPayment ?>)">
+                                    <button class="btn-save-payment" 
+                                            id="savePaymentBtn_<?= $order['orderid'] ?>"
+                                            onclick="saveFinalPayment(<?= $order['orderid'] ?>, <?= $maxFinalPayment ?>)"
+                                            style="display: none;">
+                                        <i class="fas fa-save me-1"></i>Save
+                                    </button>
+                                </div>
+                                <div class="payment-hint">
+                                    Max: HK$<?= number_format($maxFinalPayment, 2) ?> (1st Design Fee * 150%)
+                                </div>
+                                <div id="paymentWarning_<?= $order['orderid'] ?>" class="payment-warning" style="display: none;">
+                                    <i class="fas fa-exclamation-triangle me-1"></i>Amount exceeds maximum allowed
+                                </div>
+                            <?php else: ?>
+                                <span class="payment-value"><?= $currentFinalPayment > 0 ? 'HK$' . number_format($currentFinalPayment, 2) : 'Not set' ?></span>
+                                <?php if ($expectedPrice == 0): ?>
+                                    <div class="payment-hint">Expected price not set</div>
+                                <?php endif; ?>
+                            <?php endif; ?>
                     </div>
 
                     <!-- Requirements Section -->
@@ -1239,14 +1276,14 @@ foreach ($orders as $o) {
                                 $canSubmit = in_array($status, ['designing']);
                                 $hasPictures = !empty($order['pictures']);
                                 $hasReferences = !empty($order['references']);
-                                $hasPaymentBreakdown = (float) ($order['total_amount_due'] ?? 0) > 0;
-                                $disableSubmit = !$hasPictures || !$hasReferences || !$hasPaymentBreakdown;
+                                $hasFinalPayment = $currentFinalPayment > 0;
+                                $disableSubmit = !$hasPictures || !$hasReferences || !$hasFinalPayment;
                             ?>
                             <?php if ($canSubmit): ?>
                                 <button class="btn <?php echo $disableSubmit ? 'btn-secondary' : 'btn-primary'; ?>" onclick="updateOrder(<?= $order['orderid'] ?>,'submit_proposal', this)" <?php if ($disableSubmit): ?>disabled title="<?php 
                                     if (!$hasPictures) echo 'Add at least one design proposal';
                                     elseif (!$hasReferences) echo 'Add at least one reference';
-                                    elseif (!$hasPaymentBreakdown) echo 'Payment breakdown missing';
+                                    elseif (!$hasFinalPayment) echo 'Set the final payment amount';
                                     else echo 'Complete all requirements before submitting';
                                 ?>"<?php endif; ?>>
                                     <i class="fas fa-paper-plane me-1"></i>Submit Proposal
@@ -1863,6 +1900,85 @@ foreach ($orders as $o) {
             }
         }
 
+        // Payment functions
+        function validateFinalPayment(orderId, maxAmount) {
+            const input = document.getElementById('finalPayment_' + orderId);
+            const warning = document.getElementById('paymentWarning_' + orderId);
+            const saveBtn = document.getElementById('savePaymentBtn_' + orderId);
+            
+            if (!input || !warning || !saveBtn) return;
+            
+            const value = parseFloat(input.value) || 0;
+            
+            if (value > maxAmount) {
+                warning.style.display = 'block';
+                saveBtn.disabled = true;
+            } else {
+                warning.style.display = 'none';
+                saveBtn.disabled = false;
+            }
+            
+            // Show save button when value changes and is valid
+            if (value > 0 && value <= maxAmount) {
+                saveBtn.style.display = 'inline-block';
+            } else {
+                saveBtn.style.display = 'none';
+            }
+        }
+
+        function saveFinalPayment(orderId, maxAmount) {
+            const input = document.getElementById('finalPayment_' + orderId);
+            const saveBtn = document.getElementById('savePaymentBtn_' + orderId);
+            
+            if (!input) return;
+            
+            const value = parseFloat(input.value) || 0;
+            
+            if (value <= 0) {
+                alert('Please enter a valid final payment amount.');
+                return;
+            }
+            
+            if (value > maxAmount) {
+                alert('Final payment cannot exceed HK$' + maxAmount.toFixed(2));
+                return;
+            }
+            
+            const originalText = saveBtn.innerHTML;
+            saveBtn.disabled = true;
+            saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Saving...';
+            
+            fetch('update_final_payment.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    orderid: orderId,
+                    final_payment: value
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Final payment amount saved successfully!');
+                    // Keep the save button visible but maybe change appearance
+                    saveBtn.innerHTML = '<i class="fas fa-check me-1"></i>Saved';
+                    setTimeout(() => {
+                        saveBtn.innerHTML = originalText;
+                        saveBtn.disabled = false;
+                    }, 2000);
+                } else {
+                    alert('Error: ' + (data.message || 'Failed to save final payment'));
+                    saveBtn.innerHTML = originalText;
+                    saveBtn.disabled = false;
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                alert('Request failed: ' + err.message);
+                saveBtn.innerHTML = originalText;
+                saveBtn.disabled = false;
+            });
+        }
     </script>
     <script>
         async function updateOrder(orderId, action, btn) {
