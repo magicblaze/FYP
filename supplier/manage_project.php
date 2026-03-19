@@ -29,6 +29,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['orderdeliveryid']) &&
     }
 }
 
+// Handle delivery date update POST
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['orderdeliveryid']) && isset($_POST['delivery_date']) && $orderid > 0) {
+    $orderdeliveryid = intval($_POST['orderdeliveryid']);
+    $delivery_date = trim($_POST['delivery_date']);
+    
+    if (!empty($delivery_date)) {
+        $update_date_sql = "UPDATE OrderDelivery SET deliverydate = ? WHERE orderdeliveryid = ?";
+        $update_date_stmt = $mysqli->prepare($update_date_sql);
+        $update_date_stmt->bind_param('si', $delivery_date, $orderdeliveryid);
+        if ($update_date_stmt->execute()) {
+            $msg = 'Delivery date updated successfully!';
+        } else {
+            $msg = 'Error updating delivery date.';
+        }
+        $update_date_stmt->close();
+    } else {
+        $msg = 'Please select a valid delivery date.';
+    }
+}
+
 // Fetch all orders for dropdown and search
 $orders = [];
 $order_sql = "SELECT o.orderid, o.odate, c.cname FROM `Order` o JOIN Client c ON o.clientid = c.clientid JOIN OrderDelivery od ON o.orderid = od.orderid JOIN Product p ON od.productid = p.productid WHERE p.supplierid = ?";
