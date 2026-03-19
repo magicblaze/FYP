@@ -45,6 +45,7 @@ DROP TABLE IF EXISTS `DesignReference`;
 DROP TABLE IF EXISTS `UserLike`;
 DROP TABLE IF EXISTS `workerallocation`;
 DROP TABLE IF EXISTS `AIRecommendItem`;
+DROP TABLE IF EXISTS `OrderPayment`;
 
 -- Client table
 CREATE TABLE `Client` (
@@ -231,6 +232,7 @@ CREATE TABLE `Order` (
   `clientid` int NOT NULL,
   `budget` decimal(10,2) DEFAULT NULL,
   `deposit` decimal(10,2) NOT NULL DEFAULT 2000.00,
+  `payment_id` int DEFAULT NULL,
   `cost` decimal(10,2) DEFAULT NULL,
   `gross_floor_area` decimal(10,2) DEFAULT NULL,
   `Requirements` varchar(255) DEFAULT NULL,
@@ -240,14 +242,73 @@ CREATE TABLE `Order` (
   PRIMARY KEY (`orderid`),
   KEY `clientid_pk_idx` (`clientid`),
   KEY `designid_pk_idx` (`designid`),
+  KEY `payment_id_idx` (`payment_id`),
   CONSTRAINT `clientid_pk` FOREIGN KEY (`clientid`) REFERENCES `Client` (`clientid`),
-  CONSTRAINT `designid_pk` FOREIGN KEY (`designid`) REFERENCES `Design` (`designid`)
+  CONSTRAINT `designid_pk` FOREIGN KEY (`designid`) REFERENCES `Design` (`designid`),
+  CONSTRAINT `fk_order_payment_id` FOREIGN KEY (`payment_id`) REFERENCES `OrderPayment` (`payment_id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 INSERT INTO `Order`
 (`orderid`, `odate`, `clientid`, `budget`, `deposit`, `cost`, `gross_floor_area`, `Requirements`,`designid`,`ostatus`,`designedPicture`) VALUES
 (1, '2025-04-12 17:50:00', 1, 500000, 2000.00, NULL, NULL, 'abc',2,'designing',NULL),
 (2, '2025-05-10 12:00:00', 2, 500000, 2000.00, NULL, NULL, 'abc',1,'complete',NULL);
+
+CREATE TABLE `OrderPayment` (
+  `payment_id` INT NOT NULL AUTO_INCREMENT,
+  `orderid` INT NOT NULL UNIQUE,
+  `total_cost` DECIMAL(12, 2) NOT NULL,
+  
+  -- Designing Phase Payments (10% of total)
+  `design_fee_designer_1st` DECIMAL(12, 2) DEFAULT 0.00,
+  `design_fee_designer_2nd` DECIMAL(12, 2) DEFAULT 0.00,
+  `design_fee_manager_1st` DECIMAL(12, 2) DEFAULT 0.00,
+  `design_fee_manager_2nd` DECIMAL(12, 2) DEFAULT 0.00,
+  `design_deposit` DECIMAL(12, 2) DEFAULT 2000.00,
+  `commission_1st` DECIMAL(12, 2) DEFAULT 0.00,
+  
+  -- Construction Phase Payments (90% of total)
+  `construction_main_price` DECIMAL(12, 2) DEFAULT 0.00,
+  `construction_deposit` DECIMAL(12, 2) DEFAULT 0.00,
+  `materials_cost` DECIMAL(12, 2) DEFAULT 0.00,
+  `inspection_fee` DECIMAL(12, 2) DEFAULT 0.00,
+  `contractor_fee` DECIMAL(12, 2) DEFAULT 0.00,
+  `commission_final` DECIMAL(12, 2) DEFAULT 0.00,
+  
+  -- Additional Fees
+  `additional_fees` DECIMAL(12, 2) DEFAULT 0.00,
+  
+  -- Payment Summary
+  `total_design_payment` DECIMAL(12, 2) DEFAULT 0.00,
+  `total_construction_payment` DECIMAL(12, 2) DEFAULT 0.00,
+  `total_amount_due` DECIMAL(12, 2) DEFAULT 0.00,
+  `total_amount_paid` DECIMAL(12, 2) DEFAULT 0.00,
+  
+  `payment_status` ENUM('pending', 'partial_paid', 'settled') DEFAULT 'pending',
+  `last_payment_date` DATETIME DEFAULT NULL,
+  
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  
+  PRIMARY KEY (`payment_id`),
+  KEY `orderid_idx` (`orderid`),
+  KEY `payment_status_idx` (`payment_status`),
+  CONSTRAINT `fk_orderpayment_orderid` FOREIGN KEY (`orderid`) REFERENCES `Order` (`orderid`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Sample OrderPayment data for existing orders
+-- Calculation: Design fee 10% (d5% m5%), material 45%, contractor 30%, inspector 5%, commission 10%
+-- Order 1: total_cost=400k, design=40k+2k, materials=180k, contractor=120k, inspector=20k, commission_1st=20k, deposit=64k, commission_final=40k
+-- Order 2: total_cost=350k, design=35k+2k, materials=157.5k, contractor=105k, inspector=17.5k, commission_1st=17.5k, deposit=56k, commission_final=35k
+-- Order 3: total_cost=300k, design=30k+2k, materials=135k, contractor=90k, inspector=15k, commission_1st=15k, deposit=48k, commission_final=30k
+INSERT INTO `OrderPayment` (`orderid`, `total_cost`, `design_fee_designer_1st`, `design_fee_designer_2nd`, `design_fee_manager_1st`, `design_fee_manager_2nd`, `design_deposit`, `commission_1st`, `construction_main_price`, `construction_deposit`, `materials_cost`, `inspection_fee`, `contractor_fee`, `commission_final`, `total_design_payment`, `total_construction_payment`, `total_amount_due`, `total_amount_paid`, `payment_status`) VALUES
+(1, 400000.00, 10000.00, 10000.00, 10000.00, 10000.00, 2000.00, 20000.00, 320000.00, 64000.00, 180000.00, 20000.00, 120000.00, 40000.00, 62000.00, 424000.00, 486000.00, 0.00, 'pending'),
+(2, 350000.00, 8750.00, 8750.00, 8750.00, 8750.00, 2000.00, 17500.00, 280000.00, 56000.00, 157500.00, 17500.00, 105000.00, 35000.00, 54500.00, 371000.00, 425500.00, 0.00, 'pending'),
+(3, 300000.00, 7500.00, 7500.00, 7500.00, 7500.00, 2000.00, 15000.00, 240000.00, 48000.00, 135000.00, 15000.00, 90000.00, 30000.00, 47500.00, 318000.00, 365500.00, 0.00, 'pending');
+
+-- Update Order to link to OrderPayment for all orders
+UPDATE `Order` SET `payment_id` = 1 WHERE `orderid` = 1;
+UPDATE `Order` SET `payment_id` = 2 WHERE `orderid` = 2;
+UPDATE `Order` SET `payment_id` = 3 WHERE `orderid` = 3;
 
 -- OrderReference table to store design references for each order
 CREATE TABLE `OrderReference` (
