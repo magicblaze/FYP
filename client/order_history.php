@@ -394,14 +394,6 @@ if (!empty($_GET['msg'])) {
                                     <i class="fas fa-arrow-right me-1"></i>View Details</a>
                             <?php endif; ?>
 
-                            <!-- NEW: Pay Deposit button for designing status -->
-                            <?php if ($statusLower === 'designing'): ?>
-                                <a href="payment_deposit.php?orderid=<?= (int) $order['orderid'] ?>&amount=<?= $design_price ?>" class="view-details-btn btn-deposit"
-                                    onclick="event.stopPropagation();">
-                                    <i class="fas fa-credit-card me-1"></i>Pay Deposit
-                                </a>
-                            <?php endif; ?>
-
                             <!-- NEW: Pay Final Payment button for drafting 2nd proposal status -->
                             <?php if ($statusLower === 'drafting 2nd proposal' && $final_payment_amount > 0): ?>
                                 <a href="payment_final.php?orderid=<?= (int) $order['orderid'] ?>&amount=<?= $final_payment_amount ?>" class="view-details-btn btn-final"
