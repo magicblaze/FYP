@@ -51,15 +51,19 @@ $order_stmt->close();
 
 $clientInfo = null;
 $items = [];
+$orderStatus = '';
 if ($orderid > 0) {
-    // Fetch client info
-    $client_sql = "SELECT c.cname, c.cemail, c.address, o.odate FROM `Order` o JOIN Client c ON o.clientid = c.clientid WHERE o.orderid = ?";
+    // Fetch client info and order status
+    $client_sql = "SELECT c.cname, c.cemail, c.address, o.odate, o.ostatus FROM `Order` o JOIN Client c ON o.clientid = c.clientid WHERE o.orderid = ?";
     $client_stmt = $mysqli->prepare($client_sql);
     $client_stmt->bind_param('i', $orderid);
     $client_stmt->execute();
     $client_res = $client_stmt->get_result();
     $clientInfo = $client_res->fetch_assoc();
     $client_stmt->close();
+    if ($clientInfo) {
+        $orderStatus = $clientInfo['ostatus'];
+    }
 
     // Fetch products for this order
     $sql = "SELECT od.orderdeliveryid, od.productid, od.quantity, od.status, od.deliverydate, p.pname FROM OrderDelivery od JOIN Product p ON od.productid = p.productid WHERE od.orderid = ? AND p.supplierid = ? ORDER BY od.orderdeliveryid DESC";
@@ -112,6 +116,9 @@ $allowed_statuses = ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelled
                     <div class="col-md-6"><strong>Address:</strong> <?= htmlspecialchars($clientInfo['address']) ?></div>
                     <div class="col-md-6"><strong>Order Date:</strong> <?= htmlspecialchars($clientInfo['odate']) ?></div>
                 </div>
+                <div class="row mb-2">
+                    <div class="col-md-6"><strong>Order Status:</strong> <span class="badge bg-warning text-dark"><?= htmlspecialchars($orderStatus) ?></span></div>
+                </div>
             </div>
         </div>
         <?php if (!empty($msg)): ?>
@@ -123,8 +130,8 @@ $allowed_statuses = ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelled
                     <h5 class="mb-0 text-dark"><i class="fas fa-boxes me-2"></i>Product List</h5>
                 </div>
                 <div class="card-body p-0">
-                    <table class="table table-bordered mb-0">
-                        <thead class="bg-light">
+                    <table class="table table-bordered table-black mb-0">
+                        <thead class="muted">
                             <tr>
                                 <th>Product</th>
                                 <th>Quantity</th>
@@ -141,16 +148,20 @@ $allowed_statuses = ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelled
                                 <td><span class="badge bg-info text-dark"><?= htmlspecialchars($item['status']) ?></span></td>
                                 <td><?= htmlspecialchars($item['deliverydate']) ?></td>
                                 <td>
-                                    <form method="post" style="display:inline-block">
-                                        <input type="hidden" name="orderdeliveryid" value="<?= (int)$item['orderdeliveryid'] ?>">
-                                        <select name="new_status" class="form-select form-select-sm" style="width:120px;display:inline-block;">
-                                            <option value="">-- Change Status --</option>
-                                            <?php foreach ($allowed_statuses as $s): ?>
-                                                <option value="<?= $s ?>" <?= ($item['status'] === $s) ? 'selected' : '' ?>><?= $s ?></option>
-                                            <?php endforeach; ?>
-                                        </select>
-                                        <button type="submit" class="btn btn-sm btn-primary ms-1"><i class="fas fa-sync-alt"></i> Update</button>
-                                    </form>
+                                    <?php if ($orderStatus === 'preparing'): ?>
+                                        <form method="post" style="display:inline-block">
+                                            <input type="hidden" name="orderdeliveryid" value="<?= (int)$item['orderdeliveryid'] ?>">
+                                            <select name="new_status" class="form-select form-select-sm" style="width:120px;display:inline-block;">
+                                                <option value="">-- Change Status --</option>
+                                                <?php foreach ($allowed_statuses as $s): ?>
+                                                    <option value="<?= $s ?>" <?= ($item['status'] === $s) ? 'selected' : '' ?>><?= $s ?></option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                            <button type="submit" class="btn btn-sm btn-primary ms-1"><i class="fas fa-sync-alt"></i> Update</button>
+                                        </form>
+                                    <?php else: ?>
+                                        <span class="text-secondary fw-bold">Reserve</span>
+                                    <?php endif; ?>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
