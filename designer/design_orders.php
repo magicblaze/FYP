@@ -945,38 +945,12 @@ foreach ($orders as $o) {
                             <span class="payment-value">HK$<?= number_format($expectedPrice, 2) ?></span>
                         </div>
                         
-                        <!-- Final Payment (Editable in design mode) -->
+                        <!-- Final Payment (Read Only) -->
                         <div class="payment-item">
-                            <span class="payment-label"><i class="fas fa-check-circle me-2"></i>Final Design Payment (Completion):</span>
-                            <?php if ($canEdit && $expectedPrice > 0): ?>
-                                <div class="payment-input-group">
-                                    <span>HK$</span>
-                                    <input type="number" 
-                                           id="finalPayment_<?= $order['orderid'] ?>" 
-                                           value="<?= $currentFinalPayment > 0 ? $currentFinalPayment : '' ?>" 
-                                           min="0" 
-                                           max="<?= $maxFinalPayment ?>" 
-                                           step="0.01"
-                                           placeholder="Enter amount"
-                                           oninput="validateFinalPayment(<?= $order['orderid'] ?>, <?= $maxFinalPayment ?>)">
-                                    <button class="btn-save-payment" 
-                                            id="savePaymentBtn_<?= $order['orderid'] ?>"
-                                            onclick="saveFinalPayment(<?= $order['orderid'] ?>, <?= $maxFinalPayment ?>)"
-                                            style="display: none;">
-                                        <i class="fas fa-save me-1"></i>Save
-                                    </button>
-                                </div>
-                                <div class="payment-hint">
-                                    Max: HK$<?= number_format($maxFinalPayment, 2) ?> (Expected Price ÷ 0.25)
-                                </div>
-                                <div id="paymentWarning_<?= $order['orderid'] ?>" class="payment-warning" style="display: none;">
-                                    <i class="fas fa-exclamation-triangle me-1"></i>Amount exceeds maximum allowed
-                                </div>
-                            <?php else: ?>
-                                <span class="payment-value"><?= $currentFinalPayment > 0 ? 'HK$' . number_format($currentFinalPayment, 2) : 'Not set' ?></span>
-                                <?php if ($expectedPrice == 0): ?>
-                                    <div class="payment-hint">Expected price not set</div>
-                                <?php endif; ?>
+                            <span class="payment-label"><i class="fas fa-check-circle me-2"></i>Design Fee:</span>
+                            <span class="payment-value"><?= $currentFinalPayment > 0 ? 'HK$' . number_format($currentFinalPayment, 2) : 'Not set' ?></span>
+                            <?php if ($expectedPrice == 0): ?>
+                                <div class="payment-hint">Expected price not set</div>
                             <?php endif; ?>
                         </div>
                     </div>

@@ -43,7 +43,8 @@ $error = '';
 $references_total = 0.0;
 // Default deposit (HK$)
 $deposit = 2000.00;
-$total_amount = (float) $design['expect_price'] + $deposit;
+$first_design_fee = (float) $design['expect_price'] * 0.025; // 2.5%
+$total_amount = $first_design_fee + $deposit;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Support AJAX floor plan uploads: return JSON and exit
     if (!empty($_POST['ajax']) && $_POST['ajax'] === 'floor_upload') {
@@ -271,8 +272,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // Deposit default (HK$)
     $deposit = 2000.00;
-    // Calculate total (design + references + products + deposit)
-    $total_amount = (float) $design['expect_price'] + $references_total + $products_total + $deposit;
+    $first_design_fee = (float) $design['expect_price'] * 0.025; // 1st payment design fee (2.5%)
+    // First payment total (spec): 1st design fee + project deposit
+    $total_amount = $first_design_fee + $deposit;
 
     if (!$error) {
         // Persist per-order budget and deposit; cost left NULL until later updates
@@ -826,8 +828,7 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                                         class="btn btn-sm btn-outline-secondary">+ reference</button>
                                 </div>
                             </div>
-                            <small class="text-muted d-block mt-2">Reference(s) would help to calculate the total
-                                cost for your order.</small>
+                            <small class="text-muted d-block mt-2">Reference(s) help estimate project cost; first payment follows the payment spec.</small>
                             <input type="hidden" id="product_references" name="product_references" value="">
                             <input type="hidden" id="references" name="references" value="">
                         </div>
@@ -837,19 +838,20 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                         <div class="order-summary">
                             <h3 class="section-title">Order Summary</h3>
                             <div class="summary-item">
-                                <span>Designer cost:</span>
-                                <span>HK$<?= number_format((float) $design['expect_price'], 0) ?></span>
+                                <span>1st Design Fee (2.5%):</span>
+                                <span>HK$<?= number_format((float) $first_design_fee, 2) ?></span>
                             </div>
                             <div class="summary-item">
-                                <span>Deposit (recorded):</span>
+                                <span>Project Deposit:</span>
                                 <span>HK$<?= number_format((float) $deposit ?? 2000, 0) ?></span>
                             </div>
                             <div id="referenceList" class="mt-3"></div>
                             <div class="mt-4">
                                 <div class="summary-item summary-total">
-                                    <span>Total:</span>
+                                    <span>1st Payment Total:</span>
                                     <span id="orderTotal">HK$<?= number_format($total_amount, 0) ?></span>
                                 </div>
+                                <div class="small text-muted mt-2">Based on payment spec: 2.5% design fee + HK$2,000 deposit.</div>
                                 <!-- Payment Method Section-->
                                 <div class="order-section">
                                     <label class="form-label">Payment Method</label>
@@ -1390,6 +1392,12 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                     agreeBtn.disabled = !this.checked;
                 });
                 agreeBtn.addEventListener('click', function () {
+                    const totalEl = document.getElementById('orderTotal');
+                    const paymentAmount = totalEl ? totalEl.textContent.trim() : 'the displayed amount';
+                    const confirmed = window.confirm('Proceed with payment ' + paymentAmount + '?');
+                    if (!confirmed) {
+                        return;
+                    }
                     window.__termsAccepted = true;
                     if (termsModal) termsModal.hide();
                     orderForm.submit();
@@ -1556,14 +1564,14 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
     </script>
     <script>
         (function () {
-            const designPrice = <?= json_encode((float) $design['expect_price']) ?>;
+            const firstDesignFee = <?= json_encode((float) $first_design_fee) ?>;
             const deposit = <?= json_encode((float) ($deposit ?? 2000.0)) ?>;
             const refsInput = document.getElementById('references');
             const totalEl = document.getElementById('orderTotal');
             let debounceTimer = null;
 
-            function setTotal(refsSum) {
-                const total = designPrice + (Number(refsSum) || 0) + deposit;
+            function setTotal() {
+                const total = firstDesignFee + deposit;
                 if (totalEl) totalEl.textContent = 'HK$' + total.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
             }
 
@@ -1608,8 +1616,8 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                     debounceTimer = setTimeout(async () => {
                         const dids = refsInput.value.trim();
                         const pqty = (document.getElementById('product_references') || { value: '' }).value.trim();
-                        const sum = await fetchRefsSum(dids, pqty);
-                        setTotal(sum);
+                        await fetchRefsSum(dids, pqty);
+                        setTotal();
                     }, 300);
                 });
             }
@@ -1617,8 +1625,8 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
             (async function initRefs() {
                 const dids = refsInput ? refsInput.value.trim() : '';
                 const pqty = (document.getElementById('product_references') || { value: '' }).value.trim();
-                const sum = await fetchRefsSum(dids, pqty);
-                setTotal(sum);
+                await fetchRefsSum(dids, pqty);
+                setTotal();
             })();
         })();
     </script>
