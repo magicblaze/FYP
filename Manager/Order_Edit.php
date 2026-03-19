@@ -27,15 +27,18 @@ if ($order_check['count'] == 0) {
 }
 
 // Use prepared statement to prevent SQL injection - ADDED cost field
-$sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.cost, o.deposit, o.final_payment,
-         c.clientid, c.cname as client_name, c.ctel, c.cemail, c.budget,
-               d.designid, d.designName, d.expect_price as design_price, d.tag as design_tag,
-               s.scheduleid, s.OrderFinishDate, s.DesignFinishDate
-        FROM `Order` o
-        LEFT JOIN `Client` c ON o.clientid = c.clientid
-        LEFT JOIN `Design` d ON o.designid = d.designid
-        LEFT JOIN `Schedule` s ON o.orderid = s.orderid
-        WHERE o.orderid = ?";
+$sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.cost, o.deposit,
+       c.clientid, c.cname as client_name, c.ctel, c.cemail, c.budget,
+           d.designid, d.designName, d.expect_price as design_price, d.tag as design_tag,
+           s.scheduleid, s.OrderFinishDate, s.DesignFinishDate,
+           op.payment_id, op.total_design_payment, op.total_construction_payment,
+           op.commission_1st, op.commission_final, op.total_amount_due
+      FROM `Order` o
+      LEFT JOIN `Client` c ON o.clientid = c.clientid
+      LEFT JOIN `Design` d ON o.designid = d.designid
+      LEFT JOIN `Schedule` s ON o.orderid = s.orderid
+      LEFT JOIN `OrderPayment` op ON o.payment_id = op.payment_id
+      WHERE o.orderid = ?";
 
 $stmt = mysqli_prepare($mysqli, $sql);
 mysqli_stmt_bind_param($stmt, "i", $orderid);
@@ -45,8 +48,17 @@ $order = mysqli_fetch_assoc($result);
 
 // --- 预算计算（简化版）---
 $design_price = isset($order["design_price"]) ? floatval($order["design_price"]) : 0;
-$final_payment = isset($order['final_payment']) ? floatval($order['final_payment']) : 0;
 $original_budget = floatval($order['budget'] ?? 0);
+
+$payment = [
+    'total_design_payment' => isset($order['total_design_payment']) ? (float) $order['total_design_payment'] : 0.0,
+    'total_construction_payment' => isset($order['total_construction_payment']) ? (float) $order['total_construction_payment'] : 0.0,
+    'commission_1st' => isset($order['commission_1st']) ? (float) $order['commission_1st'] : 0.0,
+    'commission_final' => isset($order['commission_final']) ? (float) $order['commission_final'] : 0.0,
+    'total_amount_due' => isset($order['total_amount_due']) ? (float) $order['total_amount_due'] : 0.0,
+];
+
+$commission_total = $payment['commission_1st'] + $payment['commission_final'];
 
 // 只扣除设计定金
 $deducted_amount = $design_price; 
@@ -114,8 +126,7 @@ if (!empty($references)) {
 $Design_Fee1 = $order["design_price"] * 0.025;
 $Project_Deposit = 2000; 
 
-
-$final_total_cost = $Design_Fee1 + $Project_Deposit+ $total_fees + $references_total + $final_payment;
+$final_total_cost = $payment['total_amount_due'] + $total_fees + $references_total;
 
 $order_status = $order['ostatus'] ?? 'waiting confirm';
 $show_edit_cards = ($order_status !== 'waiting confirm' && !empty($order['designid']));
@@ -923,20 +934,9 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                             <?php endif; ?>
                             <hr>
                             <div class="mb-3">
-                                <label class="fw-bold text-muted small">Remaining Budget</label>
+                                <label class="fw-bold text-muted small">Budget</label>
                                 <p class="mb-0"><strong
                                         class="text-success fs-5">HK$<?php echo number_format($order["budget"], 2); ?></strong>
-                                </p>
-                            </div>
-                            <div class="mb-3">
-                                <label class="fw-bold text-muted small">Deducted Amount</label>
-                                <?php 
-                                $total_deducted = $final_total_cost;
-                                ?>
-                                <p class="mb-0">
-                                    <strong class="text-danger fs-5">
-                                        HK$<?php echo number_format($total_deducted, 2); ?>
-                                    </strong>
                                 </p>
                             </div>
 
@@ -971,13 +971,13 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                 </p>
                             </div>
                             <div class="mb-3">
-                                <label class="fw-bold text-muted small">Final Design Payment</label>
+                                <label class="fw-bold text-muted small">Design Cost</label>
                                 <p class="mb-0">
                                     <strong class="text-warning">
-                                        HK$<?php echo number_format($final_payment, 2); ?>
+                                        HK$<?php echo number_format($payment['total_design_payment'], 2); ?>
                                     </strong>
                                 </p>
-                                <small class="text-muted">Pending client confirmation</small>
+                                <small class="text-muted">From order payment breakdown</small>
                             </div>
                          
                             <hr>
@@ -1105,21 +1105,17 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                 <div class="mb-2">
                                     <ul class="list-unstyled mb-0">
                                         <li class="d-flex justify-content-between">
-                                            <small class="text-muted">Project Deposit</small>
-                                           
-                                            <strong>HK$<?php echo number_format($Project_Deposit, 2); ?></strong>
+                                            <small class="text-muted">Design Cost</small>
+                                            <strong>HK$<?php echo number_format($payment['total_design_payment'], 2); ?></strong>
                                         </li>
                                         <li class="d-flex justify-content-between">
-                                            <small class="text-muted">1st Design Fee (designer 2.5%)</small>
-                                            
-                                            <strong>HK$<?php echo number_format($Design_Fee1, 2); ?></strong>
+                                            <small class="text-muted">Construction Cost</small>
+                                            <strong>HK$<?php echo number_format($payment['total_construction_payment'], 2); ?></strong>
                                         </li>
-                                        <?php if ($final_payment <> 0): ?>
                                         <li class="d-flex justify-content-between">
-                                            <small class="text-muted">2nd Design Fee</small>
-                                            <strong>HK$<?php echo number_format($final_payment, 2); ?></strong>
+                                            <small class="text-muted">Commission</small>
+                                            <strong>HK$<?php echo number_format($commission_total, 2); ?></strong>
                                         </li>
-                                        <?php endif; ?>
                                         <?php if (!empty($references)): ?>
                                             <li class="mt-2"><small class="text-muted">Product References</small></li>
                                             <?php foreach ($references as $r):
