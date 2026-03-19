@@ -111,8 +111,11 @@ if (!empty($references)) {
         $references_total += $rprice;
     }
 }
+$Design_Fee1 = $order["design_price"] * 0.025;
+$Project_Deposit = 2000; 
 
-$final_total_cost = $design_price + $total_fees + $references_total;
+
+$final_total_cost = $Design_Fee1 + $Project_Deposit+ $total_fees + $references_total + $final_payment;
 
 $order_status = $order['ostatus'] ?? 'waiting confirm';
 $show_edit_cards = ($order_status !== 'waiting confirm' && !empty($order['designid']));
@@ -928,7 +931,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                             <div class="mb-3">
                                 <label class="fw-bold text-muted small">Deducted Amount</label>
                                 <?php 
-                                $total_deducted = $deducted_amount + $final_payment + $references_total;
+                                $total_deducted = $final_total_cost;
                                 ?>
                                 <p class="mb-0">
                                     <strong class="text-danger fs-5">
@@ -966,7 +969,6 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                 <p class="mb-0"><strong
                                         class="text-info">HK$<?php echo number_format($order["design_price"] ?? 0, 0); ?></strong>
                                 </p>
-                                <small class="text-muted">Design Deposit</small>
                             </div>
                             <div class="mb-3">
                                 <label class="fw-bold text-muted small">Final Design Payment</label>
@@ -1103,9 +1105,21 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                 <div class="mb-2">
                                     <ul class="list-unstyled mb-0">
                                         <li class="d-flex justify-content-between">
-                                            <small class="text-muted">Design deposit</small>
-                                            <strong>HK$<?php echo number_format($design_price, 2); ?></strong>
+                                            <small class="text-muted">Project Deposit</small>
+                                           
+                                            <strong>HK$<?php echo number_format($Project_Deposit, 2); ?></strong>
                                         </li>
+                                        <li class="d-flex justify-content-between">
+                                            <small class="text-muted">1st Design Fee (designer 2.5%)</small>
+                                            
+                                            <strong>HK$<?php echo number_format($Design_Fee1, 2); ?></strong>
+                                        </li>
+                                        <?php if ($final_payment <> 0): ?>
+                                        <li class="d-flex justify-content-between">
+                                            <small class="text-muted">2nd Design Fee</small>
+                                            <strong>HK$<?php echo number_format($final_payment, 2); ?></strong>
+                                        </li>
+                                        <?php endif; ?>
                                         <?php if (!empty($references)): ?>
                                             <li class="mt-2"><small class="text-muted">Product References</small></li>
                                             <?php foreach ($references as $r):

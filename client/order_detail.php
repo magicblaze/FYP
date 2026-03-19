@@ -183,8 +183,10 @@ foreach ($productsTemp as $product) {
 $products->data_seek(0);
 
 // --- NEW: Calculate design total (Design Cost + Final Design Price) ---
+$Project_Deposit = 2000; // Fixed project deposit
 $design_cost = (float) $order['expect_price'];
-$design_total = $design_cost + $final_payment;
+$Design_Fee1 = (float) $order['expect_price'] * 0.025; // 1st design fee is 2.5% of expected price
+$design_total = $design_cost - $final_payment - $Project_Deposit - $Design_Fee1; // Total design cost after subtracting fees and deposit
 // --- END NEW ---
 
 // Format display variables
@@ -561,10 +563,22 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€
                     </div>
                     <!-- --- NEW: Display Final Design Payment --- -->
                     <div class="info-row">
-                        <span class="info-label">Final Design Payment:</span>
+                        <span class="info-label">Project Deposit:</span>
+                        <span
+                            class="info-value price-highlight">$<?= number_format($Project_Deposit, 2) ?></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">1st Design Fee (designer 2.5%):</span>
+                        <span
+                            class="info-value price-highlight">$<?= number_format($Design_Fee1, 2) ?></span>
+                    </div>
+                    <?php if ($final_payment <> 0): ?>
+                    <div class="info-row">
+                        <span class="info-label">2nd Design Fee:</span>
                         <span
                             class="info-value price-highlight">$<?= number_format($final_payment, 2) ?></span>
                     </div>
+                    <?php endif; ?>
                     <!-- --- END NEW --- -->
                     <!-- --- NEW: Display Design Total (Design Cost + Final Design Payment) --- -->
                     <div class="info-row" style="border-top: 2px solid #3498db; margin-top: 0.5rem; padding-top: 0.75rem;">
@@ -815,15 +829,25 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€
                     <span
                         class="info-value price-highlight">$<?= number_format((float) $order['expect_price'], 2) ?></span>
                 </div>
-                <!-- --- NEW: Display Final Design Payment in Summary --- -->
                 <div class="info-row">
-                    <span class="info-label">Final Design Payment:</span>
-                    <span
-                        class="info-value price-highlight">$<?= number_format($final_payment, 2) ?></span>
-                </div>
-
+                        <span class="info-label">Project Deposit:</span>
+                        <span
+                            class="info-value price-highlight">$<?= number_format($Project_Deposit, 2) ?></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">1st Design Fee (designer 2.5%):</span>
+                        <span
+                            class="info-value price-highlight">$<?= number_format($Design_Fee1, 2) ?></span>
+                    </div>
+                    <?php if ($final_payment <> 0): ?>
+                    <div class="info-row">
+                        <span class="info-label">2nd Design Fee:</span>
+                        <span
+                            class="info-value price-highlight">$<?= number_format($final_payment, 2) ?></span>
+                    </div>
+                    <?php endif; ?>
                 <div class="info-row" style="border-top: 2px solid #3498db; margin-top: 0.5rem; padding-top: 0.75rem;">
-                    <span class="info-label"><strong>Design Total (Cost + Final):</strong></span>
+                    <span class="info-label"><strong>Design Total:</strong></span>
                     <span
                         class="info-value price-highlight"><strong>$<?= number_format($design_total, 2) ?></strong></span>
                 </div>
