@@ -863,12 +863,6 @@ foreach ($orders as $o) {
             <?php foreach ($orders as $order): ?>
                 <?php 
                 $canEdit = (strtolower(trim($order['ostatus'] ?? '')) === 'designing');
-                // Calculate max final payment based on Expected Price ÷ 0.25
-                $expectedPrice = floatval($order['expect_price'] ?? 0);
-                
-                $maxFinalPayment = $expectedPrice * 0.025 * 1.5; 
-                $currentFinalPayment = floatval($order['final_payment'] ?? 0);
-                $depositAmount = floatval($order['deposit_amount'] ?? 0);
                 ?>
                 <div class="order-card">
                     <!-- Order Title and Status (Main Focus) -->
