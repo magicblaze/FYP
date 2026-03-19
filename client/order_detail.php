@@ -184,7 +184,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $u_stmt->execute();
             $u_stmt->close();
         }
-        header('Location: order_detail.php?orderid=' . $orderId);
+        header('Location: payment2.php?orderid=' . $orderId);
         exit;
     }
 
@@ -824,7 +824,7 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€
                 <?php if ($statusLower === 'waiting for review design'): ?>
                     <form id="client_action_form" method="post" style="display:inline-block;">
                         <input type="hidden" name="reject_reason" id="reject_reason_input" value="" />
-                        <button type="submit" name="accept_design" class="btn btn-success me-2" onclick="return confirm('Accept this proposal and proceed to drafting 2nd proposal?');">
+                        <button type="submit" name="accept_design" class="btn btn-success me-2" onclick="return confirm('Accept this proposal and proceed to payment?');">
                             <i class="fas fa-check me-1"></i>Accept
                         </button>
                         <button type="button" id="reject_btn" class="btn btn-danger">
