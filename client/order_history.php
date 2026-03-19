@@ -282,6 +282,8 @@ if (!empty($_GET['msg'])) {
 
                     // Determine status class
                     $statusLower = strtolower($order['ostatus'] ?? '');
+                    $designPaymentStatuses = ['waiting design phase payment', 'waiting 2nd design phase payment', 'waiting final design phase payment'];
+                    $constructionPaymentStatuses = ['waiting 1st construction phase payment'];
                     $statusClass = 'status-pending';
                     if (strpos($statusLower, 'design') !== false) {
                         $statusClass = 'status-designing';
@@ -380,7 +382,7 @@ if (!empty($_GET['msg'])) {
                         <?php endif; ?>
                         <div style="margin-top: 0.75rem; display:flex; gap:8px;">
                             <!-- Primary view/proposal/details button -->
-                            <?php if ($statusLower === 'waiting client review' || $statusLower === 'waiting design phase payment' || $statusLower === 'complete'): ?>
+                            <?php if ($statusLower === 'waiting client review' || in_array($statusLower, $designPaymentStatuses, true) || $statusLower === 'complete'): ?>
                                 <a href="Order_View.php?id=<?= (int) $order['orderid'] ?>" class="view-details-btn"
                                     onclick="event.stopPropagation();">
                                     <i class="fas fa-file-image me-1"></i>View Proposal</a>
@@ -395,7 +397,7 @@ if (!empty($_GET['msg'])) {
                             <?php endif; ?>
 
                             <!-- NEW: Pay Final Payment button for drafting 2nd proposal status -->
-                            <?php if ($statusLower === 'drafting 2nd proposal' && $final_payment_amount > 0): ?>
+                            <?php if (in_array($statusLower, ['drafting 2nd proposal', 'waiting final design phase payment'], true) && $final_payment_amount > 0): ?>
                                 <a href="payment_final.php?orderid=<?= (int) $order['orderid'] ?>&amount=<?= $final_payment_amount ?>" class="view-details-btn btn-final"
                                     onclick="event.stopPropagation();">
                                     <i class="fas fa-credit-card me-1"></i>Pay Final Design & Products
@@ -403,14 +405,14 @@ if (!empty($_GET['msg'])) {
                             <?php endif; ?>
 
                             <!-- Proceed to Payment button (separate) -->
-                            <?php if ($statusLower === 'waiting design phase payment'): ?>
+                            <?php if (in_array($statusLower, ['waiting design phase payment', 'waiting 2nd design phase payment'], true)): ?>
                                 <a href="payment.php?orderid=<?= (int) $order['orderid'] ?>" class="view-details-btn"
                                     onclick="event.stopPropagation();">
                                     <i class="fas fa-credit-card me-1"></i>Proceed to Payment
                                 </a>
                             <?php endif; ?>
                             <!-- Proceed to Construction Payment button -->
-                            <?php if ($statusLower === 'waiting for selection'): ?>
+                            <?php if ($statusLower === 'waiting for selection' || in_array($statusLower, $constructionPaymentStatuses, true)): ?>
                                 <a href="payment_construction.php?orderid=<?= (int) $order['orderid'] ?>" class="view-details-btn"
                                     onclick="event.stopPropagation();">
                                     <i class="fas fa-hard-hat me-1"></i>Proceed to Construction Payment

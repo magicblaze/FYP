@@ -47,6 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $force = isset($_POST['force']) ? true : false;
         $currentBudget = floatval($clientData['budget'] ?? 0);
         $currentStatus = strtolower($_POST['current_status'] ?? '');
+        $designPaymentStatuses = ['waiting design phase payment', 'waiting 2nd design phase payment', 'waiting final design phase payment'];
         
         // Check if sufficient balance
         if ($currentBudget < $amount) {
@@ -89,7 +90,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                         'drafting 2nd proposal' => 5,
                         'waiting client review' => 6,
                         'waiting design phase payment' => 7,
-                        'complete' => 8
+                        'waiting 2nd design phase payment' => 7,
+                        'waiting final design phase payment' => 7,
+                        'waiting 1st construction phase payment' => 8,
+                        'complete' => 9
                     ];
                     
                     $currentPriority = $statusPriority[$currentStatus] ?? 0;
@@ -365,6 +369,9 @@ $ordersStmt->bind_param("i", $clientId);
 $ordersStmt->execute();
 $orders = $ordersStmt->get_result();
 
+$designPaymentStatuses = ['waiting design phase payment', 'waiting 2nd design phase payment', 'waiting final design phase payment'];
+$constructionPaymentStatuses = ['waiting 1st construction phase payment'];
+
 // Calculate payment stages for each order
 $paymentStages = [];
 while ($order = $orders->fetch_assoc()) {
@@ -408,7 +415,7 @@ while ($order = $orders->fetch_assoc()) {
         'construction_deposit' => [
             'name' => 'Construction Deposit',
             'amount' => $constructionDepositAmount,
-            'due_status' => 'waiting design phase payment',
+            'due_status' => $designPaymentStatuses,
             'paid_status' => 'complete',
             'status' => 'pending',
             'paid' => false,
@@ -438,6 +445,9 @@ while ($order = $orders->fetch_assoc()) {
         'drafting 2nd proposal' => ['design_deposit', 'design_completion'],
         'waiting client review' => ['design_deposit', 'design_completion'],
         'waiting design phase payment' => ['design_deposit', 'design_completion'],
+        'waiting 2nd design phase payment' => ['design_deposit', 'design_completion'],
+        'waiting final design phase payment' => ['design_deposit', 'design_completion'],
+        'waiting 1st construction phase payment' => ['design_deposit', 'design_completion'],
         'complete' => ['design_deposit', 'design_completion', 'construction_deposit', 'final_payment']
     ];
     
@@ -703,12 +713,14 @@ $recentTransactions = $transactionsStmt->get_result();
                                                                 <?php endif; ?>
                                                             </small>
                                                         </td>
-                                                        <td><span class="badge bg-secondary"><?= $stage['due_status'] ?></span></td>
+                                                        <?php $dueStatusLabel = is_array($stage['due_status']) ? implode(', ', $stage['due_status']) : $stage['due_status']; ?>
+                                                        <td><span class="badge bg-secondary"><?= $dueStatusLabel ?></span></td>
                                                         <td>
                                                             <?php if ($stage['paid']): ?>
                                                                 <span class="badge bg-success">Paid</span>
                                                             <?php else: ?>
-                                                                <?php if ($currentStatus === $stage['due_status']): ?>
+                                                                <?php $isDue = in_array($currentStatus, (array) $stage['due_status'], true); ?>
+                                                                <?php if ($isDue): ?>
                                                                     <span class="badge bg-warning text-dark">Due Now</span>
                                                                 <?php else: ?>
                                                                     <span class="badge bg-secondary">Pending</span>
@@ -717,7 +729,7 @@ $recentTransactions = $transactionsStmt->get_result();
                                                         </td>
                                                         <td>
                                                             <?php if (!$stage['paid']): ?>
-                                                                <?php if ($currentStatus === $stage['due_status']): ?>
+                                                                <?php if ($isDue): ?>
                                                                     <!-- Normal payment - stage is due -->
                                                                     <form method="POST" class="d-inline" onsubmit="return confirm('Pay $<?= number_format($stage['amount'], 2) ?> from your wallet?\n\nThis payment will go to: <?= $stage['recipient'] ?>')">
                                                                         <input type="hidden" name="action" value="process_payment">
@@ -733,8 +745,8 @@ $recentTransactions = $transactionsStmt->get_result();
                                                                     </form>
                                                                 <?php else: ?>
                                                                     <!-- Early payment - stage is not due yet -->
-                                                                    <button type="button" class="btn btn-sm btn-warning" 
-                                                                            onclick="confirmEarlyPayment(<?= $orderId ?>, '<?= $stageKey ?>', <?= $stage['amount'] ?>, '<?= $currentStatus ?>', '<?= $stage['due_status'] ?>', '<?= $stage['recipient'] ?>')"
+                                                                        <button type="button" class="btn btn-sm btn-warning" 
+                                                                            onclick="confirmEarlyPayment(<?= $orderId ?>, '<?= $stageKey ?>', <?= $stage['amount'] ?>, '<?= $currentStatus ?>', '<?= $dueStatusLabel ?>', '<?= $stage['recipient'] ?>')"
                                                                             <?= (floatval($clientData['budget'] ?? 0) < $stage['amount']) ? 'disabled' : '' ?>>
                                                                         Pay Early
                                                                     </button>

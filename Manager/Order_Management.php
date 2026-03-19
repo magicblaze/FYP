@@ -66,7 +66,7 @@ $stats_sql = "SELECT
                 SUM(c.budget) as total_budget,
                 AVG(c.budget) as avg_budget,
                 SUM(CASE WHEN o.ostatus = 'waiting confirm' THEN 1 ELSE 0 END) as pending_count,
-                 SUM(CASE WHEN o.ostatus IN ('designing', 'drafting 2nd proposal', 'reviewing design proposal', 'waiting for review design') THEN 1 ELSE 0 END) as designing_count,
+                 SUM(CASE WHEN o.ostatus IN ('designing', 'drafting 2nd proposal', 'reviewing design proposal', 'waiting for review design', 'waiting design phase payment', 'waiting 2nd design phase payment', 'waiting final design phase payment', 'waiting 1st construction phase payment') THEN 1 ELSE 0 END) as designing_count,
                 SUM(CASE WHEN o.ostatus = 'complete' THEN 1 ELSE 0 END) as completed_count
                FROM `Order` o
               LEFT JOIN `Client` c ON o.clientid = c.clientid
@@ -142,6 +142,22 @@ $stats = mysqli_fetch_assoc($stats_result);
                         class="btn btn-sm <?php echo $status_filter == 'waiting payment' ? 'btn-active' : 'btn'; ?>">
                         Wait Pay
                     </a>
+                    <a href="?status=waiting design phase payment"
+                        class="btn btn-sm <?php echo $status_filter == 'waiting design phase payment' ? 'btn-active' : 'btn'; ?>">
+                        Wait Design Pay
+                    </a>
+                    <a href="?status=waiting 2nd design phase payment"
+                        class="btn btn-sm <?php echo $status_filter == 'waiting 2nd design phase payment' ? 'btn-active' : 'btn'; ?>">
+                        Wait 2nd Design Pay
+                    </a>
+                    <a href="?status=waiting final design phase payment"
+                        class="btn btn-sm <?php echo $status_filter == 'waiting final design phase payment' ? 'btn-active' : 'btn'; ?>">
+                        Wait Final Design Pay
+                    </a>
+                    <a href="?status=waiting 1st construction phase payment"
+                        class="btn btn-sm <?php echo $status_filter == 'waiting 1st construction phase payment' ? 'btn-active' : 'btn'; ?>">
+                        Wait Construction Pay
+                    </a>
                     <a href="?status=complete"
                         class="btn btn-sm <?php echo $status_filter == 'complete' ? 'btn-active' : 'btn'; ?>">
                         Completed
@@ -192,6 +208,10 @@ $stats = mysqli_fetch_assoc($stats_result);
                             case 'waiting confirm':
                             case 'waiting client review':
                             case 'waiting payment':
+                            case 'waiting design phase payment':
+                            case 'waiting 2nd design phase payment':
+                            case 'waiting final design phase payment':
+                            case 'waiting 1st construction phase payment':
                                 $status_class = 'status-pending';
                                 break;
                             case 'reject':

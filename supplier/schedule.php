@@ -167,6 +167,10 @@ function getStatusBadgeClass($status) {
         case 'designing':
             return 'bg-primary';
         case 'pending':
+        case 'waiting design phase payment':
+        case 'waiting 2nd design phase payment':
+        case 'waiting final design phase payment':
+        case 'waiting 1st construction phase payment':
             return 'bg-warning';
         case 'cancelled':
             return 'bg-danger';

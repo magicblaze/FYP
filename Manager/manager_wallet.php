@@ -330,6 +330,10 @@ $pendingRequests = $pendingRequestsStmt->get_result();
                                                                 'waiting confirm' => 'secondary',
                                                                 'designing' => 'primary',
                                                                 'reviewing design proposal' => 'info',
+                                                                'waiting design phase payment' => 'warning',
+                                                                'waiting 2nd design phase payment' => 'warning',
+                                                                'waiting final design phase payment' => 'warning',
+                                                                'waiting 1st construction phase payment' => 'warning',
                                                                 'complete' => 'success',
                                                                 default => 'secondary'
                                                             };

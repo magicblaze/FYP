@@ -623,7 +623,7 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€
                 </div>
             <?php endif; ?>
 
-            <?php if (strtolower(trim($order['ostatus'] ?? '')) === 'waiting payment'): ?>
+            <?php if (in_array(strtolower(trim($order['ostatus'] ?? '')), ['waiting payment', 'waiting design phase payment', 'waiting 2nd design phase payment', 'waiting final design phase payment'], true)): ?>
                 <div class="info-card" style="border-left:4px solid #27ae60;">
                     <div class="info-row" style="border-bottom:none;">
                         <span class="info-label"><i class="fas fa-check-circle me-2"></i>Proposal Confirmed</span>

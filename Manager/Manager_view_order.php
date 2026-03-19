@@ -149,14 +149,19 @@ if (isset($_GET['id'])) {
                             <p class="mb-0">
                                 <?php
                                 $status_class = '';
-                                switch (strtolower($order['ostatus'] ?? '')) {
+                                    switch (strtolower($order['ostatus'] ?? '')) {
                                     case 'complete':
                                         $status_class = 'status-completed';
                                         break;
                                     case 'designing':
                                         $status_class = 'status-designing';
                                         break;
-                                    case 'waiting confirm':
+                                        case 'waiting confirm':
+                                        case 'waiting payment':
+                                        case 'waiting design phase payment':
+                                        case 'waiting 2nd design phase payment':
+                                        case 'waiting final design phase payment':
+                                        case 'waiting 1st construction phase payment':
                                         $status_class = 'status-pending';
                                         break;
                                     default:

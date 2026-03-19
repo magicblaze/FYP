@@ -498,6 +498,9 @@ $constructionProjects = $constructionStmt->get_result();
                                                             $statusClass = match(strtolower($project['ostatus'] ?? '')) {
                                                                 'complete' => 'success',
                                                                 'waiting design phase payment' => 'warning',
+                                                                'waiting 2nd design phase payment' => 'warning',
+                                                                'waiting final design phase payment' => 'warning',
+                                                                'waiting 1st construction phase payment' => 'warning',
                                                                 'designing' => 'primary',
                                                                 default => 'secondary'
                                                             };
