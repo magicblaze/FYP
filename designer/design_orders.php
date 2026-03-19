@@ -936,51 +936,6 @@ foreach ($orders as $o) {
                         </div>
                     </div>
 
-                    <!-- Payment Section: Deposit and Final Payment -->
-                    <div class="payment-section">
-                        <h6 class="mb-3 section-title"><i class="fas fa-credit-card me-2"></i>Payment Information</h6>
-                        
-                        <!-- Expected Price (Read-only) -->
-                        <div class="payment-item">
-                            <span class="payment-label"><i class="fas fa-tag me-2"></i>Expected Price:</span>
-                            <span class="payment-value">HK$<?= number_format($expectedPrice, 2) ?></span>
-                        </div>
-                        
-                        <!-- Final Payment (Read Only) -->
-                        <div class="payment-item">
-                            <span class="payment-label"><i class="fas fa-check-circle me-2"></i>Final Design Payment (Completion):</span>
-                            <?php if ($canEdit && $expectedPrice > 0): ?>
-                                <div class="payment-input-group">
-                                    <span>HK$</span>
-                                    <input type="number" 
-                                           id="finalPayment_<?= $order['orderid'] ?>" 
-                                           value="<?= $currentFinalPayment > 0 ? $currentFinalPayment : '' ?>" 
-                                           min="0" 
-                                           max="<?= $maxFinalPayment ?>" 
-                                           step="0.01"
-                                           placeholder="Enter amount"
-                                           oninput="validateFinalPayment(<?= $order['orderid'] ?>, <?= $maxFinalPayment ?>)">
-                                    <button class="btn-save-payment" 
-                                            id="savePaymentBtn_<?= $order['orderid'] ?>"
-                                            onclick="saveFinalPayment(<?= $order['orderid'] ?>, <?= $maxFinalPayment ?>)"
-                                            style="display: none;">
-                                        <i class="fas fa-save me-1"></i>Save
-                                    </button>
-                                </div>
-                                <div class="payment-hint">
-                                    Max: HK$<?= number_format($maxFinalPayment, 2) ?> (1st Design Fee * 150%)
-                                </div>
-                                <div id="paymentWarning_<?= $order['orderid'] ?>" class="payment-warning" style="display: none;">
-                                    <i class="fas fa-exclamation-triangle me-1"></i>Amount exceeds maximum allowed
-                                </div>
-                            <?php else: ?>
-                                <span class="payment-value"><?= $currentFinalPayment > 0 ? 'HK$' . number_format($currentFinalPayment, 2) : 'Not set' ?></span>
-                                <?php if ($expectedPrice == 0): ?>
-                                    <div class="payment-hint">Expected price not set</div>
-                                <?php endif; ?>
-                            <?php endif; ?>
-                    </div>
-
                     <!-- Requirements Section -->
                     <?php if (!empty($order['Requirements'])): ?>
                         <div class="order-info" style="background-color: #f3e5f5; border-left: 4px solid #9c27b0; margin-bottom: 1rem;">
@@ -1308,11 +1263,11 @@ foreach ($orders as $o) {
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Designed Picture</h5>
+                    <h5 class="modal-title">Design graphic</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body text-center">
-                    <img id="pictureImg" src="" alt="Designed Picture" style="max-width: 100%; max-height: 600px;">
+                    <img id="pictureImg" src="" alt="Design Graphic" style="max-width: 100%; max-height: 600px;">
                 </div>
             </div>
         </div>
@@ -1898,86 +1853,6 @@ foreach ($orders as $o) {
                 console.error(e);
                 status.textContent = 'Failed to load liked items.';
             }
-        }
-
-        // Payment functions
-        function validateFinalPayment(orderId, maxAmount) {
-            const input = document.getElementById('finalPayment_' + orderId);
-            const warning = document.getElementById('paymentWarning_' + orderId);
-            const saveBtn = document.getElementById('savePaymentBtn_' + orderId);
-            
-            if (!input || !warning || !saveBtn) return;
-            
-            const value = parseFloat(input.value) || 0;
-            
-            if (value > maxAmount) {
-                warning.style.display = 'block';
-                saveBtn.disabled = true;
-            } else {
-                warning.style.display = 'none';
-                saveBtn.disabled = false;
-            }
-            
-            // Show save button when value changes and is valid
-            if (value > 0 && value <= maxAmount) {
-                saveBtn.style.display = 'inline-block';
-            } else {
-                saveBtn.style.display = 'none';
-            }
-        }
-
-        function saveFinalPayment(orderId, maxAmount) {
-            const input = document.getElementById('finalPayment_' + orderId);
-            const saveBtn = document.getElementById('savePaymentBtn_' + orderId);
-            
-            if (!input) return;
-            
-            const value = parseFloat(input.value) || 0;
-            
-            if (value <= 0) {
-                alert('Please enter a valid final payment amount.');
-                return;
-            }
-            
-            if (value > maxAmount) {
-                alert('Final payment cannot exceed HK$' + maxAmount.toFixed(2));
-                return;
-            }
-            
-            const originalText = saveBtn.innerHTML;
-            saveBtn.disabled = true;
-            saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Saving...';
-            
-            fetch('update_final_payment.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    orderid: orderId,
-                    final_payment: value
-                })
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data.success) {
-                    alert('Final payment amount saved successfully!');
-                    // Keep the save button visible but maybe change appearance
-                    saveBtn.innerHTML = '<i class="fas fa-check me-1"></i>Saved';
-                    setTimeout(() => {
-                        saveBtn.innerHTML = originalText;
-                        saveBtn.disabled = false;
-                    }, 2000);
-                } else {
-                    alert('Error: ' + (data.message || 'Failed to save final payment'));
-                    saveBtn.innerHTML = originalText;
-                    saveBtn.disabled = false;
-                }
-            })
-            .catch(err => {
-                console.error(err);
-                alert('Request failed: ' + err.message);
-                saveBtn.innerHTML = originalText;
-                saveBtn.disabled = false;
-            });
         }
     </script>
     <script>
