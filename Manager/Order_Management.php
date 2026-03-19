@@ -150,6 +150,10 @@ $stats = mysqli_fetch_assoc($stats_result);
                         class="btn btn-sm <?php echo $status_filter == 'rejected' ? 'btn-active' : 'btn'; ?>">
                         Rejected
                     </a>
+                    <a href="?status=preparing"
+                        class="btn btn-sm <?php echo $status_filter == 'preparing' ? 'btn-active' : 'btn'; ?>">
+                        preparing
+                    </a>
                     <div class="ms-auto"> Total: <?php echo $total_orders; ?>
                         <button onclick="printPage()" class="btn btn-sm btn-outline-dark ms-2">
                             <i class="fas fa-print"></i>

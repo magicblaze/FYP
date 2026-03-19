@@ -289,8 +289,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     }
 
     if (isset($_POST['auto_assign_constructor'])) {
-        // Get the least busy available constructor/worker
-        $available_constructor_sql = "SELECT workerid, name FROM Worker WHERE status = 'Available' ORDER BY workerid ASC LIMIT 1";
+        // Get an available worker who is not currently assigned to any active order
+        $available_constructor_sql = "SELECT w.workerid, w.name 
+                                     FROM Worker w 
+                                     WHERE w.workerid NOT IN (
+                                         SELECT workerid FROM workerallocation 
+                                         WHERE status IN ('Assigned', 'In Progress')
+                                     ) 
+                                     ORDER BY w.workerid ASC LIMIT 1";
         $available_constructor_stmt = mysqli_prepare($mysqli, $available_constructor_sql);
         mysqli_stmt_execute($available_constructor_stmt);
         $available_constructor_result = mysqli_stmt_get_result($available_constructor_stmt);
@@ -300,25 +306,31 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $constructor = mysqli_fetch_assoc($available_constructor_result);
             $constructor_id = $constructor['workerid'];
 
-            // Update the Order with the assigned constructor
-            $update_constructor_sql = "UPDATE `Order` SET constructor_id = ? WHERE orderid = ?";
-            $update_constructor_stmt = mysqli_prepare($mysqli, $update_constructor_sql);
-            mysqli_stmt_bind_param($update_constructor_stmt, "ii", $constructor_id, $orderid);
+            // Get schedule info for estimated completion
+            $schedule_sql = "SELECT OrderFinishDate FROM `Schedule` WHERE orderid = ?";
+            $schedule_stmt = mysqli_prepare($mysqli, $schedule_sql);
+            mysqli_stmt_bind_param($schedule_stmt, "i", $orderid);
+            mysqli_stmt_execute($schedule_stmt);
+            $schedule_res = mysqli_stmt_get_result($schedule_stmt);
+            $schedule_data = mysqli_fetch_assoc($schedule_res);
+            mysqli_stmt_close($schedule_stmt);
+            
+            $est_completion = $schedule_data['OrderFinishDate'] ?? date('Y-m-d', strtotime('+30 days'));
 
-            if (mysqli_stmt_execute($update_constructor_stmt)) {
-                // Update worker status to Busy
-                $update_worker_sql = "UPDATE Worker SET status = 'Busy' WHERE workerid = ?";
-                $update_worker_stmt = mysqli_prepare($mysqli, $update_worker_sql);
-                mysqli_stmt_bind_param($update_worker_stmt, "i", $constructor_id);
-                mysqli_stmt_execute($update_worker_stmt);
-                mysqli_stmt_close($update_worker_stmt);
+            // Insert into workerallocation
+            $insert_alloc_sql = "INSERT INTO workerallocation (orderid, workerid, managerid, allocation_date, estimated_completion, estimated_hours, status) 
+                                VALUES (?, ?, ?, NOW(), ?, 40.0, 'Assigned')";
+            $insert_alloc_stmt = mysqli_prepare($mysqli, $insert_alloc_sql);
+            $manager_id = $_SESSION['user']['managerid'];
+            mysqli_stmt_bind_param($insert_alloc_stmt, "iiis", $orderid, $constructor_id, $manager_id, $est_completion);
 
+            if (mysqli_stmt_execute($insert_alloc_stmt)) {
+                mysqli_stmt_close($insert_alloc_stmt);
                 header("Location: Order_Edit.php?id=" . $orderid);
                 exit();
             }
         } else {
-            // No available constructor found - show error message
-            $error_message = "No available constructors at the moment. Please check back later.";
+            $error_message = "No available constructors at the moment.";
         }
     }
 
@@ -1707,8 +1719,13 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                             </div>
                             <div class="card-body">
                                 <?php
-                                // Check if constructor is already assigned
-                                $constructor_sql = "SELECT constructor_id FROM `Order` WHERE orderid = ?";
+                                // Check if constructor is already assigned via workerallocation
+                                $constructor_sql = "SELECT wa.workerid, s.sname, s.stel, s.semail 
+                                                   FROM workerallocation wa 
+                                                   JOIN Worker w ON wa.workerid = w.workerid 
+                                                   JOIN Supplier s ON w.supplierid = s.supplierid
+                                                   WHERE wa.orderid = ? AND wa.status != 'Cancelled' 
+                                                   LIMIT 1";
                                 $constructor_stmt = mysqli_prepare($mysqli, $constructor_sql);
                                 mysqli_stmt_bind_param($constructor_stmt, "i", $orderid);
                                 mysqli_stmt_execute($constructor_stmt);
@@ -1716,18 +1733,12 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                 $constructor_row = mysqli_fetch_assoc($constructor_result);
                                 mysqli_stmt_close($constructor_stmt);
                                 
-                                if (!empty($constructor_row['constructor_id'])):
-                                    // Get constructor info
-                                    $cons_info_sql = "SELECT * FROM Worker WHERE workerid = ?";
-                                    $cons_info_stmt = mysqli_prepare($mysqli, $cons_info_sql);
-                                    mysqli_stmt_bind_param($cons_info_stmt, "i", $constructor_row['constructor_id']);
-                                    mysqli_stmt_execute($cons_info_stmt);
-                                    $cons_info = mysqli_fetch_assoc(mysqli_stmt_get_result($cons_info_stmt));
-                                    mysqli_stmt_close($cons_info_stmt);
+                                if (!empty($constructor_row['workerid'])):
+                                    $cons_info = $constructor_row;
                                 ?>
                                     <div class="alert alert-info mb-3">
-                                        <strong>Constructor Assigned:</strong> <?php echo htmlspecialchars($cons_info['name'] ?? 'Unknown'); ?>
-                                        <br><small>Contact: <?php echo htmlspecialchars($cons_info['phone'] ?? '—'); ?></small>
+                                        <strong>Constructor Assigned:</strong> <?php echo htmlspecialchars($cons_info['sname'] ?? 'Unknown'); ?>
+                                        <br><small>Contact: <?php echo htmlspecialchars($cons_info['stel'] ?? '—'); ?> | <?php echo htmlspecialchars($cons_info['semail'] ?? '—'); ?></small>
                                     </div>
                                 <?php else: ?>
                                     <form method="post" class="mb-0">
