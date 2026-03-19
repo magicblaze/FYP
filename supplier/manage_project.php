@@ -29,6 +29,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['orderdeliveryid']) &&
     }
 }
 
+// Handle delivery date update POST
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['orderdeliveryid']) && isset($_POST['delivery_date']) && $orderid > 0) {
+    $orderdeliveryid = intval($_POST['orderdeliveryid']);
+    $delivery_date = trim($_POST['delivery_date']);
+    
+    if (!empty($delivery_date)) {
+        $update_date_sql = "UPDATE OrderDelivery SET deliverydate = ? WHERE orderdeliveryid = ?";
+        $update_date_stmt = $mysqli->prepare($update_date_sql);
+        $update_date_stmt->bind_param('si', $delivery_date, $orderdeliveryid);
+        if ($update_date_stmt->execute()) {
+            $msg = 'Delivery date updated successfully!';
+        } else {
+            $msg = 'Error updating delivery date.';
+        }
+        $update_date_stmt->close();
+    } else {
+        $msg = 'Please select a valid delivery date.';
+    }
+}
+
 // Fetch all orders for dropdown and search
 $orders = [];
 $order_sql = "SELECT o.orderid, o.odate, c.cname FROM `Order` o JOIN Client c ON o.clientid = c.clientid JOIN OrderDelivery od ON o.orderid = od.orderid JOIN Product p ON od.productid = p.productid WHERE p.supplierid = ?";
@@ -141,16 +161,25 @@ $allowed_statuses = ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelled
                                 <td><span class="badge bg-info text-dark"><?= htmlspecialchars($item['status']) ?></span></td>
                                 <td><?= htmlspecialchars($item['deliverydate']) ?></td>
                                 <td>
-                                    <form method="post" style="display:inline-block">
-                                        <input type="hidden" name="orderdeliveryid" value="<?= (int)$item['orderdeliveryid'] ?>">
-                                        <select name="new_status" class="form-select form-select-sm" style="width:120px;display:inline-block;">
-                                            <option value="">-- Change Status --</option>
-                                            <?php foreach ($allowed_statuses as $s): ?>
-                                                <option value="<?= $s ?>" <?= ($item['status'] === $s) ? 'selected' : '' ?>><?= $s ?></option>
-                                            <?php endforeach; ?>
-                                        </select>
-                                        <button type="submit" class="btn btn-sm btn-primary ms-1"><i class="fas fa-sync-alt"></i> Update</button>
-                                    </form>
+                                    <div class="d-flex flex-column gap-2">
+                                        <!-- Update Status -->
+                                        <form method="post" class="d-flex align-items-center">
+                                            <input type="hidden" name="orderdeliveryid" value="<?= (int)$item['orderdeliveryid'] ?>">
+                                            <select name="new_status" class="form-select form-select-sm" style="width:120px;">
+                                                <option value="">-- Status --</option>
+                                                <?php foreach ($allowed_statuses as $s): ?>
+                                                    <option value="<?= $s ?>" <?= ($item['status'] === $s) ? 'selected' : '' ?>><?= $s ?></option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                            <button type="submit" class="btn btn-sm btn-primary ms-1" title="Update Status"><i class="fas fa-sync-alt"></i></button>
+                                        </form>
+                                        <!-- Update Delivery Date -->
+                                        <form method="post" class="d-flex align-items-center">
+                                            <input type="hidden" name="orderdeliveryid" value="<?= (int)$item['orderdeliveryid'] ?>">
+                                            <input type="date" name="delivery_date" class="form-control form-control-sm" value="<?= $item['deliverydate'] ?>" style="width:120px;">
+                                            <button type="submit" class="btn btn-sm btn-success ms-1" title="Set Delivery Date"><i class="fas fa-calendar-check"></i></button>
+                                        </form>
+                                    </div>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
