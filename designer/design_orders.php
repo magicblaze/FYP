@@ -1325,7 +1325,6 @@ foreach ($orders as $o) {
                 if (refAddBtn) refAddBtn.style.display = 'inline-block';
                 refActionBtns.forEach(el => el.style.display = 'flex');
                 pictureDeleteBtns.forEach(el => el.style.display = 'flex');
-                if (savePaymentBtn) savePaymentBtn.style.display = 'inline-block';
             } else {
                 editBtn.style.display = 'inline-block';
                 saveBtn.style.display = 'none';
@@ -1334,7 +1333,6 @@ foreach ($orders as $o) {
                 if (refAddBtn) refAddBtn.style.display = 'none';
                 refActionBtns.forEach(el => el.style.display = 'none');
                 pictureDeleteBtns.forEach(el => el.style.display = 'none');
-                if (savePaymentBtn) savePaymentBtn.style.display = 'none';
                 cancelPreview(orderId);
                 toggleReferenceEdit(orderId, false);
             }
@@ -1349,16 +1347,6 @@ foreach ($orders as $o) {
             const isRefFormActive = refForm && refForm.classList.contains('active');
             const hasSelectedProduct = productSelect && productSelect.value;
             const pending = pendingReferences[orderId] || [];
-            
-            // Check if final payment is set
-            const finalPaymentInput = document.getElementById('finalPayment_' + orderId);
-            const hasFinalPayment = finalPaymentInput && finalPaymentInput.value && parseFloat(finalPaymentInput.value) > 0;
-            
-            // Validate final payment
-            if (!hasFinalPayment) {
-                alert('Please set the final payment amount before saving.');
-                return;
-            }
 
             let attemptMade = false;
             let successCount = 0;
