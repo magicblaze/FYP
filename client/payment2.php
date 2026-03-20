@@ -69,7 +69,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         mysqli_begin_transaction($mysqli);
         
         try {
-            // DO NOT update order status - keep original status
+
+            $u_sql = "UPDATE `Order` SET ostatus = 'drafting 2nd proposal' WHERE orderid = ? AND clientid = ?";
+            $u_stmt = mysqli_prepare($mysqli, $u_sql);
+            mysqli_stmt_bind_param($u_stmt, "ii", $orderid, $client_id);
+            mysqli_stmt_execute($u_stmt);
+            mysqli_stmt_close($u_stmt);
             
             // Update OrderPayment
             $op_sql = "UPDATE OrderPayment SET 

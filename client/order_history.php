@@ -392,7 +392,7 @@ if (!empty($_GET['msg'])) {
                                     <i class="fas fa-arrow-right me-1"></i>View Details</a>
                             <?php endif; ?>
 
-                            <?php if ($statusLower === 'drafting 2nd proposal'): ?>
+                            <?php if ($statusLower === 'waiting 2nd design phase payment'): ?>
                                 <a href="payment2.php?orderid=<?= (int) $order['orderid'] ?>&amount=<?= $final_payment_amount ?>" class="view-details-btn btn-final"
                                     onclick="event.stopPropagation();">
                                     <i class="fas fa-credit-card me-1"></i>Proceed to 2nd Payment
