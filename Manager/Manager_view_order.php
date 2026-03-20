@@ -24,7 +24,7 @@ if (isset($_GET['id'])) {
     $order_check = mysqli_fetch_assoc($check_result);
 
     if ($order_check['count'] == 0) {
-        die("Order not found.");
+        die("Project not found.");
     }
 
     // 修改后的SQL查询：使用别名将expect_price重命名为price，并添加cost字段
@@ -71,7 +71,7 @@ if (isset($_GET['id'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HappyDesign - Order Details #<?php echo $orderid ?? 'N/A'; ?></title>
+    <title>HappyDesign - Project Details #<?php echo $orderid ?? 'N/A'; ?></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="../css/styles.css">
@@ -109,26 +109,26 @@ if (isset($_GET['id'])) {
     <main class="container-lg mt-4">
         <!-- Page Title -->
         <div class="page-title">
-            <i class="fas fa-file-alt me-2"></i>Order Details #<?php echo htmlspecialchars($orderid ?? 'N/A'); ?>
+            <i class="fas fa-file-alt me-2"></i>Project Details #<?php echo htmlspecialchars($orderid ?? 'N/A'); ?>
         </div>
 
         <?php if (isset($order) && $order): ?>
 
-            <!-- Order Summary Card -->
+            <!-- Project Summary Card -->
             <div class="card mb-4">
                 <div class="card-header bg-light">
                     <h5 class="card-title mb-0">
-                        <i class="fas fa-info-circle me-2"></i>Order Summary
+                        <i class="fas fa-info-circle me-2"></i>Project Summary
                     </h5>
                 </div>
                 <div class="card-body">
                     <div class="row">
                         <div class="col-md-3 mb-3">
-                            <label class="fw-bold text-muted">Order ID</label>
+                            <label class="fw-bold text-muted">Project ID</label>
                             <p class="mb-0"><strong>#<?php echo htmlspecialchars($order['orderid']); ?></strong></p>
                         </div>
                         <div class="col-md-3 mb-3">
-                            <label class="fw-bold text-muted">Order Date</label>
+                            <label class="fw-bold text-muted">Project Date</label>
                             <p class="mb-0"><?php echo date('Y-m-d H:i', strtotime($order['odate'])); ?></p>
                         </div>
                         <div class="col-md-3 mb-3">
@@ -297,7 +297,7 @@ if (isset($_GET['id'])) {
                 <div class="card-body">
                     <div class="row">
                         <div class="col-md-6 mb-3">
-                            <label class="fw-bold text-muted">Order Finish Date</label>
+                            <label class="fw-bold text-muted">Project Finish Date</label>
                             <p class="mb-0">
                                 <?php
                                 if (isset($order["OrderFinishDate"]) && $order["OrderFinishDate"] != '0000-00-00 00:00:00') {
@@ -327,8 +327,8 @@ if (isset($_GET['id'])) {
         <?php else: ?>
             <div class="alert alert-danger" role="alert">
                 <i class="fas fa-exclamation-circle me-2"></i>
-                <strong>Order not found.</strong>
-                <p class="mb-0">The requested order does not exist or has been removed.</p>
+                <strong>Project not found.</strong>
+                <p class="mb-0">The requested project does not exist or has been removed.</p>
             </div>
         <?php endif; ?>
 
@@ -340,7 +340,7 @@ if (isset($_GET['id'])) {
             <button onclick="goBack()" class="btn btn-secondary">
                 <i class="fas fa-arrow-left me-2"></i>Back
             </button>
-            <small class="text-muted">Order #<?php echo htmlspecialchars($orderid ?? 'N/A'); ?></small>
+            <small class="text-muted">Project #<?php echo htmlspecialchars($orderid ?? 'N/A'); ?></small>
         </div>
     </main>
 

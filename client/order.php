@@ -790,7 +790,7 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                                 </div>
                             </div>
                             <div class="mt-3 mb-3">
-                                <label class="form-label fw-bold">Order budget</label>
+                                <label class="form-label fw-bold">Project budget</label>
                                 <?php $initialBudget = max((float) $budgetDisplay, (float) $design['expect_price']); ?>
                                 <div id="budgetView" class="d-flex align-items-center">
                                     <div id="budgetDisplayText" class="me-2">
@@ -922,7 +922,7 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                             <input type="hidden" id="references" name="references" value="">
                         </div>
                     </div>
-                    <!-- Right Column - Order Summary -->
+                    <!-- Right Column - Project Summary -->
                     <div class="col-md-4">
                         <div class="order-summary">
                             <h3 class="section-title">Summary</h3>

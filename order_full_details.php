@@ -15,7 +15,7 @@ $orderId = isset($_GET['id']) ? intval($_GET['id']) : 0;
 $isEmbed = isset($_GET['embed']) && $_GET['embed'] === '1';
 
 if ($orderId <= 0) {
-    die("Invalid Order ID");
+    die("Invalid Project ID");
 }
 
 // Handle Date Updates (Manager Only)
@@ -67,7 +67,7 @@ $stmt->execute();
 $order = $stmt->get_result()->fetch_assoc();
 
 if (!$order) {
-    die("Order not found");
+    die("Project not found");
 }
 
 // 2. Fetch Products/Materials (OrderReference)

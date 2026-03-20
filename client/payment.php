@@ -12,7 +12,7 @@ $user = $_SESSION['user'];
 $client_id = $user['clientid'];
 
 $orderid = isset($_GET['orderid']) ? intval($_GET['orderid']) : 0;
-if ($orderid <= 0) die('Order ID missing');
+if ($orderid <= 0) die('Project ID missing');
 
 // Load order and ensure ownership
 $sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.cost, o.designid, o.deposit, o.final_payment,
@@ -28,7 +28,7 @@ mysqli_stmt_execute($stmt);
 $result = mysqli_stmt_get_result($stmt);
 $order = mysqli_fetch_assoc($result);
 if (!$order) {
-    die('Order not found or access denied.');
+    die('Project not found or access denied.');
 }
 
 // Get values
@@ -112,7 +112,7 @@ $current_step = 3;
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>Construction Fee Payment - Order #<?php echo $orderid; ?></title>
+    <title>Construction Fee Payment - Project #<?php echo $orderid; ?></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="../css/styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -267,7 +267,7 @@ $current_step = 3;
                     <i class="fas fa-hard-hat me-1"></i> Construction Fee Payment
                 </div>
                 
-                <h4>Payment for Order #<?php echo $orderid; ?></h4>
+                <h4>Payment for Project #<?php echo $orderid; ?></h4>
                 
                 <!-- Budget check removed for this payment stage -->
                 
@@ -305,9 +305,9 @@ $current_step = 3;
                     </div>
                 </div>
 
-                <!-- Order Summary - Matching Budget Overview from Order_View -->
+                <!-- Project Summary - Matching Budget Overview from Order_View -->
                 <div class="total-section">
-                    <h5 class="mb-3"><i class="fas fa-chart-pie me-2"></i>Order Summary</h5>
+                    <h5 class="mb-3"><i class="fas fa-chart-pie me-2"></i>Project Summary</h5>
                     
                     <div class="total-item">
                         <span class="total-label">Project Deposit:</span>

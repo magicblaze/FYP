@@ -79,7 +79,7 @@ $res = $stmt->get_result();
           <table class="table table-hover mb-0 align-middle">
             <thead class="table">
               <tr>
-                <th>Order ID</th>
+                <th>Project ID</th>
                 <th>Design</th>
                 <th>Client</th>
                 <th>Date</th>
@@ -106,7 +106,7 @@ $res = $stmt->get_result();
                   </tr>
                 <?php endwhile; else: ?>
                 <tr>
-                  <td colspan="7" class="text-center text-muted py-4">No orders found.</td>
+                  <td colspan="7" class="text-center text-muted py-4">No projects found.</td>
                 </tr>
               <?php endif; ?>
             </tbody>

@@ -75,7 +75,7 @@ $availableStatuses = ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelle
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Manage Order - HappyDesign</title>
+    <title>Manage Project - HappyDesign</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="../css/styles.css">
@@ -282,8 +282,8 @@ $availableStatuses = ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelle
     <!-- Dashboard Content -->
     <div class="container mb-5">
         <div class="dashboard-header text-center">
-            <h2>Manage Orders</h2>
-            <p class="mb-0">View and update order product status</p>
+            <h2>Manage Projects</h2>
+            <p class="mb-0">View and update project product status</p>
         </div>
 
         <?php if (count($orderProducts) > 0): ?>
@@ -381,7 +381,7 @@ $availableStatuses = ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelle
                             <div class="detail-value">#<?= $product['orderdeliveryid'] ?></div>
                         </div>
                         <div class="detail-item">
-                            <div class="detail-label">Order Date</div>
+                            <div class="detail-label">Project Date</div>
                             <div class="detail-value"><?= date('M d, Y H:i', strtotime($product['odate'])) ?></div>
                         </div>
                     </div>
@@ -412,7 +412,7 @@ $availableStatuses = ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelle
                         <?php endif; ?>
                     </div>
 
-                    <!-- Order Information -->
+                    <!-- Project Information -->
                     <div class="order-info">
                         <div class="order-info-item">
                             <span class="order-info-label">Client:</span>
@@ -427,7 +427,7 @@ $availableStatuses = ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelle
                             <span class="order-info-value"><?= htmlspecialchars($product['address'] ?? 'N/A') ?></span>
                         </div>
                         <div class="order-info-item">
-                            <span class="order-info-label">Order Status:</span>
+                            <span class="order-info-label">Project Status:</span>
                             <span class="order-info-value"><?= htmlspecialchars($product['ostatus']) ?></span>
                         </div>
                     </div>
@@ -438,8 +438,8 @@ $availableStatuses = ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelle
             <div class="product-card">
                 <div class="no-orders">
                     <i class="fas fa-inbox" style="font-size: 3rem; color: #ccc; margin-bottom: 1rem;"></i>
-                    <h4>No Order Found</h4>
-                    <p>You don't have any order containing your products yet.</p>
+                    <h4>No Project Found</h4>
+                    <p>You don't have any project containing your products yet.</p>
                 </div>
             </div>
         <?php endif; ?>

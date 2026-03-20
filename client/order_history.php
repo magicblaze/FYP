@@ -340,7 +340,7 @@ if (!empty($_GET['msg'])) {
                         onclick="window.location.href='order_detail.php?orderid=<?= (int) $order['orderid'] ?>'">
                         <div class="order-header">
                             <div>
-                                <span class="order-id">Order #<?= (int) $order['orderid'] ?></span>
+                                <span class="order-id">Project #<?= (int) $order['orderid'] ?></span>
                                 <span class="order-date ms-3">
                                     <i class="fas fa-calendar-alt me-1"></i>
                                     <?= date('M d, Y H:i', strtotime($order['odate'])) ?>

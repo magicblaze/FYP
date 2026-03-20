@@ -13,7 +13,7 @@ $client_id = $user['clientid'];
 
 $orderid = isset($_GET['orderid']) ? intval($_GET['orderid']) : 0;
 if ($orderid <= 0)
-    die('Order ID missing');
+    die('Project ID missing');
 
 $amount = isset($_GET['amount']) ? floatval($_GET['amount']) : 0;
 
@@ -34,7 +34,7 @@ mysqli_stmt_execute($stmt);
 $result = mysqli_stmt_get_result($stmt);
 $order = mysqli_fetch_assoc($result);
 if (!$order) {
-    die('Order not found or access denied.');
+    die('Project not found or access denied.');
 }
 
 // Get payment values from OrderPayment

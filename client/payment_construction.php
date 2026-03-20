@@ -12,7 +12,7 @@ $user = $_SESSION['user'];
 $client_id = $user['clientid'];
 
 $orderid = isset($_GET['orderid']) ? intval($_GET['orderid']) : 0;
-if ($orderid <= 0) die('Order ID missing');
+if ($orderid <= 0) die('Project ID missing');
 
 $amount = isset($_GET['amount']) ? floatval($_GET['amount']) : 0;
 
@@ -37,7 +37,7 @@ mysqli_stmt_execute($stmt);
 $result = mysqli_stmt_get_result($stmt);
 $order = mysqli_fetch_assoc($result);
 if (!$order) {
-    die('Order not found or access denied.');
+    die('Project not found or access denied.');
 }
 
 // Get payment values from OrderPayment
@@ -131,7 +131,7 @@ $stage_title = 'Construction Deposit';
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>Construction Deposit - Order #<?php echo $orderid; ?></title>
+    <title>Construction Deposit - Project #<?php echo $orderid; ?></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="../css/styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
