@@ -42,7 +42,7 @@ if (!$order) {
 
 // Get payment values from OrderPayment
 $construction_deposit = isset($order['construction_deposit']) ? floatval($order['construction_deposit']) : 0;
-$materials_cost = isset($order['materials_cost']) ? floatval($order['materials_cost']) : 0;
+$materials_cost_allocated = isset($order['materials_cost']) ? floatval($order['materials_cost']) : 0;
 $design_fee_manager_1st = isset($order['design_fee_manager_1st']) ? floatval($order['design_fee_manager_1st']) : 0;
 $design_fee_designer_2nd = isset($order['design_fee_designer_2nd']) ? floatval($order['design_fee_designer_2nd']) : 0;
 $design_fee_manager_2nd = isset($order['design_fee_manager_2nd']) ? floatval($order['design_fee_manager_2nd']) : 0;
@@ -56,8 +56,25 @@ $total_amount_paid = isset($order['total_amount_paid']) ? floatval($order['total
 $design_price = isset($order['design_price']) ? floatval($order['design_price']) : 0;
 $current_budget = isset($order['budget']) ? floatval($order['budget']) : 0;
 
-// Calculate total for this payment stage (Construction Deposit + Materials Cost)
-$total_to_pay = $construction_deposit + $materials_cost;
+// Calculate actual material cost from confirmed order references
+$actual_materials_cost = 0.0;
+$materials_sql = "SELECT IFNULL(SUM(COALESCE(orr.price, p.price, 0)), 0) AS material_total
+                                    FROM `OrderReference` orr
+                                    LEFT JOIN `Product` p ON orr.productid = p.productid
+                                    WHERE orr.orderid = ?
+                                        AND (orr.status IS NULL OR LOWER(orr.status) <> 'rejected')";
+$materials_stmt = mysqli_prepare($mysqli, $materials_sql);
+if ($materials_stmt) {
+        mysqli_stmt_bind_param($materials_stmt, "i", $orderid);
+        mysqli_stmt_execute($materials_stmt);
+        $materials_result = mysqli_stmt_get_result($materials_stmt);
+        $materials_row = mysqli_fetch_assoc($materials_result);
+        $actual_materials_cost = isset($materials_row['material_total']) ? (float) $materials_row['material_total'] : 0.0;
+        mysqli_stmt_close($materials_stmt);
+}
+
+// Calculate total for this payment stage (Construction Deposit + Actual Materials Cost)
+$total_to_pay = $construction_deposit + $actual_materials_cost;
 
 // Parse saved payment method
 $paymentMethodData = [];
@@ -391,8 +408,8 @@ $stage_title = 'Construction Deposit';
                                 <span>HK$<?php echo number_format($construction_deposit, 2); ?></span>
                             </div>
                             <div class="d-flex justify-content-between">
-                                <span>Materials Cost:</span>
-                                <span>HK$<?php echo number_format($materials_cost, 2); ?></span>
+                                <span>Materials Cost (Actual Price):</span>
+                                <span>HK$<?php echo number_format($actual_materials_cost, 2); ?></span>
                             </div>
                         </div>
                         

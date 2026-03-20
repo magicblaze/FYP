@@ -366,7 +366,7 @@ if (!empty($_GET['msg'])) {
 
                             </div>
                             <div class="order-price-info">
-                                <div class="price-label">Cost</div>
+                                <div class="price-label">Expected cost</div>
                                 <div class="price-value">$<?= number_format($computed_cost, 2) ?></div>
                             </div>
                         </div>
@@ -378,7 +378,7 @@ if (!empty($_GET['msg'])) {
                         <?php endif; ?>
                         <div style="margin-top: 0.75rem; display:flex; gap:8px;">
                             <!-- Primary view/proposal/details button -->
-                            <?php if ($statusLower === 'waiting client review' || $statusLower === 'waiting final design phase payment' || $statusLower === 'complete'): ?>
+                            <?php if ($statusLower === 'waiting client review' || $statusLower === 'waiting final design phase payment' || $statusLower === "preparing" || $statusLower === 'complete'): ?>
                                 <a href="Order_View.php?id=<?= (int) $order['orderid'] ?>" class="view-details-btn"
                                     onclick="event.stopPropagation();">
                                     <i class="fas fa-file-image me-1"></i>View Proposal</a>

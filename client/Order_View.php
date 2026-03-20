@@ -302,60 +302,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <div class="budget-info">
                             <h6 class="mb-3"><i class="fas fa-chart-pie me-2"></i>Budget Overview</h6>
                             <div class="budget-item">
-                                <span class="budget-label">Design Cost:</span>
-                                <span class="budget-value text-info">-
-                                    HK$<?php echo number_format($payment['total_design_payment'], 2); ?></span>
+                                <span class="budget-label">Original Budget:</span>
+                                <span class="budget-value">HK$<?php echo number_format($original_budget, 2); ?></span>
                             </div>
 
-                            <div class="budget-item">
-                                <span class="budget-label">Material Cost (Actual price):</span>
-                                <span class="budget-value text-info">-
-                                    HK$<?php echo number_format($actual_material_cost, 2); ?></span>
-                            </div>
-
-                            <div class="budget-item">
-                                <span class="budget-label">Commission:</span>
-                                <span class="budget-value text-info">-
-                                    HK$<?php echo number_format($commission_total, 2); ?></span>
-                            </div>
-
-                            <div class="budget-item">
-                                <span class="budget-label">Constructor Cost:</span>
-                                <span class="budget-value text-info">-
-                                    HK$<?php echo number_format($constructor_cost, 2); ?></span>
-                            </div>
-
-                            <?php if (!empty($fees)): ?>
-                                <?php foreach ($fees as $fee): ?>
-                                    <div class="budget-item">
-                                        <span class="budget-label"><?php echo htmlspecialchars($fee['fee_name']); ?>:</span>
-                                        <span class="budget-value text-info">-
-                                            HK$<?php echo number_format($fee['amount'], 2); ?></span>
-                                    </div>
-                                <?php endforeach; ?>
-                            <?php endif; ?>
-
-                            <div class="budget-item"
-                                style="border-top: 2px solid #10f176; margin-top: 0.5rem; padding-top: 0.75rem;">
-                                <span class="budget-label"><strong>Total Deducted:</strong></span>
-                                <span class="budget-value text-danger">-
-                                    HK$<?php echo number_format($total_deducted, 2); ?></span>
-                            </div>
-
-                            <div class="budget-item"
-                                style="border-top: 2px solid #3498db; margin-top: 0.5rem; padding-top: 0.75rem;">
+                            <div class="budget-item" style="border-top: 2px solid #3498db; margin-top: 0.5rem; padding-top: 0.75rem;">
                                 <span class="budget-label"><strong>Remaining Budget:</strong></span>
-                                <span
-                                    class="budget-value budget-remaining"><strong>HK$<?php echo number_format($remaining_budget, 2); ?></strong></span>
+                                <span class="budget-value budget-remaining"><strong>HK$<?php echo number_format($remaining_budget, 2); ?></strong></span>
                             </div>
-
-                            <?php if ($remaining_budget < 0): ?>
-                                <div class="alert alert-danger mt-2 mb-0 py-2">
-                                    <i class="fas fa-exclamation-triangle me-1"></i>
-                                    <small>Budget exceeded by
-                                        HK$<?php echo number_format(abs($remaining_budget), 2); ?></small>
-                                </div>
-                            <?php endif; ?>
                         </div>
                     </div>
                 </div>
@@ -399,22 +353,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <p class="mb-0"><strong
                                     class="text-info">HK$<?php echo number_format($design_price, 2); ?></strong></p>
                         </div>
-
-                        <div class="mb-3">
-                            <label class="fw-bold text-muted small">Design deposit (2.5%)</label>
-                            <p class="mb-0"><strong
-                                    class="text-info">HK$<?php echo number_format($Design_Fee1, 2); ?></strong></p>
-                            <small class="text-muted">Based on design price:
-                                HK$<?php echo number_format($design_price, 2); ?></small>
-                        </div>
-
-                        <div class="mb-3">
-                            <label class="fw-bold text-muted small">Project Deposit</label>
-                            <p class="mb-0"><strong
-                                    class="text-info">HK$<?php echo number_format($Project_Deposit, 2); ?></strong></p>
-                            <small class="text-muted">Fixed project deposit</small>
-                        </div>
-
+                        
                         <hr>
                         <div class="mb-3">
                             <label class="fw-bold text-muted small">Design Tag</label>
@@ -579,7 +518,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     <?php endif; ?>
                                 </ul>
                             </div>
-                            <label class="fw-bold text-muted small">Total Cost</label>
+                            <label class="fw-bold text-muted small">Actual Cost</label>
                             <p class="mb-0"><strong
                                     class="text-danger fs-5">HK$<?php echo number_format($final_total_cost, 2); ?></strong>
                             </p>
