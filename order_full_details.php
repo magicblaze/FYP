@@ -114,7 +114,7 @@ $grandTotal = $productTotal + $feeTotal + ($order['cost'] ?? 0);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Order Details #<?= $orderId ?> - HappyDesign</title>
+    <title>Project Detail #<?= $orderId ?> - HappyDesign</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="css/styles.css">
@@ -325,8 +325,8 @@ $grandTotal = $productTotal + $feeTotal + ($order['cost'] ?? 0);
 
         <div class="d-flex justify-content-between align-items-center mb-4 bg-white p-4 rounded-3 shadow-sm">
             <div>
-                <h2 class="fw-bold mb-1">Order #<?= $orderId ?></h2>
-                <p class="text-muted mb-0"><i class="far fa-calendar-alt me-1"></i> Placed on
+                <h2 class="fw-bold mb-1">Project #<?= $orderId ?></h2>
+                <p class="text-muted mb-0"><i class="far fa-calendar-alt me-1"></i> Created in
                     <?= date('F d, Y', strtotime($order['odate'])) ?></p>
             </div>
             <span
@@ -350,7 +350,7 @@ $grandTotal = $productTotal + $feeTotal + ($order['cost'] ?? 0);
                         </div>
                     </div>
                     <div class="col-md-4">
-                        <label class="form-label small">Order Finish Date</label>
+                        <label class="form-label small">Project Finish Date</label>
                         <div class="input-group">
                             <span class="input-group-text bg-light border-end-0"><i
                                     class="fas fa-check-double text-muted"></i></span>
@@ -381,7 +381,7 @@ $grandTotal = $productTotal + $feeTotal + ($order['cost'] ?? 0);
                             <div class="info-value"><?= htmlspecialchars($order['designName'] ?? 'Custom Request') ?>
                             </div>
 
-                            <div class="info-label">Order Date</div>
+                            <div class="info-label">Project Date</div>
                             <div class="info-value"><?= date('F d, Y', strtotime($order['odate'])) ?></div>
                         </div>
                         <div class="col-md-6">

@@ -880,7 +880,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
     <div class="container mb-5">
         <!-- Page Title -->
         <div class="page-title">
-            <i class="fas fa-edit me-2"></i>Proposal Drafter
+            Project Managment - Order #<?php echo $orderid; ?>
         </div>
 
         <?php if ($order): ?>

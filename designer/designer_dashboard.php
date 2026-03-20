@@ -183,7 +183,7 @@ $designerName = $_SESSION['user']['name'];
         </div>
         <div class="stat-card d-flex justify-content-between gap-3 mb-4">
             <a href="OrderManager.php" class="btn btn-primary btn-lg w-100">
-                Order Manager
+                Project Manager
             </a>
             <a href="DesignManager.php" class="btn btn-success btn-lg w-100">
                 <i class="fas fa-plus me-2"></i>Design Manager

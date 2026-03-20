@@ -365,7 +365,7 @@ foreach($orders as $o) {
             <div class="col-lg-3 col-md-6">
                 <div class="stat-card">
                     <div class="stat-number"><?= $total_orders ?></div>
-                    <div class="stat-label">Total Orders</div>
+                    <div class="stat-label">All Projects</div>
                 </div>
             </div>
             <div class="col-lg-3 col-md-6">

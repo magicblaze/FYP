@@ -214,7 +214,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <?php include_once __DIR__ . '/../includes/header.php'; ?>
 
     <div class="container mb-5">
-        <div class="page-title"><i class="fas fa-info-circle me-2"></i>Proposal Detail</div>
+        <div class="page-title"><i class="fas fa-info-circle me-2"></i>Project Detail</div>
 
         <div class="alert <?php echo in_array($status, ['waiting confirm', 'waiting client review']) ? 'alert-warning' : 'alert-info'; ?> mb-4"
             role="alert">
@@ -416,16 +416,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="card h-100">
                     <div class="card-header">
                         <h5 class="card-title mb-0">
-                            <i class="fas fa-clipboard me-2"></i>Order Detail
+                            <i class="fas fa-clipboard me-2"></i>Project Detail
                         </h5>
                     </div>
                     <div class="card-body">
                         <div class="mb-3">
-                            <label class="fw-bold text-muted small">Order ID</label>
+                            <label class="fw-bold text-muted small">Project ID</label>
                             <p class="mb-0"><small>#<?php echo htmlspecialchars($order["orderid"]); ?></small></p>
                         </div>
                         <div class="mb-3">
-                            <label class="fw-bold text-muted small">Order Date</label>
+                            <label class="fw-bold text-muted small">Project Date</label>
                             <p class="mb-0"><small><?php echo date('M d, Y H:i', strtotime($order["odate"])); ?></small></p>
                         </div>
                         <div class="mb-3">

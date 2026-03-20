@@ -125,7 +125,7 @@ $stage_title = 'Final Construction Payment';
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>Final Construction Payment - Order #<?php echo $orderid; ?></title>
+    <title>Final Construction Payment - Project #<?php echo $orderid; ?></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="../css/styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -286,7 +286,7 @@ $stage_title = 'Final Construction Payment';
                     <i class="fas fa-check-circle me-1"></i> Final Construction Payment
                 </div>
                 
-                <h4>Payment for Order #<?php echo $orderid; ?></h4>
+                <h4>Payment for Project #<?php echo $orderid; ?></h4>
                 
                 <!-- Budget check removed for this payment stage -->
                 
@@ -376,7 +376,7 @@ $stage_title = 'Final Construction Payment';
                     
                     <div class="payment-detail">
                         <div class="payment-detail-item">
-                            <span>Order #<?php echo $orderid; ?></span>
+                            <span>Project #<?php echo $orderid; ?></span>
                             <span><?php echo date('Y-m-d', strtotime($order['odate'])); ?></span>
                         </div>
                         
@@ -428,7 +428,7 @@ $stage_title = 'Final Construction Payment';
                     <div class="d-flex gap-2">
                         <?php if (!empty($paymentMethodData) && !empty($paymentMethodData['method'])): ?>
                             <?php if ($payment_success): ?>
-                                <a href="order_history.php" class="btn btn-secondary">Back to Order History</a>
+                                <a href="order_history.php" class="btn btn-secondary">Back to Project History</a>
                             <?php else: ?>
                                 <button type="submit" name="proceed_pay" class="btn btn-success" 
                                         onclick="return confirm('Confirm payment HK$<?php echo number_format($total_to_pay, 2); ?>?');">

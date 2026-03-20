@@ -185,15 +185,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // Validate required fields (check updated values, not just profile)
     if (empty($clientData['floor_plan'])) {
-        $error = 'Please upload a floor plan before placing an order.';
+        $error = 'Please upload a floor plan.';
     } elseif ($budget <= 0) {
         $error = 'Budget must be greater than 0.';
     } elseif ($budget < (float) $design['expect_price']) {
         $error = 'Budget cannot be lower than the design cost (HK$' . number_format((float) $design['expect_price'], 0) . '). Please adjust your budget.';
     } elseif ($gfa <= 0) {
-        $error = 'Please provide Gross Floor Area (m²) for this order.';
+        $error = 'Please provide Gross Floor Area (m²).';
     } elseif (empty($paymentMethodData) || empty($paymentMethodData['method'])) {
-        $error = 'Please select a payment method before placing an order.';
+        $error = 'Please select a payment method.';
     } else {
         // Validate payment method details based on selected method
         $pm = $paymentMethodData['method'] ?? '';
@@ -580,7 +580,7 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HappyDesign - Order</title>
+    <title>HappyDesign - Project</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="../css/styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -817,7 +817,7 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                                     value="<?= htmlspecialchars($initialBudget) ?>">
 
                                 <small class="form-text text-muted mt-2"><i class="fas fa-info-circle me-1"></i>This is
-                                    the budget that will be used for the order.</small>
+                                    the budget that will be used for this project.</small>
                             </div>
                             <!-- Floor Plan Section-->
                             <label class="form-label fw-bold mb-3">Floor Plan</label>
@@ -875,7 +875,7 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                                 </div>
                             </div>
                             <small class="form-text text-muted mt-2 mb-3"><i class="fas fa-info-circle me-1"></i>Please
-                                upload a floor plan which is required changes for the order.</small>
+                                upload a floor plan which is required changes for the project.</small>
                             <div class="mb-3">
                                 <label class="form-label fw-bold">Gross Floor Area (m²)</label>
                                 <?php $initialGfa = isset($clientData['gross_floor_area']) ? (float) $clientData['gross_floor_area'] : 0.0; ?>
@@ -925,7 +925,7 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                     <!-- Right Column - Order Summary -->
                     <div class="col-md-4">
                         <div class="order-summary">
-                            <h3 class="section-title">Order Summary</h3>
+                            <h3 class="section-title">Summary</h3>
                             <div class="summary-item">
                                 <span>1st Design Fee (2.5%):</span>
                                 <span>HK$<?= number_format((float) $first_design_fee, 2) ?></span>
@@ -1062,7 +1062,7 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                                         only.</div>
                                 </div>
                                 <button type="submit" class="btn btn-success w-100 py-2">
-                                    <i class="fas fa-check-circle me-2"></i>Place Order
+                                    <i class="fas fa-check-circle me-2"></i>Submit
                                 </button>
                             </div>
                         </div>
@@ -1417,7 +1417,7 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                     if (!pmVal) {
                         e.preventDefault();
                         try { orderForm.dataset.hasValidationError = '1'; } catch (ex) { /* ignore */ }
-                        showClientWarning('Please select a payment method before placing the order.');
+                        showClientWarning('Please select a payment method.');
                         if (paymentDisplay) paymentDisplay.scrollIntoView({ behavior: 'smooth', block: 'center' });
                         showPaymentEdit(true);
                         return false;
@@ -1450,8 +1450,7 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? null;
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-primary" id="termsAcceptBtn" disabled>Agree & Place
-                        Order</button>
+                    <button type="button" class="btn btn-primary" id="termsAcceptBtn" disabled>Agree & Submit</button>
                 </div>
             </div>
         </div>

@@ -49,7 +49,7 @@ $baseUrl = $scheme . '://' . $host . $appRoot;
 </script>
 <header class="bg-white shadow p-3 d-flex justify-content-between align-items-center">
   <div class="d-flex align-items-center gap-3">
-    <div class="h4 mb-0 user-select-none">HappyDesign</div>
+    <div class="h4 mb-0 user-select-none">HappyDesign - IDPMA</div>
     <nav>
       <ul class="nav align-items-center gap-2">
         <?php if ($role === 'designer'): ?>
@@ -58,7 +58,7 @@ $baseUrl = $scheme . '://' . $host . $appRoot;
             <li class=""><a class="nav-link" href="<?= $baseUrl ?>/designer/schedule.php">Schedule</a></li>
           <?php endif; ?>
           <li class="nav-item"><a class="nav-link" href="<?= $baseUrl ?>/designer/DesignManager.php">Designs</a></li>
-          <li class="nav-item"><a class="nav-link" href="<?= $baseUrl ?>/designer/OrderManager.php">Orders</a></li>
+          <li class="nav-item"><a class="nav-link" href="<?= $baseUrl ?>/designer/OrderManager.php">Projects</a></li>
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle" href="#" id="browseDropdownDesigner" role="button"
               data-bs-toggle="dropdown" aria-expanded="false">Browse</a>
@@ -83,7 +83,7 @@ $baseUrl = $scheme . '://' . $host . $appRoot;
           </li>
         <?php elseif ($role === 'manager'): ?>
           <li class="nav-item"><a class="nav-link" href="<?= $baseUrl ?>/Manager/Manager_Dashboard.php">Dashboard</a></li>
-          <li class="nav-item"><a class="nav-link" href="<?= $baseUrl ?>/Manager/Order_Management.php">Orders</a></li>
+          <li class="nav-item"><a class="nav-link" href="<?= $baseUrl ?>/Manager/Order_Management.php">Projects</a></li>
           <li class="nav-item"><a class="nav-link" href="<?= $baseUrl ?>/Manager/manager_wallet.php">Wallet</a></li>
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle" href="#" id="browseDropdownManager" role="button"
@@ -113,7 +113,7 @@ $baseUrl = $scheme . '://' . $host . $appRoot;
       <?php endif; ?>
       <?php if (!empty($_SESSION['user'])): ?>
         <?php if ($role === 'client'): ?>
-          <li class=""><a class="nav-link" href="<?= $baseUrl ?>/client/order_history.php">Order History</a></li>
+          <li class=""><a class="nav-link" href="<?= $baseUrl ?>/client/order_history.php">Project History</a></li>
         <?php endif; ?>
         <li class=""><a class="nav-link" href="<?= $baseUrl ?>/logout.php">Logout</a></li>
           <li class=""><a class="nav-link" href="<?= $baseUrl ?>/my_likes.php">Liked</a></li>
@@ -124,6 +124,7 @@ $baseUrl = $scheme . '://' . $host . $appRoot;
             </button>
           </li>
       <?php else: ?>
+        
         <li class=""><a class="nav-link" href="<?= $baseUrl ?>/login.php">Login</a></li>
       <?php endif; ?>
     </ul>

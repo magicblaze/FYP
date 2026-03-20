@@ -81,7 +81,7 @@ $stats = mysqli_fetch_assoc($stats_result);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Order Manager</title>
+    <title>Project Manager</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="../css/styles.css">
@@ -96,12 +96,12 @@ $stats = mysqli_fetch_assoc($stats_result);
         <div class="bg-white rounded d-flex justify-content-between align-items-center flex-column">
             <!-- Page Title -->
             <div class="page-title">
-                Order Manager
+                Project Manager
             </div>
             <div class="card-body">
                 <form method="GET" action="" class="d-flex gap-2">
                     <input type="text" name="search" class="form-control"
-                        placeholder="Search orders by ID, client name, or tags..."
+                        placeholder="Search Projects by ID, client name, or tags..."
                         value="<?php echo htmlspecialchars($search); ?>">
                     <input type="hidden" name="status" value="<?php echo htmlspecialchars($status_filter); ?>">
                     <button type="submit" class="btn btn-primary">
@@ -179,12 +179,12 @@ $stats = mysqli_fetch_assoc($stats_result);
             </div>
         </div>
 
-        <!-- Orders Table -->
+        <!-- Project Table -->
         <div class="table-container">
             <table class="table">
                 <thead>
                     <tr>
-                        <th>Order ID</th>
+                        <th>Project ID</th>
                         <th>Client</th>
                         <th>Designer</th>
                         <th>Status</th>

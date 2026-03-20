@@ -301,17 +301,17 @@ $pendingRequests = $pendingRequestsStmt->get_result();
                         <!-- 收入摘要 -->
                         <div class="card mb-4">
                             <div class="card-header bg-dark text-white">
-                                <h5 class="mb-0"><i class="fas fa-chart-line me-2"></i>Recent Income from Orders</h5>
+                                <h5 class="mb-0"><i class="fas fa-chart-line me-2"></i>Recent Income from Projects</h5>
                             </div>
                             <div class="card-body">
                                 <?php if ($incomeSummary->num_rows === 0): ?>
-                                    <p class="text-muted text-center my-3">No orders found.</p>
+                                    <p class="text-muted text-center my-3">No project found.</p>
                                 <?php else: ?>
                                     <div class="table-responsive">
                                         <table class="table table-hover">
                                             <thead>
                                                 <tr>
-                                                    <th>Order ID</th>
+                                                    <th>Project ID</th>
                                                     <th>Design</th>
                                                     <th>Date</th>
                                                     <th>Status</th>

@@ -23,12 +23,12 @@ session_start();
 
         <div class="terms-section">
             <h4>1. Introduction</h4>
-            <p>These Terms of Use ("Terms") govern your access to and use of the HappyDesign website and services (the "Service"). By placing an order through HappyDesign, you ("Client") agree to these Terms. If you do not agree, do not place an order.</p>
+            <p>These Terms of Use ("Terms") govern your access to and use of the HappyDesign website and services (the "Service"). By starting a project through HappyDesign, you ("Client") agree to these Terms. If you do not agree, do not start a project.</p>
         </div>
 
         <div class="terms-section">
             <h4>2. Services</h4>
-            <p>HappyDesign connects Clients with Designers to provide custom design services. When you place an order you engage the selected Designer to perform services as described in your order. The Designer is an independent service provider and not an employee of HappyDesign unless explicitly stated.</p>
+            <p>HappyDesign connects Clients with Designers to provide custom design services. When you start a project you engage the selected Designer to perform services as described in your project. The Designer is an independent service provider and not an employee of HappyDesign unless explicitly stated.</p>
         </div>
 
         <div class="terms-section">
@@ -42,22 +42,22 @@ session_start();
 
         <div class="terms-section">
             <h4>4. Pricing, Payment and Fees</h4>
-            <p>Order fees and pricing are shown at checkout. Payment methods available on the platform may include third-party providers (e.g., PayPal, AlipayHK, FPS). All payments are subject to the terms of the payment provider. Fees paid are for the Designer's services and platform facilitation; additional taxes or transaction fees may apply.</p>
+            <p>Project fees and pricing are shown at checkout. Payment methods available on the platform may include third-party providers (e.g., PayPal, AlipayHK, FPS). All payments are subject to the terms of the payment provider. Fees paid are for the Designer's services and platform facilitation; additional taxes or transaction fees may apply.</p>
         </div>
 
         <div class="terms-section">
             <h4>5. Cancellations and Refunds</h4>
-            <p>Cancellations, refunds, and revisions are governed by the specific cancellation policy visible at the time of ordering and by any Designer-specific terms. If you request a cancellation, contact support or the Designer promptly. Refunds may be issued at the discretion of HappyDesign and/or the Designer based on work performed.</p>
+            <p>Cancellations, refunds, and revisions are governed by the specific cancellation policy visible at the time of project initiation and by any Designer-specific terms. If you request a cancellation, contact support or the Designer promptly. Refunds may be issued at the discretion of HappyDesign and/or the Designer based on work performed.</p>
         </div>
 
         <div class="terms-section">
             <h4>6. Intellectual Property</h4>
-            <p>Design deliverables, drafts and final works remain the intellectual property of their respective creators until transferred in writing. Unless otherwise agreed, Designers grant Clients a license to use final deliverables for the intended purpose described in the order.</p>
+            <p>Design deliverables, drafts and final works remain the intellectual property of their respective creators until transferred in writing. Unless otherwise agreed, Designers grant Clients a license to use final deliverables for the intended purpose described in the project.</p>
         </div>
 
         <div class="terms-section">
             <h4>7. Delivery and Revisions</h4>
-            <p>Delivery timelines and allowed revisions are stated in the order or communicated by the Designer. Clients are responsible for reviewing submissions and requesting revisions within the timeframe specified. Unused revision requests may be forfeited if not claimed within the stated period.</p>
+            <p>Delivery timelines and allowed revisions are stated in the project or communicated by the Designer. Clients are responsible for reviewing submissions and requesting revisions within the timeframe specified. Unused revision requests may be forfeited if not claimed within the stated period.</p>
         </div>
 
         <div class="terms-section">
@@ -67,12 +67,12 @@ session_start();
 
         <div class="terms-section">
             <h4>9. Limitation of Liability</h4>
-            <p>HappyDesign, its officers and agents will not be liable for indirect, incidental, special, consequential or punitive damages arising from use of the Service. Maximum aggregate liability to you for any claim related to the Service will not exceed the total fees you paid for the specific order giving rise to the claim.</p>
+            <p>HappyDesign, its officers and agents will not be liable for indirect, incidental, special, consequential or punitive damages arising from use of the Service. Maximum aggregate liability to you for any claim related to the Service will not exceed the total fees you paid for the specific project giving rise to the claim.</p>
         </div>
 
         <div class="terms-section">
             <h4>10. Privacy</h4>
-            <p>We collect and use personal information in accordance with our Privacy Policy. Please review the Privacy Policy before placing order.</p>
+            <p>We collect and use personal information in accordance with our Privacy Policy. Please review the Privacy Policy before starting a project.</p>
         </div>
 
         <div class="terms-section">

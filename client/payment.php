@@ -381,7 +381,7 @@ $current_step = 3;
 
                 <form method="post">
                     <div class="d-flex gap-2">
-                        <a href="order_detail.php?orderid=<?php echo $orderid; ?>" class="btn btn-secondary">Back to Order</a>
+                        <a href="order_detail.php?orderid=<?php echo $orderid; ?>" class="btn btn-secondary">Back to Project</a>
                         
                         <?php if (!empty($paymentMethodData) && !empty($paymentMethodData['method'])): ?>
                             <button type="submit" name="proceed_pay" class="btn btn-success" onclick="return confirm('Confirm payment HK$<?php echo number_format($total_to_pay, 2); ?>?');">

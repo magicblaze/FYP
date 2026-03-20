@@ -249,7 +249,7 @@ $mainImg = $baseUrlEarly . $appRoot . '/design_image.php?id=' . (int) $design['d
                     <?php else: ?>
                         <button type="button" class="btn btn-primary btn-order"
                             onclick="window.location.href='<?= htmlspecialchars($loginUrl) ?>'">
-                            <i class="fas fa-shopping-cart me-2"></i>Order
+                            <i class="fas fa-shopping-cart me-2"></i>Create Project
                         </button>
                     <?php endif; ?>
                 </div>

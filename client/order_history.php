@@ -62,7 +62,7 @@ if (!empty($_GET['msg'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HappyDesign - Order History</title>
+    <title>HappyDesign - Project History</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="../css/styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -272,7 +272,7 @@ if (!empty($_GET['msg'])) {
 
     <main class="container mt-4">
         <div class="order-history-container">
-            <h1 class="page-title"><i class="fas fa-history me-2"></i>Order History</h1>
+            <h1 class="page-title"><i class="fas fa-history me-2"></i>Project History</h1>
 
             <?php if ($orders->num_rows > 0): ?>
                 <?php while ($order = $orders->fetch_assoc()): ?>
@@ -419,8 +419,8 @@ if (!empty($_GET['msg'])) {
             <?php else: ?>
                 <div class="empty-orders">
                     <i class="fas fa-shopping-bag"></i>
-                    <h3>No Orders Yet</h3>
-                    <p>You haven't placed any order yet. Browse our designs and place your first order!</p>
+                    <h3>No Project Yet</h3>
+                    <p>You haven't created any projects yet. Browse our designs and place your first project!</p>
                     <a href="../design_dashboard.php" class="btn btn-primary mt-2">
                         <i class="fas fa-search me-2"></i>Browse Designs
                     </a>

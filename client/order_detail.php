@@ -526,25 +526,25 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€
     <main class="container mt-4">
         <div class="order-detail-container">
             <a href="order_history.php" class="back-link">
-                <i class="fas fa-arrow-left me-1"></i>Back to Order History
+                <i class="fas fa-arrow-left me-1"></i>Back to Project History
             </a>
 
             <h1 class="page-title">
-                <i class="fas fa-receipt me-2"></i>Order #<?= (int) $order['orderid'] ?> Details
+                <i class="fas fa-receipt me-2"></i>Project #<?= (int) $order['orderid'] ?> Details
             </h1>
 
             <!-- Order Overview Section -->
             <div class="section-title">
-                <i class="fas fa-info-circle me-2"></i>Order Overview
+                <i class="fas fa-info-circle me-2"></i>Project Overview
             </div>
             <div class="grid-2">
                 <div class="info-card">
                     <div class="info-row">
-                        <span class="info-label">Order ID:</span>
+                        <span class="info-label">Project ID:</span>
                         <span class="info-value">#<?= (int) $order['orderid'] ?></span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label">Order Date:</span>
+                        <span class="info-label">Project Date:</span>
                         <span class="info-value"><?= date('M d, Y H:i', strtotime($order['odate'])) ?></span>
                     </div>
                     <div class="info-row">
@@ -850,7 +850,7 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€
                     </script>
                 <?php endif; ?>
                 <a href="order_history.php" class="btn btn-primary">
-                    <i class="fas fa-arrow-left me-2"></i>Back to Order History
+                    <i class="fas fa-arrow-left me-2"></i>Back to Project History
                 </a>
             </div>
         </div>

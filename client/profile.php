@@ -743,7 +743,7 @@ $selectedPaymentMethod = $paymentMethodData['method'] ?? 'alipay_hk';
                                 <label for="budget" class="form-label"><i class="fas fa-dollar-sign me-2"></i>Budget (HK$) *</label>
                                 <input type="number" class="form-control form-control-lg" id="budget" name="budget" step="1000"
                                        value="<?= $budgetDisplay ?>" min="1" placeholder="Enter your budget" required>
-                                <small class="text-muted">This budget will be used as the default when placing orders.</small>
+                                <small class="text-muted">This will be used as default budget.</small>
                             </div>
                         </div>
                         

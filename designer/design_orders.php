@@ -178,7 +178,7 @@ foreach ($orders as $o) {
 
 <head>
     <meta charset="UTF-8">
-    <title>Orders - HappyDesign</title>
+    <title>Project - HappyDesign</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="../css/styles.css">
@@ -851,9 +851,9 @@ foreach ($orders as $o) {
     <main class="container-lg mt-4">
         <div class="mt-5 mb-4 text-center">
             <?php if ($anyCanEdit): ?>
-                <h2>Proposal Drafter</h2>
+                <h2>Design Proposal Creator</h2>
             <?php else: ?>
-                <h2>Order Detail</h2>
+                <h2>Project Detail</h2>
             <?php endif; ?>
             <p class="mb-0"></p>
         </div>
@@ -865,10 +865,10 @@ foreach ($orders as $o) {
                 $canEdit = (strtolower(trim($order['ostatus'] ?? '')) === 'designing');
                 ?>
                 <div class="order-card">
-                    <!-- Order Title and Status (Main Focus) -->
+                    <!-- Project Title and Status (Main Focus) -->
                     <div class="order-title-bar">
                         <div>
-                            <h3 style="margin: 0; color: #2c3e50;">Order #<?= $order['orderid'] ?></h3>
+                            <h3 style="margin: 0; color: #2c3e50;">Project #<?= $order['orderid'] ?></h3>
                             <div style="font-size: 1.1rem; color: #3498db; font-weight: 600; margin-top: 0.25rem;">
                                 Status: <span id="status_<?= $order['orderid'] ?>" class="status-pill"><?= htmlspecialchars($order['ostatus']) ?></span>
                             </div>
@@ -910,10 +910,10 @@ foreach ($orders as $o) {
                         </div>
                     </div>
 
-                    <!-- Order Details (Key Information) -->
+                    <!-- Project Details (Key Information) -->
                     <div class="order-details" style="margin-bottom: 1rem;">
                         <div class="detail-item">
-                            <div class="detail-label"><i class="fas fa-calendar me-1"></i>Order Date</div>
+                            <div class="detail-label"><i class="fas fa-calendar me-1"></i>Project Date</div>
                             <div class="detail-value"><?= date('M d, Y H:i', strtotime($order['odate'])) ?></div>
                         </div>
                         <div class="detail-item">
@@ -1244,8 +1244,8 @@ foreach ($orders as $o) {
         <?php else: ?>
             <div class="no-orders">
                 <i class="fas fa-inbox" style="font-size: 3rem; margin-bottom: 1rem; display: block; color: #ccc;"></i>
-                <h5>No Orders Yet</h5>
-                <p>You don't have any design orders yet. Check back later!</p>
+                <h5>No Project Yet</h5>
+                <p>You don't have any design project yet.</p>
             </div>
         <?php endif; ?>
     </main>
@@ -1840,7 +1840,7 @@ foreach ($orders as $o) {
             let verb = action;
             if (action === 'submit_proposal') verb = 'submit proposal for';
             
-            if (!confirm('Are you sure you want to ' + verb + ' this order? The change cannot be undone.')) return;
+            if (!confirm('Are you sure you want to ' + verb + ' this project? The change cannot be undone.')) return;
             try {
                 btn.disabled = true;
                 const res = await fetch('update_order_status.php', {
@@ -1850,7 +1850,7 @@ foreach ($orders as $o) {
                 });
                 const j = await res.json();
                 if (j && j.success) {
-                    alert('Order status updated successfully.');
+                    alert('Project status updated successfully.');
                     location.reload();
                 } else {
                     alert('Error: ' + (j && j.message ? j.message : 'Unknown'));

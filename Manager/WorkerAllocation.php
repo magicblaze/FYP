@@ -590,7 +590,7 @@ mysqli_stmt_close($existing_display_stmt);
         <?php else: ?>
             <div class="alert alert-success">
                 <i class="fas fa-info-circle me-2"></i>
-                This order is already in <strong class="text-success"><?php echo htmlspecialchars($order_info['ostatus']); ?></strong> status. Worker allocation can only be done for orders in "Designing" status.
+                This order is already in <strong class="text-success"><?php echo htmlspecialchars($order_info['ostatus']); ?></strong> status. Worker allocation can only be done for project(s) in "Designing" status.
             </div>
         <?php endif; ?>
 

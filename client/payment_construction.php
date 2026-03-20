@@ -292,7 +292,7 @@ $stage_title = 'Construction Deposit';
                     <i class="fas fa-hard-hat me-1"></i> Construction Deposit
                 </div>
                 
-                <h4>Payment for Order #<?php echo $orderid; ?></h4>
+                <h4>Payment for Project #<?php echo $orderid; ?></h4>
                 
                 <!-- Budget check removed for this payment stage -->
                 
@@ -380,7 +380,7 @@ $stage_title = 'Construction Deposit';
                     
                     <div class="payment-detail">
                         <div class="payment-detail-item">
-                            <span>Order #<?php echo $orderid; ?></span>
+                            <span>Project #<?php echo $orderid; ?></span>
                             <span><?php echo date('Y-m-d', strtotime($order['odate'])); ?></span>
                         </div>
                         
@@ -424,7 +424,7 @@ $stage_title = 'Construction Deposit';
                     <div class="d-flex gap-2">
                         <?php if (!empty($paymentMethodData) && !empty($paymentMethodData['method'])): ?>
                             <?php if ($payment_success): ?>
-                                <a href="order_history.php" class="btn btn-secondary">Back to Order History</a>
+                                <a href="order_history.php" class="btn btn-secondary">Back to Project History</a>
                             <?php else: ?>
                                 <button type="submit" name="proceed_pay" class="btn btn-success" 
                                         onclick="return confirm('Confirm payment HK$<?php echo number_format($total_to_pay, 2); ?>?');">
