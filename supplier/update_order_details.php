@@ -109,7 +109,7 @@ try {
     http_response_code(200);
     echo json_encode([
         'success' => true,
-        'message' => 'Order details updated successfully'
+        'message' => 'Project detail updated successfully'
     ]);
 
 } catch (Exception $e) {

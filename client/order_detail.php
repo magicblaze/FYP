@@ -174,9 +174,9 @@ if (!$referencesStmt) {
 
 // Handle client accept/reject actions for design proposal
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Accept: move to 'drafting 2nd proposal'
+    // Accept: move to 'waiting 2nd design phase payment'
     if (isset($_POST['accept_design']) && $clientId && $orderId) {
-        $next_status = 'drafting 2nd proposal';
+        $next_status = 'waiting 2nd design phase payment';
         $u_sql = "UPDATE `Order` SET ostatus = ? WHERE orderid = ? AND clientid = ?";
         $u_stmt = $mysqli->prepare($u_sql);
         if ($u_stmt) {
@@ -226,7 +226,7 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HappyDesign - Order Detail</title>
+    <title>HappyDesign - Project Detail</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="../css/styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -849,9 +849,6 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€
                         })();
                     </script>
                 <?php endif; ?>
-                <a href="order_history.php" class="btn btn-primary">
-                    <i class="fas fa-arrow-left me-2"></i>Back to Project History
-                </a>
             </div>
         </div>
     </main>

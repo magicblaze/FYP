@@ -494,11 +494,11 @@ function getWorkloadColor($task_count) {
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="orderDetailModalLabel">Order Details</h5>
+                    <h5 class="modal-title" id="orderDetailModalLabel">Project Details</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body" id="orderDetailContent">
-                    <!-- Order details will be loaded here -->
+                    <!-- Project details will be loaded here -->
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>

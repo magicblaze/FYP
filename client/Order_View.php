@@ -15,12 +15,14 @@ $orderid = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
 // Verify order exists and belongs to this client
 $check_order_sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.cost, o.deposit, o.final_payment,
-               c.clientid, c.cname as client_name, c.ctel, c.cemail, c.budget,
+               o.budget AS order_budget,
+               c.clientid, c.cname as client_name, c.ctel, c.cemail, c.budget AS client_budget,
                d.designid, d.designName, d.expect_price as design_price, d.tag as design_tag,
                s.scheduleid, s.OrderFinishDate, s.DesignFinishDate,
                des.dname as designer_name, des.status as designer_status,
-               op.total_design_payment, op.total_construction_payment, 
-               op.commission_1st, op.commission_final, op.total_amount_due
+               op.total_design_payment, op.total_construction_payment,
+               op.commission_1st, op.commission_final, op.total_amount_due,
+               op.inspection_fee, op.contractor_fee
         FROM `Order` o
         LEFT JOIN `Client` c ON o.clientid = c.clientid
         LEFT JOIN `Design` d ON o.designid = d.designid
@@ -45,10 +47,13 @@ $payment = [
     'total_construction_payment' => isset($order['total_construction_payment']) ? (float) $order['total_construction_payment'] : 0.0,
     'commission_1st' => isset($order['commission_1st']) ? (float) $order['commission_1st'] : 0.0,
     'commission_final' => isset($order['commission_final']) ? (float) $order['commission_final'] : 0.0,
+    'inspection_fee' => isset($order['inspection_fee']) ? (float) $order['inspection_fee'] : 0.0,
+    'contractor_fee' => isset($order['contractor_fee']) ? (float) $order['contractor_fee'] : 0.0,
     'total_amount_due' => isset($order['total_amount_due']) ? (float) $order['total_amount_due'] : 0.0,
 ];
 
 $commission_total = $payment['commission_1st'] + $payment['commission_final'];
+$constructor_cost = $payment['inspection_fee'] + $payment['contractor_fee'];
 
 // Fetch order references
 $ref_sql = "SELECT 
@@ -72,6 +77,23 @@ $ref_result = mysqli_stmt_get_result($ref_stmt);
 $references = array();
 while ($ref_row = mysqli_fetch_assoc($ref_result)) {
     $references[] = $ref_row;
+}
+
+// Fetch actual material cost from products in this order (OrderReference)
+$actual_material_cost = 0.0;
+$material_sql = "SELECT IFNULL(SUM(COALESCE(orr.price, p.price, 0)), 0) AS material_total
+                                 FROM `OrderReference` orr
+                                 LEFT JOIN `Product` p ON orr.productid = p.productid
+                                 WHERE orr.orderid = ?
+                                     AND (orr.status IS NULL OR LOWER(orr.status) <> 'rejected')";
+$material_stmt = mysqli_prepare($mysqli, $material_sql);
+if ($material_stmt) {
+    mysqli_stmt_bind_param($material_stmt, "i", $orderid);
+    mysqli_stmt_execute($material_stmt);
+    $material_result = mysqli_stmt_get_result($material_stmt);
+    $material_row = mysqli_fetch_assoc($material_result);
+    $actual_material_cost = isset($material_row['material_total']) ? (float) $material_row['material_total'] : 0.0;
+    mysqli_stmt_close($material_stmt);
 }
 
 // Fetch additional fees
@@ -99,36 +121,46 @@ $latest_picture = mysqli_fetch_assoc($pic_result);
 $design_price = isset($order["design_price"]) ? floatval($order["design_price"]) : 0;
 $final_payment = isset($order['final_payment']) ? floatval($order['final_payment']) : 0;
 $deposit = isset($order['deposit']) ? floatval($order['deposit']) : 2000.0;
-$original_budget = floatval($order['budget'] ?? 0);
+$original_budget = floatval($order['order_budget'] ?? 0);
 
 // Calculate total cost
 $references_total = 0.0;
 if (!empty($references)) {
     foreach ($references as $r) {
-        $rprice = isset($r['price']) && $r['price'] !== null ? (float)$r['price'] : (float)($r['product_price'] ?? 0);
+        $rprice = isset($r['price']) && $r['price'] !== null ? (float) $r['price'] : (float) ($r['product_price'] ?? 0);
         $references_total += $rprice;
     }
 }
 
-$final_payment_amount = $final_payment + $references_total;
+$final_payment_amount = $final_payment;
 
 // Calculate Design Fee (2.5% of design price)
 $Design_Fee1 = $design_price * 0.025;
 $Project_Deposit = 2000; // Fixed project deposit
 
-$final_total_cost = $payment['total_amount_due'] + $total_fees + $references_total;
+$total_deducted = $payment['total_design_payment']
+    + $actual_material_cost
+    + $constructor_cost
+    + $commission_total
+    + $total_fees;
+$final_total_cost = $total_deducted;
 
 // Calculate remaining budget
-$total_deducted = $final_total_cost;
 $remaining_budget = $original_budget - $total_deducted;
 
 $status = strtolower($order['ostatus'] ?? 'waiting confirm');
 
 // Handle client actions: confirm proposal or request revision
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_POST['client_confirm_proposal'])) {  
-    header('Location: ../client/payment3.php?proposal_confirmed=1&orderid=' . $orderid);
-    exit;
+    if (isset($_POST['client_confirm_proposal'])) {
+        $next_status = 'waiting final design phase payment';
+        $u_sql = "UPDATE `Order` SET ostatus = ? WHERE orderid = ? AND clientid = ?";
+        $u_stmt = mysqli_prepare($mysqli, $u_sql);
+        mysqli_stmt_bind_param($u_stmt, "sii", $next_status, $orderid, $client_id);
+        mysqli_stmt_execute($u_stmt);
+        mysqli_stmt_close($u_stmt);
+        header('Location: ../client/payment3.php?proposal_confirmed=1&orderid=' . $orderid);
+        exit;
     }
 
     if (isset($_POST['client_request_revision'])) {
@@ -164,29 +196,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             border-radius: 6px;
             margin-top: 1rem;
         }
+
         .budget-item {
             display: flex;
             justify-content: space-between;
             align-items: center;
             padding: 0.5rem 0;
-            border-bottom: 1px solid rgba(0,0,0,0.05);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
         }
+
         .budget-item:last-child {
             border-bottom: none;
         }
+
         .budget-label {
             font-weight: 500;
             color: #2c3e50;
         }
+
         .budget-value {
             font-weight: 600;
             color: #27ae60;
             font-size: 1.1rem;
         }
+
         .budget-remaining {
             font-size: 1.2rem;
             color: #e74c3c;
         }
+
         .designer-info {
             background: #f0f7ff;
             border-left: 4px solid #3498db;
@@ -195,14 +233,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             margin-top: 0.5rem;
             margin-bottom: 1rem;
         }
+
         .card-header {
             background-color: #f8f9fa;
             border-bottom: 1px solid #e9ecef;
         }
+
         .card-title {
             color: #495057;
             font-size: 1.1rem;
         }
+
         .status-badge {
             font-size: 0.85rem;
             padding: 0.35rem 0.65rem;
@@ -240,7 +281,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </div>
                         <div class="mb-3">
                             <label class="fw-bold text-muted small">Client ID</label>
-                            <p class="mb-0"><small>#<?php echo htmlspecialchars($order["clientid"] ?? 'N/A'); ?></small></p>
+                            <p class="mb-0"><small>#<?php echo htmlspecialchars($order["clientid"] ?? 'N/A'); ?></small>
+                            </p>
                         </div>
                         <?php if (!empty($order["cemail"])): ?>
                             <div class="mb-3">
@@ -255,60 +297,63 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             </div>
                         <?php endif; ?>
                         <hr>
-                        
+
                         <!-- Budget Information Section -->
                         <div class="budget-info">
                             <h6 class="mb-3"><i class="fas fa-chart-pie me-2"></i>Budget Overview</h6>
                             <div class="budget-item">
                                 <span class="budget-label">Design Cost:</span>
-                                <span class="budget-value text-info">- HK$<?php echo number_format($payment['total_design_payment'], 2); ?></span>
-                            </div>
-                            
-                            <div class="budget-item">
-                                <span class="budget-label">Construction Cost:</span>
-                                <span class="budget-value text-info">- HK$<?php echo number_format($payment['total_construction_payment'], 2); ?></span>
-                            </div>
-                            
-                            <div class="budget-item">
-                                <span class="budget-label">Commission:</span>
-                                <span class="budget-value text-info">- HK$<?php echo number_format($commission_total, 2); ?></span>
+                                <span class="budget-value text-info">-
+                                    HK$<?php echo number_format($payment['total_design_payment'], 2); ?></span>
                             </div>
 
-                            
-                            <?php if (!empty($references)): ?>
-                                <?php foreach ($references as $ref): 
-                                    $refPrice = isset($ref['price']) && $ref['price'] !== null ? (float)$ref['price'] : (float)($ref['product_price'] ?? 0);
-                                ?>
-                                <div class="budget-item">
-                                    <span class="budget-label"><?php echo htmlspecialchars($ref['pname']); ?>:</span>
-                                    <span class="budget-value text-info">- HK$<?php echo number_format($refPrice, 2); ?></span>
-                                </div>
-                                <?php endforeach; ?>
-                            <?php endif; ?>
+                            <div class="budget-item">
+                                <span class="budget-label">Material Cost (Actual price):</span>
+                                <span class="budget-value text-info">-
+                                    HK$<?php echo number_format($actual_material_cost, 2); ?></span>
+                            </div>
+
+                            <div class="budget-item">
+                                <span class="budget-label">Commission:</span>
+                                <span class="budget-value text-info">-
+                                    HK$<?php echo number_format($commission_total, 2); ?></span>
+                            </div>
+
+                            <div class="budget-item">
+                                <span class="budget-label">Constructor Cost:</span>
+                                <span class="budget-value text-info">-
+                                    HK$<?php echo number_format($constructor_cost, 2); ?></span>
+                            </div>
 
                             <?php if (!empty($fees)): ?>
                                 <?php foreach ($fees as $fee): ?>
-                                <div class="budget-item">
-                                    <span class="budget-label"><?php echo htmlspecialchars($fee['fee_name']); ?>:</span>
-                                    <span class="budget-value text-info">- HK$<?php echo number_format($fee['amount'], 2); ?></span>
-                                </div>
+                                    <div class="budget-item">
+                                        <span class="budget-label"><?php echo htmlspecialchars($fee['fee_name']); ?>:</span>
+                                        <span class="budget-value text-info">-
+                                            HK$<?php echo number_format($fee['amount'], 2); ?></span>
+                                    </div>
                                 <?php endforeach; ?>
                             <?php endif; ?>
 
-                            <div class="budget-item" style="border-top: 2px solid #10f176; margin-top: 0.5rem; padding-top: 0.75rem;">
+                            <div class="budget-item"
+                                style="border-top: 2px solid #10f176; margin-top: 0.5rem; padding-top: 0.75rem;">
                                 <span class="budget-label"><strong>Total Deducted:</strong></span>
-                                <span class="budget-value text-danger">- HK$<?php echo number_format($total_deducted, 2); ?></span>
+                                <span class="budget-value text-danger">-
+                                    HK$<?php echo number_format($total_deducted, 2); ?></span>
                             </div>
-                            
-                            <div class="budget-item" style="border-top: 2px solid #3498db; margin-top: 0.5rem; padding-top: 0.75rem;">
+
+                            <div class="budget-item"
+                                style="border-top: 2px solid #3498db; margin-top: 0.5rem; padding-top: 0.75rem;">
                                 <span class="budget-label"><strong>Remaining Budget:</strong></span>
-                                <span class="budget-value budget-remaining"><strong>HK$<?php echo number_format($remaining_budget, 2); ?></strong></span>
+                                <span
+                                    class="budget-value budget-remaining"><strong>HK$<?php echo number_format($remaining_budget, 2); ?></strong></span>
                             </div>
-                            
+
                             <?php if ($remaining_budget < 0): ?>
                                 <div class="alert alert-danger mt-2 mb-0 py-2">
                                     <i class="fas fa-exclamation-triangle me-1"></i>
-                                    <small>Budget exceeded by HK$<?php echo number_format(abs($remaining_budget), 2); ?></small>
+                                    <small>Budget exceeded by
+                                        HK$<?php echo number_format(abs($remaining_budget), 2); ?></small>
                                 </div>
                             <?php endif; ?>
                         </div>
@@ -327,7 +372,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <div class="card-body">
                         <div class="mb-3">
                             <label class="fw-bold text-muted small">Design ID</label>
-                            <p class="mb-0"><small>#<?php echo htmlspecialchars($order["designid"] ?? 'N/A'); ?></small></p>
+                            <p class="mb-0"><small>#<?php echo htmlspecialchars($order["designid"] ?? 'N/A'); ?></small>
+                            </p>
                         </div>
                         <div class="mb-3">
                             <label class="fw-bold text-muted small">Design Name</label>
@@ -335,39 +381,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 <small><?php echo htmlspecialchars($order["designName"] ?? 'N/A'); ?></small>
                             </p>
                         </div>
-                        
+
                         <!-- Designer Information -->
                         <?php if (!empty($order['designer_name'])): ?>
-                        <div class="designer-info">
-                            <label class="fw-bold text-muted small">Assigned Designer</label>
-                            <p class="mb-1"><?php echo htmlspecialchars($order['designer_name']); ?></p>
-                            <div class="badge <?php echo ($order['designer_status'] ?? 'Available') === 'Available' ? 'bg-success' : 'bg-warning'; ?>">
-                                <?php echo htmlspecialchars($order['designer_status'] ?? 'Available'); ?>
+                            <div class="designer-info">
+                                <label class="fw-bold text-muted small">Assigned Designer</label>
+                                <p class="mb-1"><?php echo htmlspecialchars($order['designer_name']); ?></p>
+                                <div
+                                    class="badge <?php echo ($order['designer_status'] ?? 'Available') === 'Available' ? 'bg-success' : 'bg-warning'; ?>">
+                                    <?php echo htmlspecialchars($order['designer_status'] ?? 'Available'); ?>
+                                </div>
                             </div>
-                        </div>
                         <?php endif; ?>
-                        
+
                         <div class="mb-3">
                             <label class="fw-bold text-muted small">Expected Price</label>
-                            <p class="mb-0"><strong class="text-info">HK$<?php echo number_format($design_price, 2); ?></strong></p>
+                            <p class="mb-0"><strong
+                                    class="text-info">HK$<?php echo number_format($design_price, 2); ?></strong></p>
                         </div>
-                        
+
                         <div class="mb-3">
                             <label class="fw-bold text-muted small">Design deposit (2.5%)</label>
-                            <p class="mb-0"><strong class="text-info">HK$<?php echo number_format($Design_Fee1, 2); ?></strong></p>
-                            <small class="text-muted">Based on design price: HK$<?php echo number_format($design_price, 2); ?></small>
+                            <p class="mb-0"><strong
+                                    class="text-info">HK$<?php echo number_format($Design_Fee1, 2); ?></strong></p>
+                            <small class="text-muted">Based on design price:
+                                HK$<?php echo number_format($design_price, 2); ?></small>
                         </div>
-                        
+
                         <div class="mb-3">
                             <label class="fw-bold text-muted small">Project Deposit</label>
-                            <p class="mb-0"><strong class="text-info">HK$<?php echo number_format($Project_Deposit, 2); ?></strong></p>
+                            <p class="mb-0"><strong
+                                    class="text-info">HK$<?php echo number_format($Project_Deposit, 2); ?></strong></p>
                             <small class="text-muted">Fixed project deposit</small>
                         </div>
-                         
+
                         <hr>
                         <div class="mb-3">
                             <label class="fw-bold text-muted small">Design Tag</label>
-                            <p class="mb-0"><small class="text-muted"><?php echo htmlspecialchars($order["design_tag"] ?? 'N/A'); ?></small></p>
+                            <p class="mb-0"><small
+                                    class="text-muted"><?php echo htmlspecialchars($order["design_tag"] ?? 'N/A'); ?></small>
+                            </p>
                         </div>
 
                         <!-- Design References -->
@@ -381,20 +434,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             }
                             foreach ($grouped_refs as $category => $items): ?>
                                 <div class="mb-3">
-                                    <div class="mb-1"><span class="badge bg-secondary"><?php echo htmlspecialchars($category); ?></span></div>
+                                    <div class="mb-1"><span
+                                            class="badge bg-secondary"><?php echo htmlspecialchars($category); ?></span></div>
                                     <ul class="list-unstyled ps-2 mb-0 border-start border-2 border-light">
                                         <?php foreach ($items as $ref): ?>
                                             <li class="d-flex justify-content-between align-items-center mb-1 ps-2">
                                                 <small class="text-truncate" style="max-width: 60%;"
                                                     title="<?php echo htmlspecialchars($ref['pname']); ?>"><?php echo htmlspecialchars($ref['pname']); ?></small>
-                                                <small class="text-success fw-bold">HK$<?php echo number_format($ref['product_price'] ?? 0, 0); ?></small>
+                                                <small
+                                                    class="text-success fw-bold">HK$<?php echo number_format($ref['product_price'] ?? 0, 0); ?></small>
                                             </li>
                                         <?php endforeach; ?>
                                     </ul>
                                 </div>
                             <?php endforeach; ?>
                         <?php endif; ?>
-                        
+
                         <!-- Design Proposal -->
                         <div class="mt-3">
                             <label class="fw-bold text-muted small mb-2">Design proposal</label>
@@ -426,7 +481,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </div>
                         <div class="mb-3">
                             <label class="fw-bold text-muted small">Project Date</label>
-                            <p class="mb-0"><small><?php echo date('M d, Y H:i', strtotime($order["odate"])); ?></small></p>
+                            <p class="mb-0"><small><?php echo date('M d, Y H:i', strtotime($order["odate"])); ?></small>
+                            </p>
                         </div>
                         <div class="mb-3">
                             <label class="fw-bold text-muted small">Status</label>
@@ -462,28 +518,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 </span>
                             </p>
                         </div>
-                        
+
                         <?php if (!empty($order['OrderFinishDate']) || !empty($order['DesignFinishDate'])): ?>
-                        <div class="mb-3">
-                            <label class="fw-bold text-muted small">Schedule Dates</label>
-                            <?php if (!empty($order['DesignFinishDate'])): ?>
-                                <p class="mb-1"><small>Design Finish: <?php echo date('M d, Y', strtotime($order['DesignFinishDate'])); ?></small></p>
-                            <?php endif; ?>
-                            <?php if (!empty($order['OrderFinishDate'])): ?>
-                                <p class="mb-0"><small>Order Finish: <?php echo date('M d, Y', strtotime($order['OrderFinishDate'])); ?></small></p>
-                            <?php endif; ?>
-                        </div>
+                            <div class="mb-3">
+                                <label class="fw-bold text-muted small">Schedule Dates</label>
+                                <?php if (!empty($order['DesignFinishDate'])): ?>
+                                    <p class="mb-1"><small>Design Finish:
+                                            <?php echo date('M d, Y', strtotime($order['DesignFinishDate'])); ?></small></p>
+                                <?php endif; ?>
+                                <?php if (!empty($order['OrderFinishDate'])): ?>
+                                    <p class="mb-0"><small>Order Finish:
+                                            <?php echo date('M d, Y', strtotime($order['OrderFinishDate'])); ?></small></p>
+                                <?php endif; ?>
+                            </div>
                         <?php endif; ?>
-                        
+
                         <div class="mb-3">
                             <label class="fw-bold text-muted small">Requirements</label>
                             <div class="p-2 bg-light rounded">
                                 <?php echo nl2br(htmlspecialchars($order["Requirements"] ?? 'No requirements specified')); ?>
                             </div>
                         </div>
-                        
+
                         <hr>
-                        
+
                         <!-- Cost Breakdown -->
                         <div class="mb-0">
                             <label class="fw-bold text-muted small">Cost Breakdown</label>
@@ -493,40 +551,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                         <small class="text-muted">Design Cost</small>
                                         <strong>HK$<?php echo number_format($payment['total_design_payment'], 2); ?></strong>
                                     </li>
+
                                     <li class="d-flex justify-content-between">
-                                        <small class="text-muted">Construction Cost</small>
-                                        <strong>HK$<?php echo number_format($payment['total_construction_payment'], 2); ?></strong>
+                                        <small class="text-muted">Material Cost (Actual Products)</small>
+                                        <strong>HK$<?php echo number_format($actual_material_cost, 2); ?></strong>
+                                    </li>
+
+                                    <li class="d-flex justify-content-between">
+                                        <small class="text-muted">Constructor Cost</small>
+                                        <strong>HK$<?php echo number_format($constructor_cost, 2); ?></strong>
                                     </li>
                                     <li class="d-flex justify-content-between">
                                         <small class="text-muted">Commission</small>
-                                        <strong>HK$<?php echo number_format($commission_total, 2); ?></strong>
+                                        <strong>HK$
+                                            <?php echo number_format($commission_total, 2); ?>
+                                        </strong>
                                     </li>
-                                    
-                                    <?php if (!empty($references)): ?>
-                                        <li class="mt-2"><small class="text-muted">Product References</small></li>
-                                        <?php foreach ($references as $r):
-                                            $rprice = isset($r['price']) && $r['price'] !== null ? (float)$r['price'] : (float)($r['product_price'] ?? 0);
-                                        ?>
-                                            <li class="d-flex justify-content-between ps-3">
-                                                <small><?php echo htmlspecialchars($r['pname'] ?? ('Product #' . $r['productid'])); ?></small>
-                                                <small class="text-success">HK$<?php echo number_format($rprice, 2); ?></small>
-                                            </li>
-                                        <?php endforeach; ?>
-                                    <?php endif; ?>
-
                                     <?php if (!empty($fees)): ?>
                                         <li class="mt-2"><small class="text-muted">Additional Fees</small></li>
                                         <?php foreach ($fees as $f): ?>
                                             <li class="d-flex justify-content-between ps-3">
                                                 <small><?php echo htmlspecialchars($f['fee_name']); ?></small>
-                                                <small class="text-success">HK$<?php echo number_format((float)$f['amount'], 2); ?></small>
+                                                <small
+                                                    class="text-success">HK$<?php echo number_format((float) $f['amount'], 2); ?></small>
                                             </li>
                                         <?php endforeach; ?>
                                     <?php endif; ?>
                                 </ul>
                             </div>
                             <label class="fw-bold text-muted small">Total Cost</label>
-                            <p class="mb-0"><strong class="text-danger fs-5">HK$<?php echo number_format($final_total_cost, 2); ?></strong></p>
+                            <p class="mb-0"><strong
+                                    class="text-danger fs-5">HK$<?php echo number_format($final_total_cost, 2); ?></strong>
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -568,9 +624,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                                 $badgeClass = 'bg-danger';
                                             ?>
                                             <tr>
-                                                <td><?php echo htmlspecialchars($ref['pname'] ?? ('Product #' . $ref['productid'])); ?></td>
+                                                <td><?php echo htmlspecialchars($ref['pname'] ?? ('Product #' . $ref['productid'])); ?>
+                                                </td>
                                                 <td><?php echo htmlspecialchars($ref['category'] ?? '—'); ?></td>
-                                                <td><span class="badge <?php echo $badgeClass; ?>"><?php echo $refStatus === 'waiting confirm' ? 'Request Confirm' : htmlspecialchars($refStatus); ?></span></td>
+                                                <td><span
+                                                        class="badge <?php echo $badgeClass; ?>"><?php echo $refStatus === 'waiting confirm' ? 'Request Confirm' : htmlspecialchars($refStatus); ?></span>
+                                                </td>
                                                 <td>HK$<?php echo number_format($displayPrice, 2); ?></td>
                                                 <td><?php echo htmlspecialchars($ref['note'] ?? '—'); ?></td>
                                             </tr>
@@ -615,17 +674,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <div class="card border-info">
                         <div class="card-body text-center">
                             <h5 class="mb-2">Proposal Ready for Your Review</h5>
-                            <p class="text-muted">Please preview the proposal. Confirm to proceed to payment or request a revision.</p>
+                            <p class="text-muted">Please preview the proposal. Confirm to proceed to payment or request a
+                                revision.</p>
                             <div class="mt-3 d-flex justify-content-center gap-2">
-                                <form method="post" onsubmit="return confirm('Confirm this proposal and proceed to payment?');" style="display:inline;">
+                                <form method="post"
+                                    onsubmit="return confirm('Confirm this proposal and proceed to payment?');"
+                                    style="display:inline;">
                                     <input type="hidden" name="client_confirm_proposal" value="1">
                                     <button type="submit" class="btn btn-success">
-                                        <i class="fas fa-check me-1"></i>Confirm Proposal
+                                        Confirm Proposal
                                     </button>
                                 </form>
 
                                 <button class="btn btn-warning" data-bs-toggle="collapse" data-bs-target="#revisionBox">
-                                    <i class="fas fa-edit me-1"></i>Request Revision
+                                    Request Revision
                                 </button>
                             </div>
 
@@ -651,7 +713,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <div class="card border-success">
                         <div class="card-body text-center">
                             <h5 class="mb-2">Proceed to Payment</h5>
-                            <p class="text-muted">Your proposal has been confirmed. Please proceed to complete the payment to start the work.</p>
+                            <p class="text-muted">Your proposal has been confirmed. Please proceed to complete the payment
+                                to start the work.</p>
                             <div class="mt-3">
                                 <a href="payment.php?orderid=<?php echo $orderid; ?>" class="btn btn-success">
                                     <i class="fas fa-credit-card me-1"></i>Proceed to Payment
@@ -671,7 +734,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <h5 class="mb-2">Final Design Payment</h5>
                             <p class="text-muted">Please complete the final design payment to proceed.</p>
                             <div class="mt-3">
-                                <a href="payment_final.php?orderid=<?php echo $orderid; ?>&amount=<?php echo $final_payment_amount; ?>" class="btn btn-success">
+                                <a href="payment_final.php?orderid=<?php echo $orderid; ?>&amount=<?php echo $final_payment_amount; ?>"
+                                    class="btn btn-success">
                                     <i class="fas fa-credit-card me-1"></i>Pay Final Design & Products
                                 </a>
                             </div>
@@ -683,7 +747,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <!-- Back Button -->
         <div class="d-flex justify-content-between align-items-center mt-4">
-            <a href="../client/order_history.php" class="btn btn-secondary"><i class="fas fa-arrow-left me-2"></i>Back to Order History</a>
+            <a href="../client/order_history.php" class="btn btn-secondary"><i class="fas fa-arrow-left me-2"></i>Back
+                to Order History</a>
         </div>
 
     </div>

@@ -847,7 +847,7 @@ $designing_orders = count(array_filter($schedules, function($s) {
                                     <i class="fas fa-edit me-2"></i>Update Schedule
                                 </a>
                                 <a href="Order_Edit.php?id=<?php echo $schedule['orderid']; ?>" class="btn btn-info">
-                                    <i class="fas fa-eye me-2"></i>View Order Details
+                                    <i class="fas fa-eye me-2"></i>View Project Details
                                 </a>
                                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
                                     <i class="fas fa-times me-2"></i>Close
@@ -970,7 +970,7 @@ $designing_orders = count(array_filter($schedules, function($s) {
                                     <i class="fas fa-edit me-2"></i>Update Schedule
                                 </a>
                                 <a href="Order_Edit.php?id=<?php echo $schedule['orderid']; ?>" class="btn btn-info">
-                                    <i class="fas fa-eye me-2"></i>View Order Details
+                                    <i class="fas fa-eye me-2"></i>View Project Details
                                 </a>
                                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
                                     <i class="fas fa-times me-2"></i>Close

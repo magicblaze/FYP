@@ -32,7 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $stmt->bind_param("sdi", $newStatus, $price, $refId);
         
         if ($stmt->execute()) {
-            $success = "Order item has been " . ($action === 'confirm' ? "CONFIRMED" : "REJECTED") . " successfully.";
+            $success = "Quote has been " . ($action === 'confirm' ? "confirmed" : "rejected");
         } else {
             $error = "Database error: " . $mysqli->error;
         }

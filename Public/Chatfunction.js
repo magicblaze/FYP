@@ -114,7 +114,7 @@ function initApp(config = {}) {
       if (!payload.room) {
         try {
           const rn = currentAgent && (currentAgent.roomname || currentAgent.roomName || '');
-          const m = rn && rn.toString().match(/^order-(\d+)$/i);
+          const m = rn && rn.toString().match(/^Project-(\d+)$/i);
           if (m) payload.orderid = parseInt(m[1], 10);
         } catch (e) {}
       }
@@ -405,8 +405,8 @@ function initApp(config = {}) {
       try {
         const roomName = currentAgent && (currentAgent.roomname || currentAgent.roomName || '');
         let orderId = null;
-        if (roomName && /^order-\d+/i.test(roomName)) {
-          const m = (roomName || '').match(/^order-(\d+)/i);
+        if (roomName && /^Project-(\d+)/i.test(roomName)) {
+          const m = (roomName || '').match(/^Project-(\d+)/i);
           if (m) orderId = m[1];
         }
         if (!orderId && messages && messages.length) {
@@ -593,7 +593,7 @@ function initApp(config = {}) {
         try {
           const isDesigner = (typeof userType !== 'undefined' && String(userType).toLowerCase() === 'designer');
           const roomName = (currentAgent && (currentAgent.roomname || currentAgent.roomName || '')) || '';
-          const isOrderRoom = String(roomName).toLowerCase().startsWith('order-');
+          const isOrderRoom = String(roomName).toLowerCase().startsWith('project-');
           const mid = existingId || msgObj.messageid || msgObj.id || '';
           const did = (msgObj.share && msgObj.share.designid) ? msgObj.share.designid : (msgObj.content && /^\d+$/.test(String(msgObj.content).trim()) ? String(msgObj.content).trim() : '');
           const hasDesignId = (did && String(did).trim() !== '');
@@ -1751,7 +1751,7 @@ window.handleChat = function(designerid, options = {}) {
     return Promise.resolve({ ok: false, reason: 'not_authenticated' });
   }
 
-  // If caller provided an orderId, prefer to open or create an order-specific room named `order-<id>`
+  // If caller provided an orderId, prefer to open or create an order-specific room named `Project-<id>`
   const orderId = options.orderId || null;
   if (orderId) {
     // try to find existing room by name via listRooms
@@ -1760,7 +1760,7 @@ window.handleChat = function(designerid, options = {}) {
         .then(r => r.json())
         .then(list => {
           const rooms = Array.isArray(list) ? list : (list.rooms || []);
-          const targetName = 'Chatroom order#' + String(orderId);
+          const targetName = 'Chatroom Project-' + String(orderId);
           const found = rooms && rooms.find(r => (r.roomname || r.roomName || '').toString() === targetName);
           if (found) {
             const roomId = found.ChatRoomid || found.ChatRoomId || found.id || found.roomId;
@@ -1773,7 +1773,7 @@ window.handleChat = function(designerid, options = {}) {
             return { ok: true, roomId };
           }
           // not found, fall through to create with roomname set
-          const bodyObj = Object.assign({ creator_type: creatorType, creator_id: creatorId, other_type: otherType, other_id: otherId }, (options.otherName ? { other_name: options.otherName } : {}), { roomname: 'order-' + String(orderId), room_type: 'group' });
+          const bodyObj = Object.assign({ creator_type: creatorType, creator_id: creatorId, other_type: otherType, other_id: otherId }, (options.otherName ? { other_name: options.otherName } : {}), { roomname: 'Project-' + String(orderId), room_type: 'group' });
           return fetch(API + 'createRoom', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

@@ -819,7 +819,7 @@ try {
     if (!$rrow) send_json(['ok'=>false,'error'=>'invalid_room'],400);
     $roomname = $rrow['roomname'] ?? '';
     $orderId = null;
-    if (preg_match('/^order-(\d+)$/i', $roomname, $m)) $orderId = (int)$m[1];
+    if (preg_match('/^Project-(\d+)$/i', $roomname, $m)) $orderId = (int)$m[1];
     if (!$orderId && !empty($data['orderid'])) $orderId = (int)$data['orderid'];
     if (!$orderId) send_json(['ok'=>false,'error'=>'no_order_associated','message'=>'Room is not an order room'],400);
     // If designid not provided, try to resolve from message
@@ -884,7 +884,7 @@ try {
     if (!$orderId && $room) {
       try {
         $rstmt = $pdo->prepare('SELECT roomname FROM ChatRoom WHERE ChatRoomid = ? LIMIT 1'); $rstmt->execute([$room]); $rr = $rstmt->fetch(PDO::FETCH_ASSOC);
-        if ($rr && !empty($rr['roomname']) && preg_match('/^order-(\d+)$/i', $rr['roomname'], $m)) $orderId = (int)$m[1];
+        if ($rr && !empty($rr['roomname']) && preg_match('/^Project-(\d+)$/i', $rr['roomname'], $m)) $orderId = (int)$m[1];
       } catch (Throwable $__e) { }
     }
     if (!$orderId) send_json(['ok'=>true,'references'=>[]]);

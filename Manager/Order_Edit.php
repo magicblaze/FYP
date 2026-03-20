@@ -31,7 +31,7 @@ $sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.cost, o.deposit,
        c.clientid, c.cname as client_name, c.ctel, c.cemail, c.budget,
            d.designid, d.designName, d.expect_price as design_price, d.tag as design_tag,
            s.scheduleid, s.OrderFinishDate, s.DesignFinishDate,
-           op.payment_id, op.total_design_payment, op.total_construction_payment,
+           op.payment_id, op.total_design_payment, op.total_construction_payment, op.materials_cost,
            op.commission_1st, op.commission_final, op.total_amount_due
       FROM `Order` o
       LEFT JOIN `Client` c ON o.clientid = c.clientid
@@ -53,15 +53,17 @@ $original_budget = floatval($order['budget'] ?? 0);
 $payment = [
     'total_design_payment' => isset($order['total_design_payment']) ? (float) $order['total_design_payment'] : 0.0,
     'total_construction_payment' => isset($order['total_construction_payment']) ? (float) $order['total_construction_payment'] : 0.0,
+    'materials_cost' => isset($order['materials_cost']) ? (float) $order['materials_cost'] : 0.0,
     'commission_1st' => isset($order['commission_1st']) ? (float) $order['commission_1st'] : 0.0,
     'commission_final' => isset($order['commission_final']) ? (float) $order['commission_final'] : 0.0,
     'total_amount_due' => isset($order['total_amount_due']) ? (float) $order['total_amount_due'] : 0.0,
 ];
 
 $commission_total = $payment['commission_1st'] + $payment['commission_final'];
+$construction_cost_ex_material = max(0, $payment['total_construction_payment'] - $payment['materials_cost']);
 
 // 只扣除设计定金
-$deducted_amount = $design_price; 
+$deducted_amount = $design_price;
 $remaining_budget = $original_budget - $deducted_amount;
 
 // 检查设计是否已确认
@@ -124,9 +126,13 @@ if (!empty($references)) {
     }
 }
 $Design_Fee1 = $order["design_price"] * 0.025;
-$Project_Deposit = 2000; 
+$Project_Deposit = 2000;
 
-$final_total_cost = $payment['total_amount_due'] + $total_fees + $references_total;
+$final_total_cost = $payment['total_design_payment']
+    + $construction_cost_ex_material
+    + $commission_total
+    + $references_total
+    + $total_fees;
 
 $order_status = $order['ostatus'] ?? 'waiting confirm';
 $show_edit_cards = ($order_status !== 'waiting confirm' && !empty($order['designid']));
@@ -138,7 +144,7 @@ $edit_requirements = isset($_GET['edit']) && $_GET['edit'] == 'requirements';
 $edit_designer = isset($_GET['edit']) && $_GET['edit'] == 'designer';
 $edit_cost = isset($_GET['edit']) && $_GET['edit'] == 'cost';
 $edit_reference = isset($_GET['edit']) && $_GET['edit'] == 'reference';
- $edit_delivery = isset($_GET['edit']) && $_GET['edit'] == 'delivery';
+$edit_delivery = isset($_GET['edit']) && $_GET['edit'] == 'delivery';
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     // Handle placing order for a reference item
@@ -163,7 +169,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             mysqli_stmt_close($check_stmt);
             if ($check['cnt'] == 0) {
                 // Insert into OrderDelivery
-                $productid = (int)$ref['productid'];
+                $productid = (int) $ref['productid'];
                 $qty = 1;
                 $status = 'Pending';
                 $date = null;
@@ -180,10 +186,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     }
     // Handle OrderDelivery update
     if (isset($_POST['update_delivery'])) {
-        $od_id = (int)$_POST['orderdeliveryid'];
+        $od_id = (int) $_POST['orderdeliveryid'];
         $od_status = mysqli_real_escape_string($mysqli, $_POST['status']);
         $od_date = mysqli_real_escape_string($mysqli, $_POST['deliverydate']);
-        $od_qty = (int)$_POST['quantity'];
+        $od_qty = (int) $_POST['quantity'];
         $od_color = mysqli_real_escape_string($mysqli, $_POST['color']);
 
         $update_od_sql = "UPDATE OrderDelivery SET status = ?, deliverydate = ?, quantity = ?, color = ? WHERE orderdeliveryid = ?";
@@ -197,12 +203,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
     // Handle adding new OrderDelivery
     if (isset($_POST['add_delivery'])) {
-        $prod_id = (int)$_POST['productid'];
-        $qty = (int)$_POST['quantity'];
+        $prod_id = (int) $_POST['productid'];
+        $qty = (int) $_POST['quantity'];
         $status = mysqli_real_escape_string($mysqli, $_POST['status']);
         $date = mysqli_real_escape_string($mysqli, $_POST['deliverydate']);
         $color = mysqli_real_escape_string($mysqli, $_POST['color']);
-        $rid = (int)$_POST['rid'];
+        $rid = (int) $_POST['rid'];
 
         $insert_od_sql = "INSERT INTO OrderDelivery (productid, quantity, orderid, deliverydate, status, managerid, color, rid) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
         $insert_od_stmt = mysqli_prepare($mysqli, $insert_od_sql);
@@ -314,7 +320,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $schedule_res = mysqli_stmt_get_result($schedule_stmt);
             $schedule_data = mysqli_fetch_assoc($schedule_res);
             mysqli_stmt_close($schedule_stmt);
-            
+
             $est_completion = $schedule_data['OrderFinishDate'] ?? date('Y-m-d', strtotime('+30 days'));
 
             // Insert into workerallocation
@@ -371,21 +377,21 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         mysqli_stmt_close($update_designer_stmt);
 
                         // REMOVED: 移除了预算扣除逻辑
-                        
+
                         header("Location: Order_Edit.php?id=" . $orderid);
                         exit();
                     }
                 }
             } else {
                 $design = mysqli_fetch_assoc($design_check_result);
-                
+
                 $update_order_sql = "UPDATE `Order` SET designid = ?, ostatus = 'designing' WHERE orderid = ?";
                 $update_order_stmt = mysqli_prepare($mysqli, $update_order_sql);
                 mysqli_stmt_bind_param($update_order_stmt, "ii", $design['designid'], $orderid);
 
                 if (mysqli_stmt_execute($update_order_stmt)) {
                     // REMOVED: 移除了预算扣除逻辑
-                    
+
                     header("Location: Order_Edit.php?id=" . $orderid);
                     exit();
                 }
@@ -880,7 +886,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
     <div class="container mb-5">
         <!-- Page Title -->
         <div class="page-title">
-            Project Managment - Order #<?php echo $orderid; ?>
+            Project Managment - Project #<?php echo $orderid; ?>
         </div>
 
         <?php if ($order): ?>
@@ -889,7 +895,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
             <?php
             $banner_status = strtolower($order['ostatus'] ?? 'waiting confirm');
             $status_map = [
-                'waiting confirm' => ['class' => 'alert-warning', 'icon' => 'fa-hourglass-half', 'title' => 'Pending Confirmation', 'text' => 'Please review the details, assign a designer, then confirm or reject this order.'],
+                'waiting confirm' => ['class' => 'alert-warning', 'icon' => 'fa-hourglass-half', 'title' => 'Pending Confirmation', 'text' => 'Please review the details, assign a designer, then confirm or reject this project.'],
                 'designing' => ['class' => 'alert-info', 'icon' => 'fa-pencil-alt', 'title' => 'Designing', 'text' => 'Design is in progress. Please contact via chat if needed.'],
                 'drafting 2nd proposal' => ['class' => 'alert-info', 'icon' => 'fa-pencil-alt', 'title' => 'Drafting 2nd Proposal', 'text' => 'Please preparing a 2nd proposal. Update all info if needed.'],
                 'reviewing design proposal' => ['class' => 'alert-info', 'icon' => 'fa-search', 'title' => 'Proposal Review', 'text' => 'A design proposal has been submitted. Please review and confirm or request changes.'],
@@ -900,9 +906,9 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                 'waiting 2nd design phase payment' => ['class' => 'alert-warning', 'icon' => 'fa-credit-card', 'title' => 'Waiting Payment', 'text' => 'Waiting for client payment to proceed.'],
                 'waiting final design phase payment' => ['class' => 'alert-warning', 'icon' => 'fa-credit-card', 'title' => 'Waiting Payment', 'text' => 'Waiting for client payment to proceed.'],
                 'waiting 1st construction phase payment' => ['class' => 'alert-warning', 'icon' => 'fa-credit-card', 'title' => 'Waiting Construction Payment', 'text' => 'Waiting for client construction payment to proceed.'],
-                'preparing' => ['class' => 'alert-info', 'icon' => 'fa-truck-loading', 'title' => 'Preparing', 'text' => 'Order is being prepared for construction/delivery.'],
-                'complete' => ['class' => 'alert-success', 'icon' => 'fa-check-circle', 'title' => 'Complete', 'text' => 'Order completed successfully.'],
-                'rejected' => ['class' => 'alert-danger', 'icon' => 'fa-times-circle', 'title' => 'Rejected', 'text' => 'Order has been rejected. See notes for reason.'],
+                'preparing' => ['class' => 'alert-info', 'icon' => 'fa-truck-loading', 'title' => 'Preparing', 'text' => 'Project is being prepared for construction/delivery.'],
+                'complete' => ['class' => 'alert-success', 'icon' => 'fa-check-circle', 'title' => 'Complete', 'text' => 'Project completed successfully.'],
+                'rejected' => ['class' => 'alert-danger', 'icon' => 'fa-times-circle', 'title' => 'Rejected', 'text' => 'Project has been rejected. See notes for reason.'],
             ];
 
             $banner = $status_map[$banner_status] ?? ['class' => 'alert-info', 'icon' => 'fa-info-circle', 'title' => ucwords($banner_status), 'text' => 'Status: ' . $banner_status];
@@ -984,16 +990,6 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                         class="text-info">HK$<?php echo number_format($order["design_price"] ?? 0, 0); ?></strong>
                                 </p>
                             </div>
-                            <div class="mb-3">
-                                <label class="fw-bold text-muted small">Design Cost</label>
-                                <p class="mb-0">
-                                    <strong class="text-warning">
-                                        HK$<?php echo number_format($payment['total_design_payment'], 2); ?>
-                                    </strong>
-                                </p>
-                                <small class="text-muted">From order payment breakdown</small>
-                            </div>
-                         
                             <hr>
                             <div class="mb-0">
                                 <label class="fw-bold text-muted small">Design Tag</label>
@@ -1004,7 +1000,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                             <!-- Design References Card -->
                             <?php if (!empty($references)): ?>
                                 <hr>
-                                <div class="fw-bold text-muted small mb-2">Product References</div>
+                                <div class="fw-bold text-muted small mb-2">Actual Material Costs</div>
                                 <?php
                                 $grouped_refs = [];
                                 foreach ($references as $ref) {
@@ -1039,16 +1035,16 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                     <div class="card h-100">
                         <div class="card-header">
                             <h5 class="card-title mb-0">
-                                <i class="fas fa-clipboard me-2"></i>Order Detail
+                                <i class="fas fa-clipboard me-2"></i>Project Detail
                             </h5>
                         </div>
                         <div class="card-body">
                             <div class="mb-3">
-                                <label class="fw-bold text-muted small">Order ID</label>
+                                <label class="fw-bold text-muted small">Project ID</label>
                                 <p class="mb-0"><small>#<?php echo htmlspecialchars($order["orderid"]); ?></small></p>
                             </div>
                             <div class="mb-3">
-                                <label class="fw-bold text-muted small">Order Date</label>
+                                <label class="fw-bold text-muted small">Project Date</label>
                                 <p class="mb-0"><small><?php echo date('M d, Y H:i', strtotime($order["odate"])); ?></small>
                                 </p>
                             </div>
@@ -1126,16 +1122,21 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                             <small class="text-muted">Design Cost</small>
                                             <strong>HK$<?php echo number_format($payment['total_design_payment'], 2); ?></strong>
                                         </li>
+                                        
                                         <li class="d-flex justify-content-between">
-                                            <small class="text-muted">Construction Cost</small>
-                                            <strong>HK$<?php echo number_format($payment['total_construction_payment'], 2); ?></strong>
+                                            <small class="text-muted">Construction Cost (Excl. Materials):</small>
+                                            <strong>HK$<?php echo number_format($construction_cost_ex_material, 2); ?></strong>
+                                        </li>
+                                        <li class="d-flex justify-content-between">
+                                            <small class="text-muted">   -Material Cost Allocated</small>
+                                            <strong>HK$<?php echo number_format($payment['materials_cost'], 2); ?></strong>
                                         </li>
                                         <li class="d-flex justify-content-between">
                                             <small class="text-muted">Commission</small>
                                             <strong>HK$<?php echo number_format($commission_total, 2); ?></strong>
                                         </li>
                                         <?php if (!empty($references)): ?>
-                                            <li class="mt-2"><small class="text-muted">Product References</small></li>
+                                            <li class="mt-2"><small class="text-muted">Actual Material Costs</small></li>
                                             <?php foreach ($references as $r):
                                                 $rprice = isset($r['price']) && $r['price'] !== null ? (float) $r['price'] : (float) ($r['product_price'] ?? 0);
                                                 ?>
@@ -1236,7 +1237,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                 <div class="card border-warning">
                                     <div class="card-header bg-warning bg-opacity-10">
                                         <h5 class="card-title mb-0">
-                                            <i class="fas fa-check-circle me-2"></i>Order Action
+                                            <i class="fas fa-check-circle me-2"></i>Action
                                         </h5>
                                     </div>
                                     <div class="card-body">
@@ -1253,7 +1254,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                                 <form method="post" style="display: inline;">
                                                     <input type="hidden" name="confirm_order" value="1">
                                                     <button type="submit" class="btn btn-success w-100"
-                                                        onclick="return confirm('Confirm this order?');">
+                                                        onclick="return confirm('Confirm to proceed?');">
                                                         <i class="fas fa-check-circle me-2"></i>Confirm
                                                     </button>
                                                 </form>
@@ -1379,46 +1380,46 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                             </div>
                         </div>
 
-	                        <!-- Update Requirements Section -->
-	                        <div class="col-lg-6 mb-4">
-	                            <div class="card h-100">
-	                                <div class="card-header bg-light">
-	                                    <h5 class="card-title mb-0">
-	                                        <i class="fas fa-clipboard-list me-2"></i>Update Requirements
-	                                    </h5>
-	                                </div>
-	                                <div class="card-body">
-	                                    <!-- View Mode -->
-	                                    <div id="requirements-view" class="<?php echo $edit_requirements ? 'd-none' : ''; ?>">
-	                                        <button type="button" class="btn btn-primary w-100"
-	                                            onclick="toggleEdit('requirements', true)">
-	                                            <i class="fas fa-edit me-2"></i>Update Requirements
-	                                        </button>
-	                                    </div>
-	
-	                                    <!-- Edit Mode -->
-	                                    <div id="requirements-edit" class="<?php echo $edit_requirements ? '' : 'd-none'; ?>">
-	                                        <form method="post">
-	                                            <input type="hidden" name="update_requirements" value="1">
-	                                            <div class="mb-3">
-	                                                <label class="form-label fw-bold">Requirements</label>
-	                                                <textarea name="Requirements" class="form-control" rows="6"
-	                                                    required><?php echo htmlspecialchars($order['Requirements'] ?? ''); ?></textarea>
-	                                            </div>
-	                                            <div class="d-flex gap-2">
-	                                                <button type="submit" class="btn btn-success flex-grow-1">
-	                                                    <i class="fas fa-save me-2"></i>Save Changes
-	                                                </button>
-	                                                <button type="button" class="btn btn-secondary"
-	                                                    onclick="toggleEdit('requirements', false)">
-	                                                    <i class="fas fa-times me-2"></i>Cancel
-	                                                </button>
-	                                            </div>
-	                                        </form>
-	                                    </div>
-	                                </div>
-	                            </div>
-	                        </div>
+                        <!-- Update Requirements Section -->
+                        <div class="col-lg-6 mb-4">
+                            <div class="card h-100">
+                                <div class="card-header bg-light">
+                                    <h5 class="card-title mb-0">
+                                        <i class="fas fa-clipboard-list me-2"></i>Update Requirements
+                                    </h5>
+                                </div>
+                                <div class="card-body">
+                                    <!-- View Mode -->
+                                    <div id="requirements-view" class="<?php echo $edit_requirements ? 'd-none' : ''; ?>">
+                                        <button type="button" class="btn btn-primary w-100"
+                                            onclick="toggleEdit('requirements', true)">
+                                            <i class="fas fa-edit me-2"></i>Update Requirements
+                                        </button>
+                                    </div>
+
+                                    <!-- Edit Mode -->
+                                    <div id="requirements-edit" class="<?php echo $edit_requirements ? '' : 'd-none'; ?>">
+                                        <form method="post">
+                                            <input type="hidden" name="update_requirements" value="1">
+                                            <div class="mb-3">
+                                                <label class="form-label fw-bold">Requirements</label>
+                                                <textarea name="Requirements" class="form-control" rows="6"
+                                                    required><?php echo htmlspecialchars($order['Requirements'] ?? ''); ?></textarea>
+                                            </div>
+                                            <div class="d-flex gap-2">
+                                                <button type="submit" class="btn btn-success flex-grow-1">
+                                                    <i class="fas fa-save me-2"></i>Save Changes
+                                                </button>
+                                                <button type="button" class="btn btn-secondary"
+                                                    onclick="toggleEdit('requirements', false)">
+                                                    <i class="fas fa-times me-2"></i>Cancel
+                                                </button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
 
                         <!-- Edit Cost Section -->
                         <div class="col-lg-6 mb-4">
@@ -1714,79 +1715,83 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                         </div>
                     <?php endif; // end of drafting 2nd proposal section ?>
                     <?php if ($status === 'preparing'): ?>
-                        
-                    <!-- Assign Constructor Card -->
-                    <div class="col-lg-6 mb-4">
-                        <div class="card h-100">
-                            <div class="card-header bg-light">
-                                <h5 class="card-title mb-0">
-                                    <i class="fas fa-user-hard-hat me-2"></i>Assign Constructor
-                                </h5>
-                            </div>
-                            <div class="card-body">
-                                <?php
-                                // Check if constructor is already assigned via workerallocation
-                                $constructor_sql = "SELECT wa.workerid, s.sname, s.stel, s.semail 
+
+                        <!-- Assign Constructor Card -->
+                        <div class="col-lg-6 mb-4">
+                            <div class="card h-100">
+                                <div class="card-header bg-light">
+                                    <h5 class="card-title mb-0">
+                                        <i class="fas fa-user-hard-hat me-2"></i>Assign Constructor
+                                    </h5>
+                                </div>
+                                <div class="card-body">
+                                    <?php
+                                    // Check if constructor is already assigned via workerallocation
+                                    $constructor_sql = "SELECT wa.workerid, s.sname, s.stel, s.semail 
                                                    FROM workerallocation wa 
                                                    JOIN Worker w ON wa.workerid = w.workerid 
                                                    JOIN Supplier s ON w.supplierid = s.supplierid
                                                    WHERE wa.orderid = ? AND wa.status != 'Cancelled' 
                                                    LIMIT 1";
-                                $constructor_stmt = mysqli_prepare($mysqli, $constructor_sql);
-                                mysqli_stmt_bind_param($constructor_stmt, "i", $orderid);
-                                mysqli_stmt_execute($constructor_stmt);
-                                $constructor_result = mysqli_stmt_get_result($constructor_stmt);
-                                $constructor_row = mysqli_fetch_assoc($constructor_result);
-                                mysqli_stmt_close($constructor_stmt);
-                                
-                                if (!empty($constructor_row['workerid'])):
-                                    $cons_info = $constructor_row;
-                                ?>
-                                    <div class="alert alert-info mb-3">
-                                        <strong>Constructor Assigned:</strong> <?php echo htmlspecialchars($cons_info['sname'] ?? 'Unknown'); ?>
-                                        <br><small>Contact: <?php echo htmlspecialchars($cons_info['stel'] ?? '—'); ?> | <?php echo htmlspecialchars($cons_info['semail'] ?? '—'); ?></small>
-                                    </div>
-                                <?php else: ?>
-                                    <form method="post" class="mb-0">
-                                        <input type="hidden" name="auto_assign_constructor" value="1">
-                                        <button type="submit" class="btn btn-primary w-100">
-                                            <i class="fas fa-magic me-2"></i>Auto Assign Constructor
-                                        </button>
-                                    </form>
-                                <?php endif; ?>
+                                    $constructor_stmt = mysqli_prepare($mysqli, $constructor_sql);
+                                    mysqli_stmt_bind_param($constructor_stmt, "i", $orderid);
+                                    mysqli_stmt_execute($constructor_stmt);
+                                    $constructor_result = mysqli_stmt_get_result($constructor_stmt);
+                                    $constructor_row = mysqli_fetch_assoc($constructor_result);
+                                    mysqli_stmt_close($constructor_stmt);
+
+                                    if (!empty($constructor_row['workerid'])):
+                                        $cons_info = $constructor_row;
+                                        ?>
+                                        <div class="alert alert-info mb-3">
+                                            <strong>Constructor Assigned:</strong>
+                                            <?php echo htmlspecialchars($cons_info['sname'] ?? 'Unknown'); ?>
+                                            <br><small>Contact: <?php echo htmlspecialchars($cons_info['stel'] ?? '—'); ?> |
+                                                <?php echo htmlspecialchars($cons_info['semail'] ?? '—'); ?></small>
+                                        </div>
+                                    <?php else: ?>
+                                        <form method="post" class="mb-0">
+                                            <input type="hidden" name="auto_assign_constructor" value="1">
+                                            <button type="submit" class="btn btn-primary w-100">
+                                                <i class="fas fa-magic me-2"></i>Auto Assign Constructor
+                                            </button>
+                                        </form>
+                                    <?php endif; ?>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                    
-                    <!-- Order Reference Table for Placing Order -->
-                    <div class="col-12 mb-4">
-                        <div class="card h-100">
-                            <div class="card-header bg-light">
-                                <h5 class="card-title mb-0">
-                                    <i class="fas fa-list me-2"></i>Order Reference Items
-                                </h5>
-                            </div>
-                            <div class="card-body">
-                                <div class="table-responsive">
-                                    <table class="table table-sm table-hover">
-                                        <thead>
-                                            <tr>
-                                                <th>Product</th>
-                                                <th>Category</th>
-                                                <th>Requested Price</th>
-                                                <th>Status</th>
-                                                <th>Note</th>
-                                                <th>Action</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <?php foreach ($references as $ref): ?>
+
+                        <!-- Order Reference Table for Placing Order -->
+                        <div class="col-12 mb-4">
+                            <div class="card h-100">
+                                <div class="card-header bg-light">
+                                    <h5 class="card-title mb-0">
+                                        <i class="fas fa-list me-2"></i>Reference Items
+                                    </h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="table-responsive">
+                                        <table class="table table-sm table-hover">
+                                            <thead>
                                                 <tr>
-                                                    <td><?php echo htmlspecialchars($ref['pname'] ?? ('Product #' . $ref['productid'])); ?></td>
-                                                    <td><?php echo htmlspecialchars($ref['category'] ?? '—'); ?></td>
-                                                    <td>HK$<?php echo number_format(isset($ref['price']) ? $ref['price'] : (isset($ref['product_price']) ? $ref['product_price'] : 0), 2); ?></td>
-                                                    <td><?php echo htmlspecialchars($ref['status'] ?? '—'); ?></td>
-                                                    <td><?php echo htmlspecialchars($ref['note'] ?? '—'); ?></td>
+                                                    <th>Product</th>
+                                                    <th>Category</th>
+                                                    <th>Requested Price</th>
+                                                    <th>Status</th>
+                                                    <th>Note</th>
+                                                    <th>Action</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <?php foreach ($references as $ref): ?>
+                                                    <tr>
+                                                        <td><?php echo htmlspecialchars($ref['pname'] ?? ('Product #' . $ref['productid'])); ?>
+                                                        </td>
+                                                        <td><?php echo htmlspecialchars($ref['category'] ?? '—'); ?></td>
+                                                        <td>HK$<?php echo number_format(isset($ref['price']) ? $ref['price'] : (isset($ref['product_price']) ? $ref['product_price'] : 0), 2); ?>
+                                                        </td>
+                                                        <td><?php echo htmlspecialchars($ref['status'] ?? '—'); ?></td>
+                                                        <td><?php echo htmlspecialchars($ref['note'] ?? '—'); ?></td>
                                                         <td>
                                                             <?php
                                                             // Check if this reference's product is already pending in OrderDelivery for this order
@@ -1798,69 +1803,74 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                                             $pending_row = mysqli_fetch_assoc($pending_res);
                                                             mysqli_stmt_close($pending_stmt);
                                                             if ($pending_row['cnt'] == 0):
-                                                            ?>
+                                                                ?>
                                                                 <form method="post" style="display:inline-block">
                                                                     <input type="hidden" name="place_order_reference" value="1">
-                                                                    <input type="hidden" name="reference_id" value="<?php echo (int)$ref['id']; ?>">
-                                                                    <button type="submit" class="btn btn-sm btn-primary">Place Order</button>
+                                                                    <input type="hidden" name="reference_id"
+                                                                        value="<?php echo (int) $ref['id']; ?>">
+                                                                    <button type="submit" class="btn btn-sm btn-primary">Place
+                                                                        Order</button>
                                                                 </form>
                                                             <?php else: ?>
                                                                 <span class="text-muted small">Order Pending</span>
                                                             <?php endif; ?>
                                                         </td>
-                                                </tr>
-                                            <?php endforeach; ?>
-                                        </tbody>
-                                    </table>
+                                                    </tr>
+                                                <?php endforeach; ?>
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
-                    <!-- Order Delivery Section (New Box) -->
-                            <div class="col-lg-6 mb-4">
-                                <div class="card h-100">
-                                    <div class="card-header bg-light">
-                                        <h5 class="card-title mb-0">
-                                            <i class="fas fa-truck me-2"></i>Order Delivery
-                                        </h5>
-                                    </div>
-                                    <div class="card-body">
-                                        <!-- View Mode -->
-                                        <div id="delivery-view" class="<?php echo $edit_delivery ? 'd-none' : ''; ?>">
-                                            <?php
-                                            $od_sql = "SELECT od.*, p.pname FROM OrderDelivery od JOIN Product p ON od.productid = p.productid WHERE od.orderid = ?";
-                                            $od_stmt = mysqli_prepare($mysqli, $od_sql);
-                                            mysqli_stmt_bind_param($od_stmt, "i", $orderid);
-                                            mysqli_stmt_execute($od_stmt);
-                                            $od_res = mysqli_stmt_get_result($od_stmt);
-                                            if ($od_res->num_rows > 0): ?>
-                                                <div class="table-responsive mb-3">
-                                                    <table class="table table-sm table-hover">
-                                                        <thead>
+                        <!-- Order Delivery Section (New Box) -->
+                        <div class="col-lg-6 mb-4">
+                            <div class="card h-100">
+                                <div class="card-header bg-light">
+                                    <h5 class="card-title mb-0">
+                                        <i class="fas fa-truck me-2"></i>Product Delivery
+                                    </h5>
+                                </div>
+                                <div class="card-body">
+                                    <!-- View Mode -->
+                                    <div id="delivery-view" class="<?php echo $edit_delivery ? 'd-none' : ''; ?>">
+                                        <?php
+                                        $od_sql = "SELECT od.*, p.pname FROM OrderDelivery od JOIN Product p ON od.productid = p.productid WHERE od.orderid = ?";
+                                        $od_stmt = mysqli_prepare($mysqli, $od_sql);
+                                        mysqli_stmt_bind_param($od_stmt, "i", $orderid);
+                                        mysqli_stmt_execute($od_stmt);
+                                        $od_res = mysqli_stmt_get_result($od_stmt);
+                                        if ($od_res->num_rows > 0): ?>
+                                            <div class="table-responsive mb-3">
+                                                <table class="table table-sm table-hover">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>Product</th>
+                                                            <th>Status</th>
+                                                            <th>Date</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        <?php while ($od = mysqli_fetch_assoc($od_res)): ?>
                                                             <tr>
-                                                                <th>Product</th>
-                                                                <th>Status</th>
-                                                                <th>Date</th>
+                                                                <td><small><?php echo htmlspecialchars($od['pname']); ?>
+                                                                        (<?php echo $od['quantity']; ?>)</small></td>
+                                                                <td><span
+                                                                        class="badge bg-info"><?php echo htmlspecialchars($od['status']); ?></span>
+                                                                </td>
+                                                                <td><small><?php echo $od['deliverydate']; ?></small></td>
                                                             </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            <?php while ($od = mysqli_fetch_assoc($od_res)): ?>
-                                                                <tr>
-                                                                    <td><small><?php echo htmlspecialchars($od['pname']); ?> (<?php echo $od['quantity']; ?>)</small></td>
-                                                                    <td><span class="badge bg-info"><?php echo htmlspecialchars($od['status']); ?></span></td>
-                                                                    <td><small><?php echo $od['deliverydate']; ?></small></td>
-                                                                </tr>
-                                                            <?php endwhile; ?>
-                                                        </tbody>
-                                                    </table>
-                                                </div>
-                                            <?php else: ?>
-                                                <p class="text-muted small text-center">No delivery info yet.</p>
-                                            <?php endif; ?>
-                                        </div>
+                                                        <?php endwhile; ?>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        <?php else: ?>
+                                            <p class="text-muted small text-center">No delivery info yet.</p>
+                                        <?php endif; ?>
                                     </div>
                                 </div>
-                            </div>            
+                            </div>
+                        </div>
                     <?php endif; ?>
                     <!-- Proposal Preview Modal -->
                     <div class="modal fade" id="proposalPreviewModal" tabindex="-1" aria-hidden="true">
@@ -1887,7 +1897,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                         <form method="post" class="m-0">
                                             <input type="hidden" name="confirm_proposal" value="1">
                                             <button type="submit" class="btn btn-success">
-                                                <i class="fas fa-check me-1"></i>Confirm Proposal
+                                                <i class="fas fa-check me-1"></i>Accept Proposal
                                             </button>
                                         </form>
                                         <form method="post" class="m-0">
@@ -1900,19 +1910,19 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                 </div>
                             </div>
                         </div>
-                    </div>       
+                    </div>
                 <?php else: ?>
                     <div class="alert alert-danger" role="alert">
                         <i class="fas fa-exclamation-circle me-2"></i>
-                        <strong>Order not found.</strong>
-                        <p class="mb-0">The requested order does not exist or has been removed.</p>
+                        <strong>Project not found.</strong>
+                        <p class="mb-0">The requested project does not exist or has been removed.</p>
                     </div>
                 <?php endif; ?>
 
                 <!-- Action Buttons -->
                 <div class="d-flex justify-content-between align-items-center mt-4">
                     <a href="Order_Management.php" class="btn btn-secondary">
-                        <i class="fas fa-arrow-left me-2"></i>Back to Order List
+                        <i class="fas fa-arrow-left me-2"></i>Back to Project List
                     </a>
                 </div>
             </div>
