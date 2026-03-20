@@ -422,15 +422,7 @@ if ($final_paid) $current_step = 3;
                     <div class="total-item" style="border-top: 2px solid #27ae60; margin-top: 0.5rem; padding-top: 0.75rem;">
                         <span class="total-label"><strong>Total to Pay:</strong></span>
                         <span class="total-value payment-amount"><strong>HK$<?php echo number_format($amount, 2); ?></strong></span>
-                    </div>
-                    
-                    <?php if ($final_paid): ?>
-                        <div class="alert alert-success mt-3">
-                            <i class="fas fa-check-circle me-2"></i>Final payment completed successfully! HK$<?php echo number_format($amount, 2); ?> deducted from your budget.
-                        </div>
-                    <?php endif; ?>
-                </div>
-
+                    </div>  
                 <hr>
 
                 <h5>Payment Method</h5>
@@ -445,13 +437,9 @@ if ($final_paid) $current_step = 3;
 
                 <form method="post">
                     <div class="d-flex gap-2">
-                        <a href="order_history.php" class="btn btn-secondary">Back to Order History</a>
-                        
                         <?php if (!empty($paymentMethodData) && !empty($paymentMethodData['method'])): ?>
                             <?php if ($final_paid): ?>
-                                <button type="button" class="btn btn-success" disabled>
-                                    <i class="fas fa-check-circle me-1"></i>Final Payment Completed
-                                </button>
+                                <a href="order_history.php" class="btn btn-secondary">Back to Order History</a>
                             <?php elseif ($amount > $current_budget): ?>
                                 <button type="button" class="btn btn-success" disabled title="Insufficient budget">
                                     <i class="fas fa-exclamation-triangle me-1"></i>Insufficient Budget

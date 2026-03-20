@@ -99,14 +99,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             mysqli_stmt_execute($op_stmt);
             mysqli_stmt_close($op_stmt);
             
-            // Deduct from client budget
-            $new_budget = $current_budget - $total_to_pay;
-            $b_sql = "UPDATE Client SET budget = ? WHERE clientid = ?";
-            $b_stmt = mysqli_prepare($mysqli, $b_sql);
-            mysqli_stmt_bind_param($b_stmt, "di", $new_budget, $client_id);
-            mysqli_stmt_execute($b_stmt);
-            mysqli_stmt_close($b_stmt);
-
             error_log("payment3.php - orderid: " . $orderid);
             error_log("payment3.php - GET success: " . (isset($_GET['success']) ? 'yes' : 'no'));
             error_log("payment3.php - SESSION payment_success_" . $orderid . ": " . (isset($_SESSION['payment_success_' . $orderid]) ? 'yes' : 'no'));
@@ -117,9 +109,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 mysqli_stmt_bind_param($u_stmt, "ii", $orderid, $client_id);
                                 mysqli_stmt_execute($u_stmt);
                                 mysqli_stmt_close($u_stmt);
-            // Update session budget
-            $_SESSION['user']['budget'] = $new_budget;
-            
             mysqli_commit($mysqli);
             
             // Set session flag for successful payment
@@ -307,25 +296,13 @@ $stage_title = 'Final Design Payment';
                 
                 <h4>Payment for Order #<?php echo $orderid; ?></h4>
                 
-                <!-- Budget Info -->
-                <div class="budget-info">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <span><i class="fas fa-wallet me-2"></i>Your Current Budget:</span>
-                        <strong class="text-primary">HK$<?php echo number_format($current_budget, 2); ?></strong>
-                    </div>
-                    <?php if ($total_to_pay > $current_budget && !$payment_success): ?>
-                        <div class="alert alert-danger mt-2 mb-0">
-                            <i class="fas fa-exclamation-triangle me-2"></i>
-                            Insufficient budget! You need HK$<?php echo number_format($total_to_pay - $current_budget, 2); ?> more.
-                        </div>
-                    <?php endif; ?>
-                </div>
+                <!-- Budget check removed for this payment stage -->
                 
                 <!-- Success Message -->
                 <?php if (isset($_GET['success'])): ?>
                     <div class="alert alert-success alert-message">
                         <i class="fas fa-check-circle me-2"></i>
-                        Final design payment completed successfully! HK$<?php echo number_format($total_to_pay, 2); ?> deducted from your budget.
+                        Final design payment completed successfully! HK$<?php echo number_format($total_to_pay, 2); ?> received.
                     </div>
                 <?php endif; ?>
                 
@@ -429,14 +406,6 @@ $stage_title = 'Final Design Payment';
                             <span class="payment-amount fw-bold">HK$<?php echo number_format($total_to_pay, 2); ?></span>
                         </div>
                     </div>
-                    
-                    <!-- Payment success message -->
-                    <?php if ($payment_success): ?>
-                        <div class="alert alert-success mt-3">
-                            <i class="fas fa-check-circle me-2"></i>
-                            Final design payment completed successfully! HK$<?php echo number_format($total_to_pay, 2); ?> deducted from your budget.
-                        </div>
-                    <?php endif; ?>
                 </div>
 
                 <hr>
@@ -453,21 +422,14 @@ $stage_title = 'Final Design Payment';
 
                 <form method="post">
                     <div class="d-flex gap-2">
-                        <a href="order_history.php" class="btn btn-secondary">Back to Order History
-                        </a>
                         <?php if (!empty($paymentMethodData) && !empty($paymentMethodData['method'])): ?>
                             <?php if ($payment_success): ?>
-                                <!-- Payment成功后禁用按钮 -->
-                                <button type="button" class="btn btn-success" disabled>
-                                    <i class="fas fa-check-circle me-1"></i>Payment Completed
-                                </button>
-                            <?php elseif ($total_to_pay > $current_budget): ?>
-                                <button type="button" class="btn btn-success" disabled title="Insufficient budget">
-                                    <i class="fas fa-exclamation-triangle me-1"></i>Insufficient Budget
-                                </button>
+                                <a href="payment_construction.php?orderid=<?php echo $orderid; ?>" class="btn btn-success">
+                                    <i class="fas fa-check-circle me-1"></i>Proceed to Construction Payment
+                                </a>
                             <?php else: ?>
                                 <button type="submit" name="proceed_pay" class="btn btn-success" 
-                                        onclick="return confirm('Pay HK$<?php echo number_format($total_to_pay, 2); ?> from your budget? Your remaining budget will be HK$<?php echo number_format($current_budget - $total_to_pay, 2); ?>');">
+                                        onclick="return confirm('Confirm payment HK$<?php echo number_format($total_to_pay, 2); ?>?');">
                                     <i class="fas fa-credit-card me-1"></i>
                                     Pay HK$<?php echo number_format($total_to_pay, 2); ?>
                                 </button>

@@ -84,23 +84,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         mysqli_begin_transaction($mysqli);
         
         try {
-            // Deduct from client budget
-            $new_budget = $current_budget - $total_to_pay;
-            $b_sql = "UPDATE Client SET budget = ? WHERE clientid = ?";
-            $b_stmt = mysqli_prepare($mysqli, $b_sql);
-            mysqli_stmt_bind_param($b_stmt, "di", $new_budget, $client_id);
-            mysqli_stmt_execute($b_stmt);
-            mysqli_stmt_close($b_stmt);
-            
             // Update order status to complete
             $u_sql = "UPDATE `Order` SET ostatus = 'waiting 1st construction phase payment' WHERE orderid = ? AND clientid = ?";
             $u_stmt = mysqli_prepare($mysqli, $u_sql);
             mysqli_stmt_bind_param($u_stmt, "ii", $orderid, $client_id);
             mysqli_stmt_execute($u_stmt);
             mysqli_stmt_close($u_stmt);
-            
-            // Update session budget
-            $_SESSION['user']['budget'] = $new_budget;
             
             mysqli_commit($mysqli);
             
@@ -280,18 +269,7 @@ $current_step = 3;
                 
                 <h4>Payment for Order #<?php echo $orderid; ?></h4>
                 
-                <!-- Budget Info -->
-                <div class="budget-info">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <span><i class="fas fa-wallet me-2"></i>Your Current Budget:</span>
-                        <strong class="text-primary">HK$<?php echo number_format($current_budget, 2); ?></strong>
-                    </div>
-                    <?php if ($total_to_pay > $current_budget): ?>
-                        <div class="alert alert-danger mt-2 mb-0">
-                            <i class="fas fa-exclamation-triangle me-2"></i>Insufficient budget! You need HK$<?php echo number_format($total_to_pay - $current_budget, 2); ?> more.
-                        </div>
-                    <?php endif; ?>
-                </div>
+                <!-- Budget check removed for this payment stage -->
                 
                 <!-- Progress Steps -->
                 <div class="progress-steps">
@@ -406,16 +384,10 @@ $current_step = 3;
                         <a href="order_detail.php?orderid=<?php echo $orderid; ?>" class="btn btn-secondary">Back to Order</a>
                         
                         <?php if (!empty($paymentMethodData) && !empty($paymentMethodData['method'])): ?>
-                            <?php if ($total_to_pay > $current_budget): ?>
-                                <button type="button" class="btn btn-success" disabled title="Insufficient budget">
-                                    <i class="fas fa-exclamation-triangle me-1"></i>Insufficient Budget
-                                </button>
-                            <?php else: ?>
-                                <button type="submit" name="proceed_pay" class="btn btn-success" onclick="return confirm('Pay construction fee and commission of HK$<?php echo number_format($total_to_pay, 2); ?> from your budget? Your remaining budget will be HK$<?php echo number_format($current_budget - $total_to_pay, 2); ?>');">
-                                    <i class="fas fa-credit-card me-1"></i>
-                                    Pay HK$<?php echo number_format($total_to_pay, 2); ?>
-                                </button>
-                            <?php endif; ?>
+                            <button type="submit" name="proceed_pay" class="btn btn-success" onclick="return confirm('Confirm payment HK$<?php echo number_format($total_to_pay, 2); ?>?');">
+                                <i class="fas fa-credit-card me-1"></i>
+                                Pay HK$<?php echo number_format($total_to_pay, 2); ?>
+                            </button>
                         <?php else: ?>
                             <button type="button" class="btn btn-secondary" disabled>No payment method configured</button>
                         <?php endif; ?>
