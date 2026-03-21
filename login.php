@@ -203,6 +203,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 <input id="password" type="password" class="form-control" name="password" required>
                             </div>
                             <button class="w-100 btn btn-primary" type="submit">Sign in</button>
+                            <div class="mt-4 text-center">
+                                <p class="mb-0 text-muted">Don't have an account? <a href="signup.php">Sign Up</a></p>
+                            </div>
                             <p class="mt-4 mb-0 text-muted text-center">&copy; <?= date('Y') ?> HappyDesign</p>
                         </form>
                     </div>
