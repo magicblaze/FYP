@@ -400,9 +400,6 @@ mysqli_stmt_close($workers_stmt);
                         <a href="WorkerAllocation.php?orderid=<?= $project['orderid'] ?>" class="btn-allocate">
                             <i class="fas fa-users"></i>Manage Workers
                         </a>
-                        <a href="manage_project.php?orderid=<?= $project['orderid'] ?>" class="btn-view">
-                            <i class="fas fa-eye"></i>View Project Details
-                        </a>
                     </div>
                 </div>
             <?php endforeach; ?>
