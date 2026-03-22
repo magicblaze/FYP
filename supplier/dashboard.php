@@ -313,6 +313,13 @@ $colorImageStmt->close();
                     </a>
                 </div>
             </div>
+            <div class="col-md-4">
+                <div class="stat-card d-flex align-items-center justify-content-center flex-column">
+                    <a href="ProjectWorkerManagement.php" class="btn btn-success btn-lg w-100">
+                        <i class="fas fa-users me-2"></i>Allocate Workers
+                    </a>
+                </div>
+            </div>
         </div>
         <div class="card shadow-sm border-0">
             <div class="card-header bg-white py-3">
