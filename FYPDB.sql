@@ -169,16 +169,18 @@ CREATE TABLE `Design` (
   `tag` TEXT NOT NULL,
   `likes` int NOT NULL,
   `designerid` int NOT NULL,
+  `supplierid` int NOT NULL,
   PRIMARY KEY (`designid`),
   KEY `designerid_pk_idx` (`designerid`),
-  CONSTRAINT `designerid_pk` FOREIGN KEY (`designerid`) REFERENCES `Designer` (`designerid`)
+  CONSTRAINT `designerid_pk` FOREIGN KEY (`designerid`) REFERENCES `Designer` (`designerid`),
+  CONSTRAINT `supplierid_pk` FOREIGN KEY (`supplierid`) REFERENCES `Supplier` (`supplierid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 INSERT INTO `Design` (`designid`,`designName`,`expect_price`,`description`,`tag`,`likes`,`designerid`) VALUES
-(1, 'Modern Full House Design', 1200000 , 'A modern full house design','full house,modern','200',1),
-(2, 'Minimalist Kitchen Remodel Design', 600000, 'A minimalist kitchen remodel design','kitchen remodel,minimalist','20',1),
-(3, 'Cozy Living Room Design', 800000, 'A cozy living room design','living room,cozy','50',2),
-(4, 'Elegant Bedroom Design', 600000, 'An elegant bedroom design','bedroom,elegant','75',2);
+(1, 'Modern Full House Design', 1200000 , 'A modern full house design','full house,modern','200',1,1),
+(2, 'Minimalist Kitchen Remodel Design', 600000, 'A minimalist kitchen remodel design','kitchen remodel,minimalist','20',1,2),
+(3, 'Cozy Living Room Design', 800000, 'A cozy living room design','living room,cozy','50',2,1),
+(4, 'Elegant Bedroom Design', 600000, 'An elegant bedroom design','bedroom,elegant','75',2,2);
 
 -- Comment_design table
 CREATE TABLE `Comment_design` (
@@ -237,7 +239,7 @@ CREATE TABLE `Order` (
   `gross_floor_area` decimal(10,2) DEFAULT NULL,
   `Requirements` varchar(255) DEFAULT NULL,
   `designid` int NOT NULL,
-  `ostatus` ENUM('waiting confirm', 'designing', 'reviewing design proposal', 'waiting for review design', 'drafting 2nd proposal', 'waiting client review', 'waiting 2nd design phase payment', 'waiting final design phase payment' , 'waiting 1st construction phase payment', 'complete', 'rejected','preparing') DEFAULT 'waiting confirm',
+  `ostatus` ENUM('waiting confirm', 'designing', 'reviewing design proposal', 'waiting for review design', 'drafting 2nd proposal', 'waiting client review', 'waiting client payment', 'complete', 'rejected','preparing','waiting for selection') DEFAULT 'waiting confirm',
   `designedPicture` VARCHAR(500) DEFAULT NULL,
   PRIMARY KEY (`orderid`),
   KEY `clientid_pk_idx` (`clientid`),
@@ -250,8 +252,8 @@ CREATE TABLE `Order` (
 
 INSERT INTO `Order`
 (`orderid`, `odate`, `clientid`, `budget`, `deposit`, `cost`, `gross_floor_area`, `Requirements`,`designid`,`ostatus`,`designedPicture`) VALUES
-(1, '2025-04-12 17:50:00', 1, 410000.00, 2000.00, NULL, NULL, 'abc',2,'designing',NULL),
-(2, '2025-05-10 12:00:00', 2, 358750.00, 2000.00, NULL, NULL, 'abc',1,'complete',NULL);
+(1, '2025-04-12 17:50:00', 1, 500000, 2000.00, NULL, NULL, 'abc',2,'designing',NULL),
+(2, '2025-05-10 12:00:00', 2, 500000, 2000.00, NULL, NULL, 'abc',1,'complete',NULL);
 
 CREATE TABLE `OrderPayment` (
   `payment_id` INT NOT NULL AUTO_INCREMENT,
@@ -262,13 +264,12 @@ CREATE TABLE `OrderPayment` (
   `design_fee_designer_2nd` DECIMAL(12, 2) DEFAULT 0.00,
   `design_fee_manager_1st` DECIMAL(12, 2) DEFAULT 0.00,
   `design_fee_manager_2nd` DECIMAL(12, 2) DEFAULT 0.00,
-  `design_deposit` DECIMAL(12, 2) DEFAULT 0.00,
-  
+  `design_deposit` DECIMAL(12, 2) DEFAULT 2000.00,
   `commission_1st` DECIMAL(12, 2) DEFAULT 0.00,
   
   -- Construction Phase Payments (90% of total)
   `construction_main_price` DECIMAL(12, 2) DEFAULT 0.00,
-  `construction_deposit` DECIMAL(12, 2) DEFAULT 2000.00,
+  `construction_deposit` DECIMAL(12, 2) DEFAULT 0.00,
   `materials_cost` DECIMAL(12, 2) DEFAULT 0.00,
   `inspection_fee` DECIMAL(12, 2) DEFAULT 0.00,
   `contractor_fee` DECIMAL(12, 2) DEFAULT 0.00,
@@ -294,14 +295,14 @@ CREATE TABLE `OrderPayment` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Sample OrderPayment data for existing orders
--- Calculation (per order.php): design fees 2.5% each, commission_1st 5%, construction main price 80%,
--- construction deposit 20% of main price, materials 45%, contractor 30%, inspector 5%, commission_final 5%.
--- Totals: total_design_payment = 10% of total_cost; total_construction_payment = construction_main_price;
--- total_amount_due = total_design_payment + total_construction_payment + commission_final + commission_1st
+-- Calculation: Design fee 10% (d5% m5%), material 45%, contractor 30%, inspector 5%, commission 10%
+-- Order 1: total_cost=400k, design=40k+2k, materials=180k, contractor=120k, inspector=20k, commission_1st=20k, deposit=64k, commission_final=40k
+-- Order 2: total_cost=350k, design=35k+2k, materials=157.5k, contractor=105k, inspector=17.5k, commission_1st=17.5k, deposit=56k, commission_final=35k
+-- Order 3: total_cost=300k, design=30k+2k, materials=135k, contractor=90k, inspector=15k, commission_1st=15k, deposit=48k, commission_final=30k
 INSERT INTO `OrderPayment` (`total_cost`, `design_fee_designer_1st`, `design_fee_designer_2nd`, `design_fee_manager_1st`, `design_fee_manager_2nd`, `design_deposit`, `commission_1st`, `construction_main_price`, `construction_deposit`, `materials_cost`, `inspection_fee`, `contractor_fee`, `commission_final`, `total_design_payment`, `total_construction_payment`, `total_amount_due`, `total_amount_paid`, `payment_status`) VALUES
-(400000.00, 10000.00, 10000.00, 10000.00, 10000.00, 2000.00, 20000.00, 320000.00, 64000.00, 180000.00, 20000.00, 120000.00, 20000.00, 40000.00, 320000.00, 400000.00, 0.00, 'pending'),
-(350000.00, 8750.00, 8750.00, 8750.00, 8750.00, 2000.00, 17500.00, 280000.00, 56000.00, 157500.00, 17500.00, 105000.00, 17500.00, 35000.00, 280000.00, 350000.00, 0.00, 'pending'),
-(300000.00, 7500.00, 7500.00, 7500.00, 7500.00, 2000.00, 15000.00, 240000.00, 48000.00, 135000.00, 15000.00, 90000.00, 15000.00, 30000.00, 240000.00, 300000.00, 0.00, 'pending');
+(400000.00, 10000.00, 10000.00, 10000.00, 10000.00, 2000.00, 20000.00, 320000.00, 64000.00, 180000.00, 20000.00, 120000.00, 40000.00, 62000.00, 424000.00, 486000.00, 0.00, 'pending'),
+(350000.00, 8750.00, 8750.00, 8750.00, 8750.00, 2000.00, 17500.00, 280000.00, 56000.00, 157500.00, 17500.00, 105000.00, 35000.00, 54500.00, 371000.00, 425500.00, 0.00, 'pending'),
+(300000.00, 7500.00, 7500.00, 7500.00, 7500.00, 2000.00, 15000.00, 240000.00, 48000.00, 135000.00, 15000.00, 90000.00, 30000.00, 47500.00, 318000.00, 365500.00, 0.00, 'pending');
 
 -- Update Order to link to OrderPayment for all orders
 UPDATE `Order` SET `payment_id` = 1 WHERE `orderid` = 1;
@@ -677,7 +678,7 @@ ALTER TABLE `Message`
   ADD CONSTRAINT `fk_message_fileid` FOREIGN KEY (`fileid`) REFERENCES `UploadedFiles` (`fileid`) ON DELETE SET NULL;
 
 -- Work hours columns merged into `Worker` CREATE TABLE above; no ALTER needed here.
-
+w
 DELIMITER $$
 CREATE PROCEDURE IF NOT EXISTS `ResetWeeklyHours`()
 BEGIN
