@@ -27,13 +27,13 @@ if ($order_check['count'] == 0) {
 }
 
 // Use prepared statement to prevent SQL injection - ADDED cost field
-$sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.cost, o.deposit,
-       c.clientid, c.cname as client_name, c.ctel, c.cemail, c.budget,
-           d.designid, d.designName, d.expect_price as design_price, d.tag as design_tag,
-           s.scheduleid, s.OrderFinishDate, s.DesignFinishDate,
-           op.payment_id, op.total_design_payment, op.total_construction_payment, op.materials_cost,
-           op.commission_1st, op.commission_final, op.total_amount_due
-      FROM `Order` o
+$sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.cost, o.deposit, o.supplierid, o.supplier_status,
+	       c.clientid, c.cname as client_name, c.ctel, c.cemail, c.budget,
+	           d.designid, d.designName, d.expect_price as design_price, d.tag as design_tag, d.supplierid as design_supplierid,
+	           s.scheduleid, s.OrderFinishDate, s.DesignFinishDate,
+	           op.payment_id, op.total_design_payment, op.total_construction_payment, op.materials_cost,
+	           op.commission_1st, op.commission_final, op.total_amount_due
+	      FROM `Order` o
       LEFT JOIN `Client` c ON o.clientid = c.clientid
       LEFT JOIN `Design` d ON o.designid = d.designid
       LEFT JOIN `Schedule` s ON o.orderid = s.orderid
@@ -147,6 +147,18 @@ $edit_reference = isset($_GET['edit']) && $_GET['edit'] == 'reference';
 $edit_delivery = isset($_GET['edit']) && $_GET['edit'] == 'delivery';
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+    // Handle supplier assignment
+    if (isset($_POST['assign_supplier'])) {
+        $supplier_id = intval($_POST['supplier_id']);
+        $update_supplier_sql = "UPDATE `Order` SET supplierid = ?, supplier_status = 'Pending' WHERE orderid = ?";
+        $update_supplier_stmt = mysqli_prepare($mysqli, $update_supplier_sql);
+        mysqli_stmt_bind_param($update_supplier_stmt, "ii", $supplier_id, $orderid);
+        if (mysqli_stmt_execute($update_supplier_stmt)) {
+            header("Location: Order_Edit.php?id=" . $orderid);
+            exit();
+        }
+    }
+
     // Handle placing order for a reference item
     if (isset($_POST['place_order_reference']) && isset($_POST['reference_id'])) {
         $reference_id = intval($_POST['reference_id']);
@@ -294,51 +306,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
     }
 
-    if (isset($_POST['auto_assign_constructor'])) {
-        // Get an available worker who is not currently assigned to any active order
-        $available_constructor_sql = "SELECT w.workerid, w.name 
-                                     FROM Worker w 
-                                     WHERE w.workerid NOT IN (
-                                         SELECT workerid FROM workerallocation 
-                                         WHERE status IN ('Assigned', 'In Progress')
-                                     ) 
-                                     ORDER BY w.workerid ASC LIMIT 1";
-        $available_constructor_stmt = mysqli_prepare($mysqli, $available_constructor_sql);
-        mysqli_stmt_execute($available_constructor_stmt);
-        $available_constructor_result = mysqli_stmt_get_result($available_constructor_stmt);
-        mysqli_stmt_close($available_constructor_stmt);
 
-        if ($available_constructor_result->num_rows > 0) {
-            $constructor = mysqli_fetch_assoc($available_constructor_result);
-            $constructor_id = $constructor['workerid'];
-
-            // Get schedule info for estimated completion
-            $schedule_sql = "SELECT OrderFinishDate FROM `Schedule` WHERE orderid = ?";
-            $schedule_stmt = mysqli_prepare($mysqli, $schedule_sql);
-            mysqli_stmt_bind_param($schedule_stmt, "i", $orderid);
-            mysqli_stmt_execute($schedule_stmt);
-            $schedule_res = mysqli_stmt_get_result($schedule_stmt);
-            $schedule_data = mysqli_fetch_assoc($schedule_res);
-            mysqli_stmt_close($schedule_stmt);
-
-            $est_completion = $schedule_data['OrderFinishDate'] ?? date('Y-m-d', strtotime('+30 days'));
-
-            // Insert into workerallocation
-            $insert_alloc_sql = "INSERT INTO workerallocation (orderid, workerid, managerid, allocation_date, estimated_completion, estimated_hours, status) 
-                                VALUES (?, ?, ?, NOW(), ?, 40.0, 'Assigned')";
-            $insert_alloc_stmt = mysqli_prepare($mysqli, $insert_alloc_sql);
-            $manager_id = $_SESSION['user']['managerid'];
-            mysqli_stmt_bind_param($insert_alloc_stmt, "iiis", $orderid, $constructor_id, $manager_id, $est_completion);
-
-            if (mysqli_stmt_execute($insert_alloc_stmt)) {
-                mysqli_stmt_close($insert_alloc_stmt);
-                header("Location: Order_Edit.php?id=" . $orderid);
-                exit();
-            }
-        } else {
-            $error_message = "No available constructors at the moment.";
-        }
-    }
 
     if (isset($_POST['assign_designer'])) {
         $designer_id = intval($_POST['designer_id']);
@@ -1716,46 +1684,129 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                     <?php endif; // end of drafting 2nd proposal section ?>
                     <?php if ($status === 'preparing'): ?>
 
-                        <!-- Assign Constructor Card -->
+                        <!-- Assign Constructor for Worker Allocation -->
                         <div class="col-lg-6 mb-4">
                             <div class="card h-100">
                                 <div class="card-header bg-light">
                                     <h5 class="card-title mb-0">
-                                        <i class="fas fa-user-hard-hat me-2"></i>Assign Constructor
+                                        <i class="fas fa-hard-hat me-2"></i>Assign Constructor for Worker Allocation
+                                    </h5>
+                                </div>
+                                <div class="card-body">
+                                    <?php if (!empty($order['supplierid'])): 
+                                        $assigned_supplier_sql = "SELECT sname, stel, semail FROM Supplier WHERE supplierid = ?";
+                                        $assigned_supplier_stmt = mysqli_prepare($mysqli, $assigned_supplier_sql);
+                                        mysqli_stmt_bind_param($assigned_supplier_stmt, "i", $order['supplierid']);
+                                        mysqli_stmt_execute($assigned_supplier_stmt);
+                                        $assigned_supplier_res = mysqli_stmt_get_result($assigned_supplier_stmt);
+                                        $assigned_supplier = mysqli_fetch_assoc($assigned_supplier_res);
+                                        mysqli_stmt_close($assigned_supplier_stmt);
+                                        
+                                        $status_badge = 'bg-warning';
+                                        $is_accepted = ($order['supplier_status'] === 'Accepted');
+                                        if ($is_accepted) $status_badge = 'bg-success';
+                                        if ($order['supplier_status'] === 'Rejected') $status_badge = 'bg-danger';
+                                    ?>
+                                        <div class="alert alert-info mb-3">
+                                            <strong>Assigned Constructor:</strong> <?php echo htmlspecialchars($assigned_supplier['sname']); ?>
+                                            <br><small>Status: <span class="badge <?php echo $status_badge; ?>"><?php echo htmlspecialchars($order['supplier_status'] ?? 'Pending'); ?></span></small>
+                                            <br><small>Contact: <?php echo htmlspecialchars($assigned_supplier['stel'] ?? '—'); ?> | <?php echo htmlspecialchars($assigned_supplier['semail'] ?? '—'); ?></small>
+                                        </div>
+                                        
+                                        <?php if (!$is_accepted): ?>
+                                            <button type="button" class="btn btn-outline-primary btn-sm w-100" onclick="document.getElementById('supplier-assign-form').classList.toggle('d-none')">
+                                                <i class="fas fa-exchange-alt me-2"></i>Change Constructor
+                                            </button>
+                                        <?php else: ?>
+                                            <div class="alert alert-success py-2 px-3 small mb-0">
+                                                <i class="fas fa-lock me-2"></i>Constructor has accepted.
+                                            </div>
+                                        <?php endif; ?>
+                                    <?php endif; ?>
+
+                                    <?php if (empty($order['supplierid']) || ($order['supplier_status'] !== 'Accepted')): ?>
+                                        <div id="supplier-assign-form" class="<?php echo !empty($order['supplierid']) ? 'd-none' : ''; ?> mt-3">
+                                            <form method="post">
+                                                <div class="mb-3">
+                                                    <label class="form-label small text-muted">Select Constructor</label>
+                                                    <select name="supplier_id" class="form-select" required>
+                                                        <option value="">-- Choose Constructor --</option>
+                                                        <?php
+                                                        $suppliers_sql = "SELECT supplierid, sname FROM Supplier ORDER BY sname ASC";
+                                                        $suppliers_res = mysqli_query($mysqli, $suppliers_sql);
+                                                        while ($s = mysqli_fetch_assoc($suppliers_res)) {
+                                                            $is_selected = false;
+                                                            if (!empty($order['supplierid'])) {
+                                                                $is_selected = ($s['supplierid'] == $order['supplierid']);
+                                                            } else {
+                                                                $is_selected = ($s['supplierid'] == $order['design_supplierid']);
+                                                            }
+                                                            $sel = $is_selected ? 'selected' : '';
+                                                            $label = htmlspecialchars($s['sname']);
+                                                            if ($s['supplierid'] == $order['design_supplierid']) {
+                                                                $label .= " (Linked to Design)";
+                                                            }
+                                                            echo "<option value='{$s['supplierid']}' $sel>$label</option>";
+                                                        }
+                                                        ?>
+                                                    </select>
+                                                </div>
+                                                <button type="submit" name="assign_supplier" class="btn btn-primary w-100">
+                                                    <i class="fas fa-check me-2"></i>Assign Constructor
+                                                </button>
+                                            </form>
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Worker Allocation Status Card -->
+                        <div class="col-lg-6 mb-4">
+                            <div class="card h-100">
+                                <div class="card-header bg-light">
+                                    <h5 class="card-title mb-0">
+                                        <i class="fas fa-user-hard-hat me-2"></i>Worker Allocation Status
                                     </h5>
                                 </div>
                                 <div class="card-body">
                                     <?php
-                                    // Check if constructor is already assigned via workerallocation
-                                    $constructor_sql = "SELECT wa.workerid, s.sname, s.stel, s.semail 
+                                    // Check for all workers assigned to this order
+                                    $workers_sql = "SELECT w.name, wa.status, wa.allocation_date 
                                                    FROM workerallocation wa 
                                                    JOIN Worker w ON wa.workerid = w.workerid 
-                                                   JOIN Supplier s ON w.supplierid = s.supplierid
                                                    WHERE wa.orderid = ? AND wa.status != 'Cancelled' 
-                                                   LIMIT 1";
-                                    $constructor_stmt = mysqli_prepare($mysqli, $constructor_sql);
-                                    mysqli_stmt_bind_param($constructor_stmt, "i", $orderid);
-                                    mysqli_stmt_execute($constructor_stmt);
-                                    $constructor_result = mysqli_stmt_get_result($constructor_stmt);
-                                    $constructor_row = mysqli_fetch_assoc($constructor_result);
-                                    mysqli_stmt_close($constructor_stmt);
+                                                   ORDER BY wa.allocation_date DESC";
+                                    $workers_stmt = mysqli_prepare($mysqli, $workers_sql);
+                                    mysqli_stmt_bind_param($workers_stmt, "i", $orderid);
+                                    mysqli_stmt_execute($workers_stmt);
+                                    $workers_result = mysqli_stmt_get_result($workers_stmt);
+                                    $assigned_workers = mysqli_fetch_all($workers_result, MYSQLI_ASSOC);
+                                    mysqli_stmt_close($workers_stmt);
 
-                                    if (!empty($constructor_row['workerid'])):
-                                        $cons_info = $constructor_row;
-                                        ?>
-                                        <div class="alert alert-info mb-3">
-                                            <strong>Constructor Assigned:</strong>
-                                            <?php echo htmlspecialchars($cons_info['sname'] ?? 'Unknown'); ?>
-                                            <br><small>Contact: <?php echo htmlspecialchars($cons_info['stel'] ?? '—'); ?> |
-                                                <?php echo htmlspecialchars($cons_info['semail'] ?? '—'); ?></small>
+                                    if (!empty($assigned_workers)): ?>
+                                        <div class="table-responsive">
+                                            <table class="table table-sm">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Worker Name</th>
+                                                        <th>Status</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <?php foreach ($assigned_workers as $w): ?>
+                                                        <tr>
+                                                            <td><?php echo htmlspecialchars($w['name']); ?></td>
+                                                            <td><span class="badge bg-info"><?php echo htmlspecialchars($w['status']); ?></span></td>
+                                                        </tr>
+                                                    <?php endforeach; ?>
+                                                </tbody>
+                                            </table>
                                         </div>
                                     <?php else: ?>
-                                        <form method="post" class="mb-0">
-                                            <input type="hidden" name="auto_assign_constructor" value="1">
-                                            <button type="submit" class="btn btn-primary w-100">
-                                                <i class="fas fa-magic me-2"></i>Auto Assign Constructor
-                                            </button>
-                                        </form>
+                                        <div class="alert alert-warning mb-0">
+                                            <i class="fas fa-clock me-2"></i>Waiting for supplier to allocate workers.
+                                        </div>
                                     <?php endif; ?>
                                 </div>
                             </div>

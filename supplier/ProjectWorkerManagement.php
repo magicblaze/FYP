@@ -13,29 +13,42 @@ if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'supplier') {
 $user = $_SESSION['user'];
 $supplier_id = $user['supplierid'];
 
+// Handle Accept/Reject Assignment
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['handle_assignment'])) {
+    $order_id = intval($_POST['order_id']);
+    $action = $_POST['action']; // 'Accepted' or 'Rejected'
+    
+    if (in_array($action, ['Accepted', 'Rejected'])) {
+        $update_sql = "UPDATE `Order` SET supplier_status = ? WHERE orderid = ? AND supplierid = ?";
+        $update_stmt = mysqli_prepare($mysqli, $update_sql);
+        mysqli_stmt_bind_param($update_stmt, "sii", $action, $order_id, $supplier_id);
+        mysqli_stmt_execute($update_stmt);
+        mysqli_stmt_close($update_stmt);
+        header("Location: ProjectWorkerManagement.php");
+        exit();
+    }
+}
+
 // Fetch all projects (orders) that contain this supplier's products
 $projects_sql = "
     SELECT DISTINCT 
         o.orderid,
         o.odate,
         o.ostatus,
+        o.supplier_status,
         c.cname as client_name,
         c.cemail,
         c.address,
-        COUNT(DISTINCT od.productid) as product_count,
-        COUNT(DISTINCT wa.workerid) as allocated_workers
+        (SELECT COUNT(DISTINCT od2.productid) FROM `OrderDelivery` od2 JOIN `Product` p2 ON od2.productid = p2.productid WHERE od2.orderid = o.orderid AND p2.supplierid = ?) as product_count,
+        (SELECT COUNT(DISTINCT wa.workerid) FROM `workerallocation` wa JOIN `Worker` w ON wa.workerid = w.workerid WHERE wa.orderid = o.orderid AND w.supplierid = ?) as allocated_workers
     FROM `Order` o
     JOIN Client c ON o.clientid = c.clientid
-    JOIN OrderDelivery od ON o.orderid = od.orderid
-    JOIN Product p ON od.productid = p.productid
-    LEFT JOIN workerallocation wa ON o.orderid = wa.orderid
-    WHERE p.supplierid = ?
-    GROUP BY o.orderid
+    WHERE o.supplierid = ?
     ORDER BY o.odate DESC
 ";
 
 $projects_stmt = mysqli_prepare($mysqli, $projects_sql);
-mysqli_stmt_bind_param($projects_stmt, "i", $supplier_id);
+mysqli_stmt_bind_param($projects_stmt, "iii", $supplier_id, $supplier_id, $supplier_id);
 mysqli_stmt_execute($projects_stmt);
 $projects_result = mysqli_stmt_get_result($projects_stmt);
 $projects = [];
@@ -48,18 +61,15 @@ mysqli_stmt_close($projects_stmt);
 $stats_sql = "
     SELECT 
         COUNT(DISTINCT o.orderid) as total_projects,
-        COUNT(DISTINCT wa.workerid) as total_allocated_workers,
-        COUNT(DISTINCT w.workerid) as total_available_workers
+        (SELECT COUNT(DISTINCT wa.workerid) FROM `workerallocation` wa JOIN `Worker` w ON wa.workerid = w.workerid WHERE w.supplierid = ?) as total_allocated_workers,
+        (SELECT COUNT(DISTINCT w.workerid) FROM `Worker` w WHERE w.supplierid = ?) as total_available_workers
     FROM `Order` o
-    JOIN OrderDelivery od ON o.orderid = od.orderid
-    JOIN Product p ON od.productid = p.productid
-    LEFT JOIN workerallocation wa ON o.orderid = wa.orderid
-    JOIN Worker w ON w.supplierid = ?
-    WHERE p.supplierid = ?
+    JOIN Design d ON o.designid = d.designid
+    WHERE d.supplierid = ?
 ";
 
 $stats_stmt = mysqli_prepare($mysqli, $stats_sql);
-mysqli_stmt_bind_param($stats_stmt, "ii", $supplier_id, $supplier_id);
+mysqli_stmt_bind_param($stats_stmt, "iii", $supplier_id, $supplier_id, $supplier_id);
 mysqli_stmt_execute($stats_stmt);
 $stats = mysqli_fetch_assoc(mysqli_stmt_get_result($stats_stmt));
 mysqli_stmt_close($stats_stmt);
@@ -397,9 +407,25 @@ mysqli_stmt_close($workers_stmt);
                     <?php endif; ?>
 
                     <div class="action-buttons">
-                        <a href="WorkerAllocation.php?orderid=<?= $project['orderid'] ?>" class="btn-allocate">
-                            <i class="fas fa-users"></i>Manage Workers
-                        </a>
+                        <?php if ($project['supplier_status'] === 'Pending'): ?>
+                            <div class="mb-2 small text-muted"><i class="fas fa-info-circle me-1"></i>New Constructor Assignment</div>
+                            <form method="POST" class="d-inline">
+                                <input type="hidden" name="handle_assignment" value="1">
+                                <input type="hidden" name="order_id" value="<?= $project['orderid'] ?>">
+                                <button type="submit" name="action" value="Accepted" class="btn btn-success btn-sm me-2">
+                                    <i class="fas fa-check me-1"></i>Accept Assignment
+                                </button>
+                                <button type="submit" name="action" value="Rejected" class="btn btn-danger btn-sm">
+                                    <i class="fas fa-times me-1"></i>Reject
+                                </button>
+                            </form>
+                        <?php elseif ($project['supplier_status'] === 'Accepted'): ?>
+                            <a href="WorkerAllocation.php?orderid=<?= $project['orderid'] ?>" class="btn-allocate">
+                                <i class="fas fa-users"></i>Manage Workers
+                            </a>
+                        <?php else: ?>
+                            <span class="badge bg-danger">Assignment Rejected</span>
+                        <?php endif; ?>
                     </div>
                 </div>
             <?php endforeach; ?>

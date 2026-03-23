@@ -176,7 +176,7 @@ CREATE TABLE `Design` (
   CONSTRAINT `supplierid_pk` FOREIGN KEY (`supplierid`) REFERENCES `Supplier` (`supplierid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-INSERT INTO `Design` (`designid`,`designName`,`expect_price`,`description`,`tag`,`likes`,`designerid`) VALUES
+INSERT INTO `Design` (`designid`,`designName`,`expect_price`,`description`,`tag`,`likes`,`designerid`,`supplierid`) VALUES
 (1, 'Modern Full House Design', 1200000 , 'A modern full house design','full house,modern','200',1,1),
 (2, 'Minimalist Kitchen Remodel Design', 600000, 'A minimalist kitchen remodel design','kitchen remodel,minimalist','20',1,2),
 (3, 'Cozy Living Room Design', 800000, 'A cozy living room design','living room,cozy','50',2,1),
@@ -239,21 +239,25 @@ CREATE TABLE `Order` (
   `gross_floor_area` decimal(10,2) DEFAULT NULL,
   `Requirements` varchar(255) DEFAULT NULL,
   `designid` int NOT NULL,
-  `ostatus` ENUM('waiting confirm', 'designing', 'reviewing design proposal', 'waiting for review design', 'drafting 2nd proposal', 'waiting client review', 'waiting client payment', 'complete', 'rejected','preparing','waiting for selection') DEFAULT 'waiting confirm',
+  `ostatus` ENUM('waiting confirm', 'designing', 'reviewing design proposal', 'waiting for review design', 'drafting 2nd proposal', 'waiting client review', 'waiting 2nd design phase payment', 'waiting final design phase payment' , 'waiting 1st construction phase payment', 'complete', 'rejected','preparing') DEFAULT 'waiting confirm',
   `designedPicture` VARCHAR(500) DEFAULT NULL,
+  `supplierid` int DEFAULT NULL,
+  `supplier_status` ENUM('Pending', 'Accepted', 'Rejected') DEFAULT 'Pending',
   PRIMARY KEY (`orderid`),
   KEY `clientid_pk_idx` (`clientid`),
   KEY `designid_pk_idx` (`designid`),
   KEY `payment_id_idx` (`payment_id`),
+  KEY `supplierid_order_idx` (`supplierid`),
   CONSTRAINT `clientid_pk` FOREIGN KEY (`clientid`) REFERENCES `Client` (`clientid`),
   CONSTRAINT `designid_pk` FOREIGN KEY (`designid`) REFERENCES `Design` (`designid`),
-  CONSTRAINT `fk_order_payment_id` FOREIGN KEY (`payment_id`) REFERENCES `OrderPayment` (`payment_id`) ON DELETE SET NULL
+  CONSTRAINT `fk_order_payment_id` FOREIGN KEY (`payment_id`) REFERENCES `OrderPayment` (`payment_id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_order_supplier` FOREIGN KEY (`supplierid`) REFERENCES `Supplier` (`supplierid`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 INSERT INTO `Order`
-(`orderid`, `odate`, `clientid`, `budget`, `deposit`, `cost`, `gross_floor_area`, `Requirements`,`designid`,`ostatus`,`designedPicture`) VALUES
-(1, '2025-04-12 17:50:00', 1, 500000, 2000.00, NULL, NULL, 'abc',2,'designing',NULL),
-(2, '2025-05-10 12:00:00', 2, 500000, 2000.00, NULL, NULL, 'abc',1,'complete',NULL);
+(`orderid`, `odate`, `clientid`, `budget`, `deposit`, `cost`, `gross_floor_area`, `Requirements`,`designid`,`ostatus`,`designedPicture`,`supplierid`,`supplier_status`) VALUES
+(1, '2025-04-12 17:50:00', 1, 500000, 2000.00, NULL, NULL, 'abc',2,'designing',NULL,NULL,NULL),
+(2, '2025-05-10 12:00:00', 2, 500000, 2000.00, NULL, NULL, 'abc',1,'complete',NULL,NULL,NULL);
 
 CREATE TABLE `OrderPayment` (
   `payment_id` INT NOT NULL AUTO_INCREMENT,

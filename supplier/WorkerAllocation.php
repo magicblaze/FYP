@@ -19,17 +19,14 @@ if ($order_id == 0) {
     die("Invalid Order ID");
 }
 
-// Verify if this supplier has products in this order
-$check_order_sql = "SELECT DISTINCT od.orderid 
-                    FROM `OrderDelivery` od 
-                    JOIN `Product` p ON od.productid = p.productid 
-                    WHERE od.orderid = ? AND p.supplierid = ?";
+// Verify if this supplier is assigned to this order and has accepted it
+$check_order_sql = "SELECT orderid FROM `Order` WHERE orderid = ? AND supplierid = ? AND supplier_status = 'Accepted'";
 $check_order_stmt = mysqli_prepare($mysqli, $check_order_sql);
 mysqli_stmt_bind_param($check_order_stmt, "ii", $order_id, $supplier_id);
 mysqli_stmt_execute($check_order_stmt);
 $check_order_result = mysqli_stmt_get_result($check_order_stmt);
 if (mysqli_num_rows($check_order_result) == 0) {
-    die("Access Denied: You do not have any products in this order.");
+    die("Access Denied: You must accept the assignment before allocating workers.");
 }
 mysqli_stmt_close($check_order_stmt);
 
