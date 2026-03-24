@@ -63,8 +63,8 @@ CREATE TABLE `Client` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 INSERT INTO `Client` (`clientid`,`cname`,`ctel`,`cemail`,`cpassword`,`address`,`budget`,`Floor_Plan`,`payment_method`,`remember_token`) VALUES
-(1, 'Alex Wong', 21232123, 'u3952310@gmail.com', 'User12345', 'ABC Building', 50000, null, null, NULL),
-(2, 'Tina Chan', 12345678, 'abc321@gmail.com', '123456', '123 Building', 70000, null, null, NULL);
+(1, 'Alex Wong', 21232123, 'u3952310@gmail.com', 'User12345', 'Cheerful Technology Limited', 50000, null, null, NULL),
+(2, 'Tina Chan', 12345678, 'abc321@gmail.com', '123456', 'Build King Construction Limited', 70000, null, null, NULL);
 
 -- Manager table
 CREATE TABLE `Manager` (
@@ -99,8 +99,8 @@ CREATE TABLE `Contractors` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 INSERT INTO `Contractors` (`contractorid`,`cname`,`ctel`,`cemail`,`cpassword`,`price`,`introduction`,`certification`,`managerid`,`remember_token`) VALUES
-(1, 'abc Contractors company', 12312312, 'abc123@gmail.com', 'Contractors12345',600,'welcome abc Contractors company!!',null,1, NULL),
-(2, '123 Contractors company', 12301230, 'abc@gmail.com', '12345678',700,null,null,2, NULL);
+(1, 'Cheerful Technology Limited', 12312312, 'abc123@gmail.com', 'Contractors12345',600,'welcome Cheerful Technology Limited!!',null,1, NULL),
+(2, 'Build King Construction Limited', 12301230, 'abc@gmail.com', '12345678',700,null,null,2, NULL);
 
 -- Worker table
 CREATE TABLE `Worker` (
@@ -157,8 +157,8 @@ CREATE TABLE `Supplier` (
 
 -- IMPORTANT: Updated password for ID 1 to '123456' to match your testing
 INSERT INTO `Supplier` (`supplierid`,`sname`,`stel`,`semail`,`spassword`,`remember_token`) VALUES
-(1, 'ABC Company', 12312312, 'abc1234@gmail.com', '123456', NULL),
-(2, '123 Company', 12301230, '12345123@gmail.com', '12345678', NULL);
+(1, 'Cheerful Technology Limited', 12312312, 'abc1234@gmail.com', '123456', NULL),
+(2, 'Build King Construction Limited', 12301230, '12345123@gmail.com', '12345678', NULL);
 
 -- Design table
 CREATE TABLE `Design` (
@@ -256,8 +256,8 @@ CREATE TABLE `Order` (
 
 INSERT INTO `Order`
 (`orderid`, `odate`, `clientid`, `budget`, `deposit`, `cost`, `gross_floor_area`, `Requirements`,`designid`,`ostatus`,`designedPicture`,`supplierid`,`supplier_status`) VALUES
-(1, '2025-04-12 17:50:00', 1, 500000, 2000.00, NULL, NULL, 'abc',2,'designing',NULL,NULL,NULL),
-(2, '2025-05-10 12:00:00', 2, 500000, 2000.00, NULL, NULL, 'abc',1,'complete',NULL,NULL,NULL);
+(1, '2025-04-12 17:50:00', 1, 500000, 2000.00, NULL, NULL, 'HappyBuild Builders',2,'designing',NULL,NULL,NULL),
+(2, '2025-05-10 12:00:00', 2, 500000, 2000.00, NULL, NULL, 'ProThink Constructs',1,'complete',NULL,NULL,NULL);
 
 CREATE TABLE `OrderPayment` (
   `payment_id` INT NOT NULL AUTO_INCREMENT,
@@ -395,7 +395,22 @@ INSERT INTO `ProductColorImage` (`id`, `productid`, `color`, `image`) VALUES
 (6, 3, 'White', 'brick.jpg'),
 (7, 5, 'Transparent', 'glass.jpg'),
 (8, 6, 'Brown', 'table.jpg'),
-(9, 6, 'White', 'table_white.jpg');
+(9, 6, 'White', 'table_white.jpg'),
+(10, 3, 'Alabaster', 'Alabaster.jpg'),
+(11, 3, 'Avondale', 'Avondale.jpg'),
+(12, 3, 'CedarCreek', 'CedarCreek.jpg'),
+(13, 3, 'ChimneyRock', 'ChimneyRock.jpg'),
+(14, 3, 'MonteSano', 'MonteSano.jpg'),
+(15, 3, 'OldChicago', 'OldChicago.jpg'),
+(16, 3, 'OleVirginian', 'OleVirginian.jpg'),
+(17, 4, 'AmberOak', 'AmberOak.jpg'),
+(18, 4, 'BuffOak', 'BuffOak.jpg'),
+(19, 4, 'CarshireOak', 'CarshireOak.jpg'),
+(20, 4, 'FawnOak', 'FawnOak.jpg'),
+(21, 4, 'HazelOak', 'HazelOak.jpg'),
+(22, 4, 'RussetOak', 'RussetOak.jpg'),
+(23, 4, 'TesdalOak', 'TesdalOak.jpg'),
+(24, 4, 'Wood_BronzeOak', 'Wood_BronzeOak.jpg');
 
 -- OrderDelivery table
 CREATE TABLE `OrderDelivery` (
