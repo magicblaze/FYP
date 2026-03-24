@@ -1158,7 +1158,7 @@ foreach ($orders as $o) {
                                 <h6 style="margin-bottom: 1rem;"><i class="fas fa-plus-circle me-2"></i>Add New Reference</h6>
                                 <div class="form-group">
                                     <label>Material / Product</label>
-                                    <select id="refProductId_<?= $order['orderid'] ?>">
+                                    <select id="refProductId_<?= $order['orderid'] ?>" onchange="updateColorDropdown(<?= $order['orderid'] ?>)">
                                         <option value="">-- Select a product --</option>
                                         <?= $productOptionsHtml ?>
                                     </select>
@@ -1167,6 +1167,16 @@ foreach ($orders as $o) {
                                             <i class="fas fa-thumbs-up me-1"></i>Pick from liked items
                                         </button>
                                     </div>
+                                </div>
+                                <div class="form-group">
+                                    <label>Color (optional)</label>
+                                    <select id="refColor_<?= $order['orderid'] ?>">
+                                        <option value="">-- Select a color --</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Quantity (optional)</label>
+                                    <input type="number" id="refQuantity_<?= $order['orderid'] ?>" placeholder="Enter quantity" min="1" style="width:100%;padding:0.5rem;border:1px solid #ddd;border-radius:4px;">
                                 </div>
                                 <div class="form-group">
                                     <label>Note (optional)</label>
@@ -1195,7 +1205,7 @@ foreach ($orders as $o) {
                                 <h6 style="margin-bottom: 1rem;"><i class="fas fa-plus-circle me-2"></i>Add New Reference</h6>
                                 <div class="form-group">
                                     <label>Material / Product</label>
-                                    <select id="refProductId_<?= $order['orderid'] ?>">
+                                    <select id="refProductId_<?= $order['orderid'] ?>" onchange="updateColorDropdown(<?= $order['orderid'] ?>)">
                                         <option value="">-- Select a product --</option>
                                         <?= $productOptionsHtml ?>
                                     </select>
@@ -1204,6 +1214,16 @@ foreach ($orders as $o) {
                                             <i class="fas fa-thumbs-up me-1"></i>Pick from liked items
                                         </button>
                                     </div>
+                                </div>
+                                <div class="form-group">
+                                    <label>Color (optional)</label>
+                                    <select id="refColor_<?= $order['orderid'] ?>">
+                                        <option value="">-- Select a color --</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Quantity (optional)</label>
+                                    <input type="number" id="refQuantity_<?= $order['orderid'] ?>" placeholder="Enter quantity" min="1" style="width:100%;padding:0.5rem;border:1px solid #ddd;border-radius:4px;">
                                 </div>
                                 <div class="form-group">
                                     <label>Note (optional)</label>
@@ -1651,6 +1671,32 @@ foreach ($orders as $o) {
         }
 
         // Reference management functions
+        function updateColorDropdown(orderId) {
+            const productSelect = document.getElementById('refProductId_' + orderId);
+            const colorSelect = document.getElementById('refColor_' + orderId);
+            if (!productSelect || !colorSelect) return;
+
+            const productId = productSelect.value.trim();
+            colorSelect.innerHTML = '<option value="">-- Select a color --</option>';
+            
+            if (!productId) return;
+
+            // Fetch available colors for this product
+            fetch('../api/get_product_colors.php?productid=' + productId)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.colors && Array.isArray(data.colors)) {
+                        data.colors.forEach(color => {
+                            const opt = document.createElement('option');
+                            opt.value = color.color;
+                            opt.textContent = color.color;
+                            colorSelect.appendChild(opt);
+                        });
+                    }
+                })
+                .catch(err => console.error('Error loading colors:', err));
+        }
+
         function toggleReferenceEdit(orderId, show) {
             const form = document.getElementById('addRefForm_' + orderId);
             if (!form) return;
@@ -1661,6 +1707,10 @@ foreach ($orders as $o) {
                 // Clear form
                 const productSelect = document.getElementById('refProductId_' + orderId);
                 if (productSelect) productSelect.value = '';
+                const colorSelect = document.getElementById('refColor_' + orderId);
+                if (colorSelect) colorSelect.value = '';
+                const quantityInput = document.getElementById('refQuantity_' + orderId);
+                if (quantityInput) quantityInput.value = '';
                 document.getElementById('refNote_' + orderId).value = '';
             }
         }
@@ -1669,6 +1719,8 @@ foreach ($orders as $o) {
             const productId = (productIdOverride !== null)
                 ? String(productIdOverride).trim()
                 : document.getElementById('refProductId_' + orderId).value.trim();
+            const color = document.getElementById('refColor_' + orderId).value.trim();
+            const quantity = document.getElementById('refQuantity_' + orderId).value.trim();
             const note = (noteOverride !== null)
                 ? String(noteOverride).trim()
                 : document.getElementById('refNote_' + orderId).value.trim();
@@ -1685,6 +1737,8 @@ foreach ($orders as $o) {
                     action: 'add',
                     orderid: orderId,
                     productid: productId ? parseInt(productId) : null,
+                    color: color || null,
+                    quantity: quantity ? parseInt(quantity) : null,
                     note: note
                 })
             })
@@ -1710,11 +1764,15 @@ foreach ($orders as $o) {
 
         function queueReference(orderId) {
             const select = document.getElementById('refProductId_' + orderId);
+            const colorSelect = document.getElementById('refColor_' + orderId);
+            const quantityInput = document.getElementById('refQuantity_' + orderId);
             const noteInput = document.getElementById('refNote_' + orderId);
             const pendingBox = document.getElementById('pendingRefs_' + orderId);
             if (!select || !pendingBox) return;
 
             const productId = select.value.trim();
+            const color = colorSelect ? colorSelect.value.trim() : '';
+            const quantity = quantityInput ? quantityInput.value.trim() : '';
             const note = noteInput ? noteInput.value.trim() : '';
             if (!productId) {
                 alert('Please select a material or product');
@@ -1723,16 +1781,22 @@ foreach ($orders as $o) {
 
             if (!pendingReferences[orderId]) pendingReferences[orderId] = [];
             const option = select.options[select.selectedIndex];
-            pendingReferences[orderId].push({ productId, note, label: option ? option.textContent : 'Product' });
+            pendingReferences[orderId].push({ productId, color, quantity, note, label: option ? option.textContent : 'Product' });
 
             if (pendingBox) {
                 const item = document.createElement('div');
                 item.className = 'small text-muted';
-                item.textContent = `Pending: ${option ? option.textContent : productId}${note ? ' — ' + note : ''}`;
+                let details = `${option ? option.textContent : productId}`;
+                if (color) details += ` — Color: ${color}`;
+                if (quantity) details += ` — Qty: ${quantity}`;
+                if (note) details += ` — ${note}`;
+                item.textContent = `Pending: ${details}`;
                 pendingBox.appendChild(item);
             }
 
             select.value = '';
+            if (colorSelect) colorSelect.value = '';
+            if (quantityInput) quantityInput.value = '';
             if (noteInput) noteInput.value = '';
         }
 

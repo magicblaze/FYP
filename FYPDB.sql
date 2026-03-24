@@ -789,6 +789,17 @@ ALTER TABLE `Order` ADD COLUMN `deposit_amount` DECIMAL(10,2) DEFAULT 0.00 AFTER
 ALTER TABLE `Order` ADD COLUMN `final_payment` DECIMAL(10,2) DEFAULT 0.00 AFTER `deposit_amount`;
 
 UPDATE `Order` SET `deposit_amount` = `budget` * 0.25 WHERE `deposit_amount` = 0 OR `deposit_amount` IS NULL;
+-- Database Update: Add color and quantity to OrderReference table
+-- This script adds support for storing product color and quantity selections in order references
+ALTER TABLE `OrderReference` 
+ADD COLUMN `color` VARCHAR(100) DEFAULT NULL AFTER `productid`,
+ADD COLUMN `quantity` INT DEFAULT NULL AFTER `color`;
+
+-- Add indexes for better query performance
+ALTER TABLE `OrderReference`
+ADD INDEX `idx_color` (`color`),
+ADD INDEX `idx_quantity` (`quantity`);
+
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
 /*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;

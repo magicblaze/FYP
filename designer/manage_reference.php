@@ -35,6 +35,8 @@ try {
 
         $orderId = intval($data['orderid']);
         $productId = !empty($data['productid']) ? intval($data['productid']) : null;
+        $color = !empty($data['color']) ? trim($data['color']) : null;
+        $quantity = !empty($data['quantity']) ? intval($data['quantity']) : null;
         $note = !empty($data['note']) ? trim($data['note']) : null;
 
         if (empty($productId)) {
@@ -64,14 +66,14 @@ try {
 
         // Add the reference
         $insertSQL = "
-            INSERT INTO OrderReference (orderid, productid, note, added_by_type, added_by_id, created_at)
-            VALUES (?, ?, ?, 'designer', ?, NOW())
+            INSERT INTO OrderReference (orderid, productid, color, quantity, note, added_by_type, added_by_id, created_at)
+            VALUES (?, ?, ?, ?, ?, 'designer', ?, NOW())
         ";
         $stmt = $mysqli->prepare($insertSQL);
         if (!$stmt) {
             throw new Exception('Prepare failed: ' . $mysqli->error);
         }
-        $stmt->bind_param("iisi", $orderId, $productId, $note, $designerId);
+        $stmt->bind_param("iisii", $orderId, $productId, $color, $quantity, $designerId);
         if (!$stmt->execute()) {
             throw new Exception('Execute failed: ' . $stmt->error);
         }
