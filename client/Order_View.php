@@ -55,10 +55,30 @@ $payment = [
 $commission_total = $payment['commission_1st'] + $payment['commission_final'];
 $constructor_cost = $payment['inspection_fee'] + $payment['contractor_fee'];
 
-// Fetch order references
+// Fetch order references (schema-safe: supports DBs without color/quantity columns yet)
+$hasRefColor = false;
+$hasRefQuantity = false;
+
+$refColorRes = mysqli_query($mysqli, "SHOW COLUMNS FROM `OrderReference` LIKE 'color'");
+if ($refColorRes) {
+    $hasRefColor = (mysqli_num_rows($refColorRes) > 0);
+    mysqli_free_result($refColorRes);
+}
+
+$refQuantityRes = mysqli_query($mysqli, "SHOW COLUMNS FROM `OrderReference` LIKE 'quantity'");
+if ($refQuantityRes) {
+    $hasRefQuantity = (mysqli_num_rows($refQuantityRes) > 0);
+    mysqli_free_result($refQuantityRes);
+}
+
+$refColorSelect = $hasRefColor ? 'orr.color' : 'NULL AS color';
+$refQuantitySelect = $hasRefQuantity ? 'orr.quantity' : 'NULL AS quantity';
+
 $ref_sql = "SELECT 
                 orr.id, 
                 orr.productid,
+                {$refColorSelect},
+                {$refQuantitySelect},
                 orr.status,
                 orr.price,
                 orr.note,
@@ -531,7 +551,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <!-- Product Reference Status Table -->
         <?php if (!empty($references)): ?>
             <div class="row mb-4">
-                <div class="col-12">
+                <div class="col-12">    
                     <div class="card">
                         <div class="card-header">
                             <h5 class="card-title mb-0">
@@ -547,6 +567,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                             <th>Category</th>
                                             <th>Status</th>
                                             <th>Requested Price</th>
+                                            <th>Color</th>
+                                            <th>Quantity</th>
                                             <th>Note</th>
                                         </tr>
                                     </thead>
@@ -570,6 +592,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                                         class="badge <?php echo $badgeClass; ?>"><?php echo $refStatus === 'waiting confirm' ? 'Request Confirm' : htmlspecialchars($refStatus); ?></span>
                                                 </td>
                                                 <td>HK$<?php echo number_format($displayPrice, 2); ?></td>
+                                                <td><?php echo htmlspecialchars($ref['color'] ?? '—'); ?></td>
+                                                <td><?php echo (isset($ref['quantity']) && $ref['quantity'] !== null && $ref['quantity'] !== '') ? (int) $ref['quantity'] : '—'; ?></td>
                                                 <td><?php echo htmlspecialchars($ref['note'] ?? '—'); ?></td>
                                             </tr>
                                         <?php endforeach; ?>

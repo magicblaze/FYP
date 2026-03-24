@@ -72,10 +72,30 @@ $is_design_confirmed = in_array(strtolower($order['ostatus'] ?? ''), ['waiting p
 // 获取当前状态
 $current_status = strtolower($order['ostatus'] ?? '');
 
-// Fetch order references
+// Fetch order references (schema-safe: supports DBs without color/quantity columns yet)
+$hasRefColor = false;
+$hasRefQuantity = false;
+
+$refColorRes = mysqli_query($mysqli, "SHOW COLUMNS FROM `OrderReference` LIKE 'color'");
+if ($refColorRes) {
+    $hasRefColor = (mysqli_num_rows($refColorRes) > 0);
+    mysqli_free_result($refColorRes);
+}
+
+$refQuantityRes = mysqli_query($mysqli, "SHOW COLUMNS FROM `OrderReference` LIKE 'quantity'");
+if ($refQuantityRes) {
+    $hasRefQuantity = (mysqli_num_rows($refQuantityRes) > 0);
+    mysqli_free_result($refQuantityRes);
+}
+
+$refColorSelect = $hasRefColor ? 'orr.color' : 'NULL AS color';
+$refQuantitySelect = $hasRefQuantity ? 'orr.quantity' : 'NULL AS quantity';
+
 $ref_sql = "SELECT 
                 orr.id, 
                 orr.productid,
+                {$refColorSelect},
+                {$refQuantitySelect},
                 orr.status,
                 orr.price,
                 orr.note,
@@ -182,10 +202,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             if ($check['cnt'] == 0) {
                 // Insert into OrderDelivery
                 $productid = (int) $ref['productid'];
-                $qty = 1;
+                $qty = (isset($ref['quantity']) && $ref['quantity'] !== null && (int) $ref['quantity'] > 0) ? (int) $ref['quantity'] : 1;
                 $status = 'Pending';
                 $date = null;
-                $color = null;
+                $color = isset($ref['color']) ? $ref['color'] : null;
                 $insert_sql = "INSERT INTO OrderDelivery (productid, quantity, orderid, deliverydate, status, managerid, color, rid) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
                 $insert_stmt = mysqli_prepare($mysqli, $insert_sql);
                 mysqli_stmt_bind_param($insert_stmt, "iiissisi", $productid, $qty, $orderid, $date, $status, $user_id, $color, $reference_id);
@@ -420,9 +440,28 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             foreach ($_POST['ref'] as $refId => $payload) {
                 $rid = (int) $refId;
                 $newPrice = isset($payload['price']) ? (float) $payload['price'] : null;
-                $update_ref_sql = "UPDATE `OrderReference` SET price = ?, status = 'waiting confirm' WHERE id = ? AND orderid = ?";
-                $update_ref_stmt = mysqli_prepare($mysqli, $update_ref_sql);
-                mysqli_stmt_bind_param($update_ref_stmt, "dii", $newPrice, $rid, $orderid);
+                $newColor = isset($payload['color']) ? trim((string) $payload['color']) : null;
+                $newQty = isset($payload['quantity']) && $payload['quantity'] !== '' ? (int) $payload['quantity'] : null;
+                $newNote = isset($payload['note']) ? trim((string) $payload['note']) : null;
+
+                if ($hasRefColor && $hasRefQuantity) {
+                    $update_ref_sql = "UPDATE `OrderReference` SET price = ?, color = ?, quantity = ?, note = ?, status = 'waiting confirm' WHERE id = ? AND orderid = ?";
+                    $update_ref_stmt = mysqli_prepare($mysqli, $update_ref_sql);
+                    mysqli_stmt_bind_param($update_ref_stmt, "dsisii", $newPrice, $newColor, $newQty, $newNote, $rid, $orderid);
+                } elseif ($hasRefColor) {
+                    $update_ref_sql = "UPDATE `OrderReference` SET price = ?, color = ?, note = ?, status = 'waiting confirm' WHERE id = ? AND orderid = ?";
+                    $update_ref_stmt = mysqli_prepare($mysqli, $update_ref_sql);
+                    mysqli_stmt_bind_param($update_ref_stmt, "dssii", $newPrice, $newColor, $newNote, $rid, $orderid);
+                } elseif ($hasRefQuantity) {
+                    $update_ref_sql = "UPDATE `OrderReference` SET price = ?, quantity = ?, note = ?, status = 'waiting confirm' WHERE id = ? AND orderid = ?";
+                    $update_ref_stmt = mysqli_prepare($mysqli, $update_ref_sql);
+                    mysqli_stmt_bind_param($update_ref_stmt, "disii", $newPrice, $newQty, $newNote, $rid, $orderid);
+                } else {
+                    $update_ref_sql = "UPDATE `OrderReference` SET price = ?, note = ?, status = 'waiting confirm' WHERE id = ? AND orderid = ?";
+                    $update_ref_stmt = mysqli_prepare($mysqli, $update_ref_sql);
+                    mysqli_stmt_bind_param($update_ref_stmt, "dsii", $newPrice, $newNote, $rid, $orderid);
+                }
+
                 mysqli_stmt_execute($update_ref_stmt);
                 mysqli_stmt_close($update_ref_stmt);
             }
@@ -1550,6 +1589,8 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                                         <th>Category</th>
                                                         <th>Status</th>
                                                         <th>Requested Price</th>
+                                                        <th>Color</th>
+                                                        <th>Quantity</th>
                                                         <th>Note</th>
                                                     </tr>
                                                 </thead>
@@ -1581,6 +1622,12 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                                                 <?php echo number_format($displayPrice, 2); ?>
                                                             </td>
                                                             <td>
+                                                                <?php echo htmlspecialchars($ref['color'] ?? '—'); ?>
+                                                            </td>
+                                                            <td>
+                                                                <?php echo (isset($ref['quantity']) && $ref['quantity'] !== null && $ref['quantity'] !== '') ? (int) $ref['quantity'] : '—'; ?>
+                                                            </td>
+                                                            <td>
                                                                 <?php echo htmlspecialchars($ref['note'] ?? '—'); ?>
                                                             </td>
                                                         </tr>
@@ -1606,6 +1653,8 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                                         <tr>
                                                             <th>Product</th>
                                                             <th>Requested Price</th>
+                                                            <th>Color</th>
+                                                            <th>Quantity</th>
                                                             <th>Note</th>
                                                         </tr>
                                                     </thead>
@@ -1624,7 +1673,25 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                                                         value="<?php echo htmlspecialchars(number_format($displayPrice, 2, '.', '')); ?>">
                                                                 </td>
                                                                 <td>
-                                                                    <?php echo htmlspecialchars($ref['note'] ?? '—'); ?>
+                                                                    <input type="text"
+                                                                        class="form-control form-control-sm"
+                                                                        name="ref[<?php echo (int) $ref['id']; ?>][color]"
+                                                                        value="<?php echo htmlspecialchars($ref['color'] ?? ''); ?>"
+                                                                        placeholder="e.g. Grey">
+                                                                </td>
+                                                                <td>
+                                                                    <input type="number" min="1"
+                                                                        class="form-control form-control-sm"
+                                                                        name="ref[<?php echo (int) $ref['id']; ?>][quantity]"
+                                                                        value="<?php echo (isset($ref['quantity']) && $ref['quantity'] !== null && $ref['quantity'] !== '') ? (int) $ref['quantity'] : ''; ?>"
+                                                                        placeholder="Qty">
+                                                                </td>
+                                                                <td>
+                                                                    <input type="text"
+                                                                        class="form-control form-control-sm"
+                                                                        name="ref[<?php echo (int) $ref['id']; ?>][note]"
+                                                                        value="<?php echo htmlspecialchars($ref['note'] ?? ''); ?>"
+                                                                        placeholder="Note">
                                                                 </td>
                                                             </tr>
                                                         <?php endforeach; ?>
@@ -1829,6 +1896,8 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                                     <th>Category</th>
                                                     <th>Requested Price</th>
                                                     <th>Status</th>
+                                                    <th>Color</th>
+                                                    <th>Quantity</th>
                                                     <th>Note</th>
                                                     <th>Action</th>
                                                 </tr>
@@ -1841,21 +1910,23 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                                         <td><?php echo htmlspecialchars($ref['category'] ?? '—'); ?></td>
                                                         <td>HK$<?php echo number_format(isset($ref['price']) ? $ref['price'] : (isset($ref['product_price']) ? $ref['product_price'] : 0), 2); ?>
                                                         </td>
-                                                        <td><?php echo htmlspecialchars($ref['status'] ?? '—'); ?></td>
+                                                        <td><?php echo htmlspecialchars(!empty(trim((string) ($ref['status'] ?? ''))) ? $ref['status'] : 'Pending'); ?></td>
+                                                        <td><?php echo htmlspecialchars($ref['color'] ?? '—'); ?></td>
+                                                        <td><?php echo (isset($ref['quantity']) && $ref['quantity'] !== null && $ref['quantity'] !== '') ? (int) $ref['quantity'] : '—'; ?></td>
                                                         <td><?php echo htmlspecialchars($ref['note'] ?? '—'); ?></td>
                                                         <td>
                                                             <?php
-                                                            // Check if this reference's product is already pending in OrderDelivery for this order
-                                                            $pending_sql = "SELECT COUNT(*) AS cnt FROM OrderDelivery WHERE orderid = ? AND productid = ? AND status IN ('pending', 'preparing', 'ordered')";
+                                                            // One-time placement per reference (rid)
+                                                            $pending_sql = "SELECT COUNT(*) AS cnt FROM OrderDelivery WHERE orderid = ? AND rid = ?";
                                                             $pending_stmt = mysqli_prepare($mysqli, $pending_sql);
-                                                            mysqli_stmt_bind_param($pending_stmt, "ii", $orderid, $ref['productid']);
+                                                            mysqli_stmt_bind_param($pending_stmt, "ii", $orderid, $ref['id']);
                                                             mysqli_stmt_execute($pending_stmt);
                                                             $pending_res = mysqli_stmt_get_result($pending_stmt);
                                                             $pending_row = mysqli_fetch_assoc($pending_res);
                                                             mysqli_stmt_close($pending_stmt);
                                                             if ($pending_row['cnt'] == 0):
                                                                 ?>
-                                                                <form method="post" style="display:inline-block">
+                                                                <form method="post" style="display:inline-block" onsubmit="this.querySelector('button[type=submit]').disabled=true; this.querySelector('button[type=submit]').textContent='Placing...';">
                                                                     <input type="hidden" name="place_order_reference" value="1">
                                                                     <input type="hidden" name="reference_id"
                                                                         value="<?php echo (int) $ref['id']; ?>">
@@ -1863,7 +1934,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                                                         Order</button>
                                                                 </form>
                                                             <?php else: ?>
-                                                                <span class="text-muted small">Order Pending</span>
+                                                                <span class="text-muted small">Order Placed</span>
                                                             <?php endif; ?>
                                                         </td>
                                                     </tr>

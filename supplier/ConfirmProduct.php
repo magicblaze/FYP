@@ -42,7 +42,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 }
 
 // 3. 获取数据 (包含 waiting confirm, confirmed, rejected 状态)
+$hasRefColor = false;
+$hasRefQuantity = false;
+
+$refColorRes = $mysqli->query("SHOW COLUMNS FROM `OrderReference` LIKE 'color'");
+if ($refColorRes) {
+    $hasRefColor = ($refColorRes->num_rows > 0);
+    $refColorRes->close();
+}
+
+$refQtyRes = $mysqli->query("SHOW COLUMNS FROM `OrderReference` LIKE 'quantity'");
+if ($refQtyRes) {
+    $hasRefQuantity = ($refQtyRes->num_rows > 0);
+    $refQtyRes->close();
+}
+
+$refColorSelect = $hasRefColor ? 'r.color' : 'NULL AS color';
+$refQtySelect = $hasRefQuantity ? 'r.quantity' : 'NULL AS quantity';
+
 $sql = "SELECT r.id as ref_id, r.status, r.price as ref_price, 
+               {$refColorSelect}, {$refQtySelect}, r.note,
                o.orderid, c.cname as client_name,
                p.pname, p.price as original_price, p.category
         FROM OrderReference r
@@ -151,6 +170,22 @@ $orderItems = $stmt->get_result();
                     <input type="text" id="m_pname" class="form-control bg-light" readonly>
                 </div>
 
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <label class="form-label small fw-bold">Color</label>
+                        <input type="text" id="m_color" class="form-control bg-light" readonly>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small fw-bold">Quantity</label>
+                        <input type="text" id="m_quantity" class="form-control bg-light" readonly>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Note</label>
+                    <textarea id="m_note" class="form-control bg-light" rows="2" readonly></textarea>
+                </div>
+
                 <div class="mb-4">
                     <label class="form-label small fw-bold text-primary">Price (HK$)</label>
                     <input type="number" step="0.01" name="price" id="m_price" class="form-control form-control-lg border-primary" required>
@@ -179,6 +214,9 @@ $orderItems = $stmt->get_result();
 function fillModal(data) {
     document.getElementById('m_ref_id').value = data.ref_id;
     document.getElementById('m_pname').value = data.pname;
+    document.getElementById('m_color').value = data.color ? data.color : '—';
+    document.getElementById('m_quantity').value = (data.quantity !== null && data.quantity !== undefined && data.quantity !== '') ? data.quantity : '—';
+    document.getElementById('m_note').value = data.note ? data.note : '—';
     document.getElementById('m_price').value = data.ref_price || data.original_price;
 }
 </script>

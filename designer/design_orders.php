@@ -1378,7 +1378,7 @@ foreach ($orders as $o) {
             if (pending.length) {
                 attemptMade = true;
                 for (const ref of pending) {
-                    const res = await addReference(orderId, false, ref.productId, ref.note);
+                    const res = await addReference(orderId, false, ref.productId, ref.note, ref.color, ref.quantity);
                     if (res) successCount++;
                 }
             } else if (isRefFormActive && hasSelectedProduct) {
@@ -1715,12 +1715,16 @@ foreach ($orders as $o) {
             }
         }
 
-        function addReference(orderId, shouldReload = true, productIdOverride = null, noteOverride = null) {
+        function addReference(orderId, shouldReload = true, productIdOverride = null, noteOverride = null, colorOverride = null, quantityOverride = null) {
             const productId = (productIdOverride !== null)
                 ? String(productIdOverride).trim()
                 : document.getElementById('refProductId_' + orderId).value.trim();
-            const color = document.getElementById('refColor_' + orderId).value.trim();
-            const quantity = document.getElementById('refQuantity_' + orderId).value.trim();
+            const color = (colorOverride !== null)
+                ? String(colorOverride).trim()
+                : document.getElementById('refColor_' + orderId).value.trim();
+            const quantity = (quantityOverride !== null)
+                ? String(quantityOverride).trim()
+                : document.getElementById('refQuantity_' + orderId).value.trim();
             const note = (noteOverride !== null)
                 ? String(noteOverride).trim()
                 : document.getElementById('refNote_' + orderId).value.trim();

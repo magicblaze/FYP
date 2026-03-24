@@ -64,16 +64,64 @@ try {
         }
         $stmt->close();
 
-        // Add the reference
-        $insertSQL = "
-            INSERT INTO OrderReference (orderid, productid, color, quantity, note, added_by_type, added_by_id, created_at)
-            VALUES (?, ?, ?, ?, ?, 'designer', ?, NOW())
-        ";
-        $stmt = $mysqli->prepare($insertSQL);
-        if (!$stmt) {
-            throw new Exception('Prepare failed: ' . $mysqli->error);
+        // Add the reference (schema-compatible for environments not yet migrated)
+        $hasColorCol = false;
+        $hasQuantityCol = false;
+
+        $colRes = $mysqli->query("SHOW COLUMNS FROM OrderReference LIKE 'color'");
+        if ($colRes) {
+            $hasColorCol = ($colRes->num_rows > 0);
+            $colRes->close();
         }
-        $stmt->bind_param("iisii", $orderId, $productId, $color, $quantity, $designerId);
+
+        $qtyRes = $mysqli->query("SHOW COLUMNS FROM OrderReference LIKE 'quantity'");
+        if ($qtyRes) {
+            $hasQuantityCol = ($qtyRes->num_rows > 0);
+            $qtyRes->close();
+        }
+
+        if ($hasColorCol && $hasQuantityCol) {
+            $insertSQL = "
+                INSERT INTO OrderReference (orderid, productid, color, quantity, note, added_by_type, added_by_id, created_at)
+                VALUES (?, ?, ?, ?, ?, 'designer', ?, NOW())
+            ";
+            $stmt = $mysqli->prepare($insertSQL);
+            if (!$stmt) {
+                throw new Exception('Prepare failed: ' . $mysqli->error);
+            }
+            $stmt->bind_param("iisisi", $orderId, $productId, $color, $quantity, $note, $designerId);
+        } elseif ($hasColorCol) {
+            $insertSQL = "
+                INSERT INTO OrderReference (orderid, productid, color, note, added_by_type, added_by_id, created_at)
+                VALUES (?, ?, ?, ?, 'designer', ?, NOW())
+            ";
+            $stmt = $mysqli->prepare($insertSQL);
+            if (!$stmt) {
+                throw new Exception('Prepare failed: ' . $mysqli->error);
+            }
+            $stmt->bind_param("iissi", $orderId, $productId, $color, $note, $designerId);
+        } elseif ($hasQuantityCol) {
+            $insertSQL = "
+                INSERT INTO OrderReference (orderid, productid, quantity, note, added_by_type, added_by_id, created_at)
+                VALUES (?, ?, ?, ?, 'designer', ?, NOW())
+            ";
+            $stmt = $mysqli->prepare($insertSQL);
+            if (!$stmt) {
+                throw new Exception('Prepare failed: ' . $mysqli->error);
+            }
+            $stmt->bind_param("iiisi", $orderId, $productId, $quantity, $note, $designerId);
+        } else {
+            $insertSQL = "
+                INSERT INTO OrderReference (orderid, productid, note, added_by_type, added_by_id, created_at)
+                VALUES (?, ?, ?, 'designer', ?, NOW())
+            ";
+            $stmt = $mysqli->prepare($insertSQL);
+            if (!$stmt) {
+                throw new Exception('Prepare failed: ' . $mysqli->error);
+            }
+            $stmt->bind_param("iisi", $orderId, $productId, $note, $designerId);
+        }
+
         if (!$stmt->execute()) {
             throw new Exception('Execute failed: ' . $stmt->error);
         }
