@@ -132,6 +132,121 @@ function handleFileUpload($inputName, $dir, $newName, $sql) {
 }
 
 $logoPath = ($role === 'supplier' && $id == 1) ? "../uploads/company/companylogo.jpg" : "../uploads/company/companylogo1.jpg";
+
+$designerDesigns = [];
+if ($role === 'designer') {
+    $dStmt = $mysqli->prepare("SELECT d.designid, d.designName, d.expect_price, d.likes,
+                                      (SELECT image_filename FROM DesignImage di WHERE di.designid = d.designid ORDER BY di.image_order ASC, di.imageid ASC LIMIT 1) AS image_filename
+                               FROM Design d
+                               WHERE d.designerid = ?
+                               ORDER BY d.designid DESC");
+    if ($dStmt) {
+        $dStmt->bind_param("i", $id);
+        $dStmt->execute();
+        $dResult = $dStmt->get_result();
+        while ($dRow = $dResult->fetch_assoc()) {
+            $designerDesigns[] = $dRow;
+        }
+    }
+}
+
+$managerStats = [
+    'designers' => 0,
+    'contractors' => 0,
+    'active_orders' => 0
+];
+$managerOrders = [];
+if ($role === 'manager') {
+    $st1 = $mysqli->prepare("SELECT COUNT(*) AS cnt FROM Designer WHERE managerid = ?");
+    if ($st1) {
+        $st1->bind_param("i", $id);
+        $st1->execute();
+        $r1 = $st1->get_result()->fetch_assoc();
+        $managerStats['designers'] = (int)($r1['cnt'] ?? 0);
+    }
+
+    $st2 = $mysqli->prepare("SELECT COUNT(*) AS cnt FROM Contractors WHERE managerid = ?");
+    if ($st2) {
+        $st2->bind_param("i", $id);
+        $st2->execute();
+        $r2 = $st2->get_result()->fetch_assoc();
+        $managerStats['contractors'] = (int)($r2['cnt'] ?? 0);
+    }
+
+    $st3 = $mysqli->prepare("SELECT COUNT(*) AS cnt FROM Schedule WHERE managerid = ?");
+    if ($st3) {
+        $st3->bind_param("i", $id);
+        $st3->execute();
+        $r3 = $st3->get_result()->fetch_assoc();
+        $managerStats['active_orders'] = (int)($r3['cnt'] ?? 0);
+    }
+
+    $orderStmt = $mysqli->prepare("SELECT s.orderid, o.ostatus, c.cname AS client_name, s.DesignFinishDate, s.OrderFinishDate
+                                   FROM Schedule s
+                                   JOIN `Order` o ON o.orderid = s.orderid
+                                   JOIN Client c ON c.clientid = o.clientid
+                                   WHERE s.managerid = ?
+                                   ORDER BY s.scheduleid DESC
+                                   LIMIT 6");
+    if ($orderStmt) {
+        $orderStmt->bind_param("i", $id);
+        $orderStmt->execute();
+        $orderResult = $orderStmt->get_result();
+        while ($oRow = $orderResult->fetch_assoc()) {
+            $managerOrders[] = $oRow;
+        }
+    }
+}
+
+$supplierStats = [
+    'workers' => 0,
+    'products' => 0,
+    'pending_deliveries' => 0
+];
+$supplierDeliveries = [];
+if ($role === 'supplier') {
+    $sp1 = $mysqli->prepare("SELECT COUNT(*) AS cnt FROM Worker WHERE supplierid = ?");
+    if ($sp1) {
+        $sp1->bind_param("i", $id);
+        $sp1->execute();
+        $sr1 = $sp1->get_result()->fetch_assoc();
+        $supplierStats['workers'] = (int)($sr1['cnt'] ?? 0);
+    }
+
+    $sp2 = $mysqli->prepare("SELECT COUNT(*) AS cnt FROM Product WHERE supplierid = ?");
+    if ($sp2) {
+        $sp2->bind_param("i", $id);
+        $sp2->execute();
+        $sr2 = $sp2->get_result()->fetch_assoc();
+        $supplierStats['products'] = (int)($sr2['cnt'] ?? 0);
+    }
+
+    $sp3 = $mysqli->prepare("SELECT COUNT(*) AS cnt
+                            FROM OrderDelivery od
+                            JOIN Product p ON p.productid = od.productid
+                            WHERE p.supplierid = ? AND od.status = 'Pending'");
+    if ($sp3) {
+        $sp3->bind_param("i", $id);
+        $sp3->execute();
+        $sr3 = $sp3->get_result()->fetch_assoc();
+        $supplierStats['pending_deliveries'] = (int)($sr3['cnt'] ?? 0);
+    }
+
+    $sp4 = $mysqli->prepare("SELECT od.orderid, p.pname, od.quantity, od.deliverydate, od.status
+                            FROM OrderDelivery od
+                            JOIN Product p ON p.productid = od.productid
+                            WHERE p.supplierid = ?
+                            ORDER BY od.orderdeliveryid DESC
+                            LIMIT 6");
+    if ($sp4) {
+        $sp4->bind_param("i", $id);
+        $sp4->execute();
+        $dr = $sp4->get_result();
+        while ($dRow = $dr->fetch_assoc()) {
+            $supplierDeliveries[] = $dRow;
+        }
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -162,6 +277,12 @@ $logoPath = ($role === 'supplier' && $id == 1) ? "../uploads/company/companylogo
         .worker-card { border: 1px solid #eee; border-radius: 10px; padding: 15px; margin-bottom: 15px; display: flex; align-items: center; position: relative; background: #fff; }
         .worker-img { width: 65px; height: 65px; border-radius: 8px; object-fit: cover; margin-right: 15px; }
         .edit-w-btn { position: absolute; right: 15px; top: 15px; color: #3498db; cursor: pointer; }
+
+        .design-item { border: 1px solid #eee; border-radius: 10px; padding: 12px; margin-bottom: 12px; display: flex; align-items: center; background: #fff; }
+        .design-thumb { width: 72px; height: 72px; border-radius: 8px; object-fit: cover; margin-right: 14px; border: 1px solid #f0f0f0; }
+
+        .manager-stat { border: 1px solid #eee; border-radius: 10px; padding: 14px; text-align: center; background: #fff; }
+        .manager-stat .num { font-size: 1.4rem; font-weight: 700; color: #2c3e50; }
     </style>
 </head>
 <body>
@@ -211,11 +332,136 @@ $logoPath = ($role === 'supplier' && $id == 1) ? "../uploads/company/companylogo
                     </div>
                 </div>
 
+            <!-- MANAGER UI -->
+            <?php elseif ($role === 'manager'): ?>
+                <div class="content-section">
+                    <div class="blue-section-header"><i class="fas fa-user-tie"></i> Personal Information</div>
+                    <div class="grey-card-box">
+                        <div class="info-row"><div class="info-label"><i class="fas fa-user me-2"></i>Name:</div><div><?= htmlspecialchars($userData['name']) ?></div></div>
+                        <div class="info-row"><div class="info-label"><i class="fas fa-envelope me-2"></i>Email:</div><div><?= htmlspecialchars($userData['email']) ?></div></div>
+                        <div class="info-row"><div class="info-label"><i class="fas fa-phone me-2"></i>Phone:</div><div><?= htmlspecialchars($userData['tel']) ?></div></div>
+                    </div>
+
+                    <div class="blue-section-header mt-5"><i class="fas fa-chart-pie"></i>Project Statistics</div>
+                    <div class="grey-card-box">
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-4"><div class="manager-stat"><div class="num"><?= (int)$managerStats['designers'] ?></div><div class="small text-muted">Designers</div></div></div>
+                            <div class="col-md-4"><div class="manager-stat"><div class="num"><?= (int)$managerStats['contractors'] ?></div><div class="small text-muted">Contractors</div></div></div>
+                            <div class="col-md-4"><div class="manager-stat"><div class="num"><?= (int)$managerStats['active_orders'] ?></div><div class="small text-muted">Project Orders</div></div></div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-sm align-middle mb-0">
+                                <thead>
+                                <tr>
+                                    <th>Order ID</th>
+                                    <th>Client</th>
+                                    <th>Status</th>
+                                    <th>Design Finish</th>
+                                    <th>Order Finish</th>
+                                </tr>
+                                </thead>
+                                <tbody>
+                                <?php if (!empty($managerOrders)): ?>
+                                    <?php foreach ($managerOrders as $mOrder): ?>
+                                        <tr>
+                                            <td>#<?= (int)$mOrder['orderid'] ?></td>
+                                            <td><?= htmlspecialchars($mOrder['client_name']) ?></td>
+                                            <td><?= htmlspecialchars($mOrder['ostatus']) ?></td>
+                                            <td><?= !empty($mOrder['DesignFinishDate']) ? htmlspecialchars($mOrder['DesignFinishDate']) : '-' ?></td>
+                                            <td><?= !empty($mOrder['OrderFinishDate']) ? htmlspecialchars($mOrder['OrderFinishDate']) : '-' ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                <?php else: ?>
+                                    <tr><td colspan="5" class="text-muted">No Project orders yet.</td></tr>
+                                <?php endif; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+            <!-- DESIGNER UI -->
+            <?php elseif ($role === 'designer'): ?>
+                <div class="content-section">
+                    <div class="blue-section-header"><i class="fas fa-user-circle"></i> Personal Information</div>
+                    <div class="grey-card-box">
+                        <div class="info-row"><div class="info-label"><i class="fas fa-user me-2"></i>Name:</div><div><?= htmlspecialchars($userData['name']) ?></div></div>
+                        <div class="info-row"><div class="info-label"><i class="fas fa-envelope me-2"></i>Email:</div><div><?= htmlspecialchars($userData['email']) ?></div></div>
+                        <div class="info-row"><div class="info-label"><i class="fas fa-phone me-2"></i>Phone:</div><div><?= htmlspecialchars($userData['tel']) ?></div></div>
+                        <div class="info-row"><div class="info-label"><i class="fas fa-circle-check me-2"></i>Status:</div><div><?= htmlspecialchars($userData['status']) ?></div></div>
+                    </div>
+
+                    <div class="blue-section-header mt-5"><i class="fas fa-palette"></i> My Designs</div>
+                    <div class="grey-card-box">
+                        <?php if (!empty($designerDesigns)): ?>
+                            <?php foreach ($designerDesigns as $design): ?>
+                                <?php $designImg = !empty($design['image_filename']) ? "../uploads/designs/" . $design['image_filename'] : "https://via.placeholder.com/72?text=Design"; ?>
+                                <div class="design-item">
+                                    <img src="<?= htmlspecialchars($designImg) ?>" class="design-thumb" onerror="this.src='https://via.placeholder.com/72?text=Design'">
+                                    <div class="flex-grow-1">
+                                        <div class="fw-bold"><?= htmlspecialchars($design['designName']) ?></div>
+                                        <div class="small text-muted">Expected Price: HK$<?= number_format((float)$design['expect_price']) ?></div>
+                                        <div class="small text-muted">Likes: <?= (int)$design['likes'] ?></div>
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
+                        <?php else: ?>
+                            <p class="text-muted small mb-0"><i class="fas fa-info-circle me-1"></i> No designs found yet.</p>
+                        <?php endif; ?>
+                    </div>
+                </div>
+
             <!-- SUPPLIER UI -->
             <?php elseif ($role === 'supplier'): ?>
                 <div class="content-section">
-                    <div class="d-flex justify-content-between align-items-center mb-4">
-                        <h4 class="fw-bold mb-0">Worker team</h4>
+                    <div class="blue-section-header"><i class="fas fa-building"></i> Personal Information</div>
+                    <div class="grey-card-box">
+                        <div class="info-row"><div class="info-label"><i class="fas fa-user me-2"></i>Name:</div><div><?= htmlspecialchars($userData['name']) ?></div></div>
+                        <div class="info-row"><div class="info-label"><i class="fas fa-envelope me-2"></i>Email:</div><div><?= htmlspecialchars($userData['email']) ?></div></div>
+                        <div class="info-row"><div class="info-label"><i class="fas fa-phone me-2"></i>Phone:</div><div><?= htmlspecialchars($userData['tel']) ?></div></div>
+                    </div>
+
+                    <div class="blue-section-header mt-5"><i class="fas fa-chart-line"></i> Additional Data</div>
+                    <div class="grey-card-box">
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-4"><div class="manager-stat"><div class="num"><?= (int)$supplierStats['workers'] ?></div><div class="small text-muted">Workers</div></div></div>
+                            <div class="col-md-4"><div class="manager-stat"><div class="num"><?= (int)$supplierStats['products'] ?></div><div class="small text-muted">Products</div></div></div>
+                            <div class="col-md-4"><div class="manager-stat"><div class="num"><?= (int)$supplierStats['pending_deliveries'] ?></div><div class="small text-muted">Pending Deliveries</div></div></div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-sm align-middle mb-0">
+                                <thead>
+                                <tr>
+                                    <th>Order ID</th>
+                                    <th>Product</th>
+                                    <th>Quantity</th>
+                                    <th>Delivery Date</th>
+                                    <th>Status</th>
+                                </tr>
+                                </thead>
+                                <tbody>
+                                <?php if (!empty($supplierDeliveries)): ?>
+                                    <?php foreach ($supplierDeliveries as $sDelivery): ?>
+                                        <tr>
+                                            <td>#<?= (int)$sDelivery['orderid'] ?></td>
+                                            <td><?= htmlspecialchars($sDelivery['pname']) ?></td>
+                                            <td><?= (int)$sDelivery['quantity'] ?></td>
+                                            <td><?= !empty($sDelivery['deliverydate']) ? htmlspecialchars($sDelivery['deliverydate']) : '-' ?></td>
+                                            <td><?= htmlspecialchars($sDelivery['status']) ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                <?php else: ?>
+                                    <tr><td colspan="5" class="text-muted">No delivery data yet.</td></tr>
+                                <?php endif; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center mt-5 mb-4">
+                        <h4 class="fw-bold mb-0">Worker Team</h4>
                         <button class="btn btn-primary btn-sm" onclick="openAddWorker()"><i class="fas fa-plus"></i> Add Worker</button>
                     </div>
                     <?php
@@ -237,15 +483,7 @@ $logoPath = ($role === 'supplier' && $id == 1) ? "../uploads/company/companylogo
             <?php endif; ?>
         </div>
 
-        <!-- Sidebar -->
-        <div class="col-lg-4" style="margin-top: 20px;">
-            <div class="sidebar-box">
-                <div class="sidebar-title">Contact</div>
-                <div class="small mb-1 text-muted">Email</div><strong><?= htmlspecialchars($userData['email']) ?></strong>
-                <div class="small mt-3 mb-1 text-muted">Phone</div><strong><?= htmlspecialchars($userData['tel']) ?></strong>
-            </div>
-        </div>
-    </div>
+
 </div>
 
 <!-- Modal: Edit Profile -->
