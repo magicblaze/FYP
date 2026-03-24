@@ -179,6 +179,13 @@ $allowed_statuses = ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelled
                                             </select>
                                             <button type="submit" class="btn btn-sm btn-primary ms-1"><i class="fas fa-sync-alt"></i> Update</button>
                                         </form>
+                                        <form method="post" class="mt-2 d-flex gap-1 align-items-center justify-content-center">
+                                            <input type="hidden" name="orderdeliveryid" value="<?= (int)$item['orderdeliveryid'] ?>">
+                                            <input type="date" name="delivery_date" class="form-control form-control-sm" value="<?= htmlspecialchars($item['deliverydate'] ?? '') ?>" style="max-width:150px;">
+                                            <button type="submit" class="btn btn-sm btn-outline-secondary">
+                                            <i class="fas fa-calendar-check"></i> Set Date
+                                            </button>
+                                        </form>
                                     <?php else: ?>
                                         <span class="text-secondary fw-bold">Reserve</span>
                                     <?php endif; ?>
