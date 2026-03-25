@@ -257,7 +257,7 @@ CREATE TABLE `Order` (
 INSERT INTO `Order`
 (`orderid`, `odate`, `clientid`, `budget`, `deposit`, `cost`, `gross_floor_area`, `Requirements`,`designid`,`ostatus`,`designedPicture`,`supplierid`,`supplier_status`) VALUES
 (1, '2025-04-12 17:50:00', 1, 500000, 2000.00, NULL, NULL, 'HappyBuild Builders',2,'designing',NULL,NULL,NULL),
-(2, '2025-05-10 12:00:00', 2, 500000, 2000.00, NULL, NULL, 'ProThink Constructs',1,'complete',NULL,NULL,NULL);
+(2, '2025-05-10 12:00:00', 2, 500000, 2000.00, NULL, NULL, 'ProThink Constructs',1,'preparing',NULL,1,'Pending');
 
 CREATE TABLE `OrderPayment` (
   `payment_id` INT NOT NULL AUTO_INCREMENT,

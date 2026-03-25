@@ -84,14 +84,18 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['allocate_workers'])) {
     }
 }
 
-// Get order details
-$order_sql = "SELECT o.*, c.cname as client_name FROM `Order` o JOIN `Client` c ON o.clientid = c.clientid WHERE o.orderid = ?";
+// Get order details (修正了欄位名稱)
+$order_sql = "SELECT o.*, c.cname as client_name, c.address as client_address, c.budget as client_budget, d.designName as design_name, d.designid
+              FROM `Order` o 
+              JOIN `Client` c ON o.clientid = c.clientid 
+              LEFT JOIN `Design` d ON o.designid = d.designid
+              WHERE o.orderid = ?";
 $order_stmt = mysqli_prepare($mysqli, $order_sql);
 mysqli_stmt_bind_param($order_stmt, "i", $order_id);
 mysqli_stmt_execute($order_stmt);
 $order_info = mysqli_fetch_assoc(mysqli_stmt_get_result($order_stmt));
 
-// Get all workers belonging to this supplier (including those already assigned to THIS order and those with active jobs)
+// Get all workers belonging to this supplier
 $worker_sql = "SELECT w.*, 
                (SELECT COUNT(*) FROM `workerallocation` wa WHERE wa.workerid = w.workerid AND wa.status != 'Completed' AND wa.status != 'Cancelled') as current_assignments
                FROM `Worker` w 
@@ -117,18 +121,15 @@ foreach ($all_workers as $worker) {
     $is_allocated_to_this_order = $check_allocated_result['count'] > 0;
     
     if ($is_allocated_to_this_order) {
-        // Already allocated to this order, skip
         continue;
     } elseif ($worker['current_assignments'] > 0) {
-        // Has active jobs, mark as unavailable
         $unavailable_workers[] = $worker;
     } else {
-        // Available to allocate
         $available_workers[] = $worker;
     }
 }
 
-// Get currently allocated workers for this order that belong to this supplier
+// Get currently allocated workers
 $allocated_sql = "SELECT w.*, wa.status as allocation_status, wa.allocation_date, wa.estimated_completion 
                   FROM `Worker` w 
                   JOIN `workerallocation` wa ON w.workerid = wa.workerid 
@@ -152,7 +153,7 @@ $allocated_workers = mysqli_fetch_all($allocated_workers_res, MYSQLI_ASSOC);
     <link rel="stylesheet" href="../css/styles.css">
     <style>
         body { background-color: #f4f7f6; }
-        .card { border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05 ); border: none; margin-bottom: 1.5rem; }
+        .card { border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05  ); border: none; margin-bottom: 1.5rem; }
         .worker-card { transition: all 0.3s ease; border: 2px solid transparent; cursor: pointer; }
         .worker-card:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
         .worker-card.selected { border-color: #28a745; background-color: #f8fff9; }
@@ -184,6 +185,35 @@ $allocated_workers = mysqli_fetch_all($allocated_workers_res, MYSQLI_ASSOC);
                         </div>
                     </div>
 
+                    <!-- 項目資訊卡片 -->
+                    <div class="card mb-4 border" style="background-color: #fcfcfc;">
+                        <div class="card-header bg-light py-2">
+                            <h6 class="mb-0 text-dark"><i class="fas fa-info-circle me-2"></i>Project Details</h6>
+                        </div>
+                        <div class="card-body py-3">
+                            <div class="row g-3">
+                                <div class="col-md-4">
+                                    <p class="mb-1 text-muted small">Client & Address</p>
+                                    <p class="mb-0"><strong><?= htmlspecialchars($order_info['client_name']) ?></strong></p>
+                                    <p class="mb-0 small"><?= htmlspecialchars($order_info['client_address'] ?? 'N/A') ?></p>
+                                </div>
+                                <div class="col-md-4">
+                                    <p class="mb-1 text-muted small">Design & Area</p>
+                                    <p class="mb-0"><strong><?= htmlspecialchars($order_info['design_name'] ?? 'N/A') ?></strong> (#<?= htmlspecialchars($order_info['designid'] ?? 'N/A') ?>)</p>
+                                    <p class="mb-0 small"><?= htmlspecialchars($order_info['gross_floor_area'] ?? 'N/A') ?> sq. ft.</p>
+                                </div>
+                                <div class="col-md-4">
+                                    <p class="mb-1 text-muted small">Budget</p>
+                                    <p class="mb-0"><strong>$<?= number_format($order_info['client_budget'] ?? 0, 2) ?></strong></p>
+                                </div>
+                                <div class="col-12">
+                                    <p class="mb-1 text-muted small">Requirements</p>
+                                    <p class="mb-0 small text-dark"><?= nl2br(htmlspecialchars($order_info['Requirements'] ?? 'No specific requirements.')) ?></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <?php if ($success_message): ?>
                         <div class="alert alert-success alert-dismissible fade show" role="alert">
                             <i class="fas fa-check-circle me-2"></i><?= $success_message ?>
@@ -199,7 +229,6 @@ $allocated_workers = mysqli_fetch_all($allocated_workers_res, MYSQLI_ASSOC);
                     <?php endif; ?>
 
                     <form method="POST" id="allocationForm">
-                        <!-- Available Workers Section -->
                         <div class="mb-5">
                             <h5 class="mb-3"><i class="fas fa-check-circle text-success me-2"></i>Available Workers</h5>
                             <div class="row g-3 mb-4">
@@ -215,51 +244,42 @@ $allocated_workers = mysqli_fetch_all($allocated_workers_res, MYSQLI_ASSOC);
                                                         <small class="text-muted"><?= htmlspecialchars($worker['certificate'] ?: 'General Worker') ?></small>
                                                     </div>
                                                     <div class="text-end">
-                                                        <span class="badge bg-success">
-                                                            Available
-                                                        </span>
+                                                        <span class="badge bg-success">Available</span>
                                                     </div>
                                                 </div>
                                             </div>
                                         </div>
                                     <?php endforeach; ?>
                                 <?php else: ?>
-                                    <div class="col-12 text-center py-3">
-                                        <p class="text-muted mb-0">No available workers.</p>
+                                    <div class="col-12">
+                                        <div class="alert alert-info">No available workers at the moment.</div>
                                     </div>
                                 <?php endif; ?>
                             </div>
-                        </div>
 
-                        <!-- Busy Workers Section -->
-                        <?php if (count($unavailable_workers) > 0): ?>
-                            <div class="mb-5">
-                                <h5 class="mb-3"><i class="fas fa-hourglass-end text-warning me-2"></i>Busy Workers (Cannot Select)</h5>
-                                <div class="row g-3 mb-4">
-                                    <?php foreach ($unavailable_workers as $worker): ?>
-                                        <div class="col-md-6">
-                                            <div class="card worker-card p-3 h-100 disabled-worker">
-                                                <div class="d-flex align-items-center">
-                                                    <img src="../uploads/worker/<?= $worker['image'] ?: 'default.jpg' ?>" class="worker-img me-3" alt="<?= htmlspecialchars($worker['name']) ?>">
-                                                    <div class="flex-grow-1">
-                                                        <h6 class="mb-0"><?= htmlspecialchars($worker['name']) ?></h6>
-                                                        <small class="text-muted"><?= htmlspecialchars($worker['certificate'] ?: 'General Worker') ?></small>
-                                                    </div>
-                                                    <div class="text-end">
-                                                        <span class="badge bg-warning">
-                                                            <?= $worker['current_assignments'] ?> job<?= $worker['current_assignments'] > 1 ? 's' : '' ?>
-                                                        </span>
-                                                    </div>
+                            <h5 class="mb-3"><i class="fas fa-clock text-warning me-2"></i>Currently Busy</h5>
+                            <div class="row g-3">
+                                <?php foreach ($unavailable_workers as $worker): ?>
+                                    <div class="col-md-6">
+                                        <div class="card disabled-worker p-3 h-100">
+                                            <div class="d-flex align-items-center">
+                                                <img src="../uploads/worker/<?= $worker['image'] ?: 'default.jpg' ?>" class="worker-img me-3" alt="<?= htmlspecialchars($worker['name']) ?>">
+                                                <div class="flex-grow-1">
+                                                    <h6 class="mb-0"><?= htmlspecialchars($worker['name']) ?></h6>
+                                                    <small class="text-muted"><?= htmlspecialchars($worker['certificate'] ?: 'General Worker') ?></small>
+                                                </div>
+                                                <div class="text-end">
+                                                    <span class="badge bg-warning text-dark"><?= $worker['current_assignments'] ?> Active Jobs</span>
                                                 </div>
                                             </div>
                                         </div>
-                                    <?php endforeach; ?>
-                                </div>
+                                    </div>
+                                <?php endforeach; ?>
                             </div>
-                        <?php endif; ?>
+                        </div>
 
-                        <div class="d-grid">
-                            <button type="submit" name="allocate_workers" class="btn btn-success btn-lg" id="submitBtn" disabled>
+                        <div class="sticky-bottom bg-white p-3 border-top text-end" style="z-index: 100;">
+                            <button type="submit" name="allocate_workers" class="btn btn-primary btn-lg px-5 shadow" id="submitBtn" disabled>
                                 <i class="fas fa-user-plus me-2"></i>Allocate Selected Workers
                             </button>
                         </div>
@@ -269,7 +289,7 @@ $allocated_workers = mysqli_fetch_all($allocated_workers_res, MYSQLI_ASSOC);
 
             <div class="col-lg-4">
                 <div class="card p-4">
-                    <h4 class="mb-4">Allocated Workers</h4>
+                    <h5 class="mb-4"><i class="fas fa-users-cog me-2"></i>Currently Allocated</h5>
                     <?php if (count($allocated_workers) > 0): ?>
                         <div class="list-group list-group-flush">
                             <?php foreach ($allocated_workers as $worker): ?>
@@ -278,19 +298,15 @@ $allocated_workers = mysqli_fetch_all($allocated_workers_res, MYSQLI_ASSOC);
                                         <img src="../uploads/worker/<?= $worker['image'] ?: 'default.jpg' ?>" class="worker-img me-3" alt="<?= htmlspecialchars($worker['name']) ?>">
                                         <div class="flex-grow-1">
                                             <h6 class="mb-0"><?= htmlspecialchars($worker['name']) ?></h6>
-                                            <small class="text-muted d-block"><?= htmlspecialchars($worker['allocation_status']) ?></small>
-                                            <small class="text-muted" style="font-size: 0.75rem;">
-                                                Until: <?= date('M d, Y', strtotime($worker['estimated_completion'])) ?>
-                                            </small>
+                                            <small class="text-muted">Assigned: <?= date('M d, Y', strtotime($worker['allocation_date'])) ?></small>
                                         </div>
+                                        <span class="badge bg-light text-success border border-success"><?= $worker['allocation_status'] ?></span>
                                     </div>
                                 </div>
                             <?php endforeach; ?>
                         </div>
                     <?php else: ?>
-                        <div class="text-center py-4">
-                            <p class="text-muted mb-0">No workers allocated yet.</p>
-                        </div>
+                        <p class="text-muted text-center py-4">No workers allocated to this project yet.</p>
                     <?php endif; ?>
                 </div>
             </div>
@@ -317,6 +333,5 @@ $allocated_workers = mysqli_fetch_all($allocated_workers_res, MYSQLI_ASSOC);
             document.getElementById('submitBtn').disabled = checkedCount === 0;
         }
     </script>
-    <?php include __DIR__ . '/../Public/chat_widget.php'; ?>
 </body>
 </html>
