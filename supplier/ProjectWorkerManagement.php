@@ -50,8 +50,11 @@ $projects_sql = "
         o.odate,
         o.ostatus,
         o.supplier_status,
+        o.Requirements,
+        o.budget,
         c.cname as client_name,
         c.cemail,
+        c.ctel,
         c.address,
         (SELECT COUNT(DISTINCT od2.productid) FROM `OrderDelivery` od2 JOIN `Product` p2 ON od2.productid = p2.productid WHERE od2.orderid = o.orderid AND p2.supplierid = ?) as product_count,
         (SELECT COUNT(DISTINCT wa.workerid) FROM `workerallocation` wa JOIN `Worker` w ON wa.workerid = w.workerid WHERE wa.orderid = o.orderid AND w.supplierid = ?) as allocated_workers
@@ -67,6 +70,88 @@ mysqli_stmt_execute($projects_stmt);
 $projects_result = mysqli_stmt_get_result($projects_stmt);
 $projects = [];
 while ($row = mysqli_fetch_assoc($projects_result)) {
+    $order_id = $row['orderid'];
+    
+    // --- FETCH FULL DETAILS FOR MODAL (Sync with WorkerAllocation.php) ---
+    
+    // 1. Fetch Order Edit Data
+    $edit_order_sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.cost, o.deposit, o.supplierid, o.supplier_status,
+                              c.clientid, c.cname as client_name, c.ctel, c.cemail, c.budget,
+                              d.designid, d.designName, d.expect_price as design_price, d.tag as design_tag, d.supplierid as design_supplierid,
+                              s.scheduleid, s.OrderFinishDate, s.DesignFinishDate,
+                              op.payment_id, op.total_design_payment, op.total_construction_payment, op.materials_cost,
+                              op.commission_1st, op.commission_final, op.total_amount_due
+                       FROM `Order` o
+                       LEFT JOIN `Client` c ON o.clientid = c.clientid
+                       LEFT JOIN `Design` d ON o.designid = d.designid
+                       LEFT JOIN `Schedule` s ON o.orderid = s.orderid
+                       LEFT JOIN `OrderPayment` op ON o.payment_id = op.payment_id
+                       WHERE o.orderid = ?";
+    $edit_stmt = mysqli_prepare($mysqli, $edit_order_sql);
+    mysqli_stmt_bind_param($edit_stmt, "i", $order_id);
+    mysqli_stmt_execute($edit_stmt);
+    $edit_order = mysqli_fetch_assoc(mysqli_stmt_get_result($edit_stmt));
+    $row['edit_order'] = $edit_order;
+
+    // 2. Fetch Order References
+    $hasRefColor = false;
+    $hasRefQuantity = false;
+    $refColorRes = mysqli_query($mysqli, "SHOW COLUMNS FROM `OrderReference` LIKE 'color'");
+    if ($refColorRes) { $hasRefColor = (mysqli_num_rows($refColorRes) > 0); mysqli_free_result($refColorRes); }
+    $refQuantityRes = mysqli_query($mysqli, "SHOW COLUMNS FROM `OrderReference` LIKE 'quantity'");
+    if ($refQuantityRes) { $hasRefQuantity = (mysqli_num_rows($refQuantityRes) > 0); mysqli_free_result($refQuantityRes); }
+    
+    $refColorSelect = $hasRefColor ? 'orr.color' : 'NULL AS color';
+    $refQuantitySelect = $hasRefQuantity ? 'orr.quantity' : 'NULL AS quantity';
+    
+    $ref_sql = "SELECT orr.id, orr.productid, {$refColorSelect}, {$refQuantitySelect}, orr.status, orr.price, orr.note,
+                       p.pname, p.price as product_price, p.category, p.description as product_description
+                FROM `OrderReference` orr
+                LEFT JOIN `Product` p ON orr.productid = p.productid
+                WHERE orr.orderid = ?";
+    $ref_stmt = mysqli_prepare($mysqli, $ref_sql);
+    mysqli_stmt_bind_param($ref_stmt, "i", $order_id);
+    mysqli_stmt_execute($ref_stmt);
+    $ref_result = mysqli_stmt_get_result($ref_stmt);
+    $references = mysqli_fetch_all($ref_result, MYSQLI_ASSOC);
+    $row['references'] = $references;
+
+    // 3. Fetch Additional Fees
+    $fees_sql = "SELECT fee_id, fee_name, amount, description, created_at FROM `AdditionalFee` WHERE orderid = ? ORDER BY created_at ASC";
+    $fees_stmt = mysqli_prepare($mysqli, $fees_sql);
+    mysqli_stmt_bind_param($fees_stmt, "i", $order_id);
+    mysqli_stmt_execute($fees_stmt);
+    $fees_result = mysqli_stmt_get_result($fees_stmt);
+    $fees = mysqli_fetch_all($fees_result, MYSQLI_ASSOC);
+    $row['fees'] = $fees;
+    
+    $total_fees = 0;
+    foreach ($fees as $f) { $total_fees += floatval($f['amount']); }
+    $row['total_fees'] = $total_fees;
+
+    // 4. Calculations
+    $design_price = isset($edit_order["design_price"]) ? floatval($edit_order["design_price"]) : 0;
+    $original_budget = floatval($edit_order['budget'] ?? 0);
+    
+    $payment = [
+        'total_design_payment' => isset($edit_order['total_design_payment']) ? (float) $edit_order['total_design_payment'] : 0.0,
+        'total_construction_payment' => isset($edit_order['total_construction_payment']) ? (float) $edit_order['total_construction_payment'] : 0.0,
+        'materials_cost' => isset($edit_order['materials_cost']) ? (float) $edit_order['materials_cost'] : 0.0,
+        'commission_1st' => isset($edit_order['commission_1st']) ? (float) $edit_order['commission_1st'] : 0.0,
+        'commission_final' => isset($edit_order['commission_final']) ? (float) $edit_order['commission_final'] : 0.0,
+        'total_amount_due' => isset($edit_order['total_amount_due']) ? (float) $edit_order['total_amount_due'] : 0.0,
+    ];
+    $row['payment'] = $payment;
+    
+    $references_total = 0.0;
+    foreach ($references as $r) {
+        $rprice = isset($r['price']) && $r['price'] !== null ? (float) $r['price'] : (float) ($r['product_price'] ?? 0);
+        $references_total += $rprice;
+    }
+    $row['references_total'] = $references_total;
+    $row['deducted_amount'] = $design_price;
+    $row['remaining_budget'] = $original_budget - $design_price;
+
     $projects[] = $row;
 }
 mysqli_stmt_close($projects_stmt);
@@ -78,10 +163,8 @@ $stats_sql = "
         (SELECT COUNT(DISTINCT wa.workerid) FROM `workerallocation` wa JOIN `Worker` w ON wa.workerid = w.workerid WHERE w.supplierid = ?) as total_allocated_workers,
         (SELECT COUNT(DISTINCT w.workerid) FROM `Worker` w WHERE w.supplierid = ?) as total_available_workers
     FROM `Order` o
-    JOIN Design d ON o.designid = d.designid
-    WHERE d.supplierid = ?
+    WHERE o.supplierid = ?
 ";
-
 $stats_stmt = mysqli_prepare($mysqli, $stats_sql);
 mysqli_stmt_bind_param($stats_stmt, "iii", $supplier_id, $supplier_id, $supplier_id);
 mysqli_stmt_execute($stats_stmt);
@@ -107,236 +190,35 @@ mysqli_stmt_close($workers_stmt);
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="../css/styles.css">
     <style>
-        body {
-            background-color: #f4f7f6;
-        }
+        body { background-color: #f4f7f6; }
+        .stat-card { background: white; border-radius: 12px; padding: 1.5rem; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05); text-align: center; margin-bottom: 1.5rem; transition: all 0.3s ease; }
+        .stat-card:hover { box-shadow: 0 4px 16px rgba(52, 152, 219, 0.15); transform: translateY(-2px); }
+        .stat-number { font-size: 2.5rem; font-weight: 700; color: #3498db; margin-bottom: 0.5rem; }
+        .stat-label { color: #7f8c8d; font-size: 0.95rem; font-weight: 500; }
+        .project-card { background: white; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05); border-left: 4px solid #3498db; transition: all 0.3s ease; }
+        .project-card:hover { box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1); transform: translateX(5px); }
+        .project-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; }
+        .project-title { font-size: 1.2rem; font-weight: 600; color: #2c3e50; margin-bottom: 0.5rem; }
+        .status-badge { padding: 5px 15px; border-radius: 20px; font-size: 12px; font-weight: 700; text-transform: uppercase; }
+        .project-info { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid #ecf0f1; }
+        .info-label { color: #7f8c8d; font-size: 13px; margin-bottom: 2px; }
+        .info-value { color: #2c3e50; font-weight: 600; margin-bottom: 10px; }
+        .worker-badge { display: inline-block; background: #e8f4f8; color: #0c5460; padding: 0.5rem 1rem; border-radius: 20px; font-weight: 600; margin-bottom: 1rem; }
+        .action-buttons { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+        .btn-allocate, .btn-detail { border: none; color: white; padding: 0.6rem 1.2rem; border-radius: 8px; font-weight: 600; transition: all 0.3s; text-decoration: none; display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; }
+        .btn-allocate { background: #27ae60; }
+        .btn-allocate:hover { background: #229954; color: white; transform: translateY(-2px); box-shadow: 0 4px 8px rgba(39, 174, 96, 0.3); }
+        .btn-detail { background: #3498db; }
+        .btn-detail:hover { background: #2980b9; color: white; transform: translateY(-2px); box-shadow: 0 4px 8px rgba(52, 152, 219, 0.3); }
+        .back-btn { display: inline-flex; align-items: center; gap: 0.5rem; color: #7f8c8d; text-decoration: none; font-weight: 600; margin-bottom: 1.5rem; transition: all 0.3s; }
+        .back-btn:hover { color: #3498db; transform: translateX(-5px); }
 
-        .page-header {
-            background: linear-gradient(135deg, #2c3e50, #3498db);
-            color: white;
-            padding: 2rem 0;
-            margin-bottom: 2rem;
-            border-radius: 0 0 15px 15px;
-        }
-
-        .page-header h1 {
-            font-weight: 700;
-            margin-bottom: 0.5rem;
-        }
-
-        .page-header p {
-            margin-bottom: 0;
-            opacity: 0.9;
-        }
-
-        .stat-card {
-            background: white;
-            border-radius: 12px;
-            padding: 1.5rem;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-            text-align: center;
-            margin-bottom: 1.5rem;
-            transition: all 0.3s ease;
-        }
-
-        .stat-card:hover {
-            box-shadow: 0 4px 16px rgba(52, 152, 219, 0.15);
-            transform: translateY(-2px);
-        }
-
-        .stat-number {
-            font-size: 2.5rem;
-            font-weight: 700;
-            color: #3498db;
-            margin-bottom: 0.5rem;
-        }
-
-        .stat-label {
-            color: #7f8c8d;
-            font-size: 0.95rem;
-            font-weight: 500;
-        }
-
-        .project-card {
-            background: white;
-            border-radius: 12px;
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-            border-left: 4px solid #3498db;
-            transition: all 0.3s ease;
-        }
-
-        .project-card:hover {
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
-            transform: translateX(5px);
-        }
-
-        .project-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            margin-bottom: 1rem;
-        }
-
-        .project-title {
-            font-size: 1.2rem;
-            font-weight: 600;
-            color: #2c3e50;
-            margin-bottom: 0.5rem;
-        }
-
-        .project-client {
-            color: #7f8c8d;
-            font-size: 0.95rem;
-            margin-bottom: 0.25rem;
-        }
-
-        .project-date {
-            color: #95a5a6;
-            font-size: 0.85rem;
-        }
-
-        .status-badge {
-            display: inline-block;
-            padding: 0.4rem 0.8rem;
-            border-radius: 20px;
-            font-size: 0.85rem;
-            font-weight: 600;
-            text-transform: capitalize;
-        }
-
-        .status-preparing {
-            background-color: #fff3cd;
-            color: #856404;
-        }
-
-        .status-in-progress {
-            background-color: #cfe2ff;
-            color: #084298;
-        }
-
-        .status-completed {
-            background-color: #d4edda;
-            color: #155724;
-        }
-
-        .status-cancelled {
-            background-color: #f8d7da;
-            color: #721c24;
-        }
-
-        .project-info {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 1rem;
-            margin-bottom: 1rem;
-            padding-bottom: 1rem;
-            border-bottom: 1px solid #ecf0f1;
-        }
-
-        .info-item {
-            display: flex;
-            flex-direction: column;
-        }
-
-        .info-label {
-            color: #7f8c8d;
-            font-size: 0.85rem;
-            font-weight: 500;
-            margin-bottom: 0.25rem;
-        }
-
-        .info-value {
-            color: #2c3e50;
-            font-weight: 600;
-        }
-
-        .worker-badge {
-            display: inline-block;
-            background: #e8f4f8;
-            color: #0c5460;
-            padding: 0.5rem 1rem;
-            border-radius: 20px;
-            font-weight: 600;
-            margin-bottom: 1rem;
-        }
-
-        .action-buttons {
-            display: flex;
-            gap: 0.75rem;
-            flex-wrap: wrap;
-        }
-
-        .btn-allocate {
-            background: #27ae60;
-            border: none;
-            color: white;
-            padding: 0.6rem 1.2rem;
-            border-radius: 8px;
-            font-weight: 600;
-            transition: all 0.3s;
-            text-decoration: none;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .btn-allocate:hover {
-            background: #229954;
-            color: white;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(39, 174, 96, 0.3);
-        }
-
-        .btn-view {
-            background: #3498db;
-            border: none;
-            color: white;
-            padding: 0.6rem 1.2rem;
-            border-radius: 8px;
-            font-weight: 600;
-            transition: all 0.3s;
-            text-decoration: none;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .btn-view:hover {
-            background: #2980b9;
-            color: white;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(52, 152, 219, 0.3);
-        }
-
-        .empty-state {
-            text-align: center;
-            padding: 3rem 1rem;
-            color: #7f8c8d;
-        }
-
-        .empty-state i {
-            font-size: 3rem;
-            color: #bdc3c7;
-            margin-bottom: 1rem;
-        }
-
-        .back-btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            color: #7f8c8d;
-            text-decoration: none;
-            font-weight: 600;
-            margin-bottom: 1.5rem;
-            transition: all 0.3s;
-        }
-
-        .back-btn:hover {
-            color: #3498db;
-            transform: translateX(-5px);
-        }
+        /* Modal Styles (Synced with WorkerAllocation.php) */
+        .detail-card { background: white; border-radius: 12px; padding: 25px; margin-bottom: 25px; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05); }
+        .section-title { font-size: 18px; font-weight: 700; color: #2c3e50; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid #eee; display: flex; align-items: center; gap: 10px; }
+        .table thead th { background-color: #f8f9fa; border-top: none; font-size: 13px; color: #7f8c8d; }
+        .modal-header { background: #3498db; color: white; }
+        .modal-header .btn-close { filter: brightness(0) invert(1); }
     </style>
 </head>
 <body>
@@ -375,10 +257,20 @@ mysqli_stmt_close($workers_stmt);
             </div>
         </div>
 
-        <!-- Projects List Section -->
         <h3 class="mb-3">Your Projects</h3>
         <?php if (count($projects) > 0): ?>
             <?php foreach ($projects as $project): ?>
+                <?php 
+                    $edit_order = $project['edit_order'];
+                    $references = $project['references'];
+                    $fees = $project['fees'];
+                    $payment = $project['payment'];
+                    $total_fees = $project['total_fees'];
+                    $references_total = $project['references_total'];
+                    $deducted_amount = $project['deducted_amount'];
+                    $remaining_budget = $project['remaining_budget'];
+                    $original_budget = floatval($edit_order['budget'] ?? 0);
+                ?>
                 <div class="project-card">
                     <div class="project-header">
                         <div>
@@ -386,7 +278,7 @@ mysqli_stmt_close($workers_stmt);
                             <div class="project-client"><i class="fas fa-user me-1"></i><?= htmlspecialchars($project['client_name']) ?></div>
                             <div class="project-date"><i class="fas fa-calendar me-1"></i><?= date('M d, Y', strtotime($project['odate'])) ?></div>
                         </div>
-                        <span class="status-badge status-<?= strtolower(str_replace(' ', '-', $project['ostatus'])) ?>">
+                        <span class="status-badge bg-primary text-white">
                             <?= htmlspecialchars($project['ostatus']) ?>
                         </span>
                     </div>
@@ -410,45 +302,184 @@ mysqli_stmt_close($workers_stmt);
                         </div>
                     </div>
 
-                    <?php if ($project['allocated_workers'] > 0): ?>
-                        <div class="worker-badge">
-                            <i class="fas fa-check-circle me-1"></i><?= $project['allocated_workers'] ?> worker(s) assigned
-                        </div>
-                    <?php else: ?>
-                        <div class="worker-badge" style="background: #fff3cd; color: #856404;">
-                            <i class="fas fa-exclamation-circle me-1"></i>No workers assigned yet
-                        </div>
-                    <?php endif; ?>
-
                     <div class="action-buttons">
-                        <?php if ($project['supplier_status'] === 'Pending'): ?>
-                            <div class="mb-2 small text-muted"><i class="fas fa-info-circle me-1"></i>New Constructor Assignment</div>
-                            <form method="POST" class="d-inline">
-                                <input type="hidden" name="handle_assignment" value="1">
-                                <input type="hidden" name="order_id" value="<?= $project['orderid'] ?>">
-                                <button type="submit" name="action" value="Accepted" class="btn btn-success btn-sm me-2">
-                                    <i class="fas fa-check me-1"></i>Accept Assignment
-                                </button>
-                                <button type="submit" name="action" value="Rejected" class="btn btn-danger btn-sm">
-                                    <i class="fas fa-times me-1"></i>Reject
-                                </button>
-                            </form>
-                        <?php elseif ($project['supplier_status'] === 'Accepted'): ?>
+                        <button type="button" class="btn-detail" data-bs-toggle="modal" data-bs-target="#detailsModal<?= $project['orderid'] ?>">
+                            <i class="fas fa-eye me-1"></i>Detail
+                        </button>
+
+                        <?php if ($project['supplier_status'] === 'Accepted'): ?>
                             <a href="WorkerAllocation.php?orderid=<?= $project['orderid'] ?>" class="btn-allocate">
                                 <i class="fas fa-users"></i>Manage Workers
                             </a>
-                        <?php else: ?>
-                            <span class="badge bg-danger">Assignment Rejected</span>
+                        <?php elseif ($project['supplier_status'] === 'Rejected'): ?>
+                            <span class="badge bg-danger p-2">Assignment Rejected</span>
                         <?php endif; ?>
+                    </div>
+                </div>
+
+                <!-- Details Modal (Synced with WorkerAllocation.php) -->
+                <div class="modal fade" id="detailsModal<?= $project['orderid'] ?>" tabindex="-1" aria-hidden="true">
+                    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+                        <div class="modal-content" style="background-color: #f4f7f6;">
+                            <div class="modal-header">
+                                <h5 class="modal-title"><i class="fas fa-info-circle me-2"></i>Project #<?= $project['orderid'] ?> Full Details</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body p-4">
+                                <div class="row">
+                                    <div class="col-lg-12">
+                                        <!-- Project Overview -->
+                                        <div class="detail-card">
+                                            <div class="section-title"><i class="fas fa-project-diagram"></i> Project Overview</div>
+                                            <div class="row">
+                                                <div class="col-md-6">
+                                                    <div class="info-label">Project Date</div>
+                                                    <div class="info-value"><?= date('F d, Y', strtotime($edit_order['odate'])) ?></div>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <div class="info-label">Status</div>
+                                                    <div class="info-value">
+                                                        <span class="status-badge bg-primary text-white"><?= htmlspecialchars($edit_order['ostatus']) ?></span>
+                                                    </div>
+                                                    <div class="info-label">Estimated Completion</div>
+                                                    <div class="info-value text-primary">
+                                                        <?= $edit_order['OrderFinishDate'] ? date('F d, Y', strtotime($edit_order['OrderFinishDate'])) : 'TBD' ?>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Client Information -->
+                                        <div class="detail-card">
+                                            <div class="section-title"><i class="fas fa-user"></i> Client Information</div>
+                                            <div class="row">
+                                                <div class="col-md-6">
+                                                    <div class="info-label">Client Name</div>
+                                                    <div class="info-value"><?= htmlspecialchars($edit_order['client_name']) ?></div>
+                                                    <div class="info-label">Phone</div>
+                                                    <div class="info-value"><?= htmlspecialchars($edit_order['ctel'] ?? 'N/A') ?></div>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <div class="info-label">Email</div>
+                                                    <div class="info-value"><?= htmlspecialchars($edit_order['cemail'] ?? 'N/A') ?></div>
+                                                    <div class="info-label">Budget</div>
+                                                    <div class="info-value text-success">$<?= number_format($edit_order['budget'] ?? 0, 2) ?></div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Requirements -->
+                                        <div class="detail-card">
+                                            <div class="section-title"><i class="fas fa-list"></i> Requirements</div>
+                                            <p class="text-dark"><?= nl2br(htmlspecialchars($edit_order['Requirements'] ?? 'No specific requirements')) ?></p>
+                                        </div>
+
+                                        <!-- Products & Materials -->
+                                        <?php if (!empty($references)): ?>
+                                        <div class="detail-card">
+                                            <div class="section-title"><i class="fas fa-couch"></i> Products & Materials</div>
+                                            <div class="table-responsive">
+                                                <table class="table align-middle">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>Item Name</th>
+                                                            <th>Category</th>
+                                                            <th>Status</th>
+                                                            <th class="text-end">Price</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        <?php foreach ($references as $ref): ?>
+                                                            <tr>
+                                                                <td>
+                                                                    <div class="fw-bold"><?= htmlspecialchars($ref['pname'] ?? 'Unknown Item') ?></div>
+                                                                    <small class="text-muted"><?= htmlspecialchars($ref['note'] ?? '') ?></small>
+                                                                </td>
+                                                                <td><span class="badge bg-light text-dark"><?= htmlspecialchars($ref['category'] ?? 'N/A') ?></span></td>
+                                                                <td><?= htmlspecialchars($ref['status'] ?? 'Pending') ?></td>
+                                                                <td class="text-end">$<?= number_format($ref['price'] ?? 0, 2) ?></td>
+                                                            </tr>
+                                                        <?php endforeach; ?>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                        <?php endif; ?>
+
+                                        <!-- Additional Fees -->
+                                        <?php if (!empty($fees)): ?>
+                                        <div class="detail-card">
+                                            <div class="section-title"><i class="fas fa-plus-circle"></i> Additional Fees</div>
+                                            <div class="table-responsive">
+                                                <table class="table align-middle">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>Fee Name</th>
+                                                            <th>Description</th>
+                                                            <th class="text-end">Amount</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        <?php foreach ($fees as $fee): ?>
+                                                            <tr>
+                                                                <td class="fw-bold"><?= htmlspecialchars($fee['fee_name']) ?></td>
+                                                                <td><?= htmlspecialchars($fee['description']) ?></td>
+                                                                <td class="text-end">$<?= number_format($fee['amount'], 2) ?></td>
+                                                            </tr>
+                                                        <?php endforeach; ?>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                        <?php endif; ?>
+
+                                        <!-- Cost Summary -->
+                                        <div class="detail-card">
+                                            <div class="section-title"><i class="fas fa-calculator"></i> Construction Payment</div>
+                                            <div class="row">
+                                                <div class="col-12">
+                                                    <div class="info-label">Total Construction Payment</div>
+                                                    <div class="info-value text-success" style="font-size: 18px;">$<?= number_format($payment['total_construction_payment'], 2) ?></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="modal-footer bg-white">
+                                <?php if ($project['supplier_status'] === 'Pending'): ?>
+                                    <form method="POST" class="w-100 d-flex justify-content-between align-items-center">
+                                        <div class="text-muted small"><i class="fas fa-info-circle me-1"></i> Please review all details before making a decision.</div>
+                                        <div>
+                                            <input type="hidden" name="handle_assignment" value="1">
+                                            <input type="hidden" name="order_id" value="<?= $project['orderid'] ?>">
+                                            <button type="submit" name="action" value="Rejected" class="btn btn-outline-danger me-2 px-4">
+                                                <i class="fas fa-times me-1"></i> Reject
+                                            </button>
+                                            <button type="submit" name="action" value="Accepted" class="btn btn-success px-4">
+                                                <i class="fas fa-check me-1"></i> Accept Assignment
+                                            </button>
+                                        </div>
+                                    </form>
+                                <?php else: ?>
+                                    <button type="button" class="btn btn-secondary px-4" data-bs-dismiss="modal">Close</button>
+                                    <?php if ($project['supplier_status'] === 'Accepted'): ?>
+                                        <a href="WorkerAllocation.php?orderid=<?= $project['orderid'] ?>" class="btn btn-primary px-4">
+                                            <i class="fas fa-users me-1"></i> Manage Workers
+                                        </a>
+                                    <?php endif; ?>
+                                <?php endif; ?>
+                            </div>
+                        </div>
                     </div>
                 </div>
             <?php endforeach; ?>
         <?php else: ?>
             <div class="project-card">
-                <div class="empty-state">
-                    <i class="fas fa-inbox"></i>
+                <div class="empty-state text-center py-5">
+                    <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
                     <h4>No Projects Found</h4>
-                    <p>You don't have any active projects yet.</p>
+                    <p class="text-muted">You don't have any active projects yet.</p>
                 </div>
             </div>
         <?php endif; ?>
