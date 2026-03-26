@@ -29,6 +29,7 @@ if ($orderId <= 0) {
 // Fetch order details with verification that it belongs to the client
 // --- MODIFIED: Added o.final_payment to the query ---
 $orderSql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.gross_floor_area, o.deposit,
+              o.supplierid, o.supplier_status,
               d.designid, d.expect_price, d.tag, dz.dname, dz.designerid,
               c.budget,
               op.payment_id, op.total_cost,
@@ -174,6 +175,24 @@ if (!$referencesStmt) {
 
 // Handle client accept/reject actions for design proposal
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (isset($_POST['agree_reopen_project']) && $clientId && $orderId) {
+        $u_sql = "UPDATE `Order`
+                  SET supplierid = NULL,
+                      supplier_status = 'Pending',
+                      ostatus = 'Coordinating Contractors'
+                  WHERE orderid = ?
+                    AND clientid = ?
+                    AND supplier_status = 'Rejected'";
+        $u_stmt = $mysqli->prepare($u_sql);
+        if ($u_stmt) {
+            $u_stmt->bind_param('ii', $orderId, $clientId);
+            $u_stmt->execute();
+            $u_stmt->close();
+        }
+        header('Location: order_detail.php?orderid=' . $orderId . '&shared=1');
+        exit;
+    }
+
     // Accept: move to 'waiting 2nd design phase payment'
     if (isset($_POST['accept_design']) && $clientId && $orderId) {
         $next_status = 'waiting 2nd design phase payment';
@@ -528,6 +547,12 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€
             <a href="order_history.php" class="back-link">
                 <i class="fas fa-arrow-left me-1"></i>Back to Project History
             </a>
+            <?php if (isset($_GET['shared'])): ?>
+                <div class="alert alert-success">
+                    <i class="fas fa-check-circle me-2"></i>
+                    Project has been shared to other Contractor for review.
+                </div>
+            <?php endif; ?>
 
             <h1 class="page-title">
                 <i class="fas fa-receipt me-2"></i>Project #<?= (int) $order['orderid'] ?> Details
@@ -575,6 +600,14 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€
                         <span class="info-label">Gross Floor Area:</span>
                         <span
                             class="info-value"><?= $gfaDisplay > 0 ? htmlspecialchars(number_format((float) $gfaDisplay, 2)) . ' mÂ²' : '&mdash;' ?></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Constructor Assignment:</span>
+                        <span class="info-value">
+                            <span class="badge <?php echo (($order['supplier_status'] ?? '') === 'Rejected') ? 'bg-danger' : (((($order['supplier_status'] ?? '') === 'Accepted') ? 'bg-success' : 'bg-warning text-dark')); ?>">
+                                <?php echo htmlspecialchars($order['supplier_status'] ?? 'Pending'); ?>
+                            </span>
+                        </span>
                     </div>
                 </div>
 
@@ -637,7 +670,6 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€
                         your payment method in your profile, then proceed.</div>
                 </div>
             <?php endif; ?>
-
             <!-- Requirements Section -->
             <?php if (!empty($order['Requirements'])): ?>
                 <div class="section-title">
@@ -816,6 +848,22 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€
                 <div class="empty-message">
                     <i class="fas fa-box"></i>
                     <p>No products or materials assigned yet.</p>
+                </div>
+            <?php endif; ?>
+            <!-- Supplier Reassignment -->
+            <?php if (($order['supplier_status'] ?? '') === 'Rejected'): ?>
+                <div class="info-card" style="border-left:4px solid #e67e22;">
+                    <div class="info-row" style="border-bottom:none;">
+                        <span class="info-label"><i class="fas fa-people-arrows me-2"></i>Supplier Reassignment</span>
+                        <span class="info-value">
+                            <form method="post" class="d-inline" onsubmit="return confirm('Allow other suppliers to view and take this project?');">
+                                <button type="submit" name="agree_reopen_project" class="btn btn-warning btn-sm">
+                                    <i class="fas fa-share-square me-1"></i>Agree & Share to Other Suppliers
+                                </button>
+                            </form>
+                        </span>
+                    </div>
+                    <div class="small text-muted" style="margin-top:0.5rem;">Current supplier rejected this project. Click the button to allow other suppliers to view it in supplier search.</div>
                 </div>
             <?php endif; ?>
 

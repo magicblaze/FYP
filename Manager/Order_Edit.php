@@ -179,6 +179,28 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
     }
 
+    // Handle accepting contractor request
+    if (isset($_POST['accept_supplier_request'])) {
+        $update_accept_sql = "UPDATE `Order` SET supplier_status = 'Accepted' WHERE orderid = ?";
+        $update_accept_stmt = mysqli_prepare($mysqli, $update_accept_sql);
+        mysqli_stmt_bind_param($update_accept_stmt, "i", $orderid);
+        if (mysqli_stmt_execute($update_accept_stmt)) {
+            header("Location: Order_Edit.php?id=" . $orderid . "&msg=contractor_accepted");
+            exit();
+        }
+    }
+
+    // Handle rejecting contractor request
+    if (isset($_POST['reject_supplier_request'])) {
+        $update_reject_sql = "UPDATE `Order` SET supplierid = NULL, supplier_status = 'Pending', ostatus = 'Coordinating Contractors' WHERE orderid = ?";
+        $update_reject_stmt = mysqli_prepare($mysqli, $update_reject_sql);
+        mysqli_stmt_bind_param($update_reject_stmt, "i", $orderid);
+        if (mysqli_stmt_execute($update_reject_stmt)) {
+            header("Location: Order_Edit.php?id=" . $orderid . "&msg=contractor_rejected");
+            exit();
+        }
+    }
+
     // Handle placing order for a reference item
     if (isset($_POST['place_order_reference']) && isset($_POST['reference_id'])) {
         $reference_id = intval($_POST['reference_id']);
@@ -926,6 +948,27 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                 <i class="fas <?php echo $banner['icon']; ?> me-2"></i>
                 <strong><?php echo $banner['title']; ?>:</strong> <?php echo $banner['text']; ?>
             </div>
+
+            <!-- Success/Status Messages -->
+            <?php
+            $msg = isset($_GET['msg']) ? $_GET['msg'] : '';
+            $msg_map = [
+                'contractor_accepted' => ['class' => 'alert-success', 'icon' => 'fa-check-circle', 'text' => 'Contractor accepted successfully!'],
+                'contractor_rejected' => ['class' => 'alert-info', 'icon' => 'fa-sync-alt', 'text' => 'Contractor rejected. Project is now available to other contractors.'],
+                'proposal_confirmed' => ['class' => 'alert-success', 'icon' => 'fa-check-circle', 'text' => 'Proposal confirmed successfully!'],
+                'proposal_rejected' => ['class' => 'alert-warning', 'icon' => 'fa-redo', 'text' => 'Proposal rejected. Designer can create a new proposal.'],
+                'second_proposal_submitted' => ['class' => 'alert-success', 'icon' => 'fa-check-circle', 'text' => '2nd Proposal submitted successfully!'],
+                'confirmed' => ['class' => 'alert-success', 'icon' => 'fa-check-circle', 'text' => 'Order confirmed successfully!'],
+                'rejected' => ['class' => 'alert-danger', 'icon' => 'fa-times-circle', 'text' => 'Order rejected.'],
+            ];
+            
+            if ($msg && isset($msg_map[$msg])) {
+                $msg_info = $msg_map[$msg];
+                echo '<div class="alert ' . $msg_info['class'] . ' mb-4" role="alert">';
+                echo '<i class="fas ' . $msg_info['icon'] . ' me-2"></i>' . $msg_info['text'];
+                echo '</div>';
+            }
+            ?>
 
             <!-- Customer Detail Card -->
             <div class="row mb-4">
@@ -1779,6 +1822,22 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                             <br><small>Status: <span class="badge <?php echo $status_badge; ?>"><?php echo htmlspecialchars($order['supplier_status'] ?? 'Pending'); ?></span></small>
                                             <br><small>Contact: <?php echo htmlspecialchars($assigned_supplier['stel'] ?? '—'); ?> | <?php echo htmlspecialchars($assigned_supplier['semail'] ?? '—'); ?></small>
                                         </div>
+
+                                        <?php if (($order['supplier_status'] ?? '') === 'Pending'): ?>
+                                            <div class="alert alert-warning py-2 px-3 small mb-3">
+                                                <i class="fas fa-bell me-2"></i>New constructor request received. Please review and accept or reject.
+                                            </div>
+                                            <form method="post" class="mb-3">
+                                                <div class="d-grid gap-2 d-sm-flex">
+                                                    <button type="submit" name="accept_supplier_request" class="btn btn-success btn-sm flex-grow-1">
+                                                        <i class="fas fa-check me-1"></i>Accept Contractor
+                                                    </button>
+                                                    <button type="submit" name="reject_supplier_request" class="btn btn-danger btn-sm flex-grow-1" onclick="return confirm('Reject this contractor? The project will be available to other suppliers.');">
+                                                        <i class="fas fa-times me-1"></i>Reject & Find Others
+                                                    </button>
+                                                </div>
+                                            </form>
+                                        <?php endif; ?>
                                         
                                         <?php if (!$is_accepted): ?>
                                             <button type="button" class="btn btn-outline-primary btn-sm w-100" onclick="document.getElementById('supplier-assign-form').classList.toggle('d-none')">
