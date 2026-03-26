@@ -19,11 +19,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['handle_assignment']))
     $action = $_POST['action']; // 'Accepted' or 'Rejected'
     
     if (in_array($action, ['Accepted', 'Rejected'])) {
-        $update_sql = "UPDATE `Order` SET supplier_status = ? WHERE orderid = ? AND supplierid = ?";
-        $update_stmt = mysqli_prepare($mysqli, $update_sql);
-        mysqli_stmt_bind_param($update_stmt, "sii", $action, $order_id, $supplier_id);
-        mysqli_stmt_execute($update_stmt);
-        mysqli_stmt_close($update_stmt);
+        if ($action === 'Accepted') {
+            $update_sql = "UPDATE `Order` 
+                           SET supplier_status = ?,
+                               ostatus = CASE 
+                                   WHEN LOWER(ostatus) = 'coordinating contractors' THEN 'preparing'
+                                   ELSE ostatus
+                               END
+                           WHERE orderid = ? AND supplierid = ?";
+            $update_stmt = mysqli_prepare($mysqli, $update_sql);
+            mysqli_stmt_bind_param($update_stmt, "sii", $action, $order_id, $supplier_id);
+            mysqli_stmt_execute($update_stmt);
+            mysqli_stmt_close($update_stmt);
+        } else {
+            $update_sql = "UPDATE `Order` SET supplier_status = ? WHERE orderid = ? AND supplierid = ?";
+            $update_stmt = mysqli_prepare($mysqli, $update_sql);
+            mysqli_stmt_bind_param($update_stmt, "sii", $action, $order_id, $supplier_id);
+            mysqli_stmt_execute($update_stmt);
+            mysqli_stmt_close($update_stmt);
+        }
         header("Location: ProjectWorkerManagement.php");
         exit();
     }

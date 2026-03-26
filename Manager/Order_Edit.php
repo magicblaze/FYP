@@ -914,6 +914,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                 'waiting final design phase payment' => ['class' => 'alert-warning', 'icon' => 'fa-credit-card', 'title' => 'Waiting Payment', 'text' => 'Waiting for client payment to proceed.'],
                 'waiting 1st construction phase payment' => ['class' => 'alert-warning', 'icon' => 'fa-credit-card', 'title' => 'Waiting Construction Payment', 'text' => 'Waiting for client construction payment to proceed.'],
                 'preparing' => ['class' => 'alert-info', 'icon' => 'fa-truck-loading', 'title' => 'Preparing', 'text' => 'Project is being prepared for construction/delivery.'],
+                'coordinating contractors' => ['class' => 'alert-info', 'icon' => 'fa-users-cog', 'title' => 'Coordinating Contractors', 'text' => 'We are coordinating with contractors for the next steps.'],
                 'complete' => ['class' => 'alert-success', 'icon' => 'fa-check-circle', 'title' => 'Complete', 'text' => 'Project completed successfully.'],
                 'rejected' => ['class' => 'alert-danger', 'icon' => 'fa-times-circle', 'title' => 'Rejected', 'text' => 'Project has been rejected. See notes for reason.'],
             ];
@@ -1749,8 +1750,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                             </div>
                         </div>
                     <?php endif; // end of drafting 2nd proposal section ?>
-                    <?php if ($status === 'preparing'): ?>
-
+                    <?php if ($status === 'coordinating contractors'): ?>
                         <!-- Assign Constructor for Worker Allocation -->
                         <div class="col-lg-6 mb-4">
                             <div class="card h-100">
@@ -1827,7 +1827,84 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                 </div>
                             </div>
                         </div>
+                    <?php endif; ?>
+                    <?php if ($status === 'preparing'): ?>
+                         <!-- Assign Constructor for Worker Allocation -->
+                        <div class="col-lg-6 mb-4">
+                            <div class="card h-100">
+                                <div class="card-header bg-light">
+                                    <h5 class="card-title mb-0">
+                                        <i class="fas fa-hard-hat me-2"></i>Assign Constructor for Worker Allocation
+                                    </h5>
+                                </div>
+                                <div class="card-body">
+                                    <?php if (!empty($order['supplierid'])): 
+                                        $assigned_supplier_sql = "SELECT sname, stel, semail FROM Supplier WHERE supplierid = ?";
+                                        $assigned_supplier_stmt = mysqli_prepare($mysqli, $assigned_supplier_sql);
+                                        mysqli_stmt_bind_param($assigned_supplier_stmt, "i", $order['supplierid']);
+                                        mysqli_stmt_execute($assigned_supplier_stmt);
+                                        $assigned_supplier_res = mysqli_stmt_get_result($assigned_supplier_stmt);
+                                        $assigned_supplier = mysqli_fetch_assoc($assigned_supplier_res);
+                                        mysqli_stmt_close($assigned_supplier_stmt);
+                                        
+                                        $status_badge = 'bg-warning';
+                                        $is_accepted = ($order['supplier_status'] === 'Accepted');
+                                        if ($is_accepted) $status_badge = 'bg-success';
+                                        if ($order['supplier_status'] === 'Rejected') $status_badge = 'bg-danger';
+                                    ?>
+                                        <div class="alert alert-info mb-3">
+                                            <strong>Assigned Constructor:</strong> <?php echo htmlspecialchars($assigned_supplier['sname']); ?>
+                                            <br><small>Status: <span class="badge <?php echo $status_badge; ?>"><?php echo htmlspecialchars($order['supplier_status'] ?? 'Pending'); ?></span></small>
+                                            <br><small>Contact: <?php echo htmlspecialchars($assigned_supplier['stel'] ?? '—'); ?> | <?php echo htmlspecialchars($assigned_supplier['semail'] ?? '—'); ?></small>
+                                        </div>
+                                        
+                                        <?php if (!$is_accepted): ?>
+                                            <button type="button" class="btn btn-outline-primary btn-sm w-100" onclick="document.getElementById('supplier-assign-form').classList.toggle('d-none')">
+                                                <i class="fas fa-exchange-alt me-2"></i>Change Constructor
+                                            </button>
+                                        <?php else: ?>
+                                            <div class="alert alert-success py-2 px-3 small mb-0">
+                                                <i class="fas fa-lock me-2"></i>Constructor has accepted.
+                                            </div>
+                                        <?php endif; ?>
+                                    <?php endif; ?>
 
+                                    <?php if (empty($order['supplierid']) || ($order['supplier_status'] !== 'Accepted')): ?>
+                                        <div id="supplier-assign-form" class="<?php echo !empty($order['supplierid']) ? 'd-none' : ''; ?> mt-3">
+                                            <form method="post">
+                                                <div class="mb-3">
+                                                    <label class="form-label small text-muted">Select Constructor</label>
+                                                    <select name="supplier_id" class="form-select" required>
+                                                        <option value="">-- Choose Constructor --</option>
+                                                        <?php
+                                                        $suppliers_sql = "SELECT supplierid, sname FROM Supplier ORDER BY sname ASC";
+                                                        $suppliers_res = mysqli_query($mysqli, $suppliers_sql);
+                                                        while ($s = mysqli_fetch_assoc($suppliers_res)) {
+                                                            $is_selected = false;
+                                                            if (!empty($order['supplierid'])) {
+                                                                $is_selected = ($s['supplierid'] == $order['supplierid']);
+                                                            } else {
+                                                                $is_selected = ($s['supplierid'] == $order['design_supplierid']);
+                                                            }
+                                                            $sel = $is_selected ? 'selected' : '';
+                                                            $label = htmlspecialchars($s['sname']);
+                                                            if ($s['supplierid'] == $order['design_supplierid']) {
+                                                                $label .= " (Linked to Design)";
+                                                            }
+                                                            echo "<option value='{$s['supplierid']}' $sel>$label</option>";
+                                                        }
+                                                        ?>
+                                                    </select>
+                                                </div>
+                                                <button type="submit" name="assign_supplier" class="btn btn-primary w-100">
+                                                    <i class="fas fa-check me-2"></i>Assign Constructor
+                                                </button>
+                                            </form>
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        </div>
                         <!-- Worker Allocation Status Card -->
                         <div class="col-lg-6 mb-4">
                             <div class="card h-100">
@@ -1878,7 +1955,6 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                 </div>
                             </div>
                         </div>
-
                         <!-- Order Reference Table for Placing Order -->
                         <div class="col-12 mb-4">
                             <div class="card h-100">
