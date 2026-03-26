@@ -1975,11 +1975,11 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                 <div class="card-body">
                                     <?php
                                     // Check for all workers assigned to this order
-                                    $workers_sql = "SELECT w.name, wa.status, wa.allocation_date 
+                                    $workers_sql = "SELECT w.name, wa.status, wa.created_at 
                                                    FROM workerallocation wa 
                                                    JOIN Worker w ON wa.workerid = w.workerid 
                                                    WHERE wa.orderid = ? AND wa.status != 'Cancelled' 
-                                                   ORDER BY wa.allocation_date DESC";
+                                                   ORDER BY wa.created_at DESC";
                                     $workers_stmt = mysqli_prepare($mysqli, $workers_sql);
                                     mysqli_stmt_bind_param($workers_stmt, "i", $orderid);
                                     mysqli_stmt_execute($workers_stmt);
