@@ -114,8 +114,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             mysqli_stmt_execute($op_stmt);
             mysqli_stmt_close($op_stmt);
             
-            // Update order status to preparing (like original payment_construction.php)
-            $u_sql = "UPDATE `Order` SET ostatus = 'preparing' WHERE orderid = ? AND clientid = ?";
+            // Update order status to Coordinating Contractors (like original payment_construction.php)
+            $u_sql = "UPDATE `Order` SET ostatus = 'Coordinating Contractors' WHERE orderid = ? AND clientid = ?";
             $u_stmt = mysqli_prepare($mysqli, $u_sql);
             mysqli_stmt_bind_param($u_stmt, "ii", $orderid, $client_id);
             mysqli_stmt_execute($u_stmt);

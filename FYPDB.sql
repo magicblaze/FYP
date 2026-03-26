@@ -63,8 +63,8 @@ CREATE TABLE `Client` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 INSERT INTO `Client` (`clientid`,`cname`,`ctel`,`cemail`,`cpassword`,`address`,`budget`,`Floor_Plan`,`payment_method`,`remember_token`) VALUES
-(1, 'Alex Wong', 21232123, 'u3952310@gmail.com', 'User12345', 'Cheerful Technology Limited', 50000, null, null, NULL),
-(2, 'Tina Chan', 12345678, 'abc321@gmail.com', '123456', 'Build King Construction Limited', 70000, null, null, NULL);
+(1, 'Alex Wong', 21232123, 'u3952310@gmail.com', 'User12345', 'Room 1001, 10th Floor, New Tuen Mun Centre', 500000, null, null, NULL),
+(2, 'Tina Chan', 12345678, 'abc321@gmail.com', '123456', '456 Sample Avenue, Tuen Mun, Hong Kong', 700000, null, null, NULL);
 
 -- Manager table
 CREATE TABLE `Manager` (
@@ -239,7 +239,7 @@ CREATE TABLE `Order` (
   `gross_floor_area` decimal(10,2) DEFAULT NULL,
   `Requirements` varchar(255) DEFAULT NULL,
   `designid` int NOT NULL,
-  `ostatus` ENUM('waiting confirm', 'designing', 'reviewing design proposal', 'waiting for review design', 'drafting 2nd proposal', 'waiting client review', 'waiting 2nd design phase payment', 'waiting final design phase payment' , 'waiting 1st construction phase payment', 'complete', 'rejected','preparing') DEFAULT 'waiting confirm',
+  `ostatus` ENUM('waiting confirm', 'designing', 'reviewing design proposal', 'waiting for review design', 'drafting 2nd proposal', 'waiting client review', 'waiting 2nd design phase payment', 'waiting final design phase payment' , 'waiting 1st construction phase payment', 'complete', 'rejected','Coordinating Contractors','preparing') DEFAULT 'waiting confirm',
   `designedPicture` VARCHAR(500) DEFAULT NULL,
   `supplierid` int DEFAULT NULL,
   `supplier_status` ENUM('Pending', 'Accepted', 'Rejected') DEFAULT 'Pending',
@@ -257,7 +257,7 @@ CREATE TABLE `Order` (
 INSERT INTO `Order`
 (`orderid`, `odate`, `clientid`, `budget`, `deposit`, `cost`, `gross_floor_area`, `Requirements`,`designid`,`ostatus`,`designedPicture`,`supplierid`,`supplier_status`) VALUES
 (1, '2025-04-12 17:50:00', 1, 500000, 2000.00, NULL, NULL, 'HappyBuild Builders',2,'designing',NULL,NULL,NULL),
-(2, '2025-05-10 12:00:00', 2, 500000, 2000.00, NULL, NULL, 'ProThink Constructs',1,'preparing',NULL,1,'Pending');
+(2, '2025-05-10 12:00:00', 2, 500000, 2000.00, NULL, NULL, 'ProThink Constructs',1,'Coordinating Contractors',NULL,1,'Pending');
 
 CREATE TABLE `OrderPayment` (
   `payment_id` INT NOT NULL AUTO_INCREMENT,

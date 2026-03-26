@@ -914,6 +914,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                 'waiting final design phase payment' => ['class' => 'alert-warning', 'icon' => 'fa-credit-card', 'title' => 'Waiting Payment', 'text' => 'Waiting for client payment to proceed.'],
                 'waiting 1st construction phase payment' => ['class' => 'alert-warning', 'icon' => 'fa-credit-card', 'title' => 'Waiting Construction Payment', 'text' => 'Waiting for client construction payment to proceed.'],
                 'preparing' => ['class' => 'alert-info', 'icon' => 'fa-truck-loading', 'title' => 'Preparing', 'text' => 'Project is being prepared for construction/delivery.'],
+                'coordinating contractors' => ['class' => 'alert-info', 'icon' => 'fa-users-cog', 'title' => 'Coordinating Contractors', 'text' => 'We are coordinating with contractors for the next steps.'],
                 'complete' => ['class' => 'alert-success', 'icon' => 'fa-check-circle', 'title' => 'Complete', 'text' => 'Project completed successfully.'],
                 'rejected' => ['class' => 'alert-danger', 'icon' => 'fa-times-circle', 'title' => 'Rejected', 'text' => 'Project has been rejected. See notes for reason.'],
             ];
@@ -1749,8 +1750,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                             </div>
                         </div>
                     <?php endif; // end of drafting 2nd proposal section ?>
-                    <?php if ($status === 'preparing'): ?>
-
+                    <?php if ($status === 'coordinating contractors'): ?>
                         <!-- Assign Constructor for Worker Allocation -->
                         <div class="col-lg-6 mb-4">
                             <div class="card h-100">
@@ -1827,7 +1827,8 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                 </div>
                             </div>
                         </div>
-
+                    <?php endif; ?>
+                    <?php if ($status === 'preparing'): ?>
                         <!-- Worker Allocation Status Card -->
                         <div class="col-lg-6 mb-4">
                             <div class="card h-100">

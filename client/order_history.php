@@ -149,6 +149,10 @@ if (!empty($_GET['msg'])) {
             background-color: #e1f5fe;
             color: #039be5;
         }
+        .status-Coordinating_Contractors {
+            background-color: #e1f5fe;
+            color: #046291;
+        }
 
         .order-body {
             display: flex;
@@ -291,6 +295,8 @@ if (!empty($_GET['msg'])) {
                         $statusClass = 'status-cancelled';
                     } elseif ($statusLower === 'preparing') {
                         $statusClass = 'status-preparing';
+                    } elseif ($statusLower === 'Coordinating Contractors') {
+                        $statusClass = 'status-coordinating';
                     }
 
                     // Fetch the first image from DesignImage table
@@ -378,7 +384,7 @@ if (!empty($_GET['msg'])) {
                         <?php endif; ?>
                         <div style="margin-top: 0.75rem; display:flex; gap:8px;">
                             <!-- Primary view/proposal/details button -->
-                            <?php if ($statusLower === 'waiting client review' || $statusLower === 'waiting final design phase payment' || $statusLower === "preparing" || $statusLower === 'complete'): ?>
+                            <?php if ($statusLower === 'waiting client review' || $statusLower === 'waiting final design phase payment' || $statusLower === "Coordinating Contractors" || $statusLower === 'complete'): ?>
                                 <a href="Order_View.php?id=<?= (int) $order['orderid'] ?>" class="view-details-btn"
                                     onclick="event.stopPropagation();">
                                     <i class="fas fa-file-image me-1"></i>View Proposal</a>

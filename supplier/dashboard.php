@@ -294,7 +294,7 @@ $colorImageStmt->close();
             </div>
             <div class="col-md-4">
                 <div class="stat-card d-flex align-items-center justify-content-center flex-column">
-                    <a href="manage_orders.php" class="btn btn-primary btn-lg w-100">
+                    <a href="manage_project.php" class="btn btn-primary btn-lg w-100">
                         Manage Deliveries
                     </a>
                 </div>
@@ -308,15 +308,8 @@ $colorImageStmt->close();
             </div>
             <div class="col-md-4">
                 <div class="stat-card d-flex align-items-center justify-content-center flex-column">
-                    <a href="manage_project.php" class="btn btn-warning btn-lg w-100">
+                    <a href="ProjectWorkerManagement.php" class="btn btn-warning btn-lg w-100">
                         <i class="fas fa-tasks me-2"></i>Manage Project
-                    </a>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="stat-card d-flex align-items-center justify-content-center flex-column">
-                    <a href="ProjectWorkerManagement.php" class="btn btn-success btn-lg w-100">
-                        <i class="fas fa-users me-2"></i>Allocate Workers
                     </a>
                 </div>
             </div>
