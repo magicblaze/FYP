@@ -1,7 +1,8 @@
 <?php
 // supplier/ProjectWorkerManagement.php
 // Dedicated page for suppliers to manage worker allocations across all projects
-require_once dirname(__DIR__) . '/config.php';
+require_once dirname(__DIR__) . 
+'/config.php';
 session_start();
 
 // Check if user is logged in as supplier
@@ -80,12 +81,14 @@ while ($row = mysqli_fetch_assoc($projects_result)) {
                               d.designid, d.designName, d.expect_price as design_price, d.tag as design_tag, d.supplierid as design_supplierid,
                               s.scheduleid, s.OrderFinishDate, s.DesignFinishDate,
                               op.payment_id, op.total_design_payment, op.total_construction_payment, op.materials_cost,
-                              op.commission_1st, op.commission_final, op.total_amount_due
+                               op.commission_1st, op.commission_final, op.total_amount_due,
+                               dp.filename as designed_picture_filename
                        FROM `Order` o
                        LEFT JOIN `Client` c ON o.clientid = c.clientid
                        LEFT JOIN `Design` d ON o.designid = d.designid
                        LEFT JOIN `Schedule` s ON o.orderid = s.orderid
                        LEFT JOIN `OrderPayment` op ON o.payment_id = op.payment_id
+                       LEFT JOIN `DesignedPicture` dp ON o.orderid = dp.orderid AND dp.is_current = TRUE
                        WHERE o.orderid = ?";
     $edit_stmt = mysqli_prepare($mysqli, $edit_order_sql);
     mysqli_stmt_bind_param($edit_stmt, "i", $order_id);
@@ -191,7 +194,7 @@ mysqli_stmt_close($workers_stmt);
     <link rel="stylesheet" href="../css/styles.css">
     <style>
         body { background-color: #f4f7f6; }
-        .stat-card { background: white; border-radius: 12px; padding: 1.5rem; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05); text-align: center; margin-bottom: 1.5rem; transition: all 0.3s ease; }
+        .stat-card { background: white; border-radius: 12px; padding: 1.5rem; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05 ); text-align: center; margin-bottom: 1.5rem; transition: all 0.3s ease; }
         .stat-card:hover { box-shadow: 0 4px 16px rgba(52, 152, 219, 0.15); transform: translateY(-2px); }
         .stat-number { font-size: 2.5rem; font-weight: 700; color: #3498db; margin-bottom: 0.5rem; }
         .stat-label { color: #7f8c8d; font-size: 0.95rem; font-weight: 500; }
@@ -202,8 +205,7 @@ mysqli_stmt_close($workers_stmt);
         .status-badge { padding: 5px 15px; border-radius: 20px; font-size: 12px; font-weight: 700; text-transform: uppercase; }
         .project-info { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid #ecf0f1; }
         .info-label { color: #7f8c8d; font-size: 13px; margin-bottom: 2px; }
-        .info-value { color: #2c3e50; font-weight: 600; margin-bottom: 10px; }
-        .worker-badge { display: inline-block; background: #e8f4f8; color: #0c5460; padding: 0.5rem 1rem; border-radius: 20px; font-weight: 600; margin-bottom: 1rem; }
+        .info-value { font-weight: 600; color: #2c3e50; }
         .action-buttons { display: flex; gap: 0.75rem; flex-wrap: wrap; }
         .btn-allocate, .btn-detail { border: none; color: white; padding: 0.6rem 1.2rem; border-radius: 8px; font-weight: 600; transition: all 0.3s; text-decoration: none; display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; }
         .btn-allocate { background: #27ae60; }
@@ -374,6 +376,17 @@ mysqli_stmt_close($workers_stmt);
                                             <p class="text-dark"><?= nl2br(htmlspecialchars($edit_order['Requirements'] ?? 'No specific requirements')) ?></p>
                                         </div>
 
+                                        <!-- Design Proposal -->
+                                        <?php if (!empty($edit_order['designed_picture_filename'])): ?>
+                                        <div class="detail-card">
+                                            <div class="section-title"><i class="fas fa-paint-brush"></i> Design Proposal</div>
+                                            <div class="text-center">
+                                                <img src="../uploads/designed_Picture/<?= htmlspecialchars($edit_order['designed_picture_filename']) ?>" 
+                                                     alt="Design Proposal" class="img-fluid rounded shadow-sm" style="max-height: 400px; object-fit: contain;">
+                                            </div>
+                                        </div>
+                                        <?php endif; ?>
+
                                         <!-- Products & Materials -->
                                         <?php if (!empty($references)): ?>
                                         <div class="detail-card">
@@ -392,8 +405,7 @@ mysqli_stmt_close($workers_stmt);
                                                         <?php foreach ($references as $ref): ?>
                                                             <tr>
                                                                 <td>
-                                                                    <div class="fw-bold"><?= htmlspecialchars($ref['pname'] ?? 'Unknown Item') ?></div>
-                                                                    <small class="text-muted"><?= htmlspecialchars($ref['note'] ?? '') ?></small>
+                                                                    <div class="fw-bold"><?= htmlspecialchars($ref['pname'] ?? 'N/A') ?></div>
                                                                 </td>
                                                                 <td><span class="badge bg-light text-dark"><?= htmlspecialchars($ref['category'] ?? 'N/A') ?></span></td>
                                                                 <td><?= htmlspecialchars($ref['status'] ?? 'Pending') ?></td>
