@@ -10,7 +10,7 @@ if (!isset($_SESSION['user'])) {
 
 $user = $_SESSION['user'];
 $role = $user['role'];
-$userId = $user['id'];
+$userId = $user['id'] ?? $user['managerid'] ?? $user['clientid'] ?? 0;
 $orderId = isset($_GET['id']) ? intval($_GET['id']) : 0;
 $isEmbed = isset($_GET['embed']) && $_GET['embed'] === '1';
 
@@ -20,42 +20,89 @@ if ($orderId <= 0) {
 
 // Handle Date Updates (Manager Only)
 $updateMessage = "";
-if ($role === 'manager' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_dates'])) {
-    $newOrderDate = $_POST['order_finish_date'];
-    $newDesignDate = $_POST['design_finish_date'];
+if ($role === 'manager' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (isset($_POST['update_dates'])) {
+        $newOrderDate = $_POST['order_finish_date'];
+        $newDesignDate = $_POST['design_finish_date'];
 
-    // Check if schedule exists
-    $checkSchedule = $mysqli->prepare("SELECT scheduleid FROM Schedule WHERE orderid = ?");
-    $checkSchedule->bind_param("i", $orderId);
-    $checkSchedule->execute();
-    $scheduleResult = $checkSchedule->get_result();
+        // Check if schedule exists
+        $checkSchedule = $mysqli->prepare("SELECT scheduleid FROM Schedule WHERE orderid = ?");
+        $checkSchedule->bind_param("i", $orderId);
+        $checkSchedule->execute();
+        $scheduleResult = $checkSchedule->get_result();
 
-    if ($scheduleResult->num_rows > 0) {
-        // Update existing schedule
-        $updateStmt = $mysqli->prepare("UPDATE Schedule SET OrderFinishDate = ?, DesignFinishDate = ? WHERE orderid = ?");
-        $updateStmt->bind_param("ssi", $newOrderDate, $newDesignDate, $orderId);
-    } else {
-        // Insert new schedule
-        $managerId = $userId; // Use current manager's ID
-        $updateStmt = $mysqli->prepare("INSERT INTO Schedule (OrderFinishDate, DesignFinishDate, orderid, managerid) VALUES (?, ?, ?, ?)");
-        $updateStmt->bind_param("ssii", $newOrderDate, $newDesignDate, $orderId, $managerId);
+        if ($scheduleResult->num_rows > 0) {
+            // Update existing schedule
+            $updateStmt = $mysqli->prepare("UPDATE Schedule SET OrderFinishDate = ?, DesignFinishDate = ? WHERE orderid = ?");
+            $updateStmt->bind_param("ssi", $newOrderDate, $newDesignDate, $orderId);
+        } else {
+            // Insert new schedule
+            $managerId = $userId; // Use current manager's ID
+            $updateStmt = $mysqli->prepare("INSERT INTO Schedule (OrderFinishDate, DesignFinishDate, orderid, managerid) VALUES (?, ?, ?, ?)");
+            $updateStmt->bind_param("ssii", $newOrderDate, $newDesignDate, $orderId, $managerId);
+        }
+
+        if ($updateStmt->execute()) {
+            $updateMessage = "<div class='alert alert-success alert-dismissible fade show' role='alert'>
+                                <i class='fas fa-check-circle me-2'></i>Dates updated successfully!
+                                <button type='button' class='btn-close' data-bs-dismiss='alert' aria-label='Close'></button>
+                              </div>";
+        } else {
+            $updateMessage = "<div class='alert alert-danger alert-dismissible fade show' role='alert'>
+                                <i class='fas fa-exclamation-circle me-2'></i>Error updating dates: " . $mysqli->error . "
+                                <button type='button' class='btn-close' data-bs-dismiss='alert' aria-label='Close'></button>
+                              </div>";
+        }
     }
 
-    if ($updateStmt->execute()) {
-        $updateMessage = "<div class='alert alert-success alert-dismissible fade show' role='alert'>
-                            <i class='fas fa-check-circle me-2'></i>Dates updated successfully!
-                            <button type='button' class='btn-close' data-bs-dismiss='alert' aria-label='Close'></button>
-                          </div>";
-    } else {
-        $updateMessage = "<div class='alert alert-danger alert-dismissible fade show' role='alert'>
-                            <i class='fas fa-exclamation-circle me-2'></i>Error updating dates: " . $mysqli->error . "
-                            <button type='button' class='btn-close' data-bs-dismiss='alert' aria-label='Close'></button>
-                          </div>";
+    // Handle setting construction dates
+    if (isset($_POST['set_construction_dates'])) {
+        $start_date = $_POST['construction_start_date'];
+        $end_date = $_POST['construction_end_date'];
+        
+        if (empty($start_date) || empty($end_date)) {
+            $updateMessage = "<div class='alert alert-warning alert-dismissible fade show' role='alert'>
+                                <i class='fas fa-exclamation-triangle me-2'></i>Both start and end dates are required.
+                                <button type='button' class='btn-close' data-bs-dismiss='alert' aria-label='Close'></button>
+                              </div>";
+        } else {
+            // Check if schedule exists
+            $check_sch_sql = "SELECT scheduleid FROM `Schedule` WHERE orderid = ?";
+            $check_sch_stmt = $mysqli->prepare($check_sch_sql);
+            $check_sch_stmt->bind_param("i", $orderId);
+            $check_sch_stmt->execute();
+            $sch_res = $check_sch_stmt->get_result();
+            $sch_exists = $sch_res->fetch_assoc();
+            
+            if ($sch_exists) {
+                $update_sch_sql = "UPDATE `Schedule` SET construction_start_date = ?, construction_end_date = ?, construction_date_status = 'pending' WHERE orderid = ?";
+                $update_sch_stmt = $mysqli->prepare($update_sch_sql);
+                $update_sch_stmt->bind_param("ssi", $start_date, $end_date, $orderId);
+            } else {
+                $managerId = $userId;
+                $update_sch_sql = "INSERT INTO `Schedule` (orderid, managerid, construction_start_date, construction_end_date, construction_date_status) VALUES (?, ?, ?, ?, 'pending')";
+                $update_sch_stmt = $mysqli->prepare($update_sch_sql);
+                $update_sch_stmt->bind_param("iiss", $orderId, $managerId, $start_date, $end_date);
+            }
+            
+            if ($update_sch_stmt->execute()) {
+                $updateMessage = "<div class='alert alert-success alert-dismissible fade show' role='alert'>
+                                    <i class='fas fa-check-circle me-2'></i>Construction dates set successfully!
+                                    <button type='button' class='btn-close' data-bs-dismiss='alert' aria-label='Close'></button>
+                                  </div>";
+            } else {
+                $updateMessage = "<div class='alert alert-danger alert-dismissible fade show' role='alert'>
+                                    <i class='fas fa-exclamation-circle me-2'></i>Error setting construction dates: " . $mysqli->error . "
+                                    <button type='button' class='btn-close' data-bs-dismiss='alert' aria-label='Close'></button>
+                                  </div>";
+            }
+        }
     }
 }
 
 // 1. Fetch Basic Order & Client & Design Info
-$orderQuery = "SELECT o.*, c.cname, c.ctel, c.cemail, c.address, d.designName, d.description as designDesc, s.OrderFinishDate, s.DesignFinishDate 
+$orderQuery = "SELECT o.*, c.cname, c.ctel, c.cemail, c.address, d.designName, d.description as designDesc, 
+               s.OrderFinishDate, s.DesignFinishDate, s.construction_start_date, s.construction_end_date, s.construction_date_status 
                FROM `Order` o
                LEFT JOIN Client c ON o.clientid = c.clientid
                LEFT JOIN Design d ON o.designid = d.designid
@@ -339,7 +386,7 @@ $grandTotal = $productTotal + $feeTotal + ($order['cost'] ?? 0);
                 <div class="section-title">
                     <i class="fas fa-calendar-alt"></i>Schedule Management
                 </div>
-                <form method="POST" class="row g-4 align-items-end">
+                <form method="POST" class="row g-4 align-items-end mb-4">
                     <div class="col-md-4">
                         <label class="form-label small">Design Finish Date</label>
                         <div class="input-group">
@@ -364,6 +411,65 @@ $grandTotal = $productTotal + $feeTotal + ($order['cost'] ?? 0);
                         </button>
                     </div>
                 </form>
+
+                <?php if (strtolower($order['ostatus']) === 'preparing'): ?>
+                    <hr class="my-4">
+                    <div class="section-title text-primary">
+                        <i class="fas fa-hammer"></i> Construction Date Setting
+                    </div>
+                    <?php 
+                    $c_status = strtolower($order['construction_date_status'] ?? 'pending');
+                    if ($c_status === 'accepted'): 
+                    ?>
+                        <div class="alert alert-success d-flex align-items-center">
+                            <i class="fas fa-lock me-3 fs-4"></i>
+                            <div>
+                                <strong>Dates Locked:</strong> The client has accepted the construction schedule.
+                                <div class="mt-1 small">
+                                    Start: <?= date('F d, Y', strtotime($order['construction_start_date'])) ?> | 
+                                    End: <?= date('F d, Y', strtotime($order['construction_end_date'])) ?>
+                                </div>
+                            </div>
+                        </div>
+                    <?php else: ?>
+                        <form method="POST" class="row g-4 align-items-end">
+                            <div class="col-md-4">
+                                <label class="form-label small">Construction Start Date</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light border-end-0"><i class="fas fa-play text-muted"></i></span>
+                                    <input type="date" name="construction_start_date" class="form-control border-start-0"
+                                        value="<?= $order['construction_start_date'] ?>" required>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small">Construction End Date</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light border-end-0"><i class="fas fa-stop text-muted"></i></span>
+                                    <input type="date" name="construction_end_date" class="form-control border-start-0"
+                                        value="<?= $order['construction_end_date'] ?>" required>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <button type="submit" name="set_construction_dates" class="btn btn-primary w-100 fw-bold py-2">
+                                    <i class="fas fa-calendar-check me-2"></i> <?= $order['construction_start_date'] ? 'Update Construction Dates' : 'Set Construction Dates' ?>
+                                </button>
+                            </div>
+                            <?php if ($c_status === 'rejected'): ?>
+                                <div class="col-12 mt-2">
+                                    <div class="text-danger small fw-bold">
+                                        <i class="fas fa-exclamation-circle me-1"></i> The client rejected the previous dates. Please reschedule.
+                                    </div>
+                                </div>
+                            <?php elseif ($order['construction_start_date']): ?>
+                                <div class="col-12 mt-2">
+                                    <div class="text-warning small fw-bold">
+                                        <i class="fas fa-clock me-1"></i> Waiting for client confirmation...
+                                    </div>
+                                </div>
+                            <?php endif; ?>
+                        </form>
+                    <?php endif; ?>
+                <?php endif; ?>
             </div>
         <?php endif; ?>
 

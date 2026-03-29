@@ -62,6 +62,7 @@ $display_categories = [
     'waiting confirm',
     'designing',
     'In Progress',
+    'preparing',
     'complete',
     'rejected'
 ];
@@ -78,6 +79,7 @@ $status_mapping = [
     'waiting 2nd design phase payment' => 'In Progress',
     'waiting final design phase payment' => 'In Progress',
     'waiting 1st construction phase payment' => 'In Progress',
+    'preparing' => 'preparing',
     'complete' => 'complete',
     'rejected' => 'rejected'
 ];
@@ -108,7 +110,7 @@ foreach($orders as $o) {
     $s = strtolower($o['ostatus']);
     if (in_array($s, ['waiting confirm', 'designing'])) {
         $pending_count++;
-    } elseif (in_array($s, ['reviewing design proposal', 'waiting for review design', 'drafting 2nd proposal', 'waiting client review', 'waiting design phase payment', 'waiting 2nd design phase payment', 'waiting final design phase payment', 'waiting 1st construction phase payment'])) {
+    } elseif (in_array($s, ['reviewing design proposal', 'waiting for review design', 'drafting 2nd proposal', 'waiting client review', 'waiting design phase payment', 'waiting 2nd design phase payment', 'waiting final design phase payment', 'waiting 1st construction phase payment', 'preparing'])) {
         $in_progress_count++;
     } elseif (in_array($s, ['complete'])) {
         $done_count++;

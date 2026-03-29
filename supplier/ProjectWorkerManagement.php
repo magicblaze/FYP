@@ -314,7 +314,7 @@ mysqli_stmt_close($workers_stmt);
                                 <i class="fas fa-users"></i>Manage Workers
                             </a>
                         <?php elseif ($project['supplier_status'] === 'Rejected'): ?>
-                            <span class="badge bg-danger p-2">Assignment Rejected</span>
+                            <span class="badge bg-danger p-2">Rejected</span>
                         <?php endif; ?>
                     </div>
                 </div>
@@ -469,7 +469,7 @@ mysqli_stmt_close($workers_stmt);
                                                 <i class="fas fa-times me-1"></i> Reject
                                             </button>
                                             <button type="submit" name="action" value="Accepted" class="btn btn-success px-4">
-                                                <i class="fas fa-check me-1"></i> Accept Assignment
+                                                <i class="fas fa-check me-1"></i> Accept
                                             </button>
                                         </div>
                                     </form>

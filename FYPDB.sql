@@ -465,6 +465,9 @@ CREATE TABLE `Schedule` (
   `OrderFinishDate` date DEFAULT NULL,
   `DesignFinishDate` date DEFAULT NULL,
   `orderid` int NOT NULL,
+  `construction_start_date` date DEFAULT NULL,
+   `construction_end_date` date DEFAULT NULL,
+   `construction_date_status` ENUM('pending', 'accepted', 'rejected') DEFAULT 'pending',
   PRIMARY KEY (`scheduleid`),
   KEY `orderid_pk_idx` (`orderid`),
   KEY `managerid_pk_idx` (`managerid`),
@@ -472,9 +475,9 @@ CREATE TABLE `Schedule` (
   CONSTRAINT `orderid_fk` FOREIGN KEY (`orderid`) REFERENCES `Order` (`orderid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-INSERT INTO `Schedule` (`scheduleid`,`managerid`,`OrderFinishDate`,`DesignFinishDate`,`orderid`) VALUES
-(1,1,'2026-01-16','2026-01-15',1),
-(2,2,'2026-01-18','2026-01-17',2);
+INSERT INTO `Schedule` (`scheduleid`,`managerid`,`OrderFinishDate`,`DesignFinishDate`,`orderid`, `construction_start_date`, `construction_end_date`, `construction_date_status`) VALUES
+(1,1,'2026-01-16','2026-01-15',1, '2026-01-10', '2026-01-20', 'accepted'),
+(2,2,'2026-01-18','2026-01-17',2, '2026-01-12', '2026-01-25', 'pending');
 
 -- ChatRoom Tables
 CREATE TABLE `ChatRoom` (
@@ -693,7 +696,6 @@ ALTER TABLE `Message`
   ADD CONSTRAINT `fk_message_fileid` FOREIGN KEY (`fileid`) REFERENCES `UploadedFiles` (`fileid`) ON DELETE SET NULL;
 
 -- Work hours columns merged into `Worker` CREATE TABLE above; no ALTER needed here.
-w
 DELIMITER $$
 CREATE PROCEDURE IF NOT EXISTS `ResetWeeklyHours`()
 BEGIN
