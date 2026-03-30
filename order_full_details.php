@@ -1,5 +1,6 @@
 <?php
-require_once __DIR__ . '/config.php';
+require_once __DIR__ . 
+'/config.php';
 session_start();
 
 // Check if user is logged in
@@ -18,89 +19,9 @@ if ($orderId <= 0) {
     die("Invalid Project ID");
 }
 
-// Handle Date Updates (Manager Only)
 $updateMessage = "";
-if ($role === 'manager' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_POST['update_dates'])) {
-        $newOrderDate = $_POST['order_finish_date'];
-        $newDesignDate = $_POST['design_finish_date'];
 
-        // Check if schedule exists
-        $checkSchedule = $mysqli->prepare("SELECT scheduleid FROM Schedule WHERE orderid = ?");
-        $checkSchedule->bind_param("i", $orderId);
-        $checkSchedule->execute();
-        $scheduleResult = $checkSchedule->get_result();
-
-        if ($scheduleResult->num_rows > 0) {
-            // Update existing schedule
-            $updateStmt = $mysqli->prepare("UPDATE Schedule SET OrderFinishDate = ?, DesignFinishDate = ? WHERE orderid = ?");
-            $updateStmt->bind_param("ssi", $newOrderDate, $newDesignDate, $orderId);
-        } else {
-            // Insert new schedule
-            $managerId = $userId; // Use current manager's ID
-            $updateStmt = $mysqli->prepare("INSERT INTO Schedule (OrderFinishDate, DesignFinishDate, orderid, managerid) VALUES (?, ?, ?, ?)");
-            $updateStmt->bind_param("ssii", $newOrderDate, $newDesignDate, $orderId, $managerId);
-        }
-
-        if ($updateStmt->execute()) {
-            $updateMessage = "<div class='alert alert-success alert-dismissible fade show' role='alert'>
-                                <i class='fas fa-check-circle me-2'></i>Dates updated successfully!
-                                <button type='button' class='btn-close' data-bs-dismiss='alert' aria-label='Close'></button>
-                              </div>";
-        } else {
-            $updateMessage = "<div class='alert alert-danger alert-dismissible fade show' role='alert'>
-                                <i class='fas fa-exclamation-circle me-2'></i>Error updating dates: " . $mysqli->error . "
-                                <button type='button' class='btn-close' data-bs-dismiss='alert' aria-label='Close'></button>
-                              </div>";
-        }
-    }
-
-    // Handle setting construction dates
-    if (isset($_POST['set_construction_dates'])) {
-        $start_date = $_POST['construction_start_date'];
-        $end_date = $_POST['construction_end_date'];
-        
-        if (empty($start_date) || empty($end_date)) {
-            $updateMessage = "<div class='alert alert-warning alert-dismissible fade show' role='alert'>
-                                <i class='fas fa-exclamation-triangle me-2'></i>Both start and end dates are required.
-                                <button type='button' class='btn-close' data-bs-dismiss='alert' aria-label='Close'></button>
-                              </div>";
-        } else {
-            // Check if schedule exists
-            $check_sch_sql = "SELECT scheduleid FROM `Schedule` WHERE orderid = ?";
-            $check_sch_stmt = $mysqli->prepare($check_sch_sql);
-            $check_sch_stmt->bind_param("i", $orderId);
-            $check_sch_stmt->execute();
-            $sch_res = $check_sch_stmt->get_result();
-            $sch_exists = $sch_res->fetch_assoc();
-            
-            if ($sch_exists) {
-                $update_sch_sql = "UPDATE `Schedule` SET construction_start_date = ?, construction_end_date = ?, construction_date_status = 'pending' WHERE orderid = ?";
-                $update_sch_stmt = $mysqli->prepare($update_sch_sql);
-                $update_sch_stmt->bind_param("ssi", $start_date, $end_date, $orderId);
-            } else {
-                $managerId = $userId;
-                $update_sch_sql = "INSERT INTO `Schedule` (orderid, managerid, construction_start_date, construction_end_date, construction_date_status) VALUES (?, ?, ?, ?, 'pending')";
-                $update_sch_stmt = $mysqli->prepare($update_sch_sql);
-                $update_sch_stmt->bind_param("iiss", $orderId, $managerId, $start_date, $end_date);
-            }
-            
-            if ($update_sch_stmt->execute()) {
-                $updateMessage = "<div class='alert alert-success alert-dismissible fade show' role='alert'>
-                                    <i class='fas fa-check-circle me-2'></i>Construction dates set successfully!
-                                    <button type='button' class='btn-close' data-bs-dismiss='alert' aria-label='Close'></button>
-                                  </div>";
-            } else {
-                $updateMessage = "<div class='alert alert-danger alert-dismissible fade show' role='alert'>
-                                    <i class='fas fa-exclamation-circle me-2'></i>Error setting construction dates: " . $mysqli->error . "
-                                    <button type='button' class='btn-close' data-bs-dismiss='alert' aria-label='Close'></button>
-                                  </div>";
-            }
-        }
-    }
-}
-
-// 1. Fetch Basic Order & Client & Design Info
+// 1. Fetch Basic Order & Client & Design Info first to get the status
 $orderQuery = "SELECT o.*, c.cname, c.ctel, c.cemail, c.address, d.designName, d.description as designDesc, 
                s.OrderFinishDate, s.DesignFinishDate, s.construction_start_date, s.construction_end_date, s.construction_date_status 
                FROM `Order` o
@@ -116,6 +37,91 @@ $order = $stmt->get_result()->fetch_assoc();
 if (!$order) {
     die("Project not found");
 }
+
+$isConstructionDateLocked = strtolower($order['construction_date_status'] ?? '') === 'accepted';
+
+// Handle POST requests for manager and client actions
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Manager actions
+    if ($role === 'manager') {
+        // Handle Project/Design Date Updates
+        if (isset($_POST['update_project_dates'])) {
+            $newOrderDate = $_POST['order_finish_date'];
+            $newDesignDate = $_POST['design_finish_date'];
+
+            $checkSchedule = $mysqli->prepare("SELECT scheduleid FROM Schedule WHERE orderid = ?");
+            $checkSchedule->bind_param("i", $orderId);
+            $checkSchedule->execute();
+            $scheduleResult = $checkSchedule->get_result();
+
+            if ($scheduleResult->num_rows > 0) {
+                $updateStmt = $mysqli->prepare("UPDATE Schedule SET OrderFinishDate = ?, DesignFinishDate = ? WHERE orderid = ?");
+                $updateStmt->bind_param("ssi", $newOrderDate, $newDesignDate, $orderId);
+            } else {
+                $managerId = $userId;
+                $updateStmt = $mysqli->prepare("INSERT INTO Schedule (OrderFinishDate, DesignFinishDate, orderid, managerid) VALUES (?, ?, ?, ?)");
+                $updateStmt->bind_param("ssii", $newOrderDate, $newDesignDate, $orderId, $managerId);
+            }
+
+            if ($updateStmt->execute()) {
+                $updateMessage .= "<div class='alert alert-success alert-dismissible fade show' role='alert'>Project/Design dates updated successfully!<button type='button' class='btn-close' data-bs-dismiss='alert' aria-label='Close'></button></div>";
+            } else {
+                $updateMessage .= "<div class='alert alert-danger alert-dismissible fade show' role='alert'>Error updating dates: " . $mysqli->error . "<button type='button' class='btn-close' data-bs-dismiss='alert' aria-label='Close'></button></div>";
+            }
+        }
+
+        // Handle Construction Date Updates
+        if (isset($_POST['set_construction_dates']) && !$isConstructionDateLocked) {
+            $start_date = $_POST['construction_start_date'];
+            $end_date = $_POST['construction_end_date'];
+
+            $check_sch_sql = "SELECT scheduleid FROM `Schedule` WHERE orderid = ?";
+            $check_sch_stmt = $mysqli->prepare($check_sch_sql);
+            $check_sch_stmt->bind_param("i", $orderId);
+            $check_sch_stmt->execute();
+            $sch_res = $check_sch_stmt->get_result();
+
+            if ($sch_res->num_rows > 0) {
+                $update_sch_sql = "UPDATE `Schedule` SET construction_start_date = ?, construction_end_date = ?, construction_date_status = 'pending' WHERE orderid = ?";
+                $update_sch_stmt = $mysqli->prepare($update_sch_sql);
+                $update_sch_stmt->bind_param("ssi", $start_date, $end_date, $orderId);
+            } else {
+                $managerId = $userId;
+                $update_sch_sql = "INSERT INTO `Schedule` (orderid, managerid, construction_start_date, construction_end_date, construction_date_status) VALUES (?, ?, ?, ?, 'pending')";
+                $update_sch_stmt = $mysqli->prepare($update_sch_sql);
+                $update_sch_stmt->bind_param("iiss", $orderId, $managerId, $start_date, $end_date);
+            }
+
+            if ($update_sch_stmt->execute()) {
+                $updateMessage .= "<div class='alert alert-success alert-dismissible fade show' role='alert'>Construction dates submitted to client for approval.<button type='button' class='btn-close' data-bs-dismiss='alert' aria-label='Close'></button></div>";
+            } else {
+                $updateMessage .= "<div class='alert alert-danger alert-dismissible fade show' role='alert'>Error setting construction dates: " . $mysqli->error . "<button type='button' class='btn-close' data-bs-dismiss='alert' aria-label='Close'></button></div>";
+            }
+        }
+    }
+
+    // Handle Client's acceptance/rejection
+    if ($role === 'client' && isset($_POST['action_construction_date'])) {
+        $action = $_POST['action_construction_date'];
+        $newStatus = ($action === 'accept') ? 'accepted' : 'rejected';
+        $successMessage = "Construction dates {$newStatus} successfully!";
+
+        $updateStatusSql = "UPDATE `Schedule` SET construction_date_status = ? WHERE orderid = ?";
+        $updateStatusStmt = $mysqli->prepare($updateStatusSql);
+        $updateStatusStmt->bind_param("si", $newStatus, $orderId);
+
+        if ($updateStatusStmt->execute()) {
+            $updateMessage = "<div class='alert alert-success alert-dismissible fade show' role='alert'>{$successMessage}<button type='button' class='btn-close' data-bs-dismiss='alert' aria-label='Close'></button></div>";
+        } else {
+            $updateMessage = "<div class='alert alert-danger alert-dismissible fade show' role='alert'>Error: " . $mysqli->error . "<button type='button' class='btn-close' data-bs-dismiss='alert' aria-label='Close'></button></div>";
+        }
+    }
+    // Re-fetch data after update
+    $stmt->execute();
+    $order = $stmt->get_result()->fetch_assoc();
+    $isConstructionDateLocked = strtolower($order['construction_date_status'] ?? '') === 'accepted';
+}
+
 
 // 2. Fetch Products/Materials (OrderReference)
 $refQuery = "SELECT orf.*, p.pname, p.category, p.price as unit_price
@@ -265,211 +271,159 @@ $grandTotal = $productTotal + $feeTotal + ($order['cost'] ?? 0);
                 font-size: 16px !important;
                 margin-bottom: 15px !important;
             }
-
-            .info-value {
-                font-size: 14px !important;
-                margin-bottom: 10px !important;
-            }
-
-            .status-badge {
-                padding: 4px 10px !important;
-                font-size: 11px !important;
-            }
-
-            .manager-action-box {
-                padding: 15px !important;
-                margin-bottom: 15px !important;
-            }
-
-            .btn-update-schedule {
-                padding: 0.5rem 1rem !important;
-                font-size: 14px !important;
-            }
-
-            .row>* {
-                width: 100% !important;
-                max-width: 100% !important;
-                flex: 0 0 100% !important;
-            }
-
         <?php endif; ?>
-
-        /* Updated Manager Action Box Style */
-        .manager-action-box {
-            background: white;
-            border-radius: 12px;
-            padding: 25px;
-            margin-bottom: 25px;
-            box-shadow: 0 4px 15px rgba(52, 152, 219, 0.1);
-            border: 1px solid rgba(52, 152, 219, 0.2);
-        }
-
-        .manager-action-box .section-title {
-            border-bottom: 2px solid #eef2f7;
-            color: #3498db;
-        }
-
-        .manager-action-box .form-label {
-            color: #34495e;
-            font-weight: 600;
-        }
-
-        .manager-action-box .form-control {
-            border: 2px solid #ecf0f1;
-            border-radius: 8px;
-            padding: 0.6rem 0.75rem;
-            transition: all 0.3s;
-        }
-
-        .manager-action-box .form-control:focus {
-            border-color: #3498db;
-            box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.1);
-        }
-
-        .btn-update-schedule {
-            background: #3498db;
-            border: none;
-            color: white;
-            font-weight: 600;
-            padding: 0.75rem 1.5rem;
-            border-radius: 8px;
-            transition: all 0.3s;
-            box-shadow: 0 4px 6px rgba(52, 152, 219, 0.2);
-        }
-
-        .btn-update-schedule:hover {
-            background: #2980b9;
-            transform: translateY(-2px);
-            box-shadow: 0 6px 12px rgba(52, 152, 219, 0.3);
-            color: white;
-        }
     </style>
 </head>
 
 <body>
-    <?php if (!$isEmbed): ?>
-        <?php include_once __DIR__ . '/includes/header.php'; ?>
-    <?php endif; ?>
+    <?php if (!$isEmbed) include __DIR__ . '/navbar.php'; ?>
 
-    <main class="container mt-4 mb-5">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <a href="project_management.php<?= $isEmbed ? '?embed=1' : '' ?>" class="back-btn mb-0">
-                <i class="fas fa-arrow-left me-2"></i>Back
+    <main class="container mt-5">
+        <?php if (!$isEmbed): ?>
+            <a href="projects.php" class="back-btn">
+                <i class="fas fa-arrow-left me-2"></i> Back to Projects
             </a>
-            <?php if (!$isEmbed): ?>
-                <div class="d-flex gap-2">
-                    <button class="btn btn-outline-primary btn-sm" type="button" data-bs-toggle="offcanvas"
-                        data-bs-target="#projectAppPanel" aria-controls="projectAppPanel">
-                        <i class="fas fa-tasks me-1"></i> Project View
-                    </button>
-                </div>
-            <?php endif; ?>
-        </div>
+        <?php endif; ?>
 
-        <div class="container-fluid px-0">
-            <?= $updateMessage ?>
-        </div>
+        <?= $updateMessage ?>
 
-        <div class="d-flex justify-content-between align-items-center mb-4 bg-white p-4 rounded-3 shadow-sm">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2 class="mb-0 text-primary">Project Details #<?= $orderId ?></h2>
             <div>
-                <h2 class="fw-bold mb-1">Project #<?= $orderId ?></h2>
-                <p class="text-muted mb-0"><i class="far fa-calendar-alt me-1"></i> Created in
-                    <?= date('F d, Y', strtotime($order['odate'])) ?></p>
+                <span class="badge bg-primary status-badge">
+                    <?= htmlspecialchars($order['ostatus']) ?>
+                </span>
             </div>
-            <span
-                class="status-badge bg-primary text-white px-4 py-2 fs-6"><?= htmlspecialchars($order['ostatus']) ?></span>
         </div>
 
-        <!-- Manager Exclusive Area - Styled to match system -->
         <?php if ($role === 'manager'): ?>
-            <div class="manager-action-box">
+            <div class="detail-card">
                 <div class="section-title">
-                    <i class="fas fa-calendar-alt"></i>Schedule Management
+                    <i class="fas fa-calendar-alt"></i> Set Project Dates
                 </div>
-                <form method="POST" class="row g-4 align-items-end mb-4">
-                    <div class="col-md-4">
-                        <label class="form-label small">Design Finish Date</label>
-                        <div class="input-group">
-                            <span class="input-group-text bg-light border-end-0"><i
-                                    class="fas fa-pencil-ruler text-muted"></i></span>
-                            <input type="date" name="design_finish_date" class="form-control border-start-0"
-                                value="<?= $order['DesignFinishDate'] ?>">
-                        </div>
+                <form method="POST" class="row g-3">
+                    <div class="col-md-5">
+                        <label for="design_finish_date" class="form-label small">Design Finish Date</label>
+                        <input type="date" class="form-control" id="design_finish_date" name="design_finish_date"
+                            value="<?= $order['DesignFinishDate'] ?>">
                     </div>
-                    <div class="col-md-4">
-                        <label class="form-label small">Project Finish Date</label>
-                        <div class="input-group">
-                            <span class="input-group-text bg-light border-end-0"><i
-                                    class="fas fa-check-double text-muted"></i></span>
-                            <input type="date" name="order_finish_date" class="form-control border-start-0"
-                                value="<?= $order['OrderFinishDate'] ?>">
-                        </div>
+                    <div class="col-md-5">
+                        <label for="order_finish_date" class="form-label small">Project Finish Date</label>
+                        <input type="date" class="form-control" id="order_finish_date" name="order_finish_date"
+                            value="<?= $order['OrderFinishDate'] ?>">
                     </div>
-                    <div class="col-md-4">
-                        <button type="submit" name="update_dates" class="btn btn-update-schedule w-100">
-                            <i class="fas fa-sync-alt me-2"></i>Update Schedule
+                    <div class="col-md-2 d-flex align-items-end">
+                        <button type="submit" name="update_project_dates" class="btn btn-primary w-100">
+                            <i class="fas fa-save"></i> Save
                         </button>
                     </div>
                 </form>
+            </div>
 
-                <?php if (strtolower($order['ostatus']) === 'preparing'): ?>
-                    <hr class="my-4">
-                    <div class="section-title text-primary">
-                        <i class="fas fa-hammer"></i> Construction Date Setting
+            <?php if (strtolower($order['ostatus']) === 'preparing'): ?>
+            <div class="detail-card">
+                <div class="section-title">
+                    <i class="fas fa-hammer"></i> Set Construction Dates
+                </div>
+                <form method="POST" class="row g-3">
+                    <div class="col-md-5">
+                        <label for="construction_start_date" class="form-label small">Construction Start Date</label>
+                        <input type="date" class="form-control" id="construction_start_date" name="construction_start_date"
+                            value="<?= $order['construction_start_date'] ?>" <?= $isConstructionDateLocked ? 'readonly' : '' ?>>
                     </div>
-                    <?php 
-                    $c_status = strtolower($order['construction_date_status'] ?? 'pending');
-                    if ($c_status === 'accepted'): 
-                    ?>
-                        <div class="alert alert-success d-flex align-items-center">
-                            <i class="fas fa-lock me-3 fs-4"></i>
-                            <div>
-                                <strong>Dates Locked:</strong> The client has accepted the construction schedule.
-                                <div class="mt-1 small">
-                                    Start: <?= date('F d, Y', strtotime($order['construction_start_date'])) ?> | 
-                                    End: <?= date('F d, Y', strtotime($order['construction_end_date'])) ?>
-                                </div>
+                    <div class="col-md-5">
+                        <label for="construction_end_date" class="form-label small">Construction End Date</label>
+                        <input type="date" class="form-control" id="construction_end_date" name="construction_end_date"
+                            value="<?= $order['construction_end_date'] ?>" <?= $isConstructionDateLocked ? 'readonly' : '' ?>>
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end">
+                        <?php if (!$isConstructionDateLocked): ?>
+                        <button type="submit" name="set_construction_dates" class="btn btn-primary w-100">
+                            <i class="fas fa-paper-plane"></i> Submit
+                        </button>
+                        <?php endif; ?>
+                    </div>
+                     <?php if ($isConstructionDateLocked): ?>
+                        <div class="col-12 mt-3">
+                            <div class="alert alert-success d-flex align-items-center">
+                                <i class="fas fa-lock me-3 fs-4"></i>
+                                <div><strong>Dates Locked:</strong> The client has accepted the construction schedule.</div>
                             </div>
                         </div>
-                    <?php else: ?>
-                        <form method="POST" class="row g-4 align-items-end">
-                            <div class="col-md-4">
-                                <label class="form-label small">Construction Start Date</label>
-                                <div class="input-group">
-                                    <span class="input-group-text bg-light border-end-0"><i class="fas fa-play text-muted"></i></span>
-                                    <input type="date" name="construction_start_date" class="form-control border-start-0"
-                                        value="<?= $order['construction_start_date'] ?>" required>
-                                </div>
+                    <?php elseif (strtolower($order['construction_date_status'] ?? '') === 'rejected'): ?>
+                        <div class="col-12 mt-2">
+                            <div class="text-danger small fw-bold">
+                                <i class="fas fa-exclamation-circle me-1"></i> The client rejected the previous dates. Please reschedule and submit.
                             </div>
-                            <div class="col-md-4">
-                                <label class="form-label small">Construction End Date</label>
-                                <div class="input-group">
-                                    <span class="input-group-text bg-light border-end-0"><i class="fas fa-stop text-muted"></i></span>
-                                    <input type="date" name="construction_end_date" class="form-control border-start-0"
-                                        value="<?= $order['construction_end_date'] ?>" required>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <button type="submit" name="set_construction_dates" class="btn btn-primary w-100 fw-bold py-2">
-                                    <i class="fas fa-calendar-check me-2"></i> <?= $order['construction_start_date'] ? 'Update Construction Dates' : 'Set Construction Dates' ?>
-                                </button>
-                            </div>
-                            <?php if ($c_status === 'rejected'): ?>
-                                <div class="col-12 mt-2">
-                                    <div class="text-danger small fw-bold">
-                                        <i class="fas fa-exclamation-circle me-1"></i> The client rejected the previous dates. Please reschedule.
-                                    </div>
-                                </div>
-                            <?php elseif ($order['construction_start_date']): ?>
-                                <div class="col-12 mt-2">
-                                    <div class="text-warning small fw-bold">
-                                        <i class="fas fa-clock me-1"></i> Waiting for client confirmation...
-                                    </div>
-                                </div>
-                            <?php endif; ?>
-                        </form>
+                        </div>
                     <?php endif; ?>
+                </form>
+            </div>
+            <?php endif; ?>
+        <?php elseif ($role === 'client' && strtolower($order['ostatus']) === 'preparing' && $order['construction_start_date']): ?>
+            <div class="detail-card">
+                <div class="section-title text-primary">
+                    <i class="fas fa-hammer"></i> Construction Date Confirmation
+                </div>
+                <?php 
+                $c_status = strtolower($order['construction_date_status'] ?? 'pending');
+                if ($c_status === 'accepted'): 
+                ?>
+                    <div class="alert alert-success d-flex align-items-center">
+                        <i class="fas fa-check-circle me-3 fs-4"></i>
+                        <div>
+                            <strong>You have accepted the dates:</strong>
+                            <div class="mt-1 small">
+                                Start: <?= date('F d, Y', strtotime($order['construction_start_date'])) ?> | 
+                                End: <?= date('F d, Y', strtotime($order['construction_end_date'])) ?>
+                            </div>
+                        </div>
+                    </div>
+                <?php elseif ($c_status === 'pending'): ?>
+                    <div class="alert alert-info d-flex align-items-center mb-3">
+                        <i class="fas fa-info-circle me-3 fs-4"></i>
+                        <div>
+                            Manager has proposed construction dates:
+                            <strong><?= date('F d, Y', strtotime($order['construction_start_date'])) ?></strong> to
+                            <strong><?= date('F d, Y', strtotime($order['construction_end_date'])) ?></strong>.
+                            Please review and respond.
+                        </div>
+                    </div>
+                    <form method="POST" class="d-flex justify-content-end gap-2">
+                        <button type="submit" name="action_construction_date" value="accept" class="btn btn-success">
+                            <i class="fas fa-check-circle me-2"></i>Accept Dates
+                        </button>
+                        <button type="submit" name="action_construction_date" value="reject" class="btn btn-danger">
+                            <i class="fas fa-times-circle me-2"></i>Reject Dates
+                        </button>
+                    </form>
+                <?php elseif ($c_status === 'rejected'): ?>
+                     <div class="alert alert-warning d-flex align-items-center">
+                        <i class="fas fa-exclamation-triangle me-3 fs-4"></i>
+                        <div>
+                            <strong>You have rejected the dates.</strong> Please wait for the manager to propose a new schedule.
+                        </div>
+                    </div>
                 <?php endif; ?>
+            </div>
+        <?php endif; ?>
+
+        <?php if ($role === 'supplier' && strtolower($order['construction_date_status'] ?? '') === 'accepted'): ?>
+            <div class="detail-card">
+                <div class="section-title text-info">
+                    <i class="fas fa-calendar-alt"></i> Construction Schedule
+                </div>
+                <div class="alert alert-info d-flex align-items-center">
+                    <i class="fas fa-info-circle me-3 fs-4"></i>
+                    <div>
+                        <strong>Confirmed Construction Dates:</strong>
+                        <div class="mt-1 small">
+                            Start: <?= date('F d, Y', strtotime($order['construction_start_date'])) ?> | 
+                            End: <?= date('F d, Y', strtotime($order['construction_end_date'])) ?>
+                        </div>
+                        <div class="mt-1 small text-success fw-bold"><i class="fas fa-check-circle me-1"></i> The construction dates have been accepted by the client.</div>
+                    </div>
+                </div>
             </div>
         <?php endif; ?>
 
@@ -499,6 +453,11 @@ $grandTotal = $productTotal + $feeTotal + ($order['cost'] ?? 0);
                             <div class="info-label">Estimated Completion</div>
                             <div class="info-value text-primary">
                                 <?= $order['OrderFinishDate'] ? date('F d, Y', strtotime($order['OrderFinishDate'])) : 'TBD' ?>
+                            </div>
+
+                            <div class="info-label">Design Finish Date</div>
+                            <div class="info-value text-primary">
+                                <?= $order['DesignFinishDate'] ? date('F d, Y', strtotime($order['DesignFinishDate'])) : 'TBD' ?>
                             </div>
                         </div>
                     </div>
@@ -645,4 +604,5 @@ $grandTotal = $productTotal + $feeTotal + ($order['cost'] ?? 0);
         <?php include __DIR__ . '/Public/chat_widget.php'; ?>
     <?php endif; ?>
 </body>
+
 </html>

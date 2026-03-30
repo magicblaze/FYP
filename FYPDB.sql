@@ -477,7 +477,7 @@ CREATE TABLE `Schedule` (
 
 INSERT INTO `Schedule` (`scheduleid`,`managerid`,`OrderFinishDate`,`DesignFinishDate`,`orderid`, `construction_start_date`, `construction_end_date`, `construction_date_status`) VALUES
 (1,1,'2026-01-16','2026-01-15',1, '2026-01-10', '2026-01-20', 'accepted'),
-(2,2,'2026-01-18','2026-01-17',2, '2026-01-12', '2026-01-25', 'pending');
+(2,2,'2026-01-18','2026-01-17',2, NULL, NULL, 'pending');
 
 -- ChatRoom Tables
 CREATE TABLE `ChatRoom` (
