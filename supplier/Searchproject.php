@@ -13,10 +13,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accept_project'])) {
 	$order_id = (int) ($_POST['order_id'] ?? 0);
 	if ($supplier_id > 0 && $order_id > 0) {
 		$accept_sql = "UPDATE `Order`
-		              SET supplierid = ?, supplier_status = 'Pending'
+		              SET supplierid = ?, supplier_status = 'Accepted', ostatus = 'preparing'
 		              WHERE orderid = ?
 		                AND supplierid IS NULL
-		                AND supplier_status = 'Pending'
+		                
 		                AND LOWER(ostatus) = 'coordinating contractors'";
 		$accept_stmt = mysqli_prepare($mysqli, $accept_sql);
 		if ($accept_stmt) {
@@ -43,7 +43,7 @@ $sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.budget,
 		JOIN `Client` c ON o.clientid = c.clientid
 		LEFT JOIN `Design` d ON o.designid = d.designid
 		WHERE o.supplierid IS NULL
-		  AND o.supplier_status = 'Pending'
+		  
 		  AND LOWER(o.ostatus) = 'coordinating contractors'";
 
 $params = [];
@@ -99,7 +99,7 @@ if ($stmt) {
 
 		<?php if (isset($_GET['msg']) && $_GET['msg'] === 'accepted'): ?>
 			<div class="alert alert-success">
-				<i class="fas fa-check-circle me-2"></i>Project accepted successfully. Manager will review your assignment request.
+				<i class="fas fa-check-circle me-2"></i>Project accepted successfully. You can now manage workers for this project.
 			</div>
 		<?php elseif (isset($_GET['msg']) && $_GET['msg'] === 'unavailable'): ?>
 			<div class="alert alert-warning">

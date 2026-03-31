@@ -42,6 +42,13 @@ $isConstructionDateLocked = strtolower($order['construction_date_status'] ?? '')
 
 // Handle POST requests for manager and client actions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Check if workers have been allocated for this order
+    $worker_check_sql = "SELECT COUNT(*) as cnt FROM `workerallocation` WHERE orderid = ? AND status != 'Completed' AND status != 'Cancelled'";
+    $worker_check_stmt = $mysqli->prepare($worker_check_sql);
+    $worker_check_stmt->bind_param("i", $orderId);
+    $worker_check_stmt->execute();
+    $workersAllocated = $worker_check_stmt->get_result()->fetch_assoc()['cnt'] > 0;
+
     // Manager actions
     if ($role === 'manager') {
         // Handle Project/Design Date Updates
@@ -94,12 +101,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($update_sch_stmt->execute()) {
                 // Check if workers have been allocated for this order
-                $worker_check_sql = "SELECT COUNT(*) as cnt FROM `workerallocation` WHERE orderid = ? AND status != 'Completed' AND status != 'Cancelled'";
-                $worker_check_stmt = $mysqli->prepare($worker_check_sql);
-                $worker_check_stmt->bind_param("i", $orderId);
-                $worker_check_stmt->execute();
-                $worker_count = $worker_check_stmt->get_result()->fetch_assoc()['cnt'];
-                if ($worker_count > 0) {
+                if ($workersAllocated) {
                     $status_update_sql = "UPDATE `Order` SET ostatus = 'waiting client confirm construction date' WHERE orderid = ?";
                     $status_update_stmt = $mysqli->prepare($status_update_sql);
                     $status_update_stmt->bind_param("i", $orderId);
@@ -114,6 +116,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // Handle Client's acceptance/rejection
     if ($role === 'client' && isset($_POST['action_construction_date'])) {
+        // Security check: only allow if workers are allocated
+        if ($_POST['action_construction_date'] === 'accept' && !$workersAllocated) {
+            $updateMessage = "<div class='alert alert-danger alert-dismissible fade show' role='alert'>You cannot accept construction dates until workers have been allocated by the supplier.<button type='button' class='btn-close' data-bs-dismiss='alert' aria-label='Close'></button></div>";
+            goto end_post_processing;
+        }
+
         $action = $_POST['action_construction_date'];
         $newStatus = ($action === 'accept') ? 'accepted' : 'rejected';
         $successMessage = "Construction dates {$newStatus} successfully!";
@@ -134,12 +142,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $updateMessage = "<div class='alert alert-danger alert-dismissible fade show' role='alert'>Error: " . $mysqli->error . "<button type='button' class='btn-close' data-bs-dismiss='alert' aria-label='Close'></button></div>";
         }
     }
+
+    end_post_processing:
     // Re-fetch data after update
     $stmt->execute();
     $order = $stmt->get_result()->fetch_assoc();
     $isConstructionDateLocked = strtolower($order['construction_date_status'] ?? '') === 'accepted';
 }
-
 
 // 2. Fetch Products/Materials (OrderReference)
 $refQuery = "SELECT orf.*, p.pname, p.category, p.price as unit_price
@@ -234,19 +243,6 @@ $grandTotal = $productTotal + $feeTotal + ($order['cost'] ?? 0);
             text-transform: uppercase;
         }
 
-        .table thead th {
-            background-color: #f8f9fa;
-            border-top: none;
-            font-size: 13px;
-            color: #7f8c8d;
-        }
-
-        .total-row {
-            font-size: 16px;
-            font-weight: 700;
-            background: #f8f9fa;
-        }
-
         .back-btn {
             margin-bottom: 20px;
             display: inline-flex;
@@ -297,11 +293,9 @@ $grandTotal = $productTotal + $feeTotal + ($order['cost'] ?? 0);
     <?php if (!$isEmbed) include __DIR__ . '/navbar.php'; ?>
 
     <main class="container mt-5">
-        <?php if (!$isEmbed): ?>
-            <a href="projects.php" class="back-btn">
-                <i class="fas fa-arrow-left me-2"></i> Back to Projects
-            </a>
-        <?php endif; ?>
+            <a href="project_management.php<?= $isEmbed ? '?embed=1' : '' ?>" class="back-btn">
+            <i class="fas fa-arrow-left me-2"></i> Back to Projects
+        </a>
 
         <?= $updateMessage ?>
 
@@ -379,6 +373,15 @@ $grandTotal = $productTotal + $feeTotal + ($order['cost'] ?? 0);
             </div>
             <?php endif; ?>
         <?php elseif ($role === 'client' && in_array(strtolower($order['ostatus']), ['preparing', 'waiting client confirm construction date']) && $order['construction_start_date']): ?>
+            <?php
+            // Re-check worker allocation status for display logic
+            $worker_check_sql_display = "SELECT COUNT(*) as cnt FROM `workerallocation` WHERE orderid = ? AND status != 'Completed' AND status != 'Cancelled'";
+            $worker_check_stmt_display = $mysqli->prepare($worker_check_sql_display);
+            $worker_check_stmt_display->bind_param("i", $orderId);
+            $worker_check_stmt_display->execute();
+            $workersAllocatedForDisplay = $worker_check_stmt_display->get_result()->fetch_assoc()['cnt'] > 0;
+            ?>
+            <?php if ($workersAllocatedForDisplay): ?>
             <div class="detail-card">
                 <div class="section-title text-primary">
                     <i class="fas fa-hammer"></i> Construction Date Confirmation
@@ -424,6 +427,7 @@ $grandTotal = $productTotal + $feeTotal + ($order['cost'] ?? 0);
                     </div>
                 <?php endif; ?>
             </div>
+            <?php endif; ?>
         <?php endif; ?>
 
         <?php if ($role === 'supplier' && strtolower($order['construction_date_status'] ?? '') === 'accepted'): ?>
