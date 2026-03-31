@@ -315,19 +315,6 @@ mysqli_stmt_close($workers_stmt);
                             </a>
                         <?php elseif ($project['supplier_status'] === 'Rejected'): ?>
                             <span class="badge bg-danger p-2">Rejected</span>
-                        <?php else: // Implies 'Pending' or other status where action is still needed ?>
-                            <form method="post" onsubmit="return confirm(\'Accept this project assignment?\');" style="display:inline;">
-                                <input type="hidden" name="handle_assignment" value="1">
-                                <input type="hidden" name="order_id" value="<?= $project['orderid'] ?>">
-                                <input type="hidden" name="action" value="Accepted">
-                                <button type="submit" class="btn btn-sm btn-success"><i class="fas fa-check me-1"></i>Accept</button>
-                            </form>
-                            <form method="post" onsubmit="return confirm(\'Reject this project assignment?\');" style="display:inline; margin-left: 5px;">
-                                <input type="hidden" name="handle_assignment" value="1">
-                                <input type="hidden" name="order_id" value="<?= $project['orderid'] ?>">
-                                <input type="hidden" name="action" value="Rejected">
-                                <button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-times me-1"></i>Reject</button>
-                            </form>
                         <?php endif; ?>
                     </div>
                 </div>
