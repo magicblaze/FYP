@@ -93,6 +93,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             if ($update_sch_stmt->execute()) {
+                // Check if workers have been allocated for this order
+                $worker_check_sql = "SELECT COUNT(*) as cnt FROM `workerallocation` WHERE orderid = ? AND status != 'Completed' AND status != 'Cancelled'";
+                $worker_check_stmt = $mysqli->prepare($worker_check_sql);
+                $worker_check_stmt->bind_param("i", $orderId);
+                $worker_check_stmt->execute();
+                $worker_count = $worker_check_stmt->get_result()->fetch_assoc()['cnt'];
+                if ($worker_count > 0) {
+                    $status_update_sql = "UPDATE `Order` SET ostatus = 'waiting client confirm construction date' WHERE orderid = ?";
+                    $status_update_stmt = $mysqli->prepare($status_update_sql);
+                    $status_update_stmt->bind_param("i", $orderId);
+                    $status_update_stmt->execute();
+                }
                 $updateMessage .= "<div class='alert alert-success alert-dismissible fade show' role='alert'>Construction dates submitted to client for approval.<button type='button' class='btn-close' data-bs-dismiss='alert' aria-label='Close'></button></div>";
             } else {
                 $updateMessage .= "<div class='alert alert-danger alert-dismissible fade show' role='alert'>Error setting construction dates: " . $mysqli->error . "<button type='button' class='btn-close' data-bs-dismiss='alert' aria-label='Close'></button></div>";
@@ -111,6 +123,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $updateStatusStmt->bind_param("si", $newStatus, $orderId);
 
         if ($updateStatusStmt->execute()) {
+            if ($action === 'accept') {
+                $orderStatusSql = "UPDATE `Order` SET ostatus = 'In construction' WHERE orderid = ?";
+                $orderStatusStmt = $mysqli->prepare($orderStatusSql);
+                $orderStatusStmt->bind_param("i", $orderId);
+                $orderStatusStmt->execute();
+            }
             $updateMessage = "<div class='alert alert-success alert-dismissible fade show' role='alert'>{$successMessage}<button type='button' class='btn-close' data-bs-dismiss='alert' aria-label='Close'></button></div>";
         } else {
             $updateMessage = "<div class='alert alert-danger alert-dismissible fade show' role='alert'>Error: " . $mysqli->error . "<button type='button' class='btn-close' data-bs-dismiss='alert' aria-label='Close'></button></div>";
@@ -360,7 +378,7 @@ $grandTotal = $productTotal + $feeTotal + ($order['cost'] ?? 0);
                 </form>
             </div>
             <?php endif; ?>
-        <?php elseif ($role === 'client' && strtolower($order['ostatus']) === 'preparing' && $order['construction_start_date']): ?>
+        <?php elseif ($role === 'client' && in_array(strtolower($order['ostatus']), ['preparing', 'waiting client confirm construction date']) && $order['construction_start_date']): ?>
             <div class="detail-card">
                 <div class="section-title text-primary">
                     <i class="fas fa-hammer"></i> Construction Date Confirmation

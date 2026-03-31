@@ -179,16 +179,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
     }
 
-    // Handle accepting contractor request
-    if (isset($_POST['accept_supplier_request'])) {
-        $update_accept_sql = "UPDATE `Order` SET supplier_status = 'Accepted' WHERE orderid = ?";
-        $update_accept_stmt = mysqli_prepare($mysqli, $update_accept_sql);
-        mysqli_stmt_bind_param($update_accept_stmt, "i", $orderid);
-        if (mysqli_stmt_execute($update_accept_stmt)) {
-            header("Location: Order_Edit.php?id=" . $orderid . "&msg=contractor_accepted");
-            exit();
-        }
-    }
 
     // Handle rejecting contractor request
     if (isset($_POST['reject_supplier_request'])) {
@@ -1822,21 +1812,10 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                             <br><small>Status: <span class="badge <?php echo $status_badge; ?>"><?php echo htmlspecialchars($order['supplier_status'] ?? 'Pending'); ?></span></small>
                                             <br><small>Contact: <?php echo htmlspecialchars($assigned_supplier['stel'] ?? '—'); ?> | <?php echo htmlspecialchars($assigned_supplier['semail'] ?? '—'); ?></small>
                                         </div>
-
                                         <?php if (($order['supplier_status'] ?? '') === 'Pending'): ?>
                                             <div class="alert alert-warning py-2 px-3 small mb-3">
-                                                <i class="fas fa-bell me-2"></i>New constructor request received. Please review and accept or reject.
+                                                <i class="fas fa-bell me-2"></i>Waiting for constructor to accept the project.
                                             </div>
-                                            <form method="post" class="mb-3">
-                                                <div class="d-grid gap-2 d-sm-flex">
-                                                    <button type="submit" name="accept_supplier_request" class="btn btn-success btn-sm flex-grow-1">
-                                                        <i class="fas fa-check me-1"></i>Accept Contractor
-                                                    </button>
-                                                    <button type="submit" name="reject_supplier_request" class="btn btn-danger btn-sm flex-grow-1" onclick="return confirm('Reject this contractor? The project will be available to other suppliers.');">
-                                                        <i class="fas fa-times me-1"></i>Reject & Find Others
-                                                    </button>
-                                                </div>
-                                            </form>
                                         <?php endif; ?>
                                         
                                         <?php if (!$is_accepted): ?>
