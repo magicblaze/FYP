@@ -132,10 +132,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($updateStatusStmt->execute()) {
             if ($action === 'accept') {
-                $orderStatusSql = "UPDATE `Order` SET ostatus = 'In construction' WHERE orderid = ?";
+                $orderStatusSql = "UPDATE `Order` SET ostatus = 'waiting start construction Pay' WHERE orderid = ?";
                 $orderStatusStmt = $mysqli->prepare($orderStatusSql);
                 $orderStatusStmt->bind_param("i", $orderId);
                 $orderStatusStmt->execute();
+                header('Location: client/payment_construction3.php?orderid=' . $orderId);
+                exit;
             }
             $updateMessage = "<div class='alert alert-success alert-dismissible fade show' role='alert'>{$successMessage}<button type='button' class='btn-close' data-bs-dismiss='alert' aria-label='Close'></button></div>";
         } else {
@@ -410,7 +412,7 @@ $grandTotal = $productTotal + $feeTotal + ($order['cost'] ?? 0);
                             Please review and respond.
                         </div>
                     </div>
-                    <form method="POST" class="d-flex justify-content-end gap-2">
+                    <form method="POST" class="d-flex justify-content-end gap-2" target="_top">
                         <button type="submit" name="action_construction_date" value="accept" class="btn btn-success">
                             <i class="fas fa-check-circle me-2"></i>Accept Dates
                         </button>
