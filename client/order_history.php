@@ -429,7 +429,7 @@ if (!empty($_GET['msg'])) {
                                     onclick="event.stopPropagation();">
                                     <i class="fas fa-hard-hat me-1"></i>Proceed to Final Construction Payment
                                 </a>
-                            <?php elseif (in_array($statusLower, ['waiting start construction Pay', 'waiting start construction Pay'], true)): ?>
+                            <?php elseif ( $statusLower === 'waiting start construction pay'): ?>
                                 <a href="payment_construction3.php?orderid=<?= (int) $order['orderid'] ?>" class="view-details-btn"
                                     onclick="event.stopPropagation();">
                                     <i class="fas fa-hard-hat me-1"></i>Proceed to Start Construction Payment

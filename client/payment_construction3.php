@@ -95,7 +95,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             mysqli_stmt_close($op_stmt);
             
             // Update order status to complete
-            $u_sql = "UPDATE `Order` SET ostatus = 'complete' WHERE orderid = ? AND clientid = ?";
+            $u_sql = "UPDATE `Order` SET ostatus = 'In construction' WHERE orderid = ? AND clientid = ?";
             $u_stmt = mysqli_prepare($mysqli, $u_sql);
             mysqli_stmt_bind_param($u_stmt, "ii", $orderid, $client_id);
             mysqli_stmt_execute($u_stmt);
