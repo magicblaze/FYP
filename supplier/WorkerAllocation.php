@@ -34,111 +34,66 @@ mysqli_stmt_close($check_order_stmt);
 $error_message = '';
 $success_message = '';
 
-// Handle form submission for NEW allocation
+// Handle form submission for NEW allocation (SELECTION ONLY)
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['allocate_workers'])) {
     if (!isset($_POST['worker_ids']) || empty($_POST['worker_ids'])) {
         $error_message = 'Please select at least one worker.';
     } else {
         $worker_ids = $_POST['worker_ids'];
-        $percentages = $_POST['percentages'] ?? [];
         
-        // Calculate total percentage from existing allocations
-        $existing_sql = "SELECT COALESCE(SUM(percentage), 0) as total_percentage FROM `workerallocation` 
-                         WHERE orderid = ? AND status != 'Completed' AND status != 'Cancelled'";
-        $existing_stmt = mysqli_prepare($mysqli, $existing_sql);
-        mysqli_stmt_bind_param($existing_stmt, "i", $order_id);
-        mysqli_stmt_execute($existing_stmt);
-        $existing_result = mysqli_fetch_assoc(mysqli_stmt_get_result($existing_stmt));
-        $existing_total = floatval($existing_result['total_percentage']);
-        
-        // Calculate new percentages total
-        $new_total = 0;
-        foreach ($worker_ids as $worker_id) {
-            $worker_id = intval($worker_id);
-            $percentage = isset($percentages[$worker_id]) ? floatval($percentages[$worker_id]) : 0;
-            $new_total += $percentage;
-        }
-        
-        // Check if total exceeds 100%
-        if ($existing_total + $new_total > 100) {
-            $error_message = "Error: Total percentage cannot exceed 100%. Current: " . number_format($existing_total, 2) . "%, New: " . number_format($new_total, 2) . "%, Total: " . number_format($existing_total + $new_total, 2) . "%";
-        } else {
-            mysqli_begin_transaction($mysqli);
-            try {
-                // Get managerid
-                $mgr_res = mysqli_query($mysqli, "SELECT managerid FROM `Schedule` WHERE orderid = $order_id LIMIT 1");
-                if (mysqli_num_rows($mgr_res) == 0) {
-                    $mgr_res = mysqli_query($mysqli, "SELECT managerid FROM `OrderDelivery` WHERE orderid = $order_id LIMIT 1");
-                }
-                $mgr_row = mysqli_fetch_assoc($mgr_res);
-                $manager_id = $mgr_row ? $mgr_row['managerid'] : 1;
-
-                foreach ($worker_ids as $worker_id) {
-                    $worker_id = intval($worker_id);
-                    $percentage = isset($percentages[$worker_id]) ? floatval($percentages[$worker_id]) : 0;
-                    
-                    // Check if already allocated
-                    $check_sql = "SELECT * FROM `workerallocation` WHERE orderid = ? AND workerid = ? AND status != 'Completed' AND status != 'Cancelled'";
-                    $check_stmt = mysqli_prepare($mysqli, $check_sql);
-                    mysqli_stmt_bind_param($check_stmt, "ii", $order_id, $worker_id);
-                    mysqli_stmt_execute($check_stmt);
-                    if (mysqli_num_rows(mysqli_stmt_get_result($check_stmt)) > 0) {
-                        continue;
-                    }
-                    
-                    // Insert allocation using the new 'percentage' field
-                    $insert_sql = "INSERT INTO `workerallocation` (orderid, workerid, managerid, percentage, status) 
-                                   VALUES (?, ?, ?, ?, 'Assigned')";
-                    $insert_stmt = mysqli_prepare($mysqli, $insert_sql);
-                    mysqli_stmt_bind_param($insert_stmt, "iiid", $order_id, $worker_id, $manager_id, $percentage);
-                    mysqli_stmt_execute($insert_stmt);
-                }
-                mysqli_commit($mysqli);
-                $success_message = "Workers allocated successfully!";
-            } catch (Exception $e) {
-                mysqli_rollback($mysqli);
-                $error_message = "Error: " . $e->getMessage();
+        mysqli_begin_transaction($mysqli);
+        try {
+            // Get managerid
+            $mgr_res = mysqli_query($mysqli, "SELECT managerid FROM `Schedule` WHERE orderid = $order_id LIMIT 1");
+            if (mysqli_num_rows($mgr_res) == 0) {
+                $mgr_res = mysqli_query($mysqli, "SELECT managerid FROM `OrderDelivery` WHERE orderid = $order_id LIMIT 1");
             }
+            $mgr_row = mysqli_fetch_assoc($mgr_res);
+            $manager_id = $mgr_row ? $mgr_row['managerid'] : 1;
+
+            foreach ($worker_ids as $worker_id) {
+                $worker_id = intval($worker_id);
+                
+                // Check if already allocated
+                $check_sql = "SELECT * FROM `workerallocation` WHERE orderid = ? AND workerid = ? AND status != 'Completed' AND status != 'Cancelled'";
+                $check_stmt = mysqli_prepare($mysqli, $check_sql);
+                mysqli_stmt_bind_param($check_stmt, "ii", $order_id, $worker_id);
+                mysqli_stmt_execute($check_stmt);
+                if (mysqli_num_rows(mysqli_stmt_get_result($check_stmt)) > 0) {
+                    continue;
+                }
+                
+                // Insert allocation with 0 percentage initially
+                $insert_sql = "INSERT INTO `workerallocation` (orderid, workerid, managerid, percentage, status) 
+                               VALUES (?, ?, ?, 0, 'Assigned')";
+                $insert_stmt = mysqli_prepare($mysqli, $insert_sql);
+                mysqli_stmt_bind_param($insert_stmt, "iii", $order_id, $worker_id, $manager_id);
+                mysqli_stmt_execute($insert_stmt);
+            }
+            mysqli_commit($mysqli);
+            $success_message = "Workers allocated successfully!";
+        } catch (Exception $e) {
+            mysqli_rollback($mysqli);
+            $error_message = "Error: " . $e->getMessage();
         }
     }
 }
 
-// Handle UPDATE of existing allocation percentage
-if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_percentage'])) {
+// Handle deletion of existing allocation
+if (isset($_POST['delete_allocation'])) {
     $allocation_id = intval($_POST['allocation_id']);
-    $new_percentage = floatval($_POST['new_percentage']);
-    
-    // Calculate total percentage from other allocations
-    $other_sql = "SELECT COALESCE(SUM(percentage), 0) as total_percentage FROM `workerallocation` 
-                  WHERE orderid = ? AND allocation_id != ? AND status != 'Completed' AND status != 'Cancelled'";
-    $other_stmt = mysqli_prepare($mysqli, $other_sql);
-    mysqli_stmt_bind_param($other_stmt, "ii", $order_id, $allocation_id);
-    mysqli_stmt_execute($other_stmt);
-    $other_result = mysqli_fetch_assoc(mysqli_stmt_get_result($other_stmt));
-    $other_total = floatval($other_result['total_percentage']);
-    
-    // Check if new total exceeds 100%
-    if ($other_total + $new_percentage > 100) {
-        $error_message = "Error: Total percentage cannot exceed 100%.";
+    $delete_sql = "DELETE FROM `workerallocation` WHERE allocation_id = ? AND orderid = ?";
+    $delete_stmt = mysqli_prepare($mysqli, $delete_sql);
+    mysqli_stmt_bind_param($delete_stmt, "ii", $allocation_id, $order_id);
+    if (mysqli_stmt_execute($delete_stmt)) {
+        $success_message = "Worker allocation removed.";
     } else {
-        $update_sql = "UPDATE `workerallocation` SET percentage = ? WHERE allocation_id = ?";
-        $update_stmt = mysqli_prepare($mysqli, $update_sql);
-        mysqli_stmt_bind_param($update_stmt, "di", $new_percentage, $allocation_id);
-        if (mysqli_stmt_execute($update_stmt)) {
-            $success_message = "Percentage updated successfully!";
-        } else {
-            $error_message = "Failed to update percentage.";
-        }
-        mysqli_stmt_close($update_stmt);
+        $error_message = "Failed to remove worker.";
     }
 }
 
 // Get order details
-$order_sql = "SELECT o.*, c.cname as client_name, c.address as client_address, c.budget as client_budget, d.designName as design_name, d.designid
-              FROM `Order` o 
-              JOIN `Client` c ON o.clientid = c.clientid 
-              LEFT JOIN `Design` d ON o.designid = d.designid
-              WHERE o.orderid = ?";
+$order_sql = "SELECT o.*, c.cname as client_name FROM `Order` o JOIN `Client` c ON o.clientid = c.clientid WHERE o.orderid = ?";
 $order_stmt = mysqli_prepare($mysqli, $order_sql);
 mysqli_stmt_bind_param($order_stmt, "i", $order_id);
 mysqli_stmt_execute($order_stmt);
@@ -158,21 +113,22 @@ $all_workers = mysqli_fetch_all($all_workers_res, MYSQLI_ASSOC);
 
 // Separate workers
 $available_workers = [];
-$unavailable_workers = [];
 foreach ($all_workers as $worker) {
-    $check_allocated_sql = "SELECT COUNT(*) as count FROM `workerallocation` WHERE orderid = ? AND workerid = ? AND status != 'Completed' AND status != 'Cancelled'";
+    // Modified: Check if worker is assigned to ANY active project (not just the current one)
+    $check_allocated_sql = "SELECT COUNT(*) as count FROM `workerallocation` WHERE workerid = ? AND status != 'Completed' AND status != 'Cancelled'";
     $check_allocated_stmt = mysqli_prepare($mysqli, $check_allocated_sql);
-    mysqli_stmt_bind_param($check_allocated_stmt, "ii", $order_id, $worker['workerid']);
+    mysqli_stmt_bind_param($check_allocated_stmt, "i", $worker['workerid']);
     mysqli_stmt_execute($check_allocated_stmt);
     $check_allocated_result = mysqli_fetch_assoc(mysqli_stmt_get_result($check_allocated_stmt));
+    
+    // If they have any active assignments elsewhere, they are not available
     if ($check_allocated_result['count'] > 0) continue;
     
-    if ($worker['current_assignments'] > 0) $unavailable_workers[] = $worker;
-    else $available_workers[] = $worker;
+    $available_workers[] = $worker;
 }
 
 // Get currently allocated workers
-$allocated_sql = "SELECT w.*, wa.allocation_id, wa.status as allocation_status, wa.percentage 
+$allocated_sql = "SELECT w.*, wa.allocation_id, wa.status as allocation_status 
                   FROM `Worker` w 
                   JOIN `workerallocation` wa ON w.workerid = wa.workerid 
                   WHERE wa.orderid = ? AND w.supplierid = ?
@@ -198,96 +154,101 @@ $allocated_workers = mysqli_fetch_all(mysqli_stmt_get_result($allocated_stmt), M
         .worker-card { transition: all 0.3s ease; border: 2px solid transparent; cursor: pointer; }
         .worker-card:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
         .worker-card.selected { border-color: #28a745; background-color: #f8fff9; }
-        .disabled-worker { opacity: 0.6; cursor: not-allowed; background-color: #f8f9fa; border: 2px solid #e9ecef; }
         .worker-img { width: 50px; height: 50px; object-fit: cover; border-radius: 50%; }
         .back-btn { color: #7f8c8d; text-decoration: none; font-weight: 600; transition: all 0.3s; }
         .back-btn:hover { color: #3498db; transform: translateX(-5px); }
-        .percentage-input { width: 80px; display: inline-block; }
     </style>
 </head>
 <body>
     <?php include_once __DIR__ . '/../includes/header.php'; ?>
     
     <div class="container mt-4 mb-5">
-        <a href="ProjectWorkerManagement.php" class="back-btn mb-3 d-inline-block">
-            <i class="fas fa-arrow-left me-1"></i>Back to Project Management
-        </a>
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <a href="ProjectWorkerManagement.php" class="back-btn">
+                <i class="fas fa-arrow-left me-1"></i>Back to Projects
+            </a>
+
+        </div>
 
         <div class="row">
-            <div class="col-lg-8">
-                <div class="card p-4">
-                    <h2 class="mb-1">Allocate Workers</h2>
-                    <p class="text-muted mb-4">Project #<?= $order_id ?> - Client: <?= htmlspecialchars($order_info['client_name']) ?></p>
+            <!-- Left Side: Selection -->
+            <div class="col-lg-7">
+                <div class="card p-4 h-100">
+                    <h2 class="mb-1">Step 1: Select Workers</h2>
+                    <p class="text-muted mb-4">Choose workers to assign to Project #<?= $order_id ?></p>
 
                     <?php if ($success_message): ?>
                         <div class="alert alert-success alert-dismissible fade show"><?= $success_message ?><button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
                     <?php endif; ?>
+                    <?php if ($error_message): ?>
+                        <div class="alert alert-danger alert-dismissible fade show"><?= $error_message ?><button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+                    <?php endif; ?>
 
                     <form method="POST">
-                        <h5 class="mb-3"><i class="fas fa-user-check text-success me-2"></i>Available Workers</h5>
                         <div class="row g-3 mb-4">
                             <?php if (count($available_workers) > 0): ?>
                                 <?php foreach ($available_workers as $worker): ?>
                                     <div class="col-md-6">
-                                        <div class="card worker-card p-3 h-100" onclick="toggleWorker(this, <?= $worker['workerid'] ?>)">
-                                            <div class="d-flex align-items-center mb-2">
-                                                <img src="../uploads/worker/<?= $worker['image'] ?: 'default.jpg' ?>" class="worker-img me-3">
+                                        <div class="card worker-card p-3 h-100 shadow-sm border" onclick="toggleWorker(this, <?= $worker['workerid'] ?>)">
+                                            <div class="d-flex align-items-center">
+                                                <img src="../uploads/worker/<?= $worker['image'] ?: 'default.jpg' ?>" class="worker-img me-3 border">
                                                 <div class="flex-grow-1">
                                                     <h6 class="mb-0"><?= htmlspecialchars($worker['name']) ?></h6>
                                                     <small class="text-muted"><?= htmlspecialchars($worker['certificate'] ?: 'General Worker') ?></small>
                                                 </div>
                                                 <input type="checkbox" name="worker_ids[]" value="<?= $worker['workerid'] ?>" id="worker_<?= $worker['workerid'] ?>" class="form-check-input">
                                             </div>
-                                            <div class="mt-2" onclick="event.stopPropagation()">
-                                                <label class="small text-muted">Payment %:</label>
-                                                <input type="number" name="percentages[<?= $worker['workerid'] ?>]" class="form-control form-control-sm percentage-input" value="0" min="0" max="100" step="0.1">
-                                            </div>
                                         </div>
                                     </div>
                                 <?php endforeach; ?>
                             <?php else: ?>
-                                <div class="col-12"><div class="alert alert-info">No available workers.</div></div>
+                                <div class="col-12"><div class="alert alert-info">No more available workers.</div></div>
                             <?php endif; ?>
                         </div>
 
                         <div class="text-end">
-                            <button type="submit" name="allocate_workers" class="btn btn-primary btn-lg px-5 shadow" id="submitBtn" disabled>
-                                <i class="fas fa-user-plus me-2"></i>Allocate Selected Workers
+                            <button type="submit" name="allocate_workers" class="btn btn-success btn-lg px-5 shadow" id="submitBtn" disabled>
+                                <i class="fas fa-plus-circle me-2"></i>Allocate Selected
                             </button>
                         </div>
                     </form>
                 </div>
             </div>
 
-            <div class="col-lg-4">
-                <div class="card p-4">
-                    <h5 class="mb-4"><i class="fas fa-users-cog me-2"></i>Currently Allocated</h5>
-                    <?php if ($error_message): ?>
-                        <div class="alert alert-danger alert-dismissible fade show mb-3"><?= $error_message ?><button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
-                    <?php endif; ?>
+            <!-- Right Side: Allocated Workers Overview -->
+            <div class="col-lg-5">
+                <div class="card p-4 h-100">
+                    <h2 class="mb-1">Current Team</h2>
+                    <p class="text-muted mb-4">Workers already assigned to this project.</p>
+
                     <?php if (count($allocated_workers) > 0): ?>
                         <div class="list-group list-group-flush">
                             <?php foreach ($allocated_workers as $worker): ?>
                                 <div class="list-group-item px-0 py-3">
-                                    <div class="d-flex align-items-center mb-2">
-                                        <img src="../uploads/worker/<?= $worker['image'] ?: 'default.jpg' ?>" class="worker-img me-3">
-                                        <div class="flex-grow-1">
-                                            <h6 class="mb-0"><?= htmlspecialchars($worker['name']) ?></h6>
-                                            <span class="badge bg-info small"><?= htmlspecialchars($worker['allocation_status']) ?></span>
+                                    <div class="d-flex align-items-center justify-content-between">
+                                        <div class="d-flex align-items-center">
+                                            <img src="../uploads/worker/<?= $worker['image'] ?: 'default.jpg' ?>" class="worker-img me-3 border">
+                                            <div>
+                                                <h6 class="mb-0"><?= htmlspecialchars($worker['name']) ?></h6>
+                                                <span class="badge bg-info small"><?= htmlspecialchars($worker['allocation_status']) ?></span>
+                                            </div>
                                         </div>
+                                        <form method="POST" onsubmit="return confirm('Remove this worker?')">
+                                            <input type="hidden" name="allocation_id" value="<?= $worker['allocation_id'] ?>">
+                                            <button type="submit" name="delete_allocation" class="btn btn-sm btn-outline-danger">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </form>
                                     </div>
-                                    <form method="POST" class="d-flex align-items-center gap-2 mt-2">
-                                        <input type="hidden" name="allocation_id" value="<?= $worker['allocation_id'] ?>">
-                                        <label class="small text-muted">Payment:</label>
-                                        <input type="number" name="new_percentage" class="form-control form-control-sm percentage-input" value="<?= number_format($worker['percentage'] ?? 0, 1) ?>" min="0" max="100" step="0.1">
-                                        <span class="small">%</span>
-                                        <button type="submit" name="update_percentage" class="btn btn-sm btn-outline-primary">Update</button>
-                                    </form>
                                 </div>
                             <?php endforeach; ?>
                         </div>
+
                     <?php else: ?>
-                        <p class="text-muted text-center py-4">No workers allocated yet.</p>
+                        <div class="text-center py-5 text-muted">
+                            <i class="fas fa-users-slash fa-3x mb-3"></i>
+                            <p>No workers assigned yet.</p>
+                        </div>
                     <?php endif; ?>
                 </div>
             </div>

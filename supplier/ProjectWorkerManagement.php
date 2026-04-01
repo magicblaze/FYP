@@ -200,6 +200,8 @@ mysqli_stmt_close($workers_stmt);
         .stat-label { color: #7f8c8d; font-size: 0.95rem; font-weight: 500; }
         .project-card { background: white; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05); border-left: 4px solid #3498db; transition: all 0.3s ease; }
         .project-card:hover { box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1); transform: translateX(5px); }
+        .btn-payment { background: #f39c12; color: white; border: none; padding: 8px 15px; border-radius: 8px; font-weight: 600; font-size: 14px; transition: all 0.3s ease; text-decoration: none; display: inline-block; }
+        .btn-payment:hover { background: #e67e22; color: white; box-shadow: 0 4px 12px rgba(230, 126, 34, 0.3); }
         .project-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; }
         .project-title { font-size: 1.2rem; font-weight: 600; color: #2c3e50; margin-bottom: 0.5rem; }
         .status-badge { padding: 5px 15px; border-radius: 20px; font-size: 12px; font-weight: 700; text-transform: uppercase; }
@@ -309,11 +311,14 @@ mysqli_stmt_close($workers_stmt);
                             <i class="fas fa-eye me-1"></i>Detail
                         </button>
 
-                        <?php if ($project['supplier_status'] === 'Accepted'): ?>
-                            <a href="WorkerAllocation.php?orderid=<?= $project['orderid'] ?>" class="btn-allocate">
-                                <i class="fas fa-users"></i>Manage Workers
-                            </a>
-                        <?php elseif ($project['supplier_status'] === 'Rejected'): ?>
+	                        <?php if ($project['supplier_status'] === 'Accepted'): ?>
+	                            <a href="WorkerAllocation.php?orderid=<?= $project['orderid'] ?>" class="btn-allocate">
+	                                <i class="fas fa-users"></i>Manage Workers
+	                            </a>
+	                            <a href="distribution.php?orderid=<?= $project['orderid'] ?>" class="btn-payment ms-2">
+	                                <i class="fas fa-file-invoice-dollar me-1"></i>Distribution
+	                            </a>
+	                        <?php elseif ($project['supplier_status'] === 'Rejected'): ?>
                             <span class="badge bg-danger p-2">Rejected</span>
                         <?php endif; ?>
                     </div>

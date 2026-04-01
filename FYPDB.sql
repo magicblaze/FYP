@@ -152,6 +152,7 @@ CREATE TABLE `Supplier` (
   `semail` varchar(255) DEFAULT NULL,
   `spassword` varchar(255) NOT NULL,
   `remember_token` VARCHAR(64) DEFAULT NULL,
+  `default_worker_pay` DECIMAL(10,2) DEFAULT 0.00,
   PRIMARY KEY (`supplierid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
