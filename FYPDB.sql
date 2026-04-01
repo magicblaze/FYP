@@ -239,10 +239,13 @@ CREATE TABLE `Order` (
   `gross_floor_area` decimal(10,2) DEFAULT NULL,
   `Requirements` varchar(255) DEFAULT NULL,
   `designid` int NOT NULL,
-  `ostatus` ENUM('waiting confirm', 'designing', 'reviewing design proposal', 'waiting for review design', 'drafting 2nd proposal', 'waiting client review', 'waiting 2nd design phase payment', 'waiting final design phase payment' , 'waiting 1st construction phase payment', 'complete', 'rejected','Coordinating Contractors','preparing', 'waiting client confirm construction date', 'In construction') DEFAULT 'waiting confirm',
+  `ostatus` ENUM('waiting confirm', 'designing', 'reviewing design proposal', 'waiting for review design', 'drafting 2nd proposal', 'waiting client review', 'waiting 2nd design phase payment', 'waiting final design phase payment' , 'waiting 1st construction phase payment', 'complete', 'rejected','Coordinating Contractors','preparing', 'waiting client reassignment', 'waiting client confirm construction date', 'In construction') DEFAULT 'waiting confirm',
   `designedPicture` VARCHAR(500) DEFAULT NULL,
   `supplierid` int DEFAULT NULL,
   `supplier_status` ENUM('Pending', 'Accepted', 'Rejected') DEFAULT 'Pending',
+  `reassignment_status` ENUM('Accepted', 'Pending', 'Rejected') DEFAULT Null,
+   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`orderid`),
   KEY `clientid_pk_idx` (`clientid`),
   KEY `designid_pk_idx` (`designid`),
@@ -255,9 +258,9 @@ CREATE TABLE `Order` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 INSERT INTO `Order`
-(`orderid`, `odate`, `clientid`, `budget`, `deposit`, `cost`, `gross_floor_area`, `Requirements`,`designid`,`ostatus`,`designedPicture`,`supplierid`,`supplier_status`) VALUES
-(1, '2025-04-12 17:50:00', 1, 500000, 2000.00, NULL, NULL, 'HappyBuild Builders',2,'designing',NULL,NULL,NULL),
-(2, '2025-05-10 12:00:00', 2, 500000, 2000.00, NULL, NULL, 'ProThink Constructs',1,'Coordinating Contractors',NULL,NULL,'Pending');
+(`orderid`, `odate`, `clientid`, `budget`, `deposit`, `cost`, `gross_floor_area`, `Requirements`,`designid`,`ostatus`,`designedPicture`,`supplierid`,`supplier_status`, `reassignment_status`) VALUES
+(1, '2025-04-12 17:50:00', 1, 500000, 2000.00, NULL, NULL, 'HappyBuild Builders',2,'designing',NULL,NULL,NULL,null),
+(2, '2025-05-10 12:00:00', 2, 500000, 2000.00, NULL, NULL, 'ProThink Constructs',1,'Coordinating Contractors',NULL,NULL,'Pending',null);
 
 CREATE TABLE `OrderPayment` (
   `payment_id` INT NOT NULL AUTO_INCREMENT,

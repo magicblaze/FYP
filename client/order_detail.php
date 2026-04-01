@@ -175,25 +175,9 @@ if (!$referencesStmt) {
 
 // Handle client accept/reject actions for design proposal
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_POST['agree_reopen_project']) && $clientId && $orderId) {
-        $u_sql = "UPDATE `Order`
-                  SET supplierid = NULL,
-                      supplier_status = 'Pending',
-                      ostatus = 'Coordinating Contractors'
-                  WHERE orderid = ?
-                    AND clientid = ?
-                    AND supplier_status = 'Rejected'";
-        $u_stmt = $mysqli->prepare($u_sql);
-        if ($u_stmt) {
-            $u_stmt->bind_param('ii', $orderId, $clientId);
-            $u_stmt->execute();
-            $u_stmt->close();
-        }
-        header('Location: order_detail.php?orderid=' . $orderId . '&shared=1');
-        exit;
+    if (isset($_POST['client_confirm_proposal'])) {
+        // ... existing logic if any ...
     }
-
-    // Accept: move to 'waiting 2nd design phase payment'
     if (isset($_POST['accept_design']) && $clientId && $orderId) {
         $next_status = 'waiting 2nd design phase payment';
         $u_sql = "UPDATE `Order` SET ostatus = ? WHERE orderid = ? AND clientid = ?";
@@ -850,22 +834,7 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€
                     <p>No products or materials assigned yet.</p>
                 </div>
             <?php endif; ?>
-            <!-- Supplier Reassignment -->
-            <?php if (($order['supplier_status'] ?? '') === 'Rejected'): ?>
-                <div class="info-card" style="border-left:4px solid #e67e22;">
-                    <div class="info-row" style="border-bottom:none;">
-                        <span class="info-label"><i class="fas fa-people-arrows me-2"></i>Supplier Reassignment</span>
-                        <span class="info-value">
-                            <form method="post" class="d-inline" onsubmit="return confirm('Allow other suppliers to view and take this project?');">
-                                <button type="submit" name="agree_reopen_project" class="btn btn-warning btn-sm">
-                                    <i class="fas fa-share-square me-1"></i>Agree & Share to Other Suppliers
-                                </button>
-                            </form>
-                        </span>
-                    </div>
-                    <div class="small text-muted" style="margin-top:0.5rem;">Current supplier rejected this project. Click the button to allow other suppliers to view it in supplier search.</div>
-                </div>
-            <?php endif; ?>
+
 
             <!-- Back Button -->
             <div class="d-flex justify-content-start mt-4">

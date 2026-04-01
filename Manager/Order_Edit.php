@@ -180,6 +180,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     }
 
 
+    // Handle sending reassignment request to client
+    if (isset($_POST['send_reassignment_request'])) {
+        $update_req_sql = "UPDATE `Order` SET ostatus = 'waiting client reassignment' WHERE orderid = ?";
+        $update_req_stmt = mysqli_prepare($mysqli, $update_req_sql);
+        mysqli_stmt_bind_param($update_req_stmt, "i", $orderid);
+        if (mysqli_stmt_execute($update_req_stmt)) {
+            header("Location: Order_Edit.php?id=" . $orderid . "&msg=reassignment_sent");
+            exit();
+        }
+    }
+
     // Handle rejecting contractor request
     if (isset($_POST['reject_supplier_request'])) {
         $update_reject_sql = "UPDATE `Order` SET supplierid = NULL, supplier_status = 'Pending', ostatus = 'Coordinating Contractors' WHERE orderid = ?";
@@ -945,6 +956,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
             $msg_map = [
                 'contractor_accepted' => ['class' => 'alert-success', 'icon' => 'fa-check-circle', 'text' => 'Contractor accepted successfully!'],
                 'contractor_rejected' => ['class' => 'alert-info', 'icon' => 'fa-sync-alt', 'text' => 'Contractor rejected. Project is now available to other contractors.'],
+                'reassignment_sent' => ['class' => 'alert-success', 'icon' => 'fa-paper-plane', 'text' => 'Reassignment request sent to client successfully!'],
                 'proposal_confirmed' => ['class' => 'alert-success', 'icon' => 'fa-check-circle', 'text' => 'Proposal confirmed successfully!'],
                 'proposal_rejected' => ['class' => 'alert-warning', 'icon' => 'fa-redo', 'text' => 'Proposal rejected. Designer can create a new proposal.'],
                 'second_proposal_submitted' => ['class' => 'alert-success', 'icon' => 'fa-check-circle', 'text' => '2nd Proposal submitted successfully!'],
@@ -1815,6 +1827,16 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                         <?php if (($order['supplier_status'] ?? '') === 'Pending'): ?>
                                             <div class="alert alert-warning py-2 px-3 small mb-3">
                                                 <i class="fas fa-bell me-2"></i>Waiting for constructor to accept the project.
+                                            </div>
+                                        <?php elseif (($order['supplier_status'] ?? '') === 'Rejected'): ?>
+                                            <div class="alert alert-warning py-2 px-3 small mb-3">
+                                                <i class="fas fa-exclamation-triangle me-2"></i>Current constructor rejected this project.
+                                                <form method="post" class="mt-2" onsubmit="return confirm('Send reassignment request to client?');">
+                                                    <input type="hidden" name="send_reassignment_request" value="1">
+                                                    <button type="submit" class="btn btn-info btn-sm w-100">
+                                                        <i class="fas fa-paper-plane me-1"></i>Send Reassignment Request to Client
+                                                    </button>
+                                                </form>
                                             </div>
                                         <?php endif; ?>
                                         

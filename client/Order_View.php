@@ -183,18 +183,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    if (isset($_POST['client_request_revision'])) {
-        $next_status = 'drafting 2nd proposal';
-        $note = mysqli_real_escape_string($mysqli, $_POST['revision_note'] ?? 'Client requested revision');
-        $u_sql = "UPDATE `Order` SET ostatus = ?, Requirements = CONCAT(Requirements, '\n\nCLIENT REQUEST: ', ?) WHERE orderid = ? AND clientid = ?";
-        $u_stmt = mysqli_prepare($mysqli, $u_sql);
-        mysqli_stmt_bind_param($u_stmt, "ssii", $next_status, $note, $orderid, $client_id);
-        mysqli_stmt_execute($u_stmt);
-        mysqli_stmt_close($u_stmt);
-        header('Location: Order_View.php?id=' . $orderid);
-        exit;
-    }
-}
+	    if (isset($_POST['client_request_revision'])) {
+	        $next_status = 'drafting 2nd proposal';
+	        $note = mysqli_real_escape_string($mysqli, $_POST['revision_note'] ?? 'Client requested revision');
+	        $u_sql = "UPDATE `Order` SET ostatus = ?, Requirements = CONCAT(Requirements, '\n\nCLIENT REQUEST: ', ?) WHERE orderid = ? AND clientid = ?";
+	        $u_stmt = mysqli_prepare($mysqli, $u_sql);
+	        mysqli_stmt_bind_param($u_stmt, "ssii", $next_status, $note, $orderid, $client_id);
+	        mysqli_stmt_execute($u_stmt);
+	        mysqli_stmt_close($u_stmt);
+	        header('Location: Order_View.php?id=' . $orderid);
+	        exit;
+	    }
+
+	    if (isset($_POST['agree_reopen_project']) && $client_id && $orderid) {
+	        $u_sql = "UPDATE `Order`
+	                  SET supplierid = NULL,
+	                      supplier_status = 'Pending',
+	                      ostatus = 'Coordinating Contractors',
+	                      reassignment_status = 'Accepted'
+	                  WHERE orderid = ?
+	                    AND clientid = ?
+	                    AND ostatus = 'waiting client reassignment'";
+	        $u_stmt = mysqli_prepare($mysqli, $u_sql);
+	        if ($u_stmt) {
+	            mysqli_stmt_bind_param($u_stmt, 'ii', $orderid, $client_id);
+	            mysqli_stmt_execute($u_stmt);
+	            mysqli_stmt_close($u_stmt);
+	        }
+	        header('Location: Order_View.php?id=' . $orderid . '&shared=1');
+	        exit;
+	    }
+	}
 
 ?>
 
@@ -629,6 +648,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
             </div>
         </div>
+
+        <!-- Supplier Reassignment -->
+        <?php if (($order['ostatus'] ?? '') === 'waiting client reassignment'): ?>
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card border-warning" style="border-left: 5px solid #ffc107;">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h5 class="card-title mb-1">
+                                        <i class="fas fa-people-arrows me-2 text-warning"></i>Supplier Reassignment
+                                    </h5>
+                                    <p class="text-muted mb-0 small">Current supplier rejected this project. Click the button to allow other suppliers to view it in supplier search.</p>
+                                </div>
+                                <form method="post" onsubmit="return confirm('Allow other suppliers to view and take this project?');">
+                                    <button type="submit" name="agree_reopen_project" class="btn btn-warning">
+                                        <i class="fas fa-share-square me-1"></i>Agree & Share to Other Suppliers
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        <?php endif; ?>
 
         <!-- Client Action Buttons -->
         <?php if ($status === 'waiting client review'): ?>

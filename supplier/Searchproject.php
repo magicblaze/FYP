@@ -13,11 +13,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accept_project'])) {
 	$order_id = (int) ($_POST['order_id'] ?? 0);
 	if ($supplier_id > 0 && $order_id > 0) {
 		$accept_sql = "UPDATE `Order`
-		              SET supplierid = ?, supplier_status = 'Accepted', ostatus = 'preparing'
+		              SET supplierid = ?, supplier_status = 'Accepted', ostatus = 'preparing', reassignment_status = 'Completed'
 		              WHERE orderid = ?
 		                AND supplierid IS NULL
-		                
-		                AND LOWER(ostatus) = 'coordinating contractors'";
+		                AND LOWER(ostatus) = 'coordinating contractors'
+		                AND LOWER(COALESCE(reassignment_status, '')) = 'accepted'";
 		$accept_stmt = mysqli_prepare($mysqli, $accept_sql);
 		if ($accept_stmt) {
 			mysqli_stmt_bind_param($accept_stmt, "ii", $supplier_id, $order_id);
@@ -34,17 +34,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accept_project'])) {
 
 $search = trim($_GET['search'] ?? '');
 
-$sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.budget,
-			   c.cname AS client_name,
-			   d.designName,
-			   d.tag,
-			   (SELECT dp.filename FROM DesignedPicture dp WHERE dp.orderid = o.orderid ORDER BY dp.upload_date DESC LIMIT 1) AS latest_picture
-		FROM `Order` o
-		JOIN `Client` c ON o.clientid = c.clientid
-		LEFT JOIN `Design` d ON o.designid = d.designid
-		WHERE o.supplierid IS NULL
-		  
-		  AND LOWER(o.ostatus) = 'coordinating contractors'";
+		$sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.budget,
+				   c.cname AS client_name,
+				   d.designName,
+				   d.tag,
+				   (SELECT dp.filename FROM DesignedPicture dp WHERE dp.orderid = o.orderid ORDER BY dp.upload_date DESC LIMIT 1) AS latest_picture
+			FROM `Order` o
+			JOIN `Client` c ON o.clientid = c.clientid
+			LEFT JOIN `Design` d ON o.designid = d.designid
+			WHERE o.supplierid IS NULL
+			  AND LOWER(o.ostatus) = 'coordinating contractors'
+			  AND LOWER(COALESCE(o.reassignment_status, '')) = 'accepted'";
 
 $params = [];
 $types = '';
@@ -118,7 +118,7 @@ if ($stmt) {
 						value="<?php echo htmlspecialchars($search); ?>">
 					<button type="submit" class="btn btn-primary"><i class="fas fa-search me-1"></i>Search</button>
 				</form>
-				<small class="text-muted">Only projects approved by client for re-sharing are shown here.</small>
+				<small class="text-muted">Only projects where the client has agreed to reassignment are shown here.</small>
 			</div>
 		</div>
 

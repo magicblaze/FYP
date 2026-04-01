@@ -384,7 +384,18 @@ if (!empty($_GET['msg'])) {
                         <?php endif; ?>
                         <div style="margin-top: 0.75rem; display:flex; gap:8px;">
                             <!-- Primary view/proposal/details button -->
-                            <?php if ($statusLower === 'waiting client review' || $statusLower === 'waiting final design phase payment' || $statusLower === "Coordinating Contractors" || $statusLower === 'complete'): ?>
+                            <?php 
+                            $proposalStatuses = [
+                                'waiting client review', 
+                                'waiting final design phase payment', 
+                                'coordinating contractors', 
+                                'complete', 
+                                'preparing', 
+                                'waiting client confirm construction date', 
+                                'in construction',
+                                'waiting client reassignment'
+                            ];
+                            if (in_array($statusLower, $proposalStatuses)): ?>
                                 <a href="Order_View.php?id=<?= (int) $order['orderid'] ?>" class="view-details-btn"
                                     onclick="event.stopPropagation();">
                                     <i class="fas fa-file-image me-1"></i>View Proposal</a>
