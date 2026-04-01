@@ -12,6 +12,15 @@ if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'supplier') {
 $user = $_SESSION['user'];
 $supplier_id = $user['supplierid'];
 
+// Fetch supplier's default worker pay
+$default_pay_sql = "SELECT default_worker_pay FROM `Supplier` WHERE supplierid = ?";
+$default_pay_stmt = mysqli_prepare($mysqli, $default_pay_sql);
+mysqli_stmt_bind_param($default_pay_stmt, "i", $supplier_id);
+mysqli_stmt_execute($default_pay_stmt);
+$default_pay_result = mysqli_stmt_get_result($default_pay_stmt);
+$supplier_default_pay = mysqli_fetch_assoc($default_pay_result)['default_worker_pay'] ?? 0.00;
+mysqli_stmt_close($default_pay_stmt);
+
 // Get order ID from URL parameter
 $order_id = isset($_GET['orderid']) ? intval($_GET['orderid']) : 0;
 
@@ -59,6 +68,22 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['batch_update'])) {
             mysqli_rollback($mysqli);
             $error_message = "Failed to update percentages: " . $e->getMessage();
         }
+    }
+} else if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['set_default_pay'])) {
+    $new_default_pay = floatval($_POST['default_pay_value']);
+    if ($new_default_pay < 0 || $new_default_pay > 100) {
+        $error_message = "Default Pay must be between 0 and 100%.";
+    } else {
+        $update_default_sql = "UPDATE `Supplier` SET default_worker_pay = ? WHERE supplierid = ?";
+        $update_default_stmt = mysqli_prepare($mysqli, $update_default_sql);
+        mysqli_stmt_bind_param($update_default_stmt, "di", $new_default_pay, $supplier_id);
+        if (mysqli_stmt_execute($update_default_stmt)) {
+            $success_message = "Default Pay updated successfully to " . number_format($new_default_pay, 1) . "%!";
+            $supplier_default_pay = $new_default_pay; // Update the displayed value immediately
+        } else {
+            $error_message = "Failed to update Default Pay.";
+        }
+        mysqli_stmt_close($update_default_stmt);
     }
 }
 
@@ -140,7 +165,7 @@ foreach($additional_fees as $fee) { $total_extra_fees += $fee['amount']; }
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body { background-color: #f4f7f6; }
-        .card { border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border: none; margin-bottom: 1.5rem; }
+        .card { border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05 ); border: none; margin-bottom: 1.5rem; }
         .worker-img { width: 40px; height: 40px; object-fit: cover; border-radius: 50%; }
         .back-btn { color: #7f8c8d; text-decoration: none; font-weight: 600; transition: all 0.3s; }
         .back-btn:hover { color: #3498db; transform: translateX(-5px); }
@@ -161,8 +186,8 @@ foreach($additional_fees as $fee) { $total_extra_fees += $fee['amount']; }
     
     <div class="container mt-4 mb-5">
         <div class="d-flex justify-content-between align-items-center mb-4">
-            <a href="WorkerAllocation.php?orderid=<?= $order_id ?>" class="back-btn">
-                <i class="fas fa-arrow-left me-1"></i>Back to Team Allocation
+            <a href="ProjectWorkerManagement.php" class="back-btn">
+                <i class="fas fa-arrow-left me-1"></i>Back to Project
             </a>
             <div class="text-end">
                 <h5 class="mb-0">Project #<?= $order_id ?> Distribution</h5>
@@ -216,15 +241,16 @@ foreach($additional_fees as $fee) { $total_extra_fees += $fee['amount']; }
                     <div class="default-pay-box d-flex align-items-center justify-content-between">
                         <div class="d-flex align-items-center">
                             <i class="fas fa-magic text-primary me-2"></i>
-                            <span class="small fw-bold">Auto-Apply Default Pay:</span>
+                            <span class="small fw-bold text-muted me-3">Default Pay:</span>
                         </div>
-                        <div class="d-flex align-items-center">
+                        <form method="POST" class="d-flex align-items-center">
                             <div class="input-group input-group-sm" style="width: 120px;">
-                                <input type="number" id="defaultPayValue" class="form-control" value="10.0" min="0" max="100" step="0.1">
+                                <input type="number" name="default_pay_value" id="defaultPayValue" class="form-control" value="<?= number_format($supplier_default_pay, 1) ?>" min="0" max="100" step="0.1">
                                 <span class="input-group-text">%</span>
                             </div>
-                            <button type="button" onclick="applyDefaultPay()" class="btn btn-sm btn-primary ms-2">Apply to 0% Workers</button>
-                        </div>
+                            <button type="submit" name="set_default_pay" class="btn btn-sm btn-primary ms-2">Set Default Pay</button>
+                            <button type="button" onclick="applyDefaultPay()" class="btn btn-sm btn-outline-secondary ms-2">Apply to 0% Workers</button>
+                        </form>
                     </div>
                     
                     <form method="POST" id="batchUpdateForm">
@@ -256,7 +282,6 @@ foreach($additional_fees as $fee) { $total_extra_fees += $fee['amount']; }
                                                            value="<?= number_format($worker['percentage'], 1) ?>" 
                                                            min="0" max="100" step="0.1"
                                                            oninput="syncFromInput(<?= $worker['allocation_id'] ?>, this.value)">
-                                                    <span class="input-group-text">%</span>
                                                 </div>
                                             </td>
                                             <td>

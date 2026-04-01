@@ -10,7 +10,16 @@ if (empty($_SESSION['user']) || $_SESSION['user']['role'] !== 'supplier') {
 }
 
 $user = $_SESSION['user'];
-$supplier_id = $user['supplierid'];
+$supplier_id = $user["supplierid"];
+
+// Fetch supplier's default worker pay
+$default_pay_sql = "SELECT default_worker_pay FROM `Supplier` WHERE supplierid = ?";
+$default_pay_stmt = mysqli_prepare($mysqli, $default_pay_sql);
+mysqli_stmt_bind_param($default_pay_stmt, "i", $supplier_id);
+mysqli_stmt_execute($default_pay_stmt);
+$default_pay_result = mysqli_stmt_get_result($default_pay_stmt);
+$supplier_default_pay = mysqli_fetch_assoc($default_pay_result)["default_worker_pay"] ?? 0.00;
+mysqli_stmt_close($default_pay_stmt);
 
 // Get order ID from URL parameter
 $order_id = isset($_GET['orderid']) ? intval($_GET['orderid']) : 0;
@@ -63,11 +72,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['allocate_workers'])) {
                     continue;
                 }
                 
-                // Insert allocation with 0 percentage initially
+                // Insert allocation with the supplier's default percentage
                 $insert_sql = "INSERT INTO `workerallocation` (orderid, workerid, managerid, percentage, status) 
-                               VALUES (?, ?, ?, 0, 'Assigned')";
+                               VALUES (?, ?, ?, ?, 'Assigned')";
                 $insert_stmt = mysqli_prepare($mysqli, $insert_sql);
-                mysqli_stmt_bind_param($insert_stmt, "iii", $order_id, $worker_id, $manager_id);
+                mysqli_stmt_bind_param($insert_stmt, "iiid", $order_id, $worker_id, $manager_id, $supplier_default_pay);
                 mysqli_stmt_execute($insert_stmt);
             }
             mysqli_commit($mysqli);
@@ -150,7 +159,7 @@ $allocated_workers = mysqli_fetch_all(mysqli_stmt_get_result($allocated_stmt), M
     <link rel="stylesheet" href="../css/styles.css">
     <style>
         body { background-color: #f4f7f6; }
-        .card { border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border: none; margin-bottom: 1.5rem; }
+        .card { border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05 ); border: none; margin-bottom: 1.5rem; }
         .worker-card { transition: all 0.3s ease; border: 2px solid transparent; cursor: pointer; }
         .worker-card:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
         .worker-card.selected { border-color: #28a745; background-color: #f8fff9; }
@@ -167,14 +176,13 @@ $allocated_workers = mysqli_fetch_all(mysqli_stmt_get_result($allocated_stmt), M
             <a href="ProjectWorkerManagement.php" class="back-btn">
                 <i class="fas fa-arrow-left me-1"></i>Back to Projects
             </a>
-
         </div>
 
         <div class="row">
             <!-- Left Side: Selection -->
             <div class="col-lg-7">
                 <div class="card p-4 h-100">
-                    <h2 class="mb-1">Step 1: Select Workers</h2>
+                    <h2 class="mb-1">Select Workers</h2>
                     <p class="text-muted mb-4">Choose workers to assign to Project #<?= $order_id ?></p>
 
                     <?php if ($success_message): ?>
@@ -257,7 +265,7 @@ $allocated_workers = mysqli_fetch_all(mysqli_stmt_get_result($allocated_stmt), M
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        function toggleWorker(card, id) {
+        function toggleWorker(card, id ) {
             const checkbox = document.getElementById('worker_' + id);
             checkbox.checked = !checkbox.checked;
             if (checkbox.checked) card.classList.add('selected');
