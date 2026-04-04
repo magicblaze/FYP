@@ -123,8 +123,8 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
       </div>
       <div id="chatwidget_messages" class="messages" style="display:none"></div>
       <div id="chatwidget_quickActions" class="chatwidget-quick-actions" style="display:none">
-        <span class="chatwidget-quick-label">How to:</span>
-        <button id="chatwidget_quick_design_dashboard" type="button" class="btn btn-outline btn-sm">Design dashboard</button>
+        <span class="chatwidget-quick-label">Questions:</span>
+        <button id="chatwidget_quick_design_dashboard" type="button" class="btn btn-outline btn-sm">How to use Design dashboard</button>
       </div>
            <div class="composer" style="display:none;position:relative;">
         <div id="chatwidget_attachPreviewColumn" class="message-preview-column d-flex justify-content-around">

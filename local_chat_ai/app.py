@@ -59,21 +59,56 @@ def extract_order_id(question: str) -> Optional[int]:
     return None
 
 
-def detect_intent(question: str) -> str:
-    q = (question or "").lower()
-    if any(k in q for k in ["hello", "hi", "hey"]):
-        return "greeting"
-    if "payment" in q or "pay" in q or "deposit" in q:
-        return "payment"
-    if "delivery" in q or "deliver" in q:
-        return "delivery"
-    if "schedule" in q or "date" in q:
-        return "schedule"
-    if "status" in q:
-        return "status"
-    if "order" in q:
-        return "order"
-    return "unknown"
+INTENT_KEYWORDS = {
+    "greeting": ["hello", "hi", "hey"],
+    "payment": ["payment", "pay", "paid", "deposit", "balance", "invoice"],
+    "delivery": ["delivery", "deliver", "shipping", "shipment", "shipped", "dispatch"],
+    "schedule": ["schedule", "date", "timeline", "start date", "finish date", "construction"],
+    "status": ["status", "progress", "sent order", "order sent", "placed order", "order placed"],
+    "order": ["order", "orders", "order id", "orderid", "recent orders", "latest orders", "my orders"],
+}
+
+INTENT_PRIORITY = ["status", "payment", "delivery", "schedule", "order", "greeting"]
+
+
+def score_intents(question: str) -> Dict[str, int]:
+    q = (question or "").lower().strip()
+    scores = {k: 0 for k in INTENT_KEYWORDS}
+    if not q:
+        return scores
+
+    def add_score(intent: str, kw: str) -> None:
+        if " " in kw:
+            if kw in q:
+                scores[intent] += 2
+            return
+        if re.search(r"\b" + re.escape(kw) + r"\b", q):
+            scores[intent] += 1
+
+    for intent, keywords in INTENT_KEYWORDS.items():
+        for kw in keywords:
+            add_score(intent, kw)
+
+    if "order" in q and "sent" in q:
+        scores["status"] += 2
+
+    return scores
+
+
+def detect_intent(question: str) -> tuple[str, int]:
+    scores = score_intents(question)
+    if not scores:
+        return "unknown", 0
+    best = max(scores.values())
+    if best <= 0:
+        return "unknown", 0
+    top = [k for k, v in scores.items() if v == best]
+    if len(top) == 1:
+        return top[0], best
+    for intent in INTENT_PRIORITY:
+        if intent in top:
+            return intent, best
+    return top[0], best
 
 
 def is_how_to_design_dashboard(question: str) -> bool:
@@ -151,14 +186,35 @@ def user_can_access_order(role: str, user_id: int, order_id: int) -> bool:
     return False
 
 
-def summarize_orders(rows: List[Dict[str, Any]]) -> str:
+def summarize_recent_orders(rows: List[Dict[str, Any]], limit: int = 3) -> str:
     if not rows:
         return "No orders found."
     parts = []
-    for r in rows[:5]:
-        parts.append(f"#{r['orderid']} - {r['ostatus']}")
-    more = "" if len(rows) <= 5 else f" (+{len(rows) - 5} more)"
-    return "Your orders: " + ", ".join(parts) + more
+    for r in rows[:limit]:
+        date_text = f" ({r['odate']})" if r.get("odate") else ""
+        parts.append(f"#{r['orderid']} - {r['ostatus']}{date_text}")
+    more = "" if len(rows) <= limit else f" (+{len(rows) - limit} more)"
+    return "Recent orders: " + ", ".join(parts) + more
+
+
+def build_followup(rows: List[Dict[str, Any]]) -> str:
+    if not rows:
+        return "No orders found for your account."
+    ids = [str(r["orderid"]) for r in rows[:3]]
+    return "Which order do you mean? Options: #" + ", #".join(ids) + "."
+
+
+def build_suggestions(rows: List[Dict[str, Any]]) -> str:
+    if not rows:
+        return "Try: 'show my recent orders' or 'order 1 status'."
+    ids = [str(r["orderid"]) for r in rows[:3]]
+    suggestions = [
+        f"order {ids[0]} status" if len(ids) >= 1 else None,
+        f"order {ids[0]} payment" if len(ids) >= 1 else None,
+        f"order {ids[1]} delivery" if len(ids) >= 2 else None,
+    ]
+    suggestions = [s for s in suggestions if s]
+    return "Try: " + "; ".join([f"'{s}'" for s in suggestions]) + "."
 
 
 def answer_with_db(question: str, user: Dict[str, Any]) -> str:
@@ -169,17 +225,23 @@ def answer_with_db(question: str, user: Dict[str, Any]) -> str:
         return design_dashboard_help()
     role = (user.get("type") or "").strip().lower()
     user_id = int(user.get("id") or 0)
-    intent = detect_intent(q)
+    intent, score = detect_intent(q)
     order_id = extract_order_id(q)
 
     if intent == "greeting":
         return "Hi. Ask me about your orders, payments, delivery, or schedule."
 
+    if intent == "unknown" or score <= 0:
+        rows = orders_for_user(role, user_id)
+        if not rows:
+            return "I am not sure. Try: 'show my recent orders' or 'order 1 status'."
+        return summarize_recent_orders(rows, 3) + "\n" + build_suggestions(rows)
+
     if intent in ["order", "status", "payment", "delivery", "schedule"] and not order_id:
         rows = orders_for_user(role, user_id)
         if not rows:
             return "No orders found for your account."
-        return summarize_orders(rows) + "\nAsk about a specific order like: 'order 1 status'."
+        return summarize_recent_orders(rows, 3) + "\n" + build_followup(rows)
 
     if order_id:
         if not user_can_access_order(role, user_id, order_id):
@@ -237,7 +299,8 @@ def answer_with_db(question: str, user: Dict[str, Any]) -> str:
                 f"(status: {r['construction_date_status']})."
             )
 
-    return "Ask about order status, payment, delivery, or schedule. Example: 'order 1 payment'."
+    rows = orders_for_user(role, user_id)
+    return "Ask about order status, payment, delivery, or schedule. " + build_suggestions(rows)
 
 
 @app.post("/answer")
