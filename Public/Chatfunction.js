@@ -830,6 +830,8 @@ function initApp(config = {}) {
       hasMoreNewer = !!(resp && resp.has_more_newer);
       if (messages.length) {
         resetNewerPollBackoff();
+        // Any inbound messages should immediately re-check room list with minimum delay.
+        try { startAgentsAutoPoll(); } catch (e) {}
         renderMessagesBatch(messages, { insert: 'append' });
         if (elements.messages && autoScroll) {
           elements.messages.scrollTop = elements.messages.scrollHeight;
