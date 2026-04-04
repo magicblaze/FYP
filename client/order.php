@@ -386,14 +386,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $insRef->close();
                 }
             }
-            $success = 'Order created successfully. Order ID: ' . $orderId;
+            $success = 'Room created successfully. Order ID: ' . $orderId;
             // Send order confirmation message to designer via chat (create/find private room)
             try {
                 $designerId = isset($design['designerid']) ? (int) $design['designerid'] : 0;
                 if ($designerId > 0) {
                     // For each order, create or reuse an order-specific group room (client + designer + manager)
                     $roomId = 0;
-                    $roomname = sprintf('order-%d', $orderId);
+                    $roomname = sprintf('Meeting Room - Project-%d', $orderId);
                     $chkRoom = $mysqli->prepare("SELECT ChatRoomid FROM ChatRoom WHERE roomname = ? LIMIT 1");
                     if ($chkRoom) {
                         $chkRoom->bind_param('s', $roomname);
@@ -408,7 +408,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if (!$roomId) {
                         $insRoom = $mysqli->prepare("INSERT INTO ChatRoom (roomname,description,room_type,created_by_type,created_by_id) VALUES (?,?,?,?,?)");
                         if ($insRoom) {
-                            $desc = 'Order room for order #' . $orderId;
+                            $desc = 'Room for project #' . $orderId;
                             // room_type must match DB enum (private|group). Use 'group' for order rooms.
                             $room_type = 'group';
                             $created_by_type = 'client';

@@ -6,6 +6,7 @@ function initApp(config = {}) {
   const userName = config.userName || '';
   try { window.chatUserId = userId; window.chatUserType = userType; } catch (e) {}
   const items = config.items || [];
+  const localApiPath = config.localApiPath || 'http://127.0.0.1:8010/answer';
 
   const prefix = config.rootId ? (config.rootId + '_') : '';
   const el = id => document.getElementById(prefix + id);
@@ -22,6 +23,8 @@ function initApp(config = {}) {
     connectionStatus: el('connectionStatus'),
     openCatalogBtn: el('openCatalogBtn'),
     catalogOffcanvasEl: el('catalogOffcanvas'),
+    quickActions: document.getElementById(prefix + 'chatwidget_quickActions') || document.getElementById('chatwidget_quickActions'),
+    quickDesignBtn: document.getElementById(prefix + 'chatwidget_quick_design_dashboard') || document.getElementById('chatwidget_quick_design_dashboard'),
   };
 
   try {
@@ -357,7 +360,9 @@ function initApp(config = {}) {
       }
       const unreadCount = (a.unread || a.unread_count || getUnreadCountFromStorage(roomKey) || 0);
       const unreadHtml = unreadCount ? ('<span class="badge bg-danger ms-2 chat-unread-badge">' + escapeHtml(String(unreadCount)) + '</span>') : '';
-      btn.innerHTML = `<div class="me-2"><div class="rounded-circle bg-secondary text-white d-inline-flex align-items-center justify-content-center" style="width:36px;height:36px">${escapeHtml((name||'')[0]||'R')}</div></div>
+      const isLocal = isLocalRoomId(roomKey);
+      const avatarHtml = isLocal ? '<i class="bi bi-headset" aria-hidden="true"></i>' : escapeHtml((name||'')[0]||'R');
+      btn.innerHTML = `<div class="me-2"><div class="rounded-circle bg-secondary text-white d-inline-flex align-items-center justify-content-center" style="width:36px;height:36px">${avatarHtml}</div></div>
         <div class="flex-grow-1 text-start"><div class="fw-semibold">${escapeHtml(name)}${unreadHtml}</div><div class="small text-muted">${escapeHtml(subtitle)}</div></div>`;
       btn.addEventListener('click', () => {
         selectAgent(a);
@@ -369,15 +374,96 @@ function initApp(config = {}) {
     });
   }
 
+  function isLocalRoomId(roomId) {
+    return String(roomId || '') === 'local-ai';
+  }
+
+  function isLocalAgent(agent) {
+    if (!agent) return false;
+    return isLocalRoomId(agent.ChatRoomid || agent.id || agent.roomId || agent.room_id || agent.room);
+  }
+
+  function getLocalHistoryKey() {
+    const uid = (userId || 0);
+    const utype = (userType || 'guest');
+    return 'chat_local_history_' + utype + '_' + uid;
+  }
+
+  function loadLocalHistory() {
+    try {
+      const raw = localStorage.getItem(getLocalHistoryKey());
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) { return []; }
+  }
+
+  function saveLocalHistory(list) {
+    try { localStorage.setItem(getLocalHistoryKey(), JSON.stringify(list || [])); } catch (e) {}
+  }
+
+  function appendLocalHistory(entry) {
+    const list = loadLocalHistory();
+    list.push(entry);
+    saveLocalHistory(list);
+  }
+
+  function setComposerForLocal(isLocal) {
+    try {
+      const attachBtn = document.getElementById(prefix + 'attach') || document.getElementById('attach');
+      const attachWidgetBtn = document.getElementById(prefix + 'chatwidget_attach') || document.getElementById('chatwidget_attach');
+      const shareBtn = document.getElementById(prefix + 'chatwidget_share') || document.getElementById('chatwidget_share');
+      if (attachBtn) attachBtn.disabled = !!isLocal;
+      if (attachWidgetBtn) attachWidgetBtn.disabled = !!isLocal;
+      if (shareBtn) shareBtn.disabled = !!isLocal;
+    } catch (e) {}
+  }
+
+  function setQuickActionsForLocal(isLocal) {
+    try {
+      if (elements.quickActions) {
+        elements.quickActions.style.display = isLocal ? 'flex' : 'none';
+      }
+    } catch (e) {}
+  }
+
+  function loadLocalMessages() {
+    if (elements.messages) elements.messages.innerHTML = '';
+    const messages = loadLocalHistory();
+    messages.forEach(m => {
+      const who = (m.sender_type === userType && String(m.sender_id) == String(userId)) ? 'me' : 'them';
+      appendMessageToUI(m, who);
+    });
+    if (elements.messages) {
+      elements.messages.dataset.roomId = 'local-ai';
+      elements.messages.scrollTop = elements.messages.scrollHeight;
+    }
+    return Promise.resolve(messages);
+  }
+
   function loadAgents() {
     // Use ChatApi listRooms endpoint
     return apiPost('listRooms', { user_type: userType, user_id: userId }).then(data => {
       const rooms = Array.isArray(data) ? data : (data.rooms || []);
+      // Inject a local-only assistant room for all users
+      try {
+        const hasLocal = rooms.some(r => isLocalRoomId(r.ChatRoomid || r.id || r.roomId));
+        if (!hasLocal) {
+          rooms.unshift({
+            ChatRoomid: 'local-ai',
+            roomname: 'Local Assistant',
+            room_type: 'local',
+            description: 'Assistant',
+            unread: 0
+          });
+        }
+      } catch (e) {}
       console.debug('chatwidget: loadAgents fetched', rooms.length, 'rooms');
       // sync server-provided unread counts into local cache so UI can display consistently
       try {
         rooms.forEach(r => {
           const rid = r.ChatRoomid || r.ChatRoomId || r.id || r.roomId;
+          if (isLocalRoomId(rid)) return;
           const serverCnt = (r.unread || r.unread_count || 0) || 0;
           if (rid != null) setUnreadCount(rid, serverCnt);
         });
@@ -391,12 +477,19 @@ function initApp(config = {}) {
         updateTotalUnreadBadge(total);
       } catch(e){ console.debug('chatwidget: update total unread failed', e); }
       return rooms;
-    }).catch(err => { console.error('Failed to load rooms', err); return []; });
+    }).catch(err => {
+      console.error('Failed to load rooms', err);
+      const fallback = [{ ChatRoomid: 'local-ai', roomname: 'Local Assistant', room_type: 'local', description: 'Local Q&A (no server)', unread: 0 }];
+      renderAgents(fallback, elements.agentsList, false);
+      renderAgents(fallback, elements.agentsListOff, true);
+      return fallback;
+    });
   }
 
   function conversationIdFor(agentId) { return agentId; }
 
   function loadMessages(roomId) {
+    if (isLocalRoomId(roomId)) return loadLocalMessages();
     if (elements.messages) elements.messages.innerHTML = '';
     return apiPost('getMessages', { room: roomId }).then(async data => {
       const messages = Array.isArray(data) ? data : (data.messages || []);
@@ -447,6 +540,7 @@ function initApp(config = {}) {
   function startPolling(roomId) {
     if (pollTimer) clearInterval(pollTimer);
     currentRoomId = roomId;
+    if (isLocalRoomId(roomId)) return;
     pollTimer = setInterval(() => {
           apiPost('getMessages', { room: roomId, since: lastMessageId }).then(ms => {
             const messages = Array.isArray(ms) ? ms : (ms.messages || []);
@@ -951,6 +1045,24 @@ function initApp(config = {}) {
 
   function selectAgent(agent) {
     currentAgent = agent;
+    if (isLocalAgent(agent)) {
+      stopPolling();
+      lastMessageId = 0;
+      currentRoomId = 'local-ai';
+      if (elements.connectionStatus) elements.connectionStatus.textContent = 'Local Assistant';
+      document.querySelectorAll('#agentsList .list-group-item, #agentsListOffcanvas .list-group-item').forEach(el => {
+        el.classList.toggle('active', el.dataset.roomId == (agent.ChatRoomid || agent.id || agent.roomId));
+      });
+      try {
+        const headerViewBtn = document.getElementById(prefix + 'view_btn');
+        if (headerViewBtn) headerViewBtn.style.display = 'none';
+      } catch (e) {}
+      setComposerForLocal(true);
+      setQuickActionsForLocal(true);
+      return loadLocalMessages();
+    }
+    setComposerForLocal(false);
+    setQuickActionsForLocal(false);
     const rid = agent.ChatRoomid || agent.id || agent.roomId;
     const stored = (rid ? localStorage.getItem('chat_other_name_' + rid) : null);
     // For group rooms prefer the room's name (roomname) in the header; for private rooms show the other participant's name.
@@ -1112,6 +1224,67 @@ function initApp(config = {}) {
     // determine room: prefer currentAgent, fall back to active DOM selection or first room
     let roomId = getSelectedRoomId();
     if (!roomId) { alert('Please select a person to chat with.'); return; }
+    if (isLocalRoomId(roomId) || isLocalAgent(currentAgent)) {
+      const text = (elements.input && elements.input.value || '').trim();
+      if (pendingFile || widgetPendingFile) {
+        try { alert('Attachments are not supported in Local Assistant.'); } catch (e) {}
+        try { clearSelectedPreview(document.getElementById(prefix + 'attachPreviewColumn') || document.getElementById('attachPreviewColumn') || document.getElementById('chatwidget_attachPreviewColumn')); } catch(e) {}
+        pendingFile = null; widgetPendingFile = null;
+        if (elements.send) elements.send.disabled = false;
+        return;
+      }
+      if (!text) return;
+      const userMsg = {
+        content: text,
+        sender_name: userName || (userType + ' ' + userId),
+        sender_type: userType || 'client',
+        sender_id: userId || 0,
+        timestamp: new Date().toISOString()
+      };
+      appendMessageToUI(userMsg, 'me');
+      appendLocalHistory(userMsg);
+      if (elements.messages) elements.messages.scrollTop = elements.messages.scrollHeight;
+      if (elements.input) elements.input.value = '';
+      if (elements.send) elements.send.disabled = true;
+
+      try {
+        const history = loadLocalHistory();
+        const resp = await fetch(localApiPath, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            question: text,
+            history: history.slice(-20),
+            user: { id: userId || 0, type: userType || 'client', name: userName || '' }
+          })
+        });
+        const data = await resp.json().catch(() => ({}));
+        const answerText = (data && data.answer) ? String(data.answer) : '';
+        const botMsg = {
+          content: answerText || 'Sorry, no answer was returned by the local service.',
+          sender_name: 'Local Assistant',
+          sender_type: 'assistant',
+          sender_id: 0,
+          timestamp: new Date().toISOString()
+        };
+        appendMessageToUI(botMsg, 'them');
+        appendLocalHistory(botMsg);
+      } catch (err) {
+        const errMsg = {
+          content: 'Local assistant is unavailable. Start the local Python service and try again.',
+          sender_name: 'Local Assistant',
+          sender_type: 'assistant',
+          sender_id: 0,
+          timestamp: new Date().toISOString()
+        };
+        appendMessageToUI(errMsg, 'them');
+        appendLocalHistory(errMsg);
+      } finally {
+        if (elements.send) elements.send.disabled = false;
+        if (elements.messages) elements.messages.scrollTop = elements.messages.scrollHeight;
+      }
+      return;
+    }
     const text = (elements.input && elements.input.value || '').trim();
     // If there's a pending file selection (widget or main), upload that file instead of sending text immediately
     const fileToUpload = widgetPendingFile || pendingFile;
@@ -1590,10 +1763,26 @@ function initApp(config = {}) {
 
 
   if (elements.send) elements.send.addEventListener('click', sendMessage);
+  if (elements.quickDesignBtn) {
+    elements.quickDesignBtn.addEventListener('click', () => {
+      const prompt = 'how to use design dashboard';
+      const go = () => {
+        if (elements.input) elements.input.value = prompt;
+        sendMessage();
+      };
+      if (isLocalAgent(currentAgent) || isLocalRoomId(getSelectedRoomId())) {
+        go();
+        return;
+      }
+      try { selectAgent({ ChatRoomid: 'local-ai', roomname: 'Local Assistant', room_type: 'local', description: 'Assistant' }); } catch (e) {}
+      setTimeout(go, 50);
+    });
+  }
   if (elements.input) {
     elements.input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
     elements.input.addEventListener('input', () => {
       if (!currentRoomId && currentAgent) currentRoomId = currentAgent.ChatRoomid || currentAgent.id || currentAgent.roomId;
+      if (isLocalRoomId(currentRoomId) || isLocalAgent(currentAgent)) return;
       if (!currentRoomId) return;
       if (typingThrottle) return;
       typingThrottle = setTimeout(() => { clearTimeout(typingThrottle); typingThrottle = null; }, 1800);
