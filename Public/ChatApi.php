@@ -173,10 +173,69 @@ try {
   case 'getMessages':
     $roomId = (int)($data['room'] ?? 0);
     $since = isset($data['since']) ? (int)$data['since'] : 0;
-    // Fetch messages for room; if `since` provided, filter in PHP to support different DB schemas
-    $stmt = $pdo->prepare("SELECT * FROM Message WHERE ChatRoomid=? ORDER BY timestamp ASC");
-    $stmt->execute([$roomId]);
-    $rows = $stmt->fetchAll();
+    $beforeId = isset($data['before_id']) ? (int)$data['before_id'] : 0;
+    $afterId = isset($data['after_id']) ? (int)$data['after_id'] : 0;
+    $limit = isset($data['limit']) ? max(0, (int)$data['limit']) : 0;
+    $direction = isset($data['direction']) ? strtolower(trim((string)$data['direction'])) : '';
+    $user_type = normalize_member_type($data['user_type'] ?? null);
+    $user_id = isset($data['user_id']) ? (int)$data['user_id'] : 0;
+
+    if ($since > 0 && $afterId <= 0) $afterId = $since;
+
+    $rows = [];
+    $hasMoreOlder = false;
+    $hasMoreNewer = false;
+    $fetchLimit = ($limit > 0) ? ($limit + 1) : 0;
+    if ($afterId > 0) {
+      $stmt = $pdo->prepare("SELECT * FROM Message WHERE ChatRoomid=? AND messageid > ? ORDER BY messageid ASC LIMIT " . (int)$fetchLimit);
+      $stmt->execute([$roomId, $afterId]);
+      $rows = $stmt->fetchAll();
+      if ($limit > 0 && count($rows) > $limit) {
+        $hasMoreNewer = true;
+        $rows = array_slice($rows, 0, $limit);
+      }
+    } elseif ($beforeId > 0) {
+      $stmt = $pdo->prepare("SELECT * FROM Message WHERE ChatRoomid=? AND messageid < ? ORDER BY messageid DESC LIMIT " . (int)$fetchLimit);
+      $stmt->execute([$roomId, $beforeId]);
+      $rows = $stmt->fetchAll();
+      if ($limit > 0 && count($rows) > $limit) {
+        $hasMoreOlder = true;
+        $rows = array_slice($rows, 0, $limit);
+      }
+      $rows = array_reverse($rows);
+    } elseif ($limit > 0 || $direction === 'latest') {
+      $stmt = $pdo->prepare("SELECT * FROM Message WHERE ChatRoomid=? ORDER BY messageid DESC LIMIT " . (int)$fetchLimit);
+      $stmt->execute([$roomId]);
+      $rows = $stmt->fetchAll();
+      if ($limit > 0 && count($rows) > $limit) {
+        $hasMoreOlder = true;
+        $rows = array_slice($rows, 0, $limit);
+      }
+      $rows = array_reverse($rows);
+    } else {
+      $stmt = $pdo->prepare("SELECT * FROM Message WHERE ChatRoomid=? ORDER BY timestamp ASC");
+      $stmt->execute([$roomId]);
+      $rows = $stmt->fetchAll();
+    }
+    // compute first unread message id for this member (best-effort)
+    $firstUnreadId = null;
+    $lastOpened = null;
+    if ($user_type && $user_id > 0) {
+      try {
+        $mstmt2 = $pdo->prepare('SELECT last_opened FROM ChatRoomMember WHERE ChatRoomid=? AND member_type=? AND memberid=? LIMIT 1');
+        $mstmt2->execute([(int)$roomId, $user_type, $user_id]);
+        $lastOpened = $mstmt2->fetchColumn();
+        if ($lastOpened) {
+          $fu = $pdo->prepare('SELECT messageid FROM Message WHERE ChatRoomid=? AND timestamp > ? AND NOT (sender_type = ? AND sender_id = ?) ORDER BY messageid ASC LIMIT 1');
+          $fu->execute([(int)$roomId, $lastOpened, $user_type, $user_id]);
+        } else {
+          $fu = $pdo->prepare('SELECT messageid FROM Message WHERE ChatRoomid=? AND NOT (sender_type = ? AND sender_id = ?) ORDER BY messageid ASC LIMIT 1');
+          $fu->execute([(int)$roomId, $user_type, $user_id]);
+        }
+        $firstUnreadId = $fu->fetchColumn();
+      } catch (Throwable $_e) { $firstUnreadId = null; }
+    }
+
     // augment with sender display name and attach uploaded file metadata when present
     foreach ($rows as &$r) {
       $r['sender_name'] = null;
@@ -344,17 +403,25 @@ try {
           }
         }
       } catch (Throwable $__e) { /* ignore */ }
+      // mark unread relative to last_opened for this requesting user
+      if ($user_type && $user_id > 0) {
+        $isUnread = false;
+        if (($r['sender_type'] ?? '') !== $user_type || (int)($r['sender_id'] ?? 0) !== (int)$user_id) {
+          if (empty($lastOpened)) {
+            $isUnread = true;
+          } else {
+            try { $isUnread = (strtotime((string)($r['timestamp'] ?? '')) > strtotime((string)$lastOpened)); } catch (Throwable $_e) { $isUnread = false; }
+          }
+        }
+        $r['is_unread'] = $isUnread ? 1 : 0;
+      }
     }
-    if ($since > 0) {
-      $filtered = array_filter($rows, function($m) use ($since) {
-        if (isset($m['messageid'])) return (int)$m['messageid'] > $since;
-        if (isset($m['id'])) return (int)$m['id'] > $since;
-        return false;
-      });
-      send_json(array_values($filtered));
-    } else {
-      send_json($rows);
-    }
+    send_json([
+      'messages' => $rows,
+      'has_more_older' => $hasMoreOlder,
+      'has_more_newer' => $hasMoreNewer,
+      'first_unread_id' => $firstUnreadId ? (int)$firstUnreadId : null
+    ]);
     break;
 
   case 'sendMessage':

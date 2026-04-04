@@ -50,7 +50,13 @@ def run_query(sql: str, params: tuple = ()) -> List[Dict[str, Any]]:
 def extract_order_id(question: str) -> Optional[int]:
     if not question:
         return None
+    q = question.strip()
+    if re.fullmatch(r"\d+", q):
+        return int(q)
     m = re.search(r"\border\s*#?\s*(\d+)\b", question, re.IGNORECASE)
+    if m:
+        return int(m.group(1))
+    m = re.search(r"\bproject\s*#?\s*(\d+)\b", question, re.IGNORECASE)
     if m:
         return int(m.group(1))
     m = re.search(r"\borderid\s*#?\s*(\d+)\b", question, re.IGNORECASE)
@@ -64,8 +70,8 @@ INTENT_KEYWORDS = {
     "payment": ["payment", "pay", "paid", "deposit", "balance", "invoice"],
     "delivery": ["delivery", "deliver", "shipping", "shipment", "shipped", "dispatch"],
     "schedule": ["schedule", "date", "timeline", "start date", "finish date", "construction"],
-    "status": ["status", "progress", "sent order", "order sent", "placed order", "order placed"],
-    "order": ["order", "orders", "order id", "orderid", "recent orders", "latest orders", "my orders"],
+    "status": ["status", "progress", "sent order", "order sent", "placed order", "order placed", "sent project", "project sent", "placed project", "project placed"],
+    "order": ["order", "orders", "order id", "orderid", "recent orders", "latest orders", "my orders", "project", "projects", "project id", "projectid", "recent projects", "latest projects", "my projects"],
 }
 
 INTENT_PRIORITY = ["status", "payment", "delivery", "schedule", "order", "greeting"]
@@ -129,6 +135,13 @@ def design_dashboard_help() -> str:
     )
 
 
+def is_project_list_request(question: str) -> bool:
+    q = (question or "").lower()
+    has_list = any(k in q for k in ["show", "list", "recent", "latest"])
+    has_project = any(k in q for k in ["project", "projects", "order", "orders"])
+    return has_list and has_project
+
+
 def orders_for_user(role: str, user_id: int) -> List[Dict[str, Any]]:
     if not user_id or not role:
         return []
@@ -188,30 +201,30 @@ def user_can_access_order(role: str, user_id: int, order_id: int) -> bool:
 
 def summarize_recent_orders(rows: List[Dict[str, Any]], limit: int = 3) -> str:
     if not rows:
-        return "No orders found."
+        return "No projects found."
     parts = []
     for r in rows[:limit]:
         date_text = f" ({r['odate']})" if r.get("odate") else ""
         parts.append(f"#{r['orderid']} - {r['ostatus']}{date_text}")
     more = "" if len(rows) <= limit else f" (+{len(rows) - limit} more)"
-    return "Recent orders: " + ", ".join(parts) + more
+    return "Recent projects: " + ", ".join(parts) + more
 
 
 def build_followup(rows: List[Dict[str, Any]]) -> str:
     if not rows:
-        return "No orders found for your account."
+        return "No projects found for your account."
     ids = [str(r["orderid"]) for r in rows[:3]]
-    return "Which order do you mean? Options: #" + ", #".join(ids) + "."
+    return "Which project do you mean? __options__:" + ",".join(ids)
 
 
 def build_suggestions(rows: List[Dict[str, Any]]) -> str:
     if not rows:
-        return "Try: 'show my recent orders' or 'order 1 status'."
+        return "Try: 'show my recent projects' or 'project 1 status'."
     ids = [str(r["orderid"]) for r in rows[:3]]
     suggestions = [
-        f"order {ids[0]} status" if len(ids) >= 1 else None,
-        f"order {ids[0]} payment" if len(ids) >= 1 else None,
-        f"order {ids[1]} delivery" if len(ids) >= 2 else None,
+        f"project {ids[0]} status" if len(ids) >= 1 else None,
+        f"project {ids[0]} payment" if len(ids) >= 1 else None,
+        f"project {ids[1]} delivery" if len(ids) >= 2 else None,
     ]
     suggestions = [s for s in suggestions if s]
     return "Try: " + "; ".join([f"'{s}'" for s in suggestions]) + "."
@@ -227,21 +240,22 @@ def answer_with_db(question: str, user: Dict[str, Any]) -> str:
     user_id = int(user.get("id") or 0)
     intent, score = detect_intent(q)
     order_id = extract_order_id(q)
+    if order_id and (intent == "unknown" or score <= 0):
+        intent = "status"
 
     if intent == "greeting":
-        return "Hi. Ask me about your orders, payments, delivery, or schedule."
+        return "Hi. Ask me about your projects, payments, delivery, or schedule."
 
     if intent == "unknown" or score <= 0:
-        rows = orders_for_user(role, user_id)
-        if not rows:
-            return "I am not sure. Try: 'show my recent orders' or 'order 1 status'."
-        return summarize_recent_orders(rows, 3) + "\n" + build_suggestions(rows)
+        return "I am not sure what you want. Do you want project status, payment, delivery, or schedule?"
 
     if intent in ["order", "status", "payment", "delivery", "schedule"] and not order_id:
         rows = orders_for_user(role, user_id)
         if not rows:
-            return "No orders found for your account."
-        return summarize_recent_orders(rows, 3) + "\n" + build_followup(rows)
+            return "No projects found for your account."
+        if is_project_list_request(q):
+            return summarize_recent_orders(rows, 3)
+        return build_followup(rows)
 
     if order_id:
         if not user_can_access_order(role, user_id, order_id):
@@ -250,11 +264,11 @@ def answer_with_db(question: str, user: Dict[str, Any]) -> str:
         if intent in ["status", "order"]:
             rows = run_query("SELECT orderid, ostatus, odate, supplier_status FROM `Order` WHERE orderid=%s", (order_id,))
             if not rows:
-                return "Order not found."
+                return "Project not found."
             r = rows[0]
             s = r.get("supplier_status") or ""
             s_text = f", supplier status: {s}" if s else ""
-            return f"Order #{r['orderid']} status: {r['ostatus']} (date: {r['odate']}){s_text}."
+            return f"Project #{r['orderid']} status: {r['ostatus']} (date: {r['odate']}){s_text}."
 
         if intent == "payment":
             rows = run_query(
@@ -263,10 +277,10 @@ def answer_with_db(question: str, user: Dict[str, Any]) -> str:
                 (order_id,),
             )
             if not rows:
-                return "No payment record found for that order."
+                return "No payment record found for that project."
             r = rows[0]
             return (
-                f"Order #{order_id} payment status: {r['payment_status']}. "
+                f"Project #{order_id} payment status: {r['payment_status']}. "
                 f"Paid: {r['total_amount_paid']}, Due: {r['total_amount_due']}"
             )
 
@@ -276,13 +290,13 @@ def answer_with_db(question: str, user: Dict[str, Any]) -> str:
                 (order_id,),
             )
             if not rows:
-                return "No delivery records found for that order."
+                return "No delivery records found for that project."
             parts = []
             for r in rows:
                 parts.append(
                     f"Product {r['productid']} x{r['quantity']} - {r['status']} ({r['deliverydate']})"
                 )
-            return "Delivery for order #{0}: ".format(order_id) + "; ".join(parts)
+            return "Delivery for project #{0}: ".format(order_id) + "; ".join(parts)
 
         if intent == "schedule":
             rows = run_query(
@@ -291,16 +305,16 @@ def answer_with_db(question: str, user: Dict[str, Any]) -> str:
                 (order_id,),
             )
             if not rows:
-                return "No schedule found for that order."
+                return "No schedule found for that project."
             r = rows[0]
             return (
-                f"Order #{order_id} schedule: design finish {r['DesignFinishDate']}, "
+                f"Project #{order_id} schedule: design finish {r['DesignFinishDate']}, "
                 f"order finish {r['OrderFinishDate']}, construction {r['construction_start_date']} to {r['construction_end_date']} "
                 f"(status: {r['construction_date_status']})."
             )
 
     rows = orders_for_user(role, user_id)
-    return "Ask about order status, payment, delivery, or schedule. " + build_suggestions(rows)
+    return "Ask about project status, payment, delivery, or schedule. " + build_suggestions(rows)
 
 
 @app.post("/answer")

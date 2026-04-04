@@ -43,6 +43,13 @@ function initApp(config = {}) {
   let currentRoomId = null;
   let currentOrderReferences = { messageIds: new Set(), designIds: new Set() };
   let lastMessageId = 0;
+  let firstMessageId = 0;
+  let hasMoreOlder = false;
+  let hasMoreNewer = false;
+  let loadingOlder = false;
+  let loadingNewer = false;
+  let messagesScrollHandler = null;
+  const MESSAGE_PAGE_SIZE = parseInt(config.messagePageSize || 5, 10) || 5;
   let widgetPendingFile = null;
   let pendingFile = null;
   let pollTimer = null;
@@ -157,6 +164,17 @@ function initApp(config = {}) {
 
   function escapeHtml(s) { return String(s || '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
   function stripHtml(html) { return String(html || '').replace(/<[^>]*>?/gm, ''); }
+
+  function parseOptionsToken(text) {
+    try {
+      const raw = String(text || '');
+      const m = raw.match(/__options__\s*:\s*([0-9,\s#]+)/i);
+      if (!m) return null;
+      const ids = m[1].split(/[\s,]+/).map(v => v.replace(/[^0-9]/g, '')).filter(Boolean);
+      const clean = raw.replace(m[0], '').trim();
+      return { text: clean, ids };
+    } catch (e) { return null; }
+  }
 
   function formatMessageTimestamp(ts) {
     try {
@@ -488,11 +506,117 @@ function initApp(config = {}) {
 
   function conversationIdFor(agentId) { return agentId; }
 
+  function getMessageId(m) {
+    const mid = m && (m.id || m.messageid || m.messageId || m.messageID);
+    return mid ? parseInt(mid, 10) || 0 : 0;
+  }
+
+  function resetPagingState() {
+    firstMessageId = 0;
+    lastMessageId = 0;
+    hasMoreOlder = false;
+    hasMoreNewer = false;
+    loadingOlder = false;
+    loadingNewer = false;
+  }
+
+  function updatePagingBounds(messages) {
+    messages.forEach(m => {
+      const mid = getMessageId(m);
+      if (!mid) return;
+      if (!firstMessageId || mid < firstMessageId) firstMessageId = mid;
+      if (!lastMessageId || mid > lastMessageId) lastMessageId = mid;
+    });
+  }
+
+  function renderMessagesBatch(messages, opts = {}) {
+    if (!elements.messages) return;
+    const insert = opts.insert || 'append';
+    const skipGrouping = !!opts.skipGrouping;
+    if (insert === 'prepend') {
+      const prevHeight = elements.messages.scrollHeight;
+      const prevTop = elements.messages.scrollTop;
+      const list = messages.slice().reverse();
+      list.forEach(m => {
+        const who = (m.sender_type === userType && String(m.sender_id) == String(userId)) ? 'me' : 'them';
+        appendMessageToUI(m, who, { insert: 'prepend', skipGrouping: skipGrouping });
+      });
+      const newHeight = elements.messages.scrollHeight;
+      elements.messages.scrollTop = prevTop + (newHeight - prevHeight);
+    } else {
+      messages.forEach(m => {
+        const who = (m.sender_type === userType && String(m.sender_id) == String(userId)) ? 'me' : 'them';
+        appendMessageToUI(m, who);
+      });
+    }
+    updatePagingBounds(messages);
+  }
+
+  function scrollToMessageId(mid) {
+    if (!elements.messages || !mid) return false;
+    const node = elements.messages.querySelector('[data-mid="' + mid + '"]');
+    if (!node) return false;
+    elements.messages.scrollTop = Math.max(0, node.offsetTop - 12);
+    return true;
+  }
+
+  async function fetchOlder(roomId) {
+    if (loadingOlder || !hasMoreOlder || !firstMessageId) return;
+    loadingOlder = true;
+    try {
+      const resp = await apiPost('getMessages', { room: roomId, before_id: firstMessageId, limit: MESSAGE_PAGE_SIZE, user_type: userType, user_id: userId });
+      const messages = Array.isArray(resp) ? resp : (resp.messages || []);
+      hasMoreOlder = !!(resp && resp.has_more_older);
+      if (messages.length) renderMessagesBatch(messages, { insert: 'prepend', skipGrouping: true });
+    } finally {
+      loadingOlder = false;
+    }
+  }
+
+  async function fetchNewer(roomId) {
+    if (loadingNewer || !lastMessageId) return;
+    loadingNewer = true;
+    try {
+      const resp = await apiPost('getMessages', { room: roomId, after_id: lastMessageId, limit: MESSAGE_PAGE_SIZE, user_type: userType, user_id: userId });
+      const messages = Array.isArray(resp) ? resp : (resp.messages || []);
+      hasMoreNewer = !!(resp && resp.has_more_newer);
+      if (messages.length) {
+        renderMessagesBatch(messages, { insert: 'append' });
+        if (elements.messages) elements.messages.scrollTop = elements.messages.scrollHeight;
+      }
+    } finally {
+      loadingNewer = false;
+    }
+  }
+
+  async function loadOlderUntil(roomId, targetId) {
+    let loops = 0;
+    while (hasMoreOlder && firstMessageId && firstMessageId > targetId && loops < 6) {
+      await fetchOlder(roomId);
+      loops += 1;
+    }
+  }
+
+  function attachScrollPagination(roomId) {
+    if (!elements.messages) return;
+    if (messagesScrollHandler) elements.messages.removeEventListener('scroll', messagesScrollHandler);
+    messagesScrollHandler = () => {
+      const el = elements.messages;
+      const threshold = 80;
+      if (el.scrollTop <= threshold) fetchOlder(roomId);
+      if (el.scrollTop + el.clientHeight >= el.scrollHeight - threshold) fetchNewer(roomId);
+    };
+    elements.messages.addEventListener('scroll', messagesScrollHandler);
+  }
+
   function loadMessages(roomId) {
     if (isLocalRoomId(roomId)) return loadLocalMessages();
     if (elements.messages) elements.messages.innerHTML = '';
-    return apiPost('getMessages', { room: roomId }).then(async data => {
+    resetPagingState();
+    return apiPost('getMessages', { room: roomId, limit: MESSAGE_PAGE_SIZE, direction: 'latest', user_type: userType, user_id: userId }).then(async data => {
       const messages = Array.isArray(data) ? data : (data.messages || []);
+      hasMoreOlder = !!(data && data.has_more_older);
+      hasMoreNewer = !!(data && data.has_more_newer);
       // preload references when this is an order room
       currentOrderReferences = { messageIds: new Set(), designIds: new Set() };
       try {
@@ -517,14 +641,18 @@ function initApp(config = {}) {
         }
       } catch (e) { /* ignore ref load errors */ }
 
-      messages.forEach(m => {
-        const who = (m.sender_type === userType && String(m.sender_id) == String(userId)) ? 'me' : 'them';
-        appendMessageToUI(m, who);
-        const mid = m.id || m.messageid || m.messageId || 0;
-        if (mid) lastMessageId = Math.max(lastMessageId, parseInt(mid, 10));
-      });
+      renderMessagesBatch(messages, { insert: 'append' });
       if (elements.messages) elements.messages.dataset.roomId = roomId;
-      if (elements.messages) elements.messages.scrollTop = elements.messages.scrollHeight;
+      attachScrollPagination(roomId);
+      const firstUnread = data && data.first_unread_id ? parseInt(data.first_unread_id, 10) : 0;
+      if (firstUnread) {
+        await loadOlderUntil(roomId, firstUnread);
+        if (!scrollToMessageId(firstUnread)) {
+          if (elements.messages) elements.messages.scrollTop = elements.messages.scrollHeight;
+        }
+      } else {
+        if (elements.messages) elements.messages.scrollTop = elements.messages.scrollHeight;
+      }
       // Mark this room as read on the server (best-effort) and clear local unread counter
       try {
         const room = roomId;
@@ -541,47 +669,21 @@ function initApp(config = {}) {
     if (pollTimer) clearInterval(pollTimer);
     currentRoomId = roomId;
     if (isLocalRoomId(roomId)) return;
-    pollTimer = setInterval(() => {
-          apiPost('getMessages', { room: roomId, since: lastMessageId }).then(ms => {
-            const messages = Array.isArray(ms) ? ms : (ms.messages || []);
-            messages.forEach(m => {
-              const who = (m.sender_type === userType && String(m.sender_id) == String(userId)) ? 'me' : 'them';
-              appendMessageToUI(m, who);
-              const mid = m.id || m.messageid || m.messageId || 0;
-              if (mid) lastMessageId = Math.max(lastMessageId, parseInt(mid, 10));
-            });
-            if (elements.messages && messages.length) {
-              try { elements.messages.scrollTop = elements.messages.scrollHeight; } catch(e){}
-            }
-            // Mark messages read for currently opened room and clear local unread counter
-            try {
-              if (messages && messages.length) {
-                apiPost('markRead', { room: roomId, user_type: userType, user_id: userId }).catch(() => {});
-                try { clearUnread(roomId); } catch(e){}
-              }
-            } catch(e) {}
-          }).catch(() => {});
-
-      // typing status
-      apiPost('getTyping', { room: roomId }).then(tp => {
-        const el = document.getElementById('typingIndicator');
-        if (!el) return;
-        if (tp && tp.typing && !(tp.sender === userType && String(tp.sender_id) === String(userId))) {
-          el.textContent = 'typing...';
-        } else {
-          el.textContent = '';
-        }
-      }).catch(() => {});
-
-    }, 1500);
+    attachScrollPagination(roomId);
   }
 
   function stopPolling() {
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    if (messagesScrollHandler && elements.messages) {
+      elements.messages.removeEventListener('scroll', messagesScrollHandler);
+      messagesScrollHandler = null;
+    }
   }
 
-  function appendMessageToUI(msgObj, who) {
+  function appendMessageToUI(msgObj, who, options = {}) {
     if (!elements.messages) return;
+    const insertAtTop = options.insert === 'prepend';
+    const skipGrouping = !!options.skipGrouping;
     const existingId = msgObj.id || msgObj.messageid || msgObj.messageId || msgObj.messageID || msgObj.id;
     if (existingId) {
       try {
@@ -602,8 +704,14 @@ function initApp(config = {}) {
     const content = msgObj.content || msgObj.body || '';
     // render URL content as clickable link
     let contentHtml = '';
+    let optionsData = null;
+    let optionsHtml = '';
     try {
-      const txt = String(content || '');
+      let txt = String(content || '');
+      if (msgObj && msgObj.sender_type === 'assistant') {
+        optionsData = parseOptionsToken(txt);
+        if (optionsData && optionsData.text) txt = optionsData.text;
+      }
       if (/^https?:\/\//i.test(txt)) {
         // If message also has an uploaded file, show a friendly label instead of raw URL
         const fname = (msgObj.uploaded_file && msgObj.uploaded_file.filename) ? msgObj.uploaded_file.filename : (msgObj.attachment ? (msgObj.attachment.split('/').pop() || txt) : null);
@@ -613,6 +721,13 @@ function initApp(config = {}) {
         contentHtml = escapeHtml(stripHtml(txt));
       }
     } catch (e) { contentHtml = escapeHtml(stripHtml(content)); }
+    if (optionsData && optionsData.ids && optionsData.ids.length) {
+      const btns = optionsData.ids.map(id => {
+        const safe = escapeHtml(String(id));
+        return `<button type="button" class="chat-option-btn" data-option-id="${safe}">Project #${safe}</button>`;
+      }).join('');
+      optionsHtml = `<div class="chat-option-row">${btns}</div>`;
+    }
     const time = msgObj.timestamp || msgObj.created_at || new Date().toISOString();
 
     const wrapper = document.createElement('div');
@@ -852,9 +967,9 @@ function initApp(config = {}) {
       const timeText = formatMessageTimestamp(time);
       // If image message, render image first, then text below
       if (isImageMessage && attachmentHtml) {
-        bubble.innerHTML = `${attachmentHtml}<div>${contentHtml}</div>${campaignHtml}`;
+        bubble.innerHTML = `${attachmentHtml}<div>${contentHtml}</div>${optionsHtml}${campaignHtml}`;
       } else {
-        bubble.innerHTML = `<div>${contentHtml}</div>${attachmentHtml}${campaignHtml}`;
+        bubble.innerHTML = `<div>${contentHtml}</div>${optionsHtml}${attachmentHtml}${campaignHtml}`;
       }
       // create time element as a sibling outside the bubble (keeps date outside message box)
       var timeEl = document.createElement('div');
@@ -885,18 +1000,20 @@ function initApp(config = {}) {
 
     // Determine whether this message should be visually grouped with the previous message
     let grouped = false;
-    try {
-      const last = elements.messages && elements.messages.lastElementChild;
-      // Only group when previous message is from same sender AND on same side (who)
-      if (last && last.dataset && last.dataset.senderId && String(last.dataset.senderId) === String(wrapper.dataset.senderId) && String(last.dataset.who) === String(wrapper.dataset.who)) {
-        const prevT = new Date(last.dataset.timestamp || 0);
-        const curT = new Date(time);
-        if (!isNaN(prevT.getTime()) && !isNaN(curT.getTime())) {
-          const diff = Math.abs(curT - prevT);
-          if (diff <= 60000) grouped = true; // within 1 minute
+    if (!skipGrouping) {
+      try {
+        const last = elements.messages && elements.messages.lastElementChild;
+        // Only group when previous message is from same sender AND on same side (who)
+        if (last && last.dataset && last.dataset.senderId && String(last.dataset.senderId) === String(wrapper.dataset.senderId) && String(last.dataset.who) === String(wrapper.dataset.who)) {
+          const prevT = new Date(last.dataset.timestamp || 0);
+          const curT = new Date(time);
+          if (!isNaN(prevT.getTime()) && !isNaN(curT.getTime())) {
+            const diff = Math.abs(curT - prevT);
+            if (diff <= 60000) grouped = true; // within 1 minute
+          }
         }
-      }
-    } catch(e) { grouped = false; }
+      } catch(e) { grouped = false; }
+    }
 
     if (existingId) wrapper.setAttribute('data-mid', existingId);
     // If grouped, hide avatar and name and omit timestamp when appending
@@ -928,7 +1045,11 @@ function initApp(config = {}) {
       } catch(e) {}
     }
 
-    elements.messages.appendChild(wrapper);
+    if (insertAtTop && elements.messages.firstChild) {
+      elements.messages.insertBefore(wrapper, elements.messages.firstChild);
+    } else {
+      elements.messages.appendChild(wrapper);
+    }
     // wire up Add to Reference button if present
     try {
       const refBtn = wrapper.querySelector('.add-ref-btn');
@@ -942,6 +1063,18 @@ function initApp(config = {}) {
           } catch (e) { console.error('add-ref click handler failed', e); }
         });
       }
+    } catch (e) {}
+    // wire up option buttons for local assistant suggestions
+    try {
+      const optionBtns = wrapper.querySelectorAll('.chat-option-btn');
+      optionBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+          const id = btn.getAttribute('data-option-id');
+          if (!id) return;
+          if (elements.input) elements.input.value = 'project ' + id + ' status';
+          sendMessage();
+        });
+      });
     } catch (e) {}
     // Append timestamp to the current message. If this message is grouped with the previous
     // one, remove the previous message's timestamp so the latest in the group shows the date.
@@ -1320,7 +1453,10 @@ function initApp(config = {}) {
           } catch(e){}
           appendMessageToUI(created, 'me');
           const mid = created.id || created.messageid || created.messageId || resp.id || 0;
-          if (mid) lastMessageId = Math.max(lastMessageId, parseInt(mid, 10));
+          if (mid) {
+            lastMessageId = Math.max(lastMessageId, parseInt(mid, 10));
+            if (!firstMessageId) firstMessageId = parseInt(mid, 10);
+          }
           if (elements.messages) elements.messages.scrollTop = elements.messages.scrollHeight;
           try { apiPost('markRead', { room: roomId, user_type: userType, user_id: userId }).catch(()=>{}); } catch(e){}
           try { clearUnread(roomId); } catch(e){}
@@ -1359,7 +1495,10 @@ function initApp(config = {}) {
         if (!created.sender_name) created.sender_name = userName || (userType + ' ' + userId);
         appendMessageToUI(created, 'me');
         const mid = created.id || created.messageid || created.messageId || res.id || 0;
-        if (mid) lastMessageId = Math.max(lastMessageId, parseInt(mid, 10));
+        if (mid) {
+          lastMessageId = Math.max(lastMessageId, parseInt(mid, 10));
+          if (!firstMessageId) firstMessageId = parseInt(mid, 10);
+        }
         if (elements.messages) elements.messages.scrollTop = elements.messages.scrollHeight;
         try { apiPost('markRead', { room: roomId, user_type: userType, user_id: userId }).catch(()=>{}); } catch(e){}
         try { clearUnread(roomId); } catch(e){}

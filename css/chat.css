@@ -140,6 +140,28 @@
   font-weight: 600;
 }
 
+.chat-option-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.chat-option-btn {
+  background: #f1f6ff;
+  color: #0d6efd;
+  border: 1px solid rgba(13, 110, 253, 0.25);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.chat-option-btn:hover {
+  background: #e6f0ff;
+}
+
 /* Attachments preview column (card-style preview shown above composer)
    Desktop: fixed narrow card on the right side of the messages column
    Mobile: full-width stacked preview above composer */
