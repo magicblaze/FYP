@@ -105,6 +105,32 @@
 #messages,
 #chatwidget_messages {
   padding: 12px;
+  position: relative;
+}
+
+.chat-new-message-notice {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%) translateY(8px);
+  background: #0b1b2b;
+  color: #fff;
+  border: 0;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 8px 18px rgba(11, 27, 43, 0.22);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 6;
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.chat-new-message-notice.visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(-50%) translateY(0);
 }
 
 .message {
@@ -382,6 +408,21 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.chatwidget-select-guide {
+  display: none;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--chat-muted);
+  font-size: 13px;
+  padding: 18px;
+}
+
+.chatwidget-hidden {
+  display: none !important;
 }
 
 /* Responsive: stack on small screens */

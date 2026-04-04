@@ -25,7 +25,10 @@ function initApp(config = {}) {
     catalogOffcanvasEl: el('catalogOffcanvas'),
     quickActions: document.getElementById(prefix + 'chatwidget_quickActions') || document.getElementById('chatwidget_quickActions'),
     quickDesignBtn: document.getElementById(prefix + 'chatwidget_quick_design_dashboard') || document.getElementById('chatwidget_quick_design_dashboard'),
+    header: document.getElementById(prefix + 'chatwidget_Current_Chat') || document.getElementById('chatwidget_Current_Chat'),
+    headerAvatar: document.getElementById(prefix + 'chatwidget_current_avatar') || document.getElementById('chatwidget_current_avatar'),
   };
+  elements.composer = elements.input ? elements.input.closest('.composer') : null;
 
   try {
     ['chatwidget_attachPreviewColumn','attachPreviewColumn'].forEach(id => {
@@ -53,8 +56,23 @@ function initApp(config = {}) {
   let widgetPendingFile = null;
   let pendingFile = null;
   let pollTimer = null;
+  let newMessageTimer = null;
   let agentsPollTimer = null;
+  const AGENTS_POLL_MIN_MS = 100;
+  const AGENTS_POLL_MAX_MS = 2000;
+  const AGENTS_POLL_STEP_MS = 100;
+  let agentsPollDelayMs = AGENTS_POLL_MIN_MS;
+  let agentsPollToken = 0;
+  let lastAgentsSnapshot = '';
+  const NEWER_POLL_MIN_MS = 100;
+  const NEWER_POLL_MAX_MS = 2000;
+  let newerPollDelayMs = NEWER_POLL_MIN_MS;
+  let newerPollToken = 0;
+  let userAtBottom = true;
+  let newMessagePending = false;
+  let newMessageNoticeEl = null;
   let typingThrottle = null;
+  let panelObserver = null;
   const bsOff = (elements.catalogOffcanvasEl) ? new bootstrap.Offcanvas(elements.catalogOffcanvasEl) : null;
   if (elements.openCatalogBtn && bsOff) {
     elements.openCatalogBtn.addEventListener('click', () => bsOff.show());
@@ -200,7 +218,6 @@ function initApp(config = {}) {
   function setUnreadCount(roomId, count) {
     try { localStorage.setItem(getUnreadKey(roomId), String(Math.max(0, parseInt(count||0,10)||0))); } catch(e){}
     try { updateAgentBadge(roomId, Math.max(0, parseInt(count||0,10)||0)); } catch(e){}
-    try { updateTotalUnreadBadge(); } catch(e){}
   }
   function incrementUnread(roomId, by) {
     try { const cur = getUnreadCountFromStorage(roomId); setUnreadCount(roomId, cur + (parseInt(by||1,10) || 1)); } catch(e){}
@@ -380,7 +397,7 @@ function initApp(config = {}) {
       const unreadHtml = unreadCount ? ('<span class="badge bg-danger ms-2 chat-unread-badge">' + escapeHtml(String(unreadCount)) + '</span>') : '';
       const isLocal = isLocalRoomId(roomKey);
       const avatarHtml = isLocal ? '<i class="bi bi-headset" aria-hidden="true"></i>' : escapeHtml((name||'')[0]||'R');
-      btn.innerHTML = `<div class="me-2"><div class="rounded-circle bg-secondary text-white d-inline-flex align-items-center justify-content-center" style="width:36px;height:36px">${avatarHtml}</div></div>
+      btn.innerHTML = `<div class="me-2"><div class="rounded-circle bg-secondary text-white d-inline-flex align-items-center justify-content-center chat-avatar" style="width:36px;height:36px">${avatarHtml}</div></div>
         <div class="flex-grow-1 text-start"><div class="fw-semibold">${escapeHtml(name)}${unreadHtml}</div><div class="small text-muted">${escapeHtml(subtitle)}</div></div>`;
       btn.addEventListener('click', () => {
         selectAgent(a);
@@ -445,8 +462,114 @@ function initApp(config = {}) {
     } catch (e) {}
   }
 
+  function ensureSelectGuide() {
+    if (!elements.messages) return null;
+    const rightCol = elements.messages.closest('.right');
+    if (!rightCol) return null;
+    const baseId = 'chatwidget_select_placeholder';
+    const guideId = prefix ? (prefix + 'select_placeholder') : baseId;
+    let guide = document.getElementById(guideId) || document.getElementById(baseId) || document.getElementById(prefix + 'chatwidget_select_placeholder');
+    if (!guide) {
+      guide = document.createElement('div');
+      guide.id = guideId;
+      guide.className = 'chatwidget-select-guide';
+      guide.textContent = 'Select a chat from the list or start a chat with the + button.';
+      try {
+        if (elements.messages && elements.messages.parentNode === rightCol) {
+          rightCol.insertBefore(guide, elements.messages);
+        } else {
+          rightCol.appendChild(guide);
+        }
+      } catch (e) {
+        rightCol.appendChild(guide);
+      }
+    }
+    if (guide.id !== guideId) guide.id = guideId;
+    return guide;
+  }
+
+  function setRoomUiState(hasRoom) {
+    try {
+      const guide = ensureSelectGuide();
+      if (elements.header) {
+        elements.header.classList.toggle('chatwidget-hidden', !hasRoom);
+        elements.header.style.display = hasRoom ? 'flex' : 'none';
+        elements.header.setAttribute('aria-hidden', hasRoom ? 'false' : 'true');
+      }
+      if (elements.messages) elements.messages.style.display = hasRoom ? '' : 'none';
+      if (elements.composer) elements.composer.style.display = hasRoom ? '' : 'none';
+      if (guide) guide.style.display = hasRoom ? 'none' : 'flex';
+      if (!hasRoom) {
+        setQuickActionsForLocal(false);
+        newMessagePending = false;
+        clearNewMessageNotice();
+        if (elements.connectionStatus) elements.connectionStatus.textContent = 'Select a Chat to start conversation';
+      }
+    } catch (e) {}
+  }
+
+  function getPanelElement() {
+    return document.getElementById(prefix + 'panel') || document.getElementById('chatwidget_panel');
+  }
+
+  function isPanelExpanded() {
+    const panel = getPanelElement();
+    if (!panel) return true;
+    if (panel.getAttribute('aria-hidden') === 'true') return false;
+    if (panel.classList.contains('chatwidget-hidden')) return false;
+    if (panel.style.display === 'none') return false;
+    return true;
+  }
+
+  function isSelectedRoom(roomId) {
+    if (!roomId) return false;
+    const current = currentRoomId || (elements.messages && elements.messages.dataset ? elements.messages.dataset.roomId : null);
+    return String(current || '') === String(roomId);
+  }
+
+  function markReadIfVisible(roomId) {
+    if (!roomId || isLocalRoomId(roomId)) return;
+    if (!isPanelExpanded()) return;
+    if (!elements.messages || elements.messages.style.display === 'none') return;
+    if (!isSelectedRoom(roomId)) return;
+    try { apiPost('markRead', { room: roomId, user_type: userType, user_id: userId }).catch(() => {}); } catch(e) {}
+    try { clearUnread(roomId); updateAgentBadge(roomId, 0); } catch(e) {}
+  }
+
+  function attachPanelObserver() {
+    const panel = getPanelElement();
+    if (!panel || panelObserver) return;
+    panelObserver = new MutationObserver(() => {
+      if (isPanelExpanded() && currentRoomId) markReadIfVisible(currentRoomId);
+    });
+    panelObserver.observe(panel, { attributes: true, attributeFilter: ['class', 'style', 'aria-hidden'] });
+  }
+
+  function setHeaderAvatar(name, isLocal) {
+    if (!elements.headerAvatar) return;
+    if (isLocal) {
+      elements.headerAvatar.innerHTML = '<i class="bi bi-headset" aria-hidden="true"></i>';
+      return;
+    }
+    const initial = (name && String(name).trim()) ? String(name).trim().charAt(0).toUpperCase() : 'U';
+    elements.headerAvatar.innerHTML = '';
+    elements.headerAvatar.textContent = initial;
+  }
+
+  function setHeaderAvatarFromList(roomId) {
+    if (!elements.headerAvatar || !roomId) return false;
+    const sel = document.querySelector('[data-room-id="' + roomId + '"] .chat-avatar');
+    if (!sel) return false;
+    elements.headerAvatar.className = sel.className;
+    elements.headerAvatar.style.cssText = sel.style.cssText;
+    elements.headerAvatar.innerHTML = sel.innerHTML;
+    return true;
+  }
+
   function loadLocalMessages() {
     if (elements.messages) elements.messages.innerHTML = '';
+    newMessagePending = false;
+    clearNewMessageNotice();
     const messages = loadLocalHistory();
     messages.forEach(m => {
       const who = (m.sender_type === userType && String(m.sender_id) == String(userId)) ? 'me' : 'them';
@@ -477,6 +600,19 @@ function initApp(config = {}) {
         }
       } catch (e) {}
       console.debug('chatwidget: loadAgents fetched', rooms.length, 'rooms');
+      // Remove stale room unread cache keys that are no longer active for this user.
+      try {
+        const activeRoomIds = new Set(rooms.map(r => String(r.ChatRoomid || r.ChatRoomId || r.id || r.roomId || '')).filter(v => !!v && !isLocalRoomId(v)));
+        const keyPrefix = 'chat_unread_';
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+          const key = localStorage.key(i);
+          if (!key || key.indexOf(keyPrefix) !== 0) continue;
+          const rid = key.substring(keyPrefix.length);
+          if (!activeRoomIds.has(String(rid))) {
+            localStorage.removeItem(key);
+          }
+        }
+      } catch (e) {}
       // sync server-provided unread counts into local cache so UI can display consistently
       try {
         rooms.forEach(r => {
@@ -488,12 +624,6 @@ function initApp(config = {}) {
       } catch(e){}
       renderAgents(rooms, elements.agentsList, false);
       renderAgents(rooms, elements.agentsListOff, true);
-      // update total unread badge on widget toggle (log computed total)
-      try {
-        const total = rooms.reduce((s,r) => s + (parseInt(r.unread || r.unread_count || getUnreadCountFromStorage(r.ChatRoomid || r.id || r.roomId) || 0,10) || 0), 0);
-        console.debug('chatwidget: total unread computed', total);
-        updateTotalUnreadBadge(total);
-      } catch(e){ console.debug('chatwidget: update total unread failed', e); }
       return rooms;
     }).catch(err => {
       console.error('Failed to load rooms', err);
@@ -502,6 +632,71 @@ function initApp(config = {}) {
       renderAgents(fallback, elements.agentsListOff, true);
       return fallback;
     });
+  }
+
+  function resetAgentsPollBackoff() {
+    agentsPollDelayMs = AGENTS_POLL_MIN_MS;
+  }
+
+  function increaseAgentsPollBackoff() {
+    agentsPollDelayMs = Math.min(AGENTS_POLL_MAX_MS, Math.max(AGENTS_POLL_MIN_MS, agentsPollDelayMs + AGENTS_POLL_STEP_MS));
+  }
+
+  function buildAgentsSnapshot(rooms) {
+    try {
+      return (Array.isArray(rooms) ? rooms : [])
+        .map(r => {
+          const rid = String(r.ChatRoomid || r.ChatRoomId || r.id || r.roomId || '');
+          if (!rid || isLocalRoomId(rid)) return '';
+          const unread = parseInt(r.unread || r.unread_count || getUnreadCountFromStorage(rid) || 0, 10) || 0;
+          return rid + ':' + unread;
+        })
+        .filter(Boolean)
+        .sort()
+        .join('|');
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function startAgentsAutoPoll() {
+    if (agentsPollTimer) {
+      clearTimeout(agentsPollTimer);
+      agentsPollTimer = null;
+    }
+
+    resetAgentsPollBackoff();
+    agentsPollToken += 1;
+    const token = agentsPollToken;
+
+    const scheduleNext = () => {
+      if (token !== agentsPollToken) return;
+      if (agentsPollTimer) clearTimeout(agentsPollTimer);
+      agentsPollTimer = setTimeout(runPoll, agentsPollDelayMs);
+    };
+
+    const runPoll = () => {
+      if (token !== agentsPollToken) return;
+      loadAgents()
+        .then(rooms => {
+          if (token !== agentsPollToken) return;
+          const snapshot = buildAgentsSnapshot(rooms);
+          if (snapshot !== lastAgentsSnapshot) {
+            lastAgentsSnapshot = snapshot;
+            resetAgentsPollBackoff();
+          } else {
+            increaseAgentsPollBackoff();
+          }
+          scheduleNext();
+        })
+        .catch(() => {
+          if (token !== agentsPollToken) return;
+          increaseAgentsPollBackoff();
+          scheduleNext();
+        });
+    };
+
+    runPoll();
   }
 
   function conversationIdFor(agentId) { return agentId; }
@@ -527,6 +722,50 @@ function initApp(config = {}) {
       if (!firstMessageId || mid < firstMessageId) firstMessageId = mid;
       if (!lastMessageId || mid > lastMessageId) lastMessageId = mid;
     });
+  }
+
+  function isAtBottom(threshold = 80) {
+    if (!elements.messages) return true;
+    const el = elements.messages;
+    return (el.scrollTop + el.clientHeight >= el.scrollHeight - threshold);
+  }
+
+  function ensureNewMessageNotice() {
+    if (!elements.messages) return null;
+    if (newMessageNoticeEl && newMessageNoticeEl.parentNode) return newMessageNoticeEl;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'chat-new-message-notice';
+    btn.textContent = 'New messages - Jump to latest';
+    btn.setAttribute('aria-hidden', 'true');
+    btn.addEventListener('click', () => {
+      newMessagePending = false;
+      clearNewMessageNotice();
+      if (elements.messages) {
+        elements.messages.scrollTop = elements.messages.scrollHeight;
+      }
+      userAtBottom = true;
+      if (currentRoomId) {
+        fetchNewer(currentRoomId, { autoScroll: true, force: true }).catch(() => {});
+      }
+      markReadIfVisible(currentRoomId);
+    });
+    elements.messages.appendChild(btn);
+    newMessageNoticeEl = btn;
+    return btn;
+  }
+
+  function showNewMessageNotice() {
+    const btn = ensureNewMessageNotice();
+    if (!btn) return;
+    btn.classList.add('visible');
+    btn.setAttribute('aria-hidden', 'false');
+  }
+
+  function clearNewMessageNotice() {
+    if (!newMessageNoticeEl) return;
+    newMessageNoticeEl.classList.remove('visible');
+    newMessageNoticeEl.setAttribute('aria-hidden', 'true');
   }
 
   function renderMessagesBatch(messages, opts = {}) {
@@ -560,6 +799,14 @@ function initApp(config = {}) {
     return true;
   }
 
+  function resetNewerPollBackoff() {
+    newerPollDelayMs = NEWER_POLL_MIN_MS;
+  }
+
+  function increaseNewerPollBackoff() {
+    newerPollDelayMs = Math.min(NEWER_POLL_MAX_MS, Math.max(NEWER_POLL_MIN_MS, newerPollDelayMs * 2));
+  }
+
   async function fetchOlder(roomId) {
     if (loadingOlder || !hasMoreOlder || !firstMessageId) return;
     loadingOlder = true;
@@ -573,17 +820,29 @@ function initApp(config = {}) {
     }
   }
 
-  async function fetchNewer(roomId) {
-    if (loadingNewer || !lastMessageId) return;
+  async function fetchNewer(roomId, options = {}) {
+    if (loadingNewer || !lastMessageId) return 0;
+    const autoScroll = options.autoScroll === true;
     loadingNewer = true;
     try {
       const resp = await apiPost('getMessages', { room: roomId, after_id: lastMessageId, limit: MESSAGE_PAGE_SIZE, user_type: userType, user_id: userId });
       const messages = Array.isArray(resp) ? resp : (resp.messages || []);
       hasMoreNewer = !!(resp && resp.has_more_newer);
       if (messages.length) {
+        resetNewerPollBackoff();
         renderMessagesBatch(messages, { insert: 'append' });
-        if (elements.messages) elements.messages.scrollTop = elements.messages.scrollHeight;
+        if (elements.messages && autoScroll) {
+          elements.messages.scrollTop = elements.messages.scrollHeight;
+          userAtBottom = true;
+          newMessagePending = false;
+          clearNewMessageNotice();
+        } else {
+          newMessagePending = true;
+          showNewMessageNotice();
+        }
+        markReadIfVisible(roomId);
       }
+      return messages.length;
     } finally {
       loadingNewer = false;
     }
@@ -597,14 +856,33 @@ function initApp(config = {}) {
     }
   }
 
+  async function fillViewportWithOlder(roomId, maxLoops = 8) {
+    if (!elements.messages) return;
+    let loops = 0;
+    while (hasMoreOlder && loops < maxLoops) {
+      const el = elements.messages;
+      const hasScrollableArea = el.scrollHeight > (el.clientHeight + 2);
+      if (hasScrollableArea) break;
+      await fetchOlder(roomId);
+      loops += 1;
+    }
+  }
+
   function attachScrollPagination(roomId) {
     if (!elements.messages) return;
     if (messagesScrollHandler) elements.messages.removeEventListener('scroll', messagesScrollHandler);
     messagesScrollHandler = () => {
       const el = elements.messages;
       const threshold = 80;
+      userAtBottom = isAtBottom(threshold);
       if (el.scrollTop <= threshold) fetchOlder(roomId);
-      if (el.scrollTop + el.clientHeight >= el.scrollHeight - threshold) fetchNewer(roomId);
+      if (userAtBottom) {
+        if (newMessagePending) {
+          newMessagePending = false;
+          clearNewMessageNotice();
+        }
+        fetchNewer(roomId, { autoScroll: true }).catch(() => {});
+      }
     };
     elements.messages.addEventListener('scroll', messagesScrollHandler);
   }
@@ -612,6 +890,8 @@ function initApp(config = {}) {
   function loadMessages(roomId) {
     if (isLocalRoomId(roomId)) return loadLocalMessages();
     if (elements.messages) elements.messages.innerHTML = '';
+    newMessagePending = false;
+    clearNewMessageNotice();
     resetPagingState();
     return apiPost('getMessages', { room: roomId, limit: MESSAGE_PAGE_SIZE, direction: 'latest', user_type: userType, user_id: userId }).then(async data => {
       const messages = Array.isArray(data) ? data : (data.messages || []);
@@ -653,16 +933,54 @@ function initApp(config = {}) {
       } else {
         if (elements.messages) elements.messages.scrollTop = elements.messages.scrollHeight;
       }
-      // Mark this room as read on the server (best-effort) and clear local unread counter
-      try {
-        const room = roomId;
-        if (room) {
-          apiPost('markRead', { room: room, user_type: userType, user_id: userId }).catch(() => {});
-          try { clearUnread(room); } catch(e){}
-        }
-      } catch(e){}
+      await fillViewportWithOlder(roomId);
+      userAtBottom = isAtBottom();
+      // Mark as read only when room is selected and panel is expanded
+      markReadIfVisible(roomId);
       return messages;
     }).catch(err => { console.error(err); return []; });
+  }
+
+  function startNewerAutoCheck(roomId) {
+    if (newMessageTimer) {
+      clearTimeout(newMessageTimer);
+      newMessageTimer = null;
+    }
+    if (!roomId || isLocalRoomId(roomId)) return;
+    resetNewerPollBackoff();
+    newerPollToken += 1;
+    const token = newerPollToken;
+    const roomKey = String(roomId);
+
+    const scheduleNext = () => {
+      if (token !== newerPollToken) return;
+      if (newMessageTimer) clearTimeout(newMessageTimer);
+      newMessageTimer = setTimeout(runCheck, newerPollDelayMs);
+    };
+
+    const runCheck = () => {
+      if (token !== newerPollToken) return;
+
+      if (!currentRoomId || String(currentRoomId) !== roomKey || !isPanelExpanded() || !isSelectedRoom(roomId)) {
+        increaseNewerPollBackoff();
+        scheduleNext();
+        return;
+      }
+
+      fetchNewer(roomId, { autoScroll: userAtBottom, source: 'auto' })
+        .then(newCount => {
+          if (token !== newerPollToken) return;
+          if (!(parseInt(newCount || 0, 10) > 0)) increaseNewerPollBackoff();
+          scheduleNext();
+        })
+        .catch(() => {
+          if (token !== newerPollToken) return;
+          increaseNewerPollBackoff();
+          scheduleNext();
+        });
+    };
+
+    scheduleNext();
   }
 
   function startPolling(roomId) {
@@ -670,14 +988,19 @@ function initApp(config = {}) {
     currentRoomId = roomId;
     if (isLocalRoomId(roomId)) return;
     attachScrollPagination(roomId);
+    startNewerAutoCheck(roomId);
   }
 
   function stopPolling() {
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    newerPollToken += 1;
+    if (newMessageTimer) { clearTimeout(newMessageTimer); newMessageTimer = null; }
     if (messagesScrollHandler && elements.messages) {
       elements.messages.removeEventListener('scroll', messagesScrollHandler);
       messagesScrollHandler = null;
     }
+    newMessagePending = false;
+    clearNewMessageNotice();
   }
 
   function appendMessageToUI(msgObj, who, options = {}) {
@@ -1183,6 +1506,9 @@ function initApp(config = {}) {
       lastMessageId = 0;
       currentRoomId = 'local-ai';
       if (elements.connectionStatus) elements.connectionStatus.textContent = 'Local Assistant';
+      if (!setHeaderAvatarFromList(agent.ChatRoomid || agent.id || agent.roomId)) {
+        setHeaderAvatar('Local Assistant', true);
+      }
       document.querySelectorAll('#agentsList .list-group-item, #agentsListOffcanvas .list-group-item').forEach(el => {
         el.classList.toggle('active', el.dataset.roomId == (agent.ChatRoomid || agent.id || agent.roomId));
       });
@@ -1192,10 +1518,12 @@ function initApp(config = {}) {
       } catch (e) {}
       setComposerForLocal(true);
       setQuickActionsForLocal(true);
+      setRoomUiState(true);
       return loadLocalMessages();
     }
     setComposerForLocal(false);
     setQuickActionsForLocal(false);
+    setRoomUiState(true);
     const rid = agent.ChatRoomid || agent.id || agent.roomId;
     const stored = (rid ? localStorage.getItem('chat_other_name_' + rid) : null);
     // For group rooms prefer the room's name (roomname) in the header; for private rooms show the other participant's name.
@@ -1208,6 +1536,9 @@ function initApp(config = {}) {
       displayName = agent.other_name || agent.otherName || stored || agent.roomname || agent.name || '';
     }
     if (elements.connectionStatus) elements.connectionStatus.textContent = displayName;
+    if (!setHeaderAvatarFromList(agent.ChatRoomid || agent.id || agent.roomId)) {
+      setHeaderAvatar(displayName, false);
+    }
     document.querySelectorAll('#agentsList .list-group-item, #agentsListOffcanvas .list-group-item').forEach(el => {
       el.classList.toggle('active', el.dataset.roomId == (agent.ChatRoomid || agent.id));
     });
@@ -1458,8 +1789,8 @@ function initApp(config = {}) {
             if (!firstMessageId) firstMessageId = parseInt(mid, 10);
           }
           if (elements.messages) elements.messages.scrollTop = elements.messages.scrollHeight;
-          try { apiPost('markRead', { room: roomId, user_type: userType, user_id: userId }).catch(()=>{}); } catch(e){}
-          try { clearUnread(roomId); } catch(e){}
+          markReadIfVisible(roomId);
+          try { startAgentsAutoPoll(); } catch (e) {}
         } else {
           alert('Failed to upload file');
         }
@@ -1500,8 +1831,8 @@ function initApp(config = {}) {
           if (!firstMessageId) firstMessageId = parseInt(mid, 10);
         }
         if (elements.messages) elements.messages.scrollTop = elements.messages.scrollHeight;
-        try { apiPost('markRead', { room: roomId, user_type: userType, user_id: userId }).catch(()=>{}); } catch(e){}
-        try { clearUnread(roomId); } catch(e){}
+        markReadIfVisible(roomId);
+        try { startAgentsAutoPoll(); } catch (e) {}
       } else {
         console.warn('sendMessage failed response', res);
         alert('Failed to send message');
@@ -1532,6 +1863,7 @@ function initApp(config = {}) {
           const created = resp.message || { content: previewHtml, created_at: new Date().toISOString(), id: resp.id };
           if (!created.sender_name) created.sender_name = userName || (userType + ' ' + userId);
           appendMessageToUI(created, 'me');
+          try { startAgentsAutoPoll(); } catch (e) {}
         }
       }).catch(console.error);
     } else {
@@ -1938,13 +2270,9 @@ function initApp(config = {}) {
   }
 
   renderCards(items);
-  loadAgents();
-  // Periodically refresh the agents/rooms list so newly created group rooms
-  // show up for other members without requiring a manual reload.
-  try {
-    if (agentsPollTimer) clearInterval(agentsPollTimer);
-    agentsPollTimer = setInterval(() => { try { loadAgents(); } catch(e){} }, 10000);
-  } catch(e) {}
+  startAgentsAutoPoll();
+  try { setRoomUiState(false); } catch (e) {}
+  try { attachPanelObserver(); } catch (e) {}
 
   // Restore persisted total unread badge immediately (in case widget was closed or toggle not present earlier)
   try { const persisted = parseInt(localStorage.getItem('chat_total_unread') || '0', 10) || 0; if (persisted) updateTotalUnreadBadge(persisted); } catch(e){}
@@ -1966,8 +2294,6 @@ function initApp(config = {}) {
           const roomId = e.key.substring(prefixKey.length);
           const cnt = parseInt(e.newValue || '0', 10) || 0;
           try { updateAgentBadge(roomId, cnt); } catch(err){}
-          // also refresh total computed from storage
-          try { updateTotalUnreadBadge(); } catch(err){}
         }
       } catch(err) { console.debug('storage event handler failed', err); }
     });
@@ -1975,21 +2301,26 @@ function initApp(config = {}) {
 
   // Short-poll for total unread to reduce latency (lightweight endpoint)
   let totalPollTimer = null;
+  const TOTAL_POLL_INTERVAL_MS = 10000;
+  function pollTotalUnreadOnce() {
+    try {
+      // Use ChatApi.getTotalUnread which is optimized to return a single count
+      apiPost('getTotalUnread', { user_type: userType, user_id: userId }).then(resp => {
+        try {
+          if (resp && resp.ok) {
+            const tot = parseInt(resp.total || 0, 10) || 0;
+            updateTotalUnreadBadge(tot);
+          }
+        } catch (e) { console.debug('fast unread parse failed', e); }
+      }).catch(() => {});
+    } catch(e){}
+  }
   try {
     if (totalPollTimer) clearInterval(totalPollTimer);
+    pollTotalUnreadOnce();
     totalPollTimer = setInterval(() => {
-      try {
-        // Use ChatApi.getTotalUnread which is optimized to return a single count
-        apiPost('getTotalUnread', { user_type: userType, user_id: userId }).then(resp => {
-          try {
-            if (resp && resp.ok) {
-              const tot = parseInt(resp.total || 0, 10) || 0;
-              updateTotalUnreadBadge(tot);
-            }
-          } catch (e) { console.debug('fast unread parse failed', e); }
-        }).catch(() => {});
-      } catch(e){}
-    }, 3000);
+      pollTotalUnreadOnce();
+    }, TOTAL_POLL_INTERVAL_MS);
   } catch(e) {}
 
   // Make the agents column resizable via the right-edge resizer

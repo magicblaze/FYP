@@ -701,93 +701,14 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
         try {
           const roomId = inst && typeof inst.getSelectedRoomId === 'function' ? inst.getSelectedRoomId() : (document.getElementById('chatwidget_messages') && document.getElementById('chatwidget_messages').dataset && document.getElementById('chatwidget_messages').dataset.roomId);
           const panelEl = document.getElementById('chatwidget_panel');
-          const headerEl = document.getElementById('chatwidget_Current_Chat');
-          // right column / messages area handling
-          const rightCol = panelEl ? (panelEl.querySelector('.right') || document.getElementById('chatwidget_right')) : (document.querySelector('.right') || document.getElementById('chatwidget_right'));
-          const messagesEl = document.getElementById('chatwidget_messages') || document.getElementById('messages');
-          // ensure a persistent placeholder exists to show when no room is selected
-          let selectPlaceholder = document.getElementById('chatwidget_select_placeholder');
-          if (!selectPlaceholder && panelEl) {
-            selectPlaceholder = document.createElement('div');
-            selectPlaceholder.id = 'chatwidget_select_placeholder';
-            selectPlaceholder.style.display = 'none';
-            selectPlaceholder.style.padding = '18px';
-            selectPlaceholder.style.flex = '1';
-            selectPlaceholder.style.alignItems = 'center';
-            selectPlaceholder.style.justifyContent = 'center';
-            selectPlaceholder.style.textAlign = 'center';
-            selectPlaceholder.style.color = '#666';
-            selectPlaceholder.style.fontSize = '14px';
-            selectPlaceholder.style.background = 'transparent';
-            selectPlaceholder.textContent = 'Select a conversation before starting a chat';
-            // try to insert next to right column if available, otherwise append to panel
-            try {
-              if (rightCol && rightCol.parentNode) rightCol.parentNode.insertBefore(selectPlaceholder, rightCol.nextSibling);
-              else panelEl.appendChild(selectPlaceholder);
-            } catch(e) { panelEl.appendChild(selectPlaceholder); }
+          if (preview) {
+            const holder = preview.querySelector('#chatwidget_attachPreview_content') || preview.querySelector('.message-preview-content');
+            const hasContent = holder && holder.innerHTML && holder.innerHTML.trim() ? true : false;
+            preview.style.display = hasContent ? '' : 'none';
+            preview.style.zIndex = hasContent ? 10090 : 10005;
+            try { applyPreviewOffset(); } catch(e) {}
           }
-                        if (!roomId) {
-                        if (composer) composer.style.display = 'none';
-                        if (headerEl) { headerEl.classList.remove('chat-visible'); headerEl.style.display = 'none'; }
-                      if (preview) {
-                        const holder = preview.querySelector('#chatwidget_attachPreview_content') || preview.querySelector('.message-preview-content');
-                        const hasContent = holder && holder.innerHTML && holder.innerHTML.trim() ? true : false;
-                        // Use the content-holder to decide visibility so static controls don't trigger the preview
-                        preview.style.display = hasContent ? '' : 'none';
-                        // keep z-index low while hidden; composer overlay will read --preview-height
-                        preview.style.zIndex = hasContent ? 10090 : 10005;
-                        // trigger reflow/height recalc for composer overlay
-                        try { applyPreviewOffset(); } catch(e) {}
-                      }
-                      // hide right column messages and show select-placeholder
-                      try {
-                        if (messagesEl) messagesEl.style.display = 'none';
-                        if (rightCol) rightCol.style.display = 'none';
-                        if (selectPlaceholder) selectPlaceholder.style.display = 'flex';
-                      } catch(e) {}
-            // set avatar to user's initial when no room selected
-            try {
-              const avatarEl = document.getElementById('chatwidget_current_avatar');
-              if (avatarEl) {
-                const userName = <?= json_encode($_SESSION['user']['name'] ?? '') ?>;
-                const initial = (userName && String(userName).trim()) ? String(userName).trim().charAt(0).toUpperCase() : 'U';
-                avatarEl.textContent = initial;
-                avatarEl.style.backgroundImage = '';
-              }
-            } catch(e) { }
-          } else {
-            if (composer) composer.style.display = '';
-            if (headerEl) { headerEl.classList.add('chat-visible'); headerEl.style.display = 'flex'; }
-            if (preview) {
-              const holder = preview.querySelector('#chatwidget_attachPreview_content') || preview.querySelector('.message-preview-content');
-              const hasContent = holder && holder.innerHTML && holder.innerHTML.trim() ? true : false;
-              preview.style.display = hasContent ? '' : 'none';
-              preview.style.zIndex = hasContent ? 10090 : 10005;
-              try { applyPreviewOffset(); } catch(e) {}
-            }
-            // restore right column/messages and hide placeholder
-            try {
-              if (messagesEl) messagesEl.style.display = '';
-              if (rightCol) rightCol.style.display = '';
-              if (selectPlaceholder) selectPlaceholder.style.display = 'none';
-            } catch(e) {}
-            // set avatar to other participant's initial when a room is selected
-            try {
-              const avatarEl = document.getElementById('chatwidget_current_avatar');
-              if (avatarEl) {
-                let otherName = null;
-                try { otherName = localStorage.getItem('chat_other_name_' + roomId) || null; } catch(e) { otherName = null; }
-                if (!otherName && inst && typeof inst.getSelectedRoomName === 'function') {
-                  try { otherName = inst.getSelectedRoomName(); } catch(e) { otherName = null; }
-                }
-                const fallbackUser = <?= json_encode($_SESSION['user']['name'] ?? '') ?>;
-                const displayName = (otherName && String(otherName).trim()) ? String(otherName).trim() : (fallbackUser && String(fallbackUser).trim() ? String(fallbackUser).trim() : 'User');
-                const initial = displayName.charAt(0).toUpperCase();
-                avatarEl.textContent = initial;
-                avatarEl.style.backgroundImage = '';
-              }
-            } catch(e) { }
-    }
+          // header avatar updates are handled by Chatfunction.js
           try { if (panelEl && preview) { const holder = preview.querySelector('#chatwidget_attachPreview_content') || preview.querySelector('.message-preview-content'); const hasContent = holder && holder.innerHTML && holder.innerHTML.trim() ? true : false; if (hasContent) panelEl.classList.add('preview-visible'); else panelEl.classList.remove('preview-visible'); } } catch(e) {}
         } catch(e){}
       }
@@ -1088,13 +1009,8 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
       if (sendBtn) sendBtn.addEventListener('click', function(){ setTimeout(clearPreview, 200); });
     } catch (e) { console.error('chatwidget preview init error', e); }
 
-    // Force-hide the per-room header and set avatar initial immediately on load
+    // Set avatar initial immediately on load
     try {
-      const headerEl = document.getElementById('chatwidget_Current_Chat');
-      if (headerEl) {
-        headerEl.classList.remove('chat-visible');
-        headerEl.style.display = 'none';
-      }
       const avatarEl = document.getElementById('chatwidget_current_avatar');
       if (avatarEl) {
         const uname = <?= json_encode($_SESSION['user']['name'] ?? '') ?>;
@@ -1102,7 +1018,7 @@ $SUGGESTIONS_API = $APP_ROOT . '/Public/get_chat_suggestions.php';
         avatarEl.textContent = initial;
         avatarEl.style.backgroundImage = '';
       }
-    } catch(e) { console.warn('chatwidget init header hide failed', e); }
+    } catch(e) { console.warn('chatwidget init avatar failed', e); }
 
 
     // rootId 'chatwidget' maps to IDs like 'chatwidget_messages', 'chatwidget_input' etc.
