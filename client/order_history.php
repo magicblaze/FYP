@@ -1,0 +1,493 @@
+<?php
+// ==============================
+// File: order_history.php - Display client's order history
+// ==============================
+require_once __DIR__ . '/../config.php';
+session_start();
+
+// Redirect to login if not authenticated
+if (empty($_SESSION['user'])) {
+    header('Location: ../login.php?redirect=' . urlencode($current_page));
+    exit;
+}
+
+$clientId = (int) ($_SESSION['user']['clientid'] ?? 0);
+if ($clientId <= 0) {
+    http_response_code(403);
+    die('Invalid session.');
+}
+
+// Fetch client details
+$clientStmt = $mysqli->prepare("SELECT cname FROM Client WHERE clientid = ?");
+$clientStmt->bind_param("i", $clientId);
+$clientStmt->execute();
+$clientData = $clientStmt->get_result()->fetch_assoc();
+
+// Fetch orders for the logged-in client
+$sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.deposit, o.final_payment,
+         d.designid, d.expect_price, d.tag, dz.dname,
+         c.budget
+        FROM `Order` o
+        JOIN Design d ON o.designid = d.designid
+        JOIN Designer dz ON d.designerid = dz.designerid
+        JOIN Client c ON o.clientid = c.clientid
+        WHERE o.clientid = ?
+        ORDER BY o.odate DESC";
+$stmt = $mysqli->prepare($sql);
+$stmt->bind_param("i", $clientId);
+$stmt->execute();
+$orders = $stmt->get_result();
+
+$flash_msg = '';
+$flash_class = '';
+if (!empty($_GET['msg'])) {
+    if ($_GET['msg'] === 'paid') {
+        $flash_msg = 'Payment successful — order marked as completed.';
+        $flash_class = 'alert alert-success';
+    } elseif ($_GET['msg'] === 'refund_requested') {
+        $flash_msg = 'Refund requested. We will process it shortly.';
+        $flash_class = 'alert alert-info';
+    } elseif ($_GET['msg'] === 'deposit_paid') {
+        $flash_msg = 'Deposit paid successfully.';
+        $flash_class = 'alert alert-success';
+    } elseif ($_GET['msg'] === 'final_paid') {
+        $flash_msg = 'Final payment completed successfully.';
+        $flash_class = 'alert alert-success';
+    }
+}
+?>
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HappyDesign - Project History</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="../css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .order-history-container {
+            background: #fff;
+            border-radius: 15px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
+            padding: 2rem;
+            margin: 1rem auto;
+            max-width: 1200px;
+        }
+
+        .order-card {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 1.25rem;
+            margin-bottom: 1rem;
+            border: 1px solid #ecf0f1;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .order-card:hover {
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            transform: translateY(-2px);
+            background: #ffffff;
+            border-color: #3498db;
+        }
+
+        .order-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 1px solid #ecf0f1;
+        }
+
+        .order-id {
+            font-weight: 600;
+            color: #2c3e50;
+            font-size: 1.1rem;
+        }
+
+        .order-date {
+            color: #7f8c8d;
+            font-size: 0.9rem;
+        }
+
+        .order-status {
+            padding: 0.35rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .status-designing {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+
+        .status-completed {
+            background-color: #d4edda;
+            color: #155724;
+        }
+
+        .status-cancelled {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+
+        .status-pending {
+            background-color: #cce5ff;
+            color: #004085;
+        }
+
+        .status-selection {
+            background-color: #ffe0b2;
+            color: #e67e22;
+        }
+
+        .status-preparing {
+            background-color: #e1f5fe;
+            color: #039be5;
+        }
+        .status-Coordinating_Contractors {
+            background-color: #e1f5fe;
+            color: #046291;
+        }
+        .status-construction_begins {
+            background-color: #d4edda;
+            color: #155724;
+        }
+
+        .order-body {
+            display: flex;
+            gap: 1.25rem;
+        }
+
+        .order-design-image {
+            width: 120px;
+            height: 90px;
+            object-fit: cover;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .order-details {
+            flex: 1;
+        }
+
+        .order-details .designer-name {
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 0.25rem;
+        }
+
+        .order-details .design-tags {
+            margin-bottom: 0.5rem;
+        }
+
+        .order-details .badge {
+            background-color: #3498db;
+            margin-right: 0.25rem;
+            font-weight: 500;
+        }
+
+        .order-price-info {
+            text-align: right;
+        }
+
+        .order-price-info .price-label {
+            font-size: 0.85rem;
+            color: #7f8c8d;
+        }
+
+        .order-price-info .price-value {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #27ae60;
+        }
+
+        .order-requirements {
+            margin-top: 0.75rem;
+            padding-top: 0.75rem;
+            border-top: 1px dashed #ecf0f1;
+            font-size: 0.9rem;
+            color: #5a6c7d;
+        }
+
+        .empty-orders {
+            text-align: center;
+            padding: 3rem;
+            color: #7f8c8d;
+        }
+
+        .empty-orders i {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+            color: #bdc3c7;
+        }
+
+        .page-title {
+            color: #2c3e50;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 2px solid #3498db;
+        }
+
+        .view-details-btn {
+            display: inline-block;
+            margin-top: 0.75rem;
+            padding: 0.5rem 1rem;
+            background-color: #3498db;
+            color: white;
+            border-radius: 6px;
+            text-decoration: none;
+            font-size: 0.85rem;
+            font-weight: 500;
+            transition: background-color 0.3s ease;
+        }
+
+        .view-details-btn:hover {
+            background-color: #2980b9;
+            color: white;
+            text-decoration: none;
+        }
+        
+        .btn-deposit {
+            background-color: #f39c12;
+            color: white;
+        }
+        
+        .btn-deposit:hover {
+            background-color: #e67e22;
+            color: white;
+        }
+        
+        .btn-final {
+            background-color: #27ae60;
+            color: white;
+        }
+        
+        .btn-final:hover {
+            background-color: #229954;
+            color: white;
+        }
+        
+        .btn-schedule {
+            background-color: #2c3e50;
+            color: white;
+        }
+        
+        .btn-schedule:hover {
+            background-color: #1a252f;
+            color: white;
+        }
+    </style>
+</head>
+
+<body>
+    <?php include_once __DIR__ . '/../includes/header.php'; ?>
+
+    <main class="container mt-4">
+        <div class="order-history-container">
+            <h1 class="page-title"><i class="fas fa-history me-2"></i>Project History</h1>
+
+            <?php if ($orders->num_rows > 0): ?>
+                <?php while ($order = $orders->fetch_assoc()): ?>
+                    <?php
+                    // Parse tags
+                    $tags = array_filter(array_map('trim', explode(',', $order['tag'] ?? '')));
+
+                    // Determine status class
+                    $statusLower = strtolower($order['ostatus'] ?? '');
+                    $statusClass = 'status-pending';
+                    if (strpos($statusLower, 'design') !== false) {
+                        $statusClass = 'status-designing';
+                    } elseif (strpos($statusLower, 'complet') !== false) {
+                        $statusClass = 'status-completed';
+                    } elseif (strpos($statusLower, 'cancel') !== false) {
+                        $statusClass = 'status-cancelled';
+                    } elseif ($statusLower === 'preparing') {
+                        $statusClass = 'status-preparing';
+                    } elseif ($statusLower === 'coordinating contractors') {
+                        $statusClass = 'status-Coordinating_Contractors';
+                    } elseif ($statusLower === 'construction begins') {
+                        $statusClass = 'status-construction_begins';
+                    }
+
+                    // Fetch the first image from DesignImage table
+                    $img_sql = "SELECT image_filename FROM DesignImage WHERE designid = ? ORDER BY image_order ASC LIMIT 1";
+                    $img_stmt = $mysqli->prepare($img_sql);
+                    $img_stmt->bind_param("i", $order['designid']);
+                    $img_stmt->execute();
+                    $img_result = $img_stmt->get_result()->fetch_assoc();
+                    $img_filename = $img_result ? $img_result['image_filename'] : 'placeholder.jpg';
+
+                    // Compute aggregated cost: design price + references + additional fees
+                    $orderId = (int) $order['orderid'];
+                    $design_price = isset($order['expect_price']) ? (float) $order['expect_price'] : 0.0;
+                    $final_payment = isset($order['final_payment']) ? (float) $order['final_payment'] : 0.0;
+
+                    // Sum additional fees
+                    $fees_total = 0.0;
+                    $fees_sql = "SELECT IFNULL(SUM(amount),0) as sum_fees FROM AdditionalFee WHERE orderid = ?";
+                    $fees_stmt = $mysqli->prepare($fees_sql);
+                    if ($fees_stmt) {
+                        $fees_stmt->bind_param("i", $orderId);
+                        $fees_stmt->execute();
+                        $fees_row = $fees_stmt->get_result()->fetch_assoc();
+                        $fees_total = isset($fees_row['sum_fees']) ? (float) $fees_row['sum_fees'] : 0.0;
+                        $fees_stmt->close();
+                    }
+
+                    // Sum product references (use reference price if set, otherwise product.price)
+                    $refs_total = 0.0;
+                    $refs_sql = "SELECT IFNULL(SUM(COALESCE(orr.price, p.price, 0)),0) as sum_refs FROM OrderReference orr LEFT JOIN Product p ON orr.productid = p.productid WHERE orr.orderid = ?";
+                    $refs_stmt = $mysqli->prepare($refs_sql);
+                    if ($refs_stmt) {
+                        $refs_stmt->bind_param("i", $orderId);
+                        $refs_stmt->execute();
+                        $refs_row = $refs_stmt->get_result()->fetch_assoc();
+                        $refs_total = isset($refs_row['sum_refs']) ? (float) $refs_row['sum_refs'] : 0.0;
+                        $refs_stmt->close();
+                    }
+
+                    $deposit = isset($order['deposit']) ? (float) $order['deposit'] : 0.0;
+                    $computed_cost = $design_price + $fees_total;
+                    
+                    // Calculate final payment amount (final payment + references)
+                    $final_payment_amount = $final_payment + $refs_total;
+                    
+                    // Fetch construction schedule status for this order
+                    $schedule_sql = "SELECT construction_start_date, construction_end_date, construction_date_status 
+                                     FROM Schedule WHERE orderid = ?";
+                    $schedule_stmt = $mysqli->prepare($schedule_sql);
+                    $schedule_stmt->bind_param("i", $orderId);
+                    $schedule_stmt->execute();
+                    $schedule_result2 = $schedule_stmt->get_result();
+                    $schedule_data = $schedule_result2->fetch_assoc();
+                    ?>
+                    <div class="order-card"
+                        onclick="window.location.href='order_detail.php?orderid=<?= (int) $order['orderid'] ?>'">
+                        <div class="order-header">
+                            <div>
+                                <span class="order-id">Project #<?= (int) $order['orderid'] ?></span>
+                                <span class="order-date ms-3">
+                                    <i class="fas fa-calendar-alt me-1"></i>
+                                    <?= date('M d, Y H:i', strtotime($order['odate'])) ?>
+                                </span>
+                            </div>
+                            <span class="order-status <?= $statusClass ?>">
+                                <?= htmlspecialchars($order['ostatus'] ?? 'waiting confirm') ?>
+                            </span>
+                        </div>
+                        <div class="order-body">
+                            <img src="../uploads/designs/<?= htmlspecialchars($img_filename) ?>" class="order-design-image"
+                                alt="Design #<?= (int) $order['designid'] ?>">
+                            <div class="order-details">
+                                <div class="designer-name">
+                                    <i class="fas fa-user-tie me-1"></i>
+                                    Designer: <?= htmlspecialchars($order['dname']) ?>
+                                </div>
+                                <div class="design-tags">
+                                    <?php foreach ($tags as $tag): ?>
+                                        <span class="badge"><?= htmlspecialchars($tag) ?></span>
+                                    <?php endforeach; ?>
+                                </div>
+
+                            </div>
+                            <div class="order-price-info">
+                                <div class="price-label">Expected cost</div>
+                                <div class="price-value">$<?= number_format($computed_cost, 2) ?></div>
+                            </div>
+                        </div>
+                        <?php if (!empty($order['Requirements'])): ?>
+                            <div class="order-requirements">
+                                <strong><i class="fas fa-clipboard-list me-1"></i>Requirements:</strong>
+                                <?= htmlspecialchars($order['Requirements']) ?>
+                            </div>
+                        <?php endif; ?>
+                        <div style="margin-top: 0.75rem; display:flex; gap:8px; flex-wrap: wrap;">
+                            <!-- Primary view/proposal/details button -->
+                            <?php 
+                            $proposalStatuses = [
+                                'waiting client review', 
+                                'waiting final design phase payment', 
+                                'coordinating contractors', 
+                                'complete', 
+                                'preparing', 
+                                'waiting client confirm construction date', 
+                                'in construction',
+                                'waiting client reassignment',
+                                'construction begins'
+                            ];
+                            if (in_array($statusLower, $proposalStatuses)): ?>
+                                <a href="Order_View.php?id=<?= (int) $order['orderid'] ?>" class="view-details-btn"
+                                    onclick="event.stopPropagation();">
+                                    <i class="fas fa-file-image me-1"></i>View Proposal</a>
+                            <?php elseif ($statusLower === 'waiting for review design' || $statusLower === 'waiting 2nd design phase payment'): ?>
+                                <a href="order_detail.php?orderid=<?= (int) $order['orderid'] ?>" class="view-details-btn"
+                                    onclick="event.stopPropagation();">
+                                    <i class="fas fa-file-image me-1"></i>View Design Detail</a>
+                            <?php else: ?>
+                                <a href="order_detail.php?orderid=<?= (int) $order['orderid'] ?>" class="view-details-btn"
+                                    onclick="event.stopPropagation();">
+                                    <i class="fas fa-arrow-right me-1"></i>View Details</a>
+                            <?php endif; ?>
+
+                            <?php if ($statusLower === 'waiting 2nd design phase payment'): ?>
+                                <a href="payment2.php?orderid=<?= (int) $order['orderid'] ?>&amount=<?= $final_payment_amount ?>" class="view-details-btn btn-final"
+                                    onclick="event.stopPropagation();">
+                                    <i class="fas fa-credit-card me-1"></i>Proceed to 2nd Payment
+                                </a>
+                            <?php elseif ($statusLower === 'waiting final design phase payment'): ?>
+                                <a href="payment3.php?orderid=<?= (int) $order['orderid'] ?>" class="view-details-btn"
+                                    onclick="event.stopPropagation();">
+                                    <i class="fas fa-credit-card me-1"></i>Proceed to Final Design Payment
+                                </a>
+                            <?php elseif ($statusLower === 'waiting 1st construction phase payment'): ?>
+                                <a href="payment_construction.php?orderid=<?= (int) $order['orderid'] ?>" class="view-details-btn"
+                                    onclick="event.stopPropagation();">
+                                    <i class="fas fa-hard-hat me-1"></i>Proceed to Construction Payment
+                                </a>
+                            <?php elseif ($statusLower === 'finish_inspection'): ?>
+                                <a href="payment_construction2.php?orderid=<?= (int) $order['orderid'] ?>" class="view-details-btn"
+                                    onclick="event.stopPropagation();">
+                                    <i class="fas fa-hard-hat me-1"></i>Proceed to Final Construction Payment
+                                </a>
+                            <?php elseif ( $statusLower === 'waiting start construction pay'): ?>
+                                <a href="payment_construction3.php?orderid=<?= (int) $order['orderid'] ?>" class="view-details-btn"
+                                    onclick="event.stopPropagation();">
+                                    <i class="fas fa-hard-hat me-1"></i>Proceed to Start Construction Payment
+                                </a>
+                            <?php endif; ?>
+                            
+                            <!-- Construction Schedule Button - appears when supplier has set dates and order is in appropriate status -->
+                            <?php if ($schedule_data && $schedule_data['construction_start_date'] && in_array($statusLower, ['preparing', 'construction begins'])): ?>
+                                <a href="construction_schedule.php?orderid=<?= (int) $order['orderid'] ?>" class="view-details-btn btn-schedule"
+                                    onclick="event.stopPropagation();">
+                                    <i class="fas fa-calendar-alt me-1"></i>Construction Schedule
+                                </a>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                <?php endwhile; ?>
+            <?php else: ?>
+                <div class="empty-orders">
+                    <i class="fas fa-shopping-bag"></i>
+                    <h3>No Project Yet</h3>
+                    <p>You haven't created any projects yet. Browse our designs and place your first project!</p>
+                    <a href="../design_dashboard.php" class="btn btn-primary mt-2">
+                        <i class="fas fa-search me-2"></i>Browse Designs
+                    </a>
+                </div>
+            <?php endif; ?>
+        </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+
+</html>
+
+<?php include __DIR__ . '/../Public/chat_widget.php'; ?>

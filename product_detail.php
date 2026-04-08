@@ -1,0 +1,483 @@
+<?php
+// ==============================
+// File: product-detail.php (UPDATED with Color Selection Feature - Visual Color Blocks)
+// Purpose: Display product details with color selection functionality showing color blocks
+// ==============================
+require_once __DIR__ . '/config.php';
+session_start();
+
+// Check if user is logged in
+if (empty($_SESSION['user'])) {
+    $redirect = 'product_detail.php' . (isset($_GET['id']) ? ('?id=' . urlencode((string)$_GET['id'])) : '');
+    header('Location: login.php?redirect=' . urlencode($redirect));
+    exit;
+}
+
+$productid = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+if ($productid <= 0) { http_response_code(404); die('Product not found.'); }
+
+$psql = "SELECT p.*, s.sname, s.semail, s.stel
+         FROM Product p
+         JOIN Supplier s ON p.supplierid = s.supplierid
+         WHERE p.productid = ?";
+$stmt = $mysqli->prepare($psql);
+$stmt->bind_param("i", $productid);
+$stmt->execute();
+$product = $stmt->get_result()->fetch_assoc();
+if (!$product) { http_response_code(404); die('Product not found.'); }
+
+    // Get color images from ProductColorImage table (regardless of Product.color field)
+    $colorImages = [];
+    $colors = [];
+    $colorImageSql = "SELECT color, image FROM ProductColorImage WHERE productid = ? ORDER BY id ASC";
+    $colorImageStmt = $mysqli->prepare($colorImageSql);
+    $colorImageStmt->bind_param("i", $productid);
+    $colorImageStmt->execute();
+    $colorImageResult = $colorImageStmt->get_result();
+    while ($row = $colorImageResult->fetch_assoc()) {
+        $colorImages[$row['color']] = $row['image'];
+        $colors[] = $row['color'];
+    }
+    $colorImageStmt->close();
+    
+    // If no color images found, try to parse colors from Product.color field
+    if (empty($colors) && !empty($product['color'])) {
+        $colorArray = array_map('trim', explode(',', $product['color']));
+        $colors = array_filter($colorArray);
+    }
+
+// Get other products from the same supplier
+$other_sql = "SELECT productid, pname, price FROM Product WHERE supplierid=? AND productid<>? LIMIT 6";
+$other_stmt = $mysqli->prepare($other_sql);
+$other_stmt->bind_param("ii", $product['supplierid'], $productid);
+$other_stmt->execute();
+$others = $other_stmt->get_result();
+
+// Check if current user has liked this product
+$clientid = (int)($_SESSION['user']['clientid'] ?? 0);
+$liked = false;
+// Determine user_type and user_id the same way as api/handle_like.php
+$user_type = strtolower(trim($_SESSION['user']['role'] ?? '')) ?: 'guest';
+$user_id = 0;
+if (!empty($_SESSION['user']['clientid'])) $user_id = (int)$_SESSION['user']['clientid'];
+elseif (!empty($_SESSION['user']['designerid'])) $user_id = (int)$_SESSION['user']['designerid'];
+elseif (!empty($_SESSION['user']['supplierid'])) $user_id = (int)$_SESSION['user']['supplierid'];
+elseif (!empty($_SESSION['user']['managerid'])) $user_id = (int)$_SESSION['user']['managerid'];
+elseif (!empty($_SESSION['user']['id'])) $user_id = (int)$_SESSION['user']['id'];
+
+if ($user_id > 0) {
+    // Use unified UserLike table to determine initial liked state
+    $like_check_sql = "SELECT COUNT(*) as count FROM UserLike WHERE user_type = ? AND user_id = ? AND item_type = 'product' AND item_id = ?";
+    $like_check_stmt = $mysqli->prepare($like_check_sql);
+    $like_check_stmt->bind_param("sii", $user_type, $user_id, $productid);
+    $like_check_stmt->execute();
+    $like_result = $like_check_stmt->get_result()->fetch_assoc();
+    $liked = (!empty($like_result['count']));
+}
+
+// Determine back button destination based on referrer and category
+$backUrl = 'furniture_dashboard.php'; // Default destination
+
+if (isset($_GET['from']) && $_GET['from'] === 'my_likes') {
+    // If coming from my_likes, always go back to my_likes
+    $backUrl = 'my_likes.php';
+} else {
+    // Otherwise, determine dashboard based on product category
+    $category = strtolower(trim($product['category'] ?? ''));
+    if ($category === 'material') {
+        $backUrl = 'material_dashboard.php';
+    } elseif ($category === 'furniture') {
+        $backUrl = 'furniture_dashboard.php';
+    } else {
+        // Default to design dashboard for other categories or designs
+        $backUrl = 'design_dashboard.php';
+    }
+}
+
+// Get the first color's image from ProductColorImage table
+$mainImg = null;
+if (!empty($colorImages)) {
+    // Get the first image from colorImages array
+    $firstImage = reset($colorImages);
+        if ($firstImage) {
+        $mainImg = 'uploads/products/' . htmlspecialchars($firstImage);
+    }
+}
+// Fallback to placeholder if no image found
+if (!$mainImg) {
+    $mainImg = 'uploads/products/placeholder.jpg';
+}
+
+// Function to convert color name or hex code to hex code
+// Supports both formats: "red" -> "#FF0000" and "#FF0000" -> "#FF0000"
+function colorNameToHex($colorInput) {
+    $colorInput = trim($colorInput);
+    
+    // If input is already a valid hex code, return it
+    if (preg_match('/^#[0-9A-Fa-f]{6}$/i', $colorInput)) {
+        return strtoupper($colorInput);
+    }
+    
+    // Otherwise, treat it as a color name
+    $colorMap = [
+        'red' => '#FF0000',
+        'blue' => '#0000FF',
+        'green' => '#008000',
+        'yellow' => '#FFFF00',
+        'black' => '#000000',
+        'white' => '#FFFFFF',
+        'gray' => '#808080',
+        'grey' => '#808080',
+        'orange' => '#FFA500',
+        'purple' => '#800080',
+        'pink' => '#FFC0CB',
+        'brown' => '#A52A2A',
+        'navy' => '#000080',
+        'teal' => '#008080',
+        'cyan' => '#00FFFF',
+        'magenta' => '#FF00FF',
+        'silver' => '#C0C0C0',
+        'gold' => '#FFD700',
+        'beige' => '#F5F5DC',
+        'khaki' => '#F0E68C',
+        'maroon' => '#800000',
+        'olive' => '#808000',
+        'lime' => '#00FF00',
+        'aqua' => '#00FFFF',
+        'turquoise' => '#40E0D0',
+        'coral' => '#FF7F50',
+        'salmon' => '#FA8072',
+        'peach' => '#FFDAB9',
+        'lavender' => '#E6E6FA',
+        'plum' => '#DDA0DD',
+        'indigo' => '#4B0082',
+        'violet' => '#EE82EE',
+        'tan' => '#D2B48C',
+        'cream' => '#FFFDD0',
+        'ivory' => '#FFFFF0',
+        'linen' => '#FAF0E6',
+        'natural wood' => '#8B7355',
+        'oak' => '#8B7355',
+        'walnut' => '#5C4033',
+        'cherry' => '#8B0000',
+        'maple' => '#A0826D',
+        'birch' => '#D2B48C',
+        'pine' => '#A0826D',
+        'ash' => '#B2BEB5',
+        'ebony' => '#3B2F2F',
+        'mahogany' => '#C04000',
+        'teak' => '#B8860B',
+        'bamboo' => '#6B8E23',
+        'light gray' => '#D3D3D3',
+        'light grey' => '#D3D3D3',
+        'dark gray' => '#A9A9A9',
+        'dark grey' => '#A9A9A9',
+        'charcoal' => '#36454F',
+        'slate' => '#708090',
+        'cream white' => '#FFFDD0',
+        'off-white' => '#F5F5F5',
+        'warm white' => '#FFF8DC',
+        'cool white' => '#F0F8FF',
+        'midnight' => '#191970',
+        'forest' => '#228B22',
+        'sea' => '#2E8B57',
+        'sky' => '#87CEEB',
+        'sand' => '#C2B280',
+        'stone' => '#928E85',
+        'concrete' => '#A7A9AC',
+        'metal' => '#757575',
+        'copper' => '#B87333',
+        'bronze' => '#CD7F32',
+        'brass' => '#B5A642',
+    ];
+    
+    $colorLower = strtolower($colorInput);
+    return isset($colorMap[$colorLower]) ? $colorMap[$colorLower] : '#999999';
+}
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HappyDesign - <?= htmlspecialchars($product['pname']) ?></title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <?php include_once __DIR__ . '/includes/header.php'; ?>
+
+    <main>
+    <div class="container-lg mt-4">
+        <div class="back-button-row mb-3">
+            <button type="button" class="btn btn-light" onclick="handleBack()" aria-label="Back">
+                ← Back
+            </button>
+    </div>
+        <div class="product-detail-wrapper">
+            <!-- Product Image -->
+            <div class="product-image-wrapper">
+                <img src="<?= htmlspecialchars($mainImg) ?>" alt="<?= htmlspecialchars($product['pname']) ?>">
+            </div>
+
+            <!-- Product Information Panel -->
+            <div class="product-panel">
+
+                <div class="product-title"><?= htmlspecialchars($product['pname']) ?></div>
+                <div class="product-price">HK$<?= number_format((float)$product['price']) ?></div>
+
+                <div class="product-stats">
+                    <div class="likes-count">
+                        <button class="heart-icon <?= $liked ? 'liked' : '' ?>" id="likeHeart" data-productid="<?= (int)$product['productid'] ?>" title="Like this product" aria-pressed="<?= $liked ? 'true' : 'false' ?>">
+                            <i class="<?= $liked ? 'fas' : 'far' ?> fa-heart" aria-hidden="true"></i>
+                        </button>
+                        <span id="likeCount"><?= (int)$product['likes'] ?></span> Likes
+                    </div>
+                </div>
+
+                <div class="product-meta">
+                    <div><i class="fas fa-store me-2"></i><strong>Contractors:</strong> <?= htmlspecialchars($product['sname']) ?></div>
+                    <div><i class="fas fa-tag me-2"></i><strong>Category:</strong> <?= htmlspecialchars($product['category']) ?></div>
+                </div>
+
+                <!-- Color Selection Section (if colors are available) -->
+                <?php if (!empty($colors)): ?>
+                <div class="color-selection-section">
+                    <label class="color-selection-label">
+                        <i class="fas fa-palette me-2"></i>Select Color:
+                    </label>
+                    
+                    <?php if (count($colors) <= 5): ?>
+                        <!-- Display as buttons for 5 or fewer colors -->
+                        <div class="color-options" id="colorOptions">
+                            <?php foreach ($colors as $index => $color): 
+                                $hexColor = colorNameToHex($color);
+                            ?>
+                                <button type="button" 
+                                        class="color-button <?= $index === 0 ? 'selected' : '' ?>" 
+                                        data-color="<?= htmlspecialchars($color) ?>"
+                                        data-hex="<?= htmlspecialchars($hexColor) ?>"
+                                        onclick="selectColor(this)"
+                                        title="<?= htmlspecialchars($color) ?>">
+                                    <span class="color-swatch" style="background-color: <?= htmlspecialchars($hexColor) ?>;"></span>
+                                </button>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php else: ?>
+                        <!-- Display as dropdown for more than 5 colors -->
+                        <select class="color-select-dropdown" id="colorSelect" onchange="selectColorDropdown(this)">
+                            <option value="">-- Choose a color --</option>
+                            <?php foreach ($colors as $color): 
+                                $hexColor = colorNameToHex($color);
+                            ?>
+                                <option value="<?= htmlspecialchars($color) ?>" data-hex="<?= htmlspecialchars($hexColor) ?>">
+                                    <?= htmlspecialchars($color) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    <?php endif; ?>
+                    
+
+                    <input type="hidden" id="selectedColor" value="<?= htmlspecialchars($colors[0]) ?>">
+                    <input type="hidden" id="selectedColorHex" value="<?= htmlspecialchars(colorNameToHex($colors[0])) ?>">
+                </div>
+                <?php endif; ?>
+
+                <div class="product-specs">
+                    <?php if (!empty($product['size'])): ?>
+                        <div><i class="fas fa-ruler me-2"></i><strong>Size:</strong> <?= htmlspecialchars($product['size']) ?></div>
+                    <?php endif; ?>
+                    
+                    <?php if (!empty($product['long']) || !empty($product['wide']) || !empty($product['tall'])): ?>
+                        <div style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #ecf0f1;">
+                            <div style="font-weight: 600; color: #2c3e50; margin-bottom: 0.75rem;">Size:</div>
+                            <?php if (!empty($product['long'])): ?>
+                                <div style="margin-bottom: 0.5rem; margin-left: 1.5rem;"><strong>Length:</strong> <?= htmlspecialchars($product['long']) ?></div>
+                            <?php endif; ?>
+                            <?php if (!empty($product['wide'])): ?>
+                                <div style="margin-bottom: 0.5rem; margin-left: 1.5rem;"><strong>Width:</strong> <?= htmlspecialchars($product['wide']) ?></div>
+                            <?php endif; ?>
+                            <?php if (!empty($product['tall'])): ?>
+                                <div style="margin-left: 1.5rem;"><strong>Height:</strong> <?= htmlspecialchars($product['tall']) ?></div>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
+                    
+                    <?php if (!empty($product['material'])): ?>
+                        <div style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #ecf0f1;"><i class="fas fa-cube me-2"></i><strong>Material:</strong> <?= htmlspecialchars($product['material']) ?></div>
+                    <?php endif; ?>
+                </div>
+
+                <?php if (!empty($product['description'])): ?>
+                <div class="product-description">
+                    <h6>Description</h6>
+                    <p><?= htmlspecialchars($product['description']) ?></p>
+                </div>
+                <?php endif; ?>
+            </div>
+        </div>
+    </main>
+
+    <?php if ($others->num_rows > 0): ?>
+    <section class="detail-gallery" aria-label="Other Products from This Supplier" style="max-width: 1200px; margin: 2rem auto; padding: 0 1rem;">
+        <h3 style="color: #2c3e50; font-weight: 600; margin-bottom: 1rem; font-size: 1.3rem;">Other Products from <?= htmlspecialchars($product['sname']) ?></h3>
+        <div class="detail-gallery-images">
+            <?php while ($r = $others->fetch_assoc()): ?>
+                <a href="product_detail.php?id=<?= (int)$r['productid'] ?>">
+                    <?php 
+                        // Get first color image for related product
+                        $relatedColorSql = "SELECT image FROM ProductColorImage WHERE productid = ? ORDER BY id ASC LIMIT 1";
+                        $relatedColorStmt = $mysqli->prepare($relatedColorSql);
+                        $relatedColorStmt->bind_param("i", $r['productid']);
+                        $relatedColorStmt->execute();
+                        $relatedColorResult = $relatedColorStmt->get_result();
+                        $relatedImage = $relatedColorResult->fetch_assoc();
+                        $imageSrc = ($relatedImage && $relatedImage['image']) ? 'uploads/products/' . htmlspecialchars($relatedImage['image']) : 'uploads/products/placeholder.jpg';
+                    ?>
+                    <img src="<?= $imageSrc ?>" alt="<?= htmlspecialchars($r['pname']) ?>">
+                </a>
+            <?php endwhile; ?>
+        </div>
+    </section>
+    <?php endif; ?>
+
+    <script>
+    // Color selection function for button-based selection
+    function selectColor(button) {
+        // Remove selected class from all buttons
+        const allButtons = document.querySelectorAll('.color-button');
+        allButtons.forEach(btn => btn.classList.remove('selected'));
+        
+        // Add selected class to clicked button
+        button.classList.add('selected');
+        
+        // Update hidden inputs
+        const selectedColor = button.dataset.color;
+        const selectedHex = button.dataset.hex;
+        document.getElementById('selectedColor').value = selectedColor;
+        document.getElementById('selectedColorHex').value = selectedHex;
+        
+        // Update product image based on selected color
+        updateProductImage(selectedColor);
+    }
+
+    // Color selection function for dropdown-based selection
+    function selectColorDropdown(select) {
+        const selectedColor = select.value;
+        if (selectedColor) {
+            const selectedOption = select.options[select.selectedIndex];
+            const selectedHex = selectedOption.dataset.hex;
+            
+            document.getElementById('selectedColor').value = selectedColor;
+            document.getElementById('selectedColorHex').value = selectedHex;
+            
+            // Update product image based on selected color
+            updateProductImage(selectedColor);
+        }
+    }
+
+    // Update product image based on selected color
+    function updateProductImage(color) {
+        const colorImages = <?= json_encode($colorImages) ?>;
+        const productImg = document.querySelector('.product-image-wrapper img');
+        
+        // Find the image with case-insensitive color matching
+        let imageFile = null;
+        if (colorImages) {
+            // Try exact match first
+            if (colorImages[color]) {
+                imageFile = colorImages[color];
+            } else {
+                // Try case-insensitive match
+                const colorLower = color.toLowerCase();
+                for (const key in colorImages) {
+                    if (key.toLowerCase() === colorLower) {
+                        imageFile = colorImages[key];
+                        break;
+                    }
+                }
+            }
+        }
+        
+        if (imageFile) {
+            // If color has a specific image, use it from ProductColorImage table
+            const imageUrl = 'uploads/products/' + imageFile;
+            productImg.src = imageUrl;
+        } else {
+            // Otherwise, use placeholder
+            productImg.src = 'uploads/products/placeholder.jpg';
+        }
+    }
+
+    function handleBack() {
+        // Use the back URL determined by the server
+        window.location.href = '<?= htmlspecialchars($backUrl) ?>';
+    }
+
+    // Like toggle for products (AJAX) — copied pattern from design_detail.php
+    (function () {
+        const heart = document.getElementById('likeHeart');
+        if (!heart) return;
+        heart.addEventListener('click', function (e) {
+            e.preventDefault();
+            const productid = this.dataset.productid;
+            const btn = this;
+            const formData = new FormData();
+            formData.append('action', 'toggle_like');
+            formData.append('type', 'product');
+            formData.append('id', productid);
+
+            fetch('api/handle_like.php', { method: 'POST', body: formData })
+                .then(r => r.json())
+                    .then(data => {
+                        if (data && data.success) {
+                            const icon = btn.querySelector('i');
+                            if (data.liked) {
+                                btn.classList.add('liked');
+                                if (icon) { icon.classList.remove('far'); icon.classList.add('fas'); icon.style.color = '#e74c3c'; }
+                                btn.setAttribute('aria-pressed', 'true');
+                            } else {
+                                btn.classList.remove('liked');
+                                if (icon) { icon.classList.remove('fas'); icon.classList.add('far'); icon.style.color = '#7f8c8d'; }
+                                btn.setAttribute('aria-pressed', 'false');
+                            }
+                            const lc = document.getElementById('likeCount'); if (lc) lc.textContent = data.likes;
+                        } else {
+                            alert('Error: ' + (data.message || 'Failed to update like'));
+                        }
+                    }).catch(err => { console.error(err); alert('An error occurred while updating the like.'); });
+        });
+
+        // Ensure initial state matches server-rendered attributes/classes
+        (function syncInitialHeart() {
+            const icon = heart.querySelector('i');
+            const pressed = heart.getAttribute('aria-pressed');
+            const isLiked = heart.classList.contains('liked') || pressed === 'true';
+            if (isLiked) {
+                heart.classList.add('liked');
+                if (icon) { icon.classList.remove('far'); icon.classList.add('fas'); icon.style.color = '#e74c3c'; }
+                heart.setAttribute('aria-pressed', 'true');
+            } else {
+                heart.classList.remove('liked');
+                if (icon) { icon.classList.remove('fas'); icon.classList.add('far'); icon.style.color = '#7f8c8d'; }
+                heart.setAttribute('aria-pressed', 'false');
+            }
+        })();
+    })();
+
+    // Function to get selected color (useful for order placement)
+    function getSelectedColor() {
+        return document.getElementById('selectedColor').value;
+    }
+
+    // Function to get selected color hex code
+    function getSelectedColorHex() {
+        return document.getElementById('selectedColorHex').value;
+    }
+    </script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
+    <?php include __DIR__ . '/Public/chat_widget.php'; ?>
+</body>
+</html>

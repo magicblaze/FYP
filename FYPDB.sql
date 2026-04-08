@@ -1,0 +1,841 @@
+-- MySQL dump 10.13  Distrib 8.0.40, for Win64 (x86_64)
+-- Host: localhost    Database: fypdb
+-- Server version 8.4.3
+
+/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
+/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
+/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
+/*!50503 SET NAMES utf8mb4 */;
+/*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
+/*!40103 SET TIME_ZONE='+00:00' */;
+/*!40014 SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0 */;
+/*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
+/*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
+/*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
+
+-- Disable Foreign Key Checks to avoid errors during drop/create
+SET FOREIGN_KEY_CHECKS = 0;
+
+-- Drop existing tables to ensure clean slate
+DROP TABLE IF EXISTS `DesignedPicture`;
+DROP TABLE IF EXISTS `Product`;
+DROP TABLE IF EXISTS `ProductColorImage`;
+DROP TABLE IF EXISTS `Client`;
+DROP TABLE IF EXISTS `Manager`;
+DROP TABLE IF EXISTS `Contractors`;
+DROP TABLE IF EXISTS `Worker`;
+DROP TABLE IF EXISTS `Designer`;
+DROP TABLE IF EXISTS `Supplier`;
+DROP TABLE IF EXISTS `Material`;
+DROP TABLE IF EXISTS `Order`;
+DROP TABLE IF EXISTS `AdditionalFee`;
+DROP TABLE IF EXISTS `OrderDelivery`;
+DROP TABLE IF EXISTS `Order_Contractors`;
+DROP TABLE IF EXISTS `Design`;
+DROP TABLE IF EXISTS `Comment_design`;
+DROP TABLE IF EXISTS `Schedule`;
+DROP TABLE IF EXISTS `ChatRoom`;
+DROP TABLE IF EXISTS `ChatRoomMember`;
+DROP TABLE IF EXISTS `Message`;
+DROP TABLE IF EXISTS `MessageRead`;
+DROP TABLE IF EXISTS `UploadedFiles`;
+DROP TABLE IF EXISTS `DesignImage`;
+DROP TABLE IF EXISTS `OrderReference`;
+DROP TABLE IF EXISTS `DesignReference`;
+DROP TABLE IF EXISTS `UserLike`;
+DROP TABLE IF EXISTS `workerallocation`;
+DROP TABLE IF EXISTS `AIRecommendItem`;
+DROP TABLE IF EXISTS `OrderPayment`;
+
+-- Client table
+CREATE TABLE `Client` (
+  `clientid` int NOT NULL AUTO_INCREMENT,
+  `cname` varchar(255) NOT NULL,
+  `ctel` varchar(32) DEFAULT NULL,
+  `cemail` varchar(255) DEFAULT NULL,
+  `cpassword` varchar(255) NOT NULL,
+  `address` varchar(255) DEFAULT NULL,
+  `budget` int NOT NULL,
+  `Floor_Plan` VARCHAR(500) DEFAULT NULL,
+  `payment_method` JSON DEFAULT NULL,
+  `remember_token` VARCHAR(64) DEFAULT NULL,
+  PRIMARY KEY (`clientid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO `Client` (`clientid`,`cname`,`ctel`,`cemail`,`cpassword`,`address`,`budget`,`Floor_Plan`,`payment_method`,`remember_token`) VALUES
+(1, 'Alex Wong', 21232123, 'u3952310@gmail.com', 'User12345', 'Room 1001, 10th Floor, New Tuen Mun Centre', 500000, null, null, NULL),
+(2, 'Tina Chan', 12345678, 'abc321@gmail.com', '123456', '456 Sample Avenue, Tuen Mun, Hong Kong', 700000, null, null, NULL);
+
+-- Manager table
+CREATE TABLE `Manager` (
+  `managerid` int NOT NULL AUTO_INCREMENT,
+  `mname` varchar(255) NOT NULL,
+  `mtel` int DEFAULT NULL,
+  `memail` varchar(255) DEFAULT NULL,
+  `mpassword` varchar(255) NOT NULL,
+  `remember_token` VARCHAR(64) DEFAULT NULL,
+  PRIMARY KEY (`managerid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO `Manager` (`managerid`,`mname`,`mtel`,`memail`,`mpassword`,`remember_token`) VALUES
+(1, 'Jeff Wong', 12312312, 'abcdef123@gmail.com', 'manager12345',NULL),
+(2, 'Apple Chan', 12301230, '1234567@gmail.com', '12345678',NULL);
+
+-- Contractors table
+CREATE TABLE `Contractors` (
+  `contractorid` int NOT NULL AUTO_INCREMENT,
+  `cname` varchar(255) NOT NULL,
+  `ctel` int DEFAULT NULL,
+  `cemail` varchar(255) DEFAULT NULL,
+  `cpassword` varchar(255) NOT NULL,
+  `price` int DEFAULT NULL,
+  `introduction` text DEFAULT NULL,
+  `certification` VARCHAR(500) DEFAULT NULL,
+  `managerid` int DEFAULT NULL,
+  `remember_token` VARCHAR(64) DEFAULT NULL,
+  PRIMARY KEY (`contractorid`),
+  KEY `managerid_Contractors_idx` (`managerid`),
+  CONSTRAINT `managerid_Contractors_fk` FOREIGN KEY (`managerid`) REFERENCES `Manager` (`managerid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO `Contractors` (`contractorid`,`cname`,`ctel`,`cemail`,`cpassword`,`price`,`introduction`,`certification`,`managerid`,`remember_token`) VALUES
+(1, 'Cheerful Technology Limited', 12312312, 'abc123@gmail.com', 'Contractors12345',600,'welcome Cheerful Technology Limited!!',null,1, NULL),
+(2, 'Build King Construction Limited', 12301230, 'abc@gmail.com', '12345678',700,null,null,2, NULL);
+
+-- Worker table
+CREATE TABLE `Worker` (
+  `workerid` int NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) NOT NULL,
+  `email` varchar(255) DEFAULT NULL,
+  `phone` varchar(32) DEFAULT NULL,
+  `certificate` varchar(255) DEFAULT NULL,
+  `image` varchar(255) DEFAULT NULL,
+  `work_hours_per_week` DECIMAL(5,1) DEFAULT 40.0,
+  `available_hours_this_week` DECIMAL(5,1) DEFAULT 40.0,
+  `supplierid` int NOT NULL,
+  PRIMARY KEY (`workerid`),
+  KEY `supplierid_Worker_idx` (`supplierid`),
+  CONSTRAINT `fk_worker_supplierid` FOREIGN KEY (`supplierid`) REFERENCES `Supplier` (`supplierid`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Worker sample data
+INSERT INTO `Worker` (`name`, `email`, `phone`, `certificate`, `image`, `supplierid`) VALUES
+('Andy wong', 'abcwork001@gmail.com', '78945699', 'Renovation and Repair Certificate', 'worker1.jpg', 1),
+('King Wong', 'abcwork002@gmail.com', '87879898', 'Renovation and Repair Certificate', 'worker2.jpg', 1),
+('law bee', 'abcwork003@gmail.com', '34346789', 'Certificate Course in Quality Decoration Service Management (Level 1)', 'worker3.jpg', 1),
+('Call bee', '123work009@gmail.com', '65494569', 'Renovation and Repair Certificate', 'worker4.jpg', 2);
+
+-- Designer table
+CREATE TABLE `Designer` (
+  `designerid` int NOT NULL AUTO_INCREMENT,
+  `dname` varchar(255) NOT NULL,
+  `dtel` int DEFAULT NULL,
+  `demail` varchar(255) DEFAULT NULL,
+  `dpassword` varchar(255) NOT NULL,
+  `status` ENUM('Available', 'Busy') NOT NULL DEFAULT 'Available',
+  `managerid` int DEFAULT NULL,
+  `remember_token` VARCHAR(64) DEFAULT NULL,
+  PRIMARY KEY (`designerid`),
+  KEY `managerid_Designer_idx` (`managerid`),
+  CONSTRAINT `managerid_Designer_fk` FOREIGN KEY (`managerid`) REFERENCES `Manager` (`managerid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO `Designer` (`designerid`,`dname`,`dtel`,`demail`,`dpassword`,`status`,`managerid`,`remember_token`) VALUES
+(1, 'John Wong', 12345678, '123@gmail.com', 'designer12345', 'Available', 1, NULL),
+(2, 'Billy Chan', 11002234, 'abcdd@gmail.com', '123456', 'Busy', 2, NULL);
+
+-- Supplier table
+CREATE TABLE `Supplier` (
+  `supplierid` int NOT NULL AUTO_INCREMENT,
+  `sname` varchar(255) NOT NULL,
+  `stel` int DEFAULT NULL,
+  `semail` varchar(255) DEFAULT NULL,
+  `spassword` varchar(255) NOT NULL,
+  `remember_token` VARCHAR(64) DEFAULT NULL,
+  `default_worker_pay` DECIMAL(10,2) DEFAULT 0.00,
+  PRIMARY KEY (`supplierid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- IMPORTANT: Updated password for ID 1 to '123456' to match your testing
+INSERT INTO `Supplier` (`supplierid`,`sname`,`stel`,`semail`,`spassword`,`remember_token`) VALUES
+(1, 'Cheerful Technology Limited', 12312312, 'abc1234@gmail.com', '123456', NULL),
+(2, 'Build King Construction Limited', 12301230, '12345123@gmail.com', '12345678', NULL);
+
+-- Design table
+CREATE TABLE `Design` (
+  `designid` int NOT NULL AUTO_INCREMENT,
+  `designName` VARCHAR(255) NOT NULL,
+  `expect_price` int NOT NULL,
+  `description` TEXT DEFAULT NULL,
+  `tag` TEXT NOT NULL,
+  `likes` int NOT NULL,
+  `designerid` int NOT NULL,
+  `supplierid` int NOT NULL,
+  PRIMARY KEY (`designid`),
+  KEY `designerid_pk_idx` (`designerid`),
+  CONSTRAINT `designerid_pk` FOREIGN KEY (`designerid`) REFERENCES `Designer` (`designerid`),
+  CONSTRAINT `supplierid_pk` FOREIGN KEY (`supplierid`) REFERENCES `Supplier` (`supplierid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO `Design` (`designid`,`designName`,`expect_price`,`description`,`tag`,`likes`,`designerid`,`supplierid`) VALUES
+(1, 'Modern Full House Design', 1200000 , 'A modern full house design','full house,modern','200',1,1),
+(2, 'Minimalist Kitchen Remodel Design', 600000, 'A minimalist kitchen remodel design','kitchen remodel,minimalist','20',1,2),
+(3, 'Cozy Living Room Design', 800000, 'A cozy living room design','living room,cozy','50',2,1),
+(4, 'Elegant Bedroom Design', 600000, 'An elegant bedroom design','bedroom,elegant','75',2,2);
+
+-- Comment_design table
+CREATE TABLE `Comment_design` (
+  `comment_designid` int NOT NULL AUTO_INCREMENT,
+  `clientid` int NOT NULL,
+  `content` varchar(255) DEFAULT NULL,
+  `timestamp` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `designid` int NOT NULL,
+  PRIMARY KEY (`comment_designid`),
+  KEY `designid_pk2` (`designid`),
+  KEY `comment_design_clientid_pk2` (`clientid`),
+  CONSTRAINT `fk_comment_design_designid` FOREIGN KEY (`designid`) REFERENCES `Design` (`designid`),
+  CONSTRAINT `fk_comment_design_clientid` FOREIGN KEY (`clientid`) REFERENCES `Client` (`clientid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO `Comment_design` (`comment_designid`,`clientid`,`content`,`designid`) VALUES
+(1, 2,'I like it.',1),
+(2, 1,'This design is great!',1);
+
+-- Product table
+CREATE TABLE `Product` (
+  `productid` int NOT NULL AUTO_INCREMENT,
+  `pname` varchar(255) NOT NULL,
+  `price` int NOT NULL,
+  `likes` int NOT NULL,
+  `category` varchar(100) NOT NULL,
+  `description` text,
+  `long` varchar(50) DEFAULT NULL,
+  `wide` varchar(50) DEFAULT NULL,
+  `tall` varchar(50) DEFAULT NULL,
+  `material` varchar(255) DEFAULT NULL,
+  `supplierid` int NOT NULL,
+  PRIMARY KEY (`productid`),
+  KEY `supplierid_product_idx` (`supplierid`),
+  CONSTRAINT `chk_category` CHECK (`category` IN ('Furniture','Material')),
+  CONSTRAINT `fk_product_supplier` FOREIGN KEY (`supplierid`) REFERENCES `Supplier` (`supplierid`)
+ ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO `Product` (`productid`,`pname`, `price`, `likes`, `category`, `description`, `long`, `wide`, `tall`, `material`, `supplierid`) VALUES
+(1, 'Modern Sofa', 2000, 100, 'Furniture', 'A comfortable modern sofa.', '200cm', '80cm', '300cm', 'Fabric, Wood', 1),
+(2, 'Oak Chair', 800, 50, 'Furniture', 'Solid wood chair.', '50cm', '50cm', '100cm', 'Oak', 1),
+(3, 'Brick', 200, 25, 'Material', 'A brick.', null, null, null, null, 1),
+(4, 'Wood Plank', 800, 75, 'Material', 'A wood.', null, null, null, null, 2),
+(5, 'Glass', 800, 75, 'Material', 'A glass.', null, null, null, null, 1),
+(6, 'Modern Table', 800, 75, 'Furniture', 'A modern table.', '20cm', '100cm', '80cm', 'wood', 1);
+
+-- Order table
+CREATE TABLE `Order` (
+  `orderid` int NOT NULL AUTO_INCREMENT,
+  `odate` datetime NOT NULL,
+  `clientid` int NOT NULL,
+  `budget` decimal(10,2) DEFAULT NULL,
+  `deposit` decimal(10,2) NOT NULL DEFAULT 2000.00,
+  `payment_id` int DEFAULT NULL,
+  `cost` decimal(10,2) DEFAULT NULL,
+  `gross_floor_area` decimal(10,2) DEFAULT NULL,
+  `Requirements` varchar(255) DEFAULT NULL,
+  `designid` int NOT NULL,
+  `ostatus` ENUM('waiting confirm', 'designing', 'reviewing design proposal', 'waiting for review design', 'drafting 2nd proposal', 'waiting client review', 'waiting 2nd design phase payment', 'waiting final design phase payment' , 'waiting 1st construction phase payment', 'complete', 'rejected','Coordinating Contractors','preparing', 'waiting client reassignment', 'waiting client confirm construction date', 'In construction', 'waiting start construction Pay','Construction begins') DEFAULT 'waiting confirm',
+  `designedPicture` VARCHAR(500) DEFAULT NULL,
+  `supplierid` int DEFAULT NULL,
+  `supplier_status` ENUM('Pending', 'Accepted', 'Rejected') DEFAULT 'Pending',
+  `reassignment_status` ENUM('Accepted', 'Pending', 'Rejected') DEFAULT Null,
+   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`orderid`),
+  KEY `clientid_pk_idx` (`clientid`),
+  KEY `designid_pk_idx` (`designid`),
+  KEY `payment_id_idx` (`payment_id`),
+  KEY `supplierid_order_idx` (`supplierid`),
+  CONSTRAINT `clientid_pk` FOREIGN KEY (`clientid`) REFERENCES `Client` (`clientid`),
+  CONSTRAINT `designid_pk` FOREIGN KEY (`designid`) REFERENCES `Design` (`designid`),
+  CONSTRAINT `fk_order_payment_id` FOREIGN KEY (`payment_id`) REFERENCES `OrderPayment` (`payment_id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_order_supplier` FOREIGN KEY (`supplierid`) REFERENCES `Supplier` (`supplierid`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO `Order`
+(`orderid`, `odate`, `clientid`, `budget`, `deposit`, `cost`, `gross_floor_area`, `Requirements`,`designid`,`ostatus`,`designedPicture`,`supplierid`,`supplier_status`, `reassignment_status`) VALUES
+(1, '2025-04-12 17:50:00', 1, 500000, 2000.00, NULL, NULL, 'HappyBuild Builders',2,'designing',NULL,NULL,NULL,null),
+(2, '2025-05-10 12:00:00', 2, 500000, 2000.00, NULL, NULL, 'ProThink Constructs',1,'Coordinating Contractors',NULL,NULL,'Pending',null);
+
+CREATE TABLE `OrderPayment` (
+  `payment_id` INT NOT NULL AUTO_INCREMENT,
+  `total_cost` DECIMAL(12, 2) NOT NULL,
+  
+  -- Designing Phase Payments (10% of total)
+  `design_fee_designer_1st` DECIMAL(12, 2) DEFAULT 0.00,
+  `design_fee_designer_2nd` DECIMAL(12, 2) DEFAULT 0.00,
+  `design_fee_manager_1st` DECIMAL(12, 2) DEFAULT 0.00,
+  `design_fee_manager_2nd` DECIMAL(12, 2) DEFAULT 0.00,
+  `design_deposit` DECIMAL(12, 2) DEFAULT 2000.00,
+  `commission_1st` DECIMAL(12, 2) DEFAULT 0.00,
+  
+  -- Construction Phase Payments (90% of total)
+  `construction_main_price` DECIMAL(12, 2) DEFAULT 0.00,
+  `construction_deposit` DECIMAL(12, 2) DEFAULT 0.00,
+  `materials_cost` DECIMAL(12, 2) DEFAULT 0.00,
+  `inspection_fee` DECIMAL(12, 2) DEFAULT 0.00,
+  `contractor_fee` DECIMAL(12, 2) DEFAULT 0.00,
+  `commission_final` DECIMAL(12, 2) DEFAULT 0.00,
+  
+  -- Additional Fees
+  `additional_fees` DECIMAL(12, 2) DEFAULT 0.00,
+  
+  -- Payment Summary
+  `total_design_payment` DECIMAL(12, 2) DEFAULT 0.00,
+  `total_construction_payment` DECIMAL(12, 2) DEFAULT 0.00,
+  `total_amount_due` DECIMAL(12, 2) DEFAULT 0.00,
+  `total_amount_paid` DECIMAL(12, 2) DEFAULT 0.00,
+  
+  `payment_status` ENUM('pending', 'partial_paid', 'settled') DEFAULT 'pending',
+  `last_payment_date` DATETIME DEFAULT NULL,
+  
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  
+  PRIMARY KEY (`payment_id`),
+  KEY `payment_status_idx` (`payment_status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Sample OrderPayment data for existing orders
+-- Calculation: Design fee 10% (d5% m5%), material 45%, contractor 30%, inspector 5%, commission 10%
+-- Order 1: total_cost=400k, design=40k+2k, materials=180k, contractor=120k, inspector=20k, commission_1st=20k, deposit=64k, commission_final=40k
+-- Order 2: total_cost=350k, design=35k+2k, materials=157.5k, contractor=105k, inspector=17.5k, commission_1st=17.5k, deposit=56k, commission_final=35k
+-- Order 3: total_cost=300k, design=30k+2k, materials=135k, contractor=90k, inspector=15k, commission_1st=15k, deposit=48k, commission_final=30k
+INSERT INTO `OrderPayment` (`total_cost`, `design_fee_designer_1st`, `design_fee_designer_2nd`, `design_fee_manager_1st`, `design_fee_manager_2nd`, `design_deposit`, `commission_1st`, `construction_main_price`, `construction_deposit`, `materials_cost`, `inspection_fee`, `contractor_fee`, `commission_final`, `total_design_payment`, `total_construction_payment`, `total_amount_due`, `total_amount_paid`, `payment_status`) VALUES
+(400000.00, 10000.00, 10000.00, 10000.00, 10000.00, 2000.00, 20000.00, 320000.00, 64000.00, 180000.00, 20000.00, 120000.00, 40000.00, 62000.00, 424000.00, 486000.00, 0.00, 'pending'),
+(350000.00, 8750.00, 8750.00, 8750.00, 8750.00, 2000.00, 17500.00, 280000.00, 56000.00, 157500.00, 17500.00, 105000.00, 35000.00, 54500.00, 371000.00, 425500.00, 0.00, 'pending'),
+(300000.00, 7500.00, 7500.00, 7500.00, 7500.00, 2000.00, 15000.00, 240000.00, 48000.00, 135000.00, 15000.00, 90000.00, 30000.00, 47500.00, 318000.00, 365500.00, 0.00, 'pending');
+
+-- Update Order to link to OrderPayment for all orders
+UPDATE `Order` SET `payment_id` = 1 WHERE `orderid` = 1;
+UPDATE `Order` SET `payment_id` = 2 WHERE `orderid` = 2;
+UPDATE `Order` SET `payment_id` = 3 WHERE `orderid` = 3;
+
+-- OrderReference table to store design references for each order
+CREATE TABLE `OrderReference` (
+  `id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `orderid` INT NOT NULL,
+  `productid` INT DEFAULT NULL,
+  `messageid` INT DEFAULT NULL,
+  `designid` INT DEFAULT NULL,
+  `added_by_type` VARCHAR(50) DEFAULT NULL,
+  `added_by_id` INT DEFAULT NULL,
+  `note` TEXT DEFAULT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `status` varchar(255) DEFAULT NULL,
+  `price` DECIMAL(10, 2) DEFAULT NULL,
+  KEY `orderid_idx` (`orderid`),
+  KEY `productid_idx` (`productid`),
+  KEY `designid_idx` (`designid`),
+  CONSTRAINT `fk_or_orderid` FOREIGN KEY (`orderid`) REFERENCES `Order` (`orderid`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+INSERT INTO `OrderReference` (`orderid`, `productid`, `added_by_type`, `added_by_id`, `status`, `price`) VALUES
+(1, 1, 'client', 1, 'waiting confirm', 2000.00), 
+(1, 2, 'client', 1, 'confirmed', 800.00), 
+(2, 3, 'client', 2, 'waiting delivery', 200.00), 
+(2, 4, 'client', 2, 'completed', 800.00);
+
+-- Table to store additional fees for each order
+CREATE TABLE `AdditionalFee` (
+  `fee_id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `orderid` INT NOT NULL,
+  `fee_name` VARCHAR(255) NOT NULL,
+  `amount` DECIMAL(10, 2) NOT NULL,
+  `description` TEXT,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  KEY `orderid_idx` (`orderid`),
+  CONSTRAINT `fk_af_orderid` FOREIGN KEY (`orderid`) REFERENCES `Order` (`orderid`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE `DesignReference` (
+  `id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `designid` INT NOT NULL,
+  `productid` INT NOT NULL,
+  `added_by_designerid` INT DEFAULT NULL,
+  `note` TEXT,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  KEY `designid_idx` (`designid`),
+  KEY `productid_idx` (`productid`),
+  CONSTRAINT `fk_dr_designid` FOREIGN KEY (`designid`) REFERENCES `Design`(`designid`) ON DELETE CASCADE,
+  CONSTRAINT `fk_dr_productid` FOREIGN KEY (`productid`) REFERENCES `Product`(`productid`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE `UserLike` (
+  `id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `user_type` VARCHAR(32) NOT NULL,
+  `user_id` INT NOT NULL,
+  `item_type` VARCHAR(16) NOT NULL,
+  `item_id` INT NOT NULL,
+   `note` TEXT DEFAULT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY `ux_user_item` (`user_type`, `user_id`, `item_type`, `item_id`),
+  KEY `item_idx` (`item_type`, `item_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+-- Table to store color-image mapping for each product
+CREATE TABLE `ProductColorImage` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `productid` int NOT NULL,
+  `color` varchar(50) NOT NULL,
+  `image` varchar(500) NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `productid_idx` (`productid`),
+  CONSTRAINT `fk_pci_productid` FOREIGN KEY (`productid`) REFERENCES `Product` (`productid`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO `ProductColorImage` (`id`, `productid`, `color`, `image`) VALUES
+(1, 1, 'Grey', 'sofa_grey.jpg'),
+(2, 1, 'Blue', 'sofa_blue.jpg'),
+(3, 2, 'Brown', 'chair_brown.jpg'),
+(4, 2, 'White', 'chair_white.jpg'),
+(5, 4, 'Black', 'wood.jpg'),
+(6, 3, 'White', 'brick.jpg'),
+(7, 5, 'Transparent', 'glass.jpg'),
+(8, 6, 'Brown', 'table.jpg'),
+(9, 6, 'White', 'table_white.jpg'),
+(10, 3, 'Alabaster', 'Alabaster.jpg'),
+(11, 3, 'Avondale', 'Avondale.jpg'),
+(12, 3, 'CedarCreek', 'CedarCreek.jpg'),
+(13, 3, 'ChimneyRock', 'ChimneyRock.jpg'),
+(14, 3, 'MonteSano', 'MonteSano.jpg'),
+(15, 3, 'OldChicago', 'OldChicago.jpg'),
+(16, 3, 'OleVirginian', 'OleVirginian.jpg'),
+(17, 4, 'AmberOak', 'AmberOak.jpg'),
+(18, 4, 'BuffOak', 'BuffOak.jpg'),
+(19, 4, 'CarshireOak', 'CarshireOak.jpg'),
+(20, 4, 'FawnOak', 'FawnOak.jpg'),
+(21, 4, 'HazelOak', 'HazelOak.jpg'),
+(22, 4, 'RussetOak', 'RussetOak.jpg'),
+(23, 4, 'TesdalOak', 'TesdalOak.jpg'),
+(24, 4, 'Wood_BronzeOak', 'Wood_BronzeOak.jpg');
+
+-- OrderDelivery table
+CREATE TABLE `OrderDelivery` (
+  `orderdeliveryid` int NOT NULL AUTO_INCREMENT,
+  `productid` int NOT NULL,
+  `quantity` int NOT NULL,
+  `orderid` int NOT NULL,
+  `deliverydate` date DEFAULT NULL,
+  `status` varchar(255) NOT NULL,
+  `managerid` int NOT NULL,
+  `color` varchar(100) DEFAULT NULL,
+  `rid` INT NOT NULL,
+  PRIMARY KEY (`orderdeliveryid`),
+  KEY `productid_OrderDelivery_idx` (`productid`),
+  KEY `orderid_OrderDelivery_idx` (`orderid`),
+  KEY `managerid_OrderDelivery_idx` (`managerid`),
+  CONSTRAINT `fk_OrderDelivery_materialid` FOREIGN KEY (`productid`) REFERENCES `Product` (`productid`),
+  CONSTRAINT `fk_OrderDelivery_orderid` FOREIGN KEY (`orderid`) REFERENCES `Order` (`orderid`),
+  CONSTRAINT `fk_OrderDelivery_managerid` FOREIGN KEY (`managerid`) REFERENCES `Manager` (`managerid`),
+  CONSTRAINT `fk_OrderDelivery_reference` FOREIGN KEY (`rid`) REFERENCES `OrderReference`(`id`) 
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO `OrderDelivery`
+(`orderdeliveryid`, `productid`, `quantity`, `orderid`, `deliverydate`,`status`, `managerid`, `color`,`rid`) VALUES
+(1, 1, 10, 1, '2026-01-13', 'Pending', 1, 'Grey',1),
+(2, 2, 20, 1, '2026-01-23', 'Shipped', 1, 'Brown',2);
+
+-- Order_Contractors table
+CREATE TABLE `Order_Contractors` (
+  `order_Contractorid` int NOT NULL AUTO_INCREMENT,
+  `contractorid` int NOT NULL,
+  `orderid` int NOT NULL,
+  `managerid` int NOT NULL,
+  PRIMARY KEY (`order_Contractorid`),
+  KEY `contractorid_OC_idx1` (`contractorid`),
+  KEY `orderid_OC_idx1` (`orderid`),
+  KEY `managerid_OC_idx1` (`managerid`),
+  CONSTRAINT `fk_OC_contractorid` FOREIGN KEY (`contractorid`) REFERENCES `Contractors` (`contractorid`),
+  CONSTRAINT `fk_OC_orderid` FOREIGN KEY (`orderid`) REFERENCES `Order` (`orderid`),
+  CONSTRAINT `fk_OC_managerid` FOREIGN KEY (`managerid`) REFERENCES `Manager` (`managerid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO `Order_Contractors`
+(`order_Contractorid`, `contractorid`, `orderid`, `managerid`) VALUES
+(1, 1,1,1),
+(2, 2,2,1);
+
+-- Schedule table
+CREATE TABLE `Schedule` (
+  `scheduleid` int NOT NULL AUTO_INCREMENT,
+  `managerid` int NOT NULL,
+  `OrderFinishDate` date DEFAULT NULL,
+  `DesignFinishDate` date DEFAULT NULL,
+  `orderid` int NOT NULL,
+  `construction_start_date` date DEFAULT NULL,
+   `construction_end_date` date DEFAULT NULL,
+   `construction_date_status` ENUM('pending', 'accepted', 'rejected') DEFAULT 'pending',
+  PRIMARY KEY (`scheduleid`),
+  KEY `orderid_pk_idx` (`orderid`),
+  KEY `managerid_pk_idx` (`managerid`),
+  CONSTRAINT `managerid_fk` FOREIGN KEY (`managerid`) REFERENCES `Manager` (`managerid`),
+  CONSTRAINT `orderid_fk` FOREIGN KEY (`orderid`) REFERENCES `Order` (`orderid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO `Schedule` (`scheduleid`,`managerid`,`OrderFinishDate`,`DesignFinishDate`,`orderid`, `construction_start_date`, `construction_end_date`, `construction_date_status`) VALUES
+(1,1,'2026-01-16','2026-01-15',1, '2026-01-10', '2026-01-20', 'accepted'),
+(2,2,'2026-01-18','2026-01-17',2, NULL, NULL, 'pending');
+
+-- ChatRoom Tables
+CREATE TABLE `ChatRoom` (
+  `ChatRoomid` INT NOT NULL AUTO_INCREMENT,
+  `roomname` VARCHAR(255) NOT NULL,
+  `description` TEXT,
+  `room_type` ENUM('private', 'group') NOT NULL DEFAULT 'group',
+  `created_by_type` ENUM('client', 'designer', 'manager', 'Contractors', 'supplier') NOT NULL,
+  `created_by_id` INT NOT NULL,
+  PRIMARY KEY (`ChatRoomid`),
+  KEY `idx_creator` (`created_by_type`, `created_by_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO `ChatRoom` (`ChatRoomid`, `roomname`, `description`, `room_type`, `created_by_type`, `created_by_id`) VALUES
+(1, '123', 'the design process', 'group', 'manager',1),
+(2, 'abc', 'the delivery process', 'private', 'client',1);
+
+CREATE TABLE `ChatRoomMember` (
+  `ChatRoomMemberid` INT NOT NULL AUTO_INCREMENT,
+  `ChatRoomid` INT NOT NULL,
+  `member_type` ENUM('client', 'designer', 'manager', 'Contractors', 'supplier') NOT NULL,
+  `memberid` INT NOT NULL,
+  PRIMARY KEY (`ChatRoomMemberid`),
+  UNIQUE KEY `unique_member` (`ChatRoomid`, `member_type`, `memberid`),
+  KEY `idx_room` (`ChatRoomid`),
+  KEY `idx_member` (`member_type`, `memberid`),
+  CONSTRAINT `fk_chatroom` FOREIGN KEY (`ChatRoomid`) REFERENCES `ChatRoom` (`ChatRoomid`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO `ChatRoomMember` (`ChatRoomMemberid`, `ChatRoomid`, `member_type`, `memberid`) VALUES
+(1, 2, 'manager', 1),
+(2, 2, 'designer', 1),
+-- map test membership to existing designer id (use designerid=2)
+(6, 3, 'designer', 2);
+
+-- Message table
+CREATE TABLE `Message` (
+  `messageid` int NOT NULL AUTO_INCREMENT,
+  `sender_type` ENUM('client', 'designer','manager','Contractors','supplier') NOT NULL,
+  `sender_id` int NOT NULL,
+  `content` text  NOT NULL,
+  `message_type` ENUM('text', 'image', 'file', 'design', 'order') DEFAULT 'text',
+  `fileid` int NULL,
+  `ChatRoomid` int NOT NULL,
+  `timestamp` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`messageid`),
+  KEY `idx_room` (`ChatRoomid`),
+  KEY `idx_fileid` (`fileid`),
+  KEY `idx_sender` (`sender_type`, `sender_id`),
+  CONSTRAINT `fk_message_room` FOREIGN KEY (`ChatRoomid`) REFERENCES `ChatRoom` (`ChatRoomid`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO `Message` (`messageid`, `sender_type`, `sender_id`, `content`,`message_type`,`fileid`,`ChatRoomid`) VALUES
+(1, 'manager', 1, 'hi','text',NULL,2),
+(2, 'designer', 1, 'hello','text',NULL,2);
+
+-- Table to store uploaded file metadata (uploader identity and path)
+CREATE TABLE `UploadedFiles` (
+  `fileid` int NOT NULL AUTO_INCREMENT,
+  `uploader_type` ENUM('client', 'designer','manager','Contractors','supplier') NOT NULL,
+  `uploader_id` int NOT NULL,
+  `filename` varchar(500) NOT NULL,
+  `filepath` varchar(1000) NOT NULL,
+  `mime` varchar(255) DEFAULT NULL,
+  `size` int DEFAULT NULL,
+  `uploaded_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`fileid`),
+  KEY `idx_uploader` (`uploader_type`, `uploader_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Per-member read/unread status for messages
+CREATE TABLE `MessageRead` (
+  `messagereadid` INT NOT NULL AUTO_INCREMENT,
+  `messageid` INT NOT NULL,
+  `ChatRoomMemberid` INT NOT NULL,
+  `is_read` TINYINT(1) NOT NULL DEFAULT 0,
+  `read_at` TIMESTAMP NULL DEFAULT NULL,
+  PRIMARY KEY (`messagereadid`),
+  UNIQUE KEY `uniq_msg_member` (`messageid`, `ChatRoomMemberid`),
+  KEY `idx_message` (`messageid`),
+  KEY `idx_member` (`ChatRoomMemberid`),
+  CONSTRAINT `fk_messageread_message` FOREIGN KEY (`messageid`) REFERENCES `Message` (`messageid`) ON DELETE CASCADE,
+  CONSTRAINT `fk_messageread_member` FOREIGN KEY (`ChatRoomMemberid`) REFERENCES `ChatRoomMember` (`ChatRoomMemberid`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- create workerallocation table
+CREATE TABLE `workerallocation` (
+    `allocation_id` INT PRIMARY KEY AUTO_INCREMENT,
+    `orderid` INT NOT NULL,
+    `workerid` INT NOT NULL,
+    `managerid` INT NOT NULL,
+    `notes` TEXT,
+    `percentage` DECIMAL(5,2) DEFAULT NULL,
+    `status` ENUM('Assigned', 'In Progress', 'Completed', 'Cancelled') DEFAULT 'Assigned',
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (`orderid`) REFERENCES `Order`(`orderid`) ON DELETE CASCADE,
+    FOREIGN KEY (`workerid`) REFERENCES `worker`(`workerid`) ON DELETE CASCADE,
+    FOREIGN KEY (`managerid`) REFERENCES `Manager`(`managerid`) ON DELETE CASCADE
+);
+
+-- Seed read status: for each message add rows for members of that chatroom
+-- Message 1 (room 2): manager (memberid 1) is sender -> read, designer (memberid 2) unread
+-- Message 2 (room 2): designer (memberid 2) is sender -> read, manager (memberid 1) unread
+INSERT INTO `MessageRead` (`messagereadid`, `messageid`, `ChatRoomMemberid`, `is_read`, `read_at`) VALUES
+(1, 1, 1, 1, '2025-01-01 10:00:00'),
+(2, 1, 2, 0, NULL),
+(3, 2, 1, 0, NULL),
+(4, 2, 2, 1, '2025-01-01 10:05:00');
+
+CREATE TABLE `DesignImage` (
+  `imageid` int NOT NULL AUTO_INCREMENT,
+  `designid` int NOT NULL,
+  `image_filename` varchar(500) NOT NULL,
+  `image_order` int DEFAULT 1,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`imageid`),
+  KEY `designid_idx` (`designid`),
+  CONSTRAINT `fk_designimage_designid` FOREIGN KEY (`designid`) REFERENCES `Design` (`designid`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO `DesignImage` (`imageid`, `designid`, `image_filename`, `image_order`) VALUES
+(1, 1, 'design.jpg', 1),
+(2, 1, 'design2.jpg', 2),
+(3, 2, 'design5.jpg', 1),
+(4, 3, 'design3.jpg', 1),
+(5, 4, 'design4.jpg', 1);
+
+-- DesignedPicture table to store designed pictures uploaded by designers for orders
+CREATE TABLE `DesignedPicture` (
+  `pictureid` int NOT NULL AUTO_INCREMENT,
+  `orderid` int NOT NULL,
+  `filename` VARCHAR(500) NOT NULL,
+  `upload_date` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `status` ENUM('pending', 'approved', 'rejected') DEFAULT 'pending',
+  `rejection_reason` TEXT DEFAULT NULL,
+  `rejection_date` TIMESTAMP NULL DEFAULT NULL,
+  `is_current` BOOLEAN DEFAULT TRUE,
+  PRIMARY KEY (`pictureid`),
+  KEY `orderid_idx` (`orderid`),
+  KEY `idx_orderid_status` (`orderid`, `status`),
+  KEY `idx_orderid_current` (`orderid`, `is_current`),
+  CONSTRAINT `fk_designed_picture_orderid` FOREIGN KEY (`orderid`) REFERENCES `Order` (`orderid`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE `AIRecommendItem` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `item_type` VARCHAR(32) NOT NULL,
+  `item_id` INT NOT NULL,
+  `name` VARCHAR(255) DEFAULT NULL,
+  `description` TEXT DEFAULT NULL,
+  `price` DECIMAL(10,2) DEFAULT NULL,
+  `category` VARCHAR(64) DEFAULT NULL,
+  `image_path` VARCHAR(500) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_item` (`item_type`, `item_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+-- Re-enable Foreign Key Checks
+SET FOREIGN_KEY_CHECKS = 1;
+
+-- Additional test data for stakeholders (clients, managers, contractors, designers, suppliers),
+-- plus sample chat rooms/messages and an order with related entries.
+-- Additional test data removed: duplicate user inserts were deleted to keep IDs consistent
+-- (Client/Manager/Contractors/Designer/Supplier rows already exist earlier in the dump)
+
+INSERT INTO `ChatRoom` (`ChatRoomid`, `roomname`, `description`, `room_type`, `created_by_type`, `created_by_id`) VALUES
+(3, 'project-room', 'discussion for project X', 'group', 'client',2);
+
+INSERT INTO `ChatRoomMember` (`ChatRoomMemberid`, `ChatRoomid`, `member_type`, `memberid`) VALUES
+(3, 3, 'client', 2),
+(4, 3, 'supplier', 2),
+(5, 1, 'designer', 2);
+
+INSERT INTO `Message` (`messageid`, `sender_type`, `sender_id`, `content`,`message_type`,`fileid`,`ChatRoomid`) VALUES
+(3, 'client', 2, 'Hi team, starting project', 'text', NULL, 3),
+(4, 'supplier', 2, 'We can supply materials next week', 'text', NULL, 3),
+(5, 'designer', 2, 'I will prepare the plan', 'text', NULL, 1);
+
+-- MessageRead rows for messages in ChatRoom 3 (room members: ChatRoomMemberid 3=client2,4=supplier2,6=designer2)
+INSERT INTO `MessageRead` (`messagereadid`, `messageid`, `ChatRoomMemberid`, `is_read`, `read_at`) VALUES
+(5, 3, 3, 1, '2025-07-01 09:01:00'),
+(6, 3, 4, 0, NULL),
+(7, 3, 6, 0, NULL),
+(8, 4, 3, 0, NULL),
+(9, 4, 4, 1, '2025-07-01 09:05:00'),
+(10,4,6,0,NULL),
+(11,5,5,1,'2025-06-01 08:00:00');
+
+INSERT INTO `Order` (`orderid`, `odate`, `clientid`, `deposit`, `Requirements`,`designid`,`ostatus`,`designedPicture`) VALUES
+(3, '2025-07-01 09:00:00', 1, 2000.00, 'Need quick remodel', 1, 'waiting confirm', NULL);
+
+UPDATE `Order` SET `payment_id` = 3 WHERE `orderid` = 3;
+
+INSERT INTO `OrderDelivery` (`orderdeliveryid`, `productid`, `quantity`, `orderid`, `deliverydate`, `status`, `managerid`, `color`,`rid`) VALUES
+(3, 3, 50, 3, '2026-01-13', 'Pending', 1, 'White',1);
+
+INSERT INTO `Order_Contractors` (`order_Contractorid`, `contractorid`, `orderid`, `managerid`) VALUES
+(3, 1, 3, 1);
+
+INSERT INTO `Schedule` (`scheduleid`,`managerid`,`OrderFinishDate`,`DesignFinishDate`,`orderid`) VALUES
+(3,1,'2026-01-02','2026-01-01',3);
+
+INSERT INTO `AIRecommendItem` (`item_type`, `item_id`, `name`, `description`, `price`, `category`, `image_path`) VALUES
+('design', 1, 'Modern Full House Design', 'A modern full house design', 500.0, NULL, 'uploads/designs/design.jpg'),
+('design', 2, 'Minimalist Kitchen Remodel Design', 'A minimalist kitchen remodel design', 1000.0, NULL, 'uploads/designs/design5.jpg'),
+('design', 3, 'Cozy Living Room Design', 'A cozy living room design', 800.0, NULL, 'uploads/designs/design3.jpg'),
+('design', 4, 'Elegant Bedroom Design', 'An elegant bedroom design', 1200.0, NULL, 'uploads/designs/design4.jpg'),
+('furniture', 1, 'Modern Sofa', 'A comfortable modern sofa.', 2000.0, 'Furniture', 'uploads/products/sofa_grey.jpg'),
+('furniture', 2, 'Oak Chair', 'Solid wood chair.', 800.0, 'Furniture', 'uploads/products/chair_brown.jpg'),
+('material', 3, 'Brick', 'A brick.', 200.0, 'Material', 'uploads/products/brick.jpg'),
+('material', 4, 'Wood Plank', 'A wood.', 800.0, 'Material', 'uploads/products/wood.jpg'),
+('material', 5, 'Glass', 'A glass.', 800.0, 'Material', 'uploads/products/glass.jpg'),
+('furniture', 6, 'Modern Table', 'A modern table.', 800.0, 'Furniture', 'uploads/products/table.jpg');
+
+-- Add foreign key from Message.fileid to UploadedFiles.fileid
+ALTER TABLE `Message`
+  ADD CONSTRAINT `fk_message_fileid` FOREIGN KEY (`fileid`) REFERENCES `UploadedFiles` (`fileid`) ON DELETE SET NULL;
+
+-- Work hours columns merged into `Worker` CREATE TABLE above; no ALTER needed here.
+DELIMITER $$
+CREATE PROCEDURE IF NOT EXISTS `ResetWeeklyHours`()
+BEGIN
+    UPDATE `worker` SET `available_hours_this_week` = `work_hours_per_week`;
+END$$
+DELIMITER ;
+
+
+-- Manager Wallet table
+CREATE TABLE IF NOT EXISTS `ManagerWallet` (
+  `wallet_id` INT NOT NULL AUTO_INCREMENT,
+  `managerid` INT NOT NULL,
+  `balance` DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+  `total_earned` DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+  `total_withdrawn` DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+  `pending_balance` DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+  `last_updated` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`wallet_id`),
+  UNIQUE KEY `unique_manager` (`managerid`),
+  CONSTRAINT `fk_wallet_managerid` FOREIGN KEY (`managerid`) REFERENCES `Manager` (`managerid`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Supplier Wallet table
+CREATE TABLE IF NOT EXISTS `SupplierWallet` (
+  `wallet_id` INT NOT NULL AUTO_INCREMENT,
+  `supplierid` INT NOT NULL,
+  `balance` DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+  `total_earned` DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+  `total_withdrawn` DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+  `pending_balance` DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+  `last_updated` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`wallet_id`),
+  UNIQUE KEY `unique_supplier` (`supplierid`),
+  CONSTRAINT `fk_wallet_supplierid` FOREIGN KEY (`supplierid`) REFERENCES `Supplier` (`supplierid`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Transaction History table for both Manager and Supplier
+CREATE TABLE IF NOT EXISTS `WalletTransaction` (
+  `transaction_id` INT NOT NULL AUTO_INCREMENT,
+  `user_type` ENUM('manager', 'supplier') NOT NULL,
+  `user_id` INT NOT NULL,
+  `transaction_type` ENUM('income', 'withdrawal', 'refund', 'fee') NOT NULL,
+  `amount` DECIMAL(15,2) NOT NULL,
+  `balance_before` DECIMAL(15,2) NOT NULL,
+  `balance_after` DECIMAL(15,2) NOT NULL,
+  `description` VARCHAR(500) DEFAULT NULL,
+  `reference_type` ENUM('order', 'product', 'withdrawal') DEFAULT NULL,
+  `reference_id` INT DEFAULT NULL,
+  `status` ENUM('pending', 'completed', 'failed', 'cancelled') DEFAULT 'completed',
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`transaction_id`),
+  KEY `idx_user` (`user_type`, `user_id`),
+  KEY `idx_reference` (`reference_type`, `reference_id`),
+  KEY `idx_created` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Withdrawal Requests table
+CREATE TABLE IF NOT EXISTS `WithdrawalRequest` (
+  `request_id` INT NOT NULL AUTO_INCREMENT,
+  `user_type` ENUM('manager', 'supplier') NOT NULL,
+  `user_id` INT NOT NULL,
+  `amount` DECIMAL(15,2) NOT NULL,
+  `bank_name` VARCHAR(255) NOT NULL,
+  `account_number` VARCHAR(100) NOT NULL,
+  `account_holder` VARCHAR(255) NOT NULL,
+  `status` ENUM('pending', 'approved', 'rejected', 'completed') DEFAULT 'pending',
+  `admin_notes` TEXT,
+  `processed_by` INT DEFAULT NULL,
+  `processed_at` TIMESTAMP NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`request_id`),
+  KEY `idx_user` (`user_type`, `user_id`),
+  KEY `idx_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+-- Construction Schedule History Table
+CREATE TABLE IF NOT EXISTS `ConstructionScheduleHistory` (
+    `history_id` INT NOT NULL AUTO_INCREMENT,
+    `orderid` INT NOT NULL,
+    `construction_start_date` DATE NOT NULL,
+    `construction_end_date` DATE NOT NULL,
+    `status` ENUM('pending', 'accepted', 'rejected') DEFAULT 'pending',
+    `version` INT NOT NULL,
+    `rejection_reason` TEXT DEFAULT NULL,
+    `rejected_by` INT DEFAULT NULL,
+    `created_by` VARCHAR(50) NOT NULL,
+    `created_by_id` INT NOT NULL,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `responded_at` TIMESTAMP NULL,
+    PRIMARY KEY (`history_id`),
+    KEY `orderid_idx` (`orderid`),
+    FOREIGN KEY (`orderid`) REFERENCES `Order` (`orderid`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Insert initial wallet records for existing managers
+INSERT INTO `ManagerWallet` (`managerid`, `balance`, `total_earned`, `total_withdrawn`, `pending_balance`)
+SELECT managerid, 0, 0, 0, 0 FROM Manager
+WHERE managerid NOT IN (SELECT managerid FROM ManagerWallet);
+
+-- Insert initial wallet records for existing suppliers
+INSERT INTO `SupplierWallet` (`supplierid`, `balance`, `total_earned`, `total_withdrawn`, `pending_balance`)
+SELECT supplierid, 0, 0, 0, 0 FROM Supplier
+WHERE supplierid NOT IN (SELECT supplierid FROM SupplierWallet);
+
+
+ALTER TABLE `Order` ADD COLUMN `deposit_amount` DECIMAL(10,2) DEFAULT 0.00 AFTER `Requirements`;
+
+ALTER TABLE `Order` ADD COLUMN `final_payment` DECIMAL(10,2) DEFAULT 0.00 AFTER `deposit_amount`;
+
+UPDATE `Order` SET `deposit_amount` = `budget` * 0.25 WHERE `deposit_amount` = 0 OR `deposit_amount` IS NULL;
+-- Database Update: Add color and quantity to OrderReference table
+-- This script adds support for storing product color and quantity selections in order references
+ALTER TABLE `OrderReference` 
+ADD COLUMN `color` VARCHAR(100) DEFAULT NULL AFTER `productid`,
+ADD COLUMN `quantity` INT DEFAULT NULL AFTER `color`;
+
+-- Add indexes for better query performance
+ALTER TABLE `OrderReference`
+ADD INDEX `idx_color` (`color`),
+ADD INDEX `idx_quantity` (`quantity`);
+
+-- Ensure the construction_date_status column has proper default
+ALTER TABLE `Schedule` 
+MODIFY COLUMN `construction_date_status` ENUM('pending', 'accepted', 'rejected') DEFAULT 'pending';
+
+-- Add a version control field to the Schedule table
+ALTER TABLE `Schedule` 
+ADD COLUMN `current_version` INT DEFAULT 1,
+ADD COLUMN `parent_schedule_id` INT DEFAULT NULL;
+
+/*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
+/*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
+/*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;
+/*!40014 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS */;
+/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
+/*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
+/*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
+/*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;

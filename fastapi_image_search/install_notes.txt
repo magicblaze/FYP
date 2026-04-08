@@ -1,0 +1,14 @@
+# install requirements only
+cd c:\xampp\htdocs\FYP\fastapi_image_search
+.\deploy_local.ps1 -InstallOnly
+
+# install + start server
+cd c:\xampp\htdocs\FYP\fastapi_image_search
+.\deploy_local.ps1
+
+# start without reinstall
+cd c:\xampp\htdocs\FYP\fastapi_image_search
+.\deploy_local.ps1 -SkipInstall
+
+# custom python / host / port
+.\deploy_local.ps1 -PythonPath "C:\Users\boot\AppData\Local\Programs\Python\Python312\python.exe" -ListenHost 127.0.0.1 -Port 8001

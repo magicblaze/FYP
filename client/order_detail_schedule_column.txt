@@ -1,0 +1,55 @@
+
+            <!-- Schedule/Timeline Section -->
+            <div class="section-title">
+                <i class="fas fa-calendar-check me-2"></i>Project Timeline
+            </div>
+            <?php if ($schedules->num_rows > 0): ?>
+                <table class="schedule-table">
+                    <thead>
+                        <tr>
+                            <th>Scheduled Finish Date</th>
+                            <th>Manager in Charge</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php while ($schedule = $schedules->fetch_assoc()): ?>
+                            <?php
+                            $finishDate = strtotime($schedule['OrderFinishDate']);
+                            $today = strtotime(date('Y-m-d'));
+                            $isOverdue = $finishDate < $today;
+                            $isUpcoming = $finishDate >= $today && $finishDate <= strtotime('+7 days');
+                            ?>
+                            <tr>
+                                <td>
+                                    <strong><?= date('M d, Y H:i', $finishDate) ?></strong>
+                                    <?php if ($isOverdue): ?>
+                                        <br><small class="text-danger"><i class="fas fa-exclamation-circle me-1"></i>Overdue</small>
+                                    <?php elseif ($isUpcoming): ?>
+                                        <br><small class="text-warning"><i class="fas fa-clock me-1"></i>Upcoming</small>
+                                    <?php endif; ?>
+                                </td>
+                                <td>
+                                    <span class="manager-badge">
+                                        <i class="fas fa-user-tie me-1"></i><?= htmlspecialchars($schedule['manager_name']) ?>
+                                    </span>
+                                </td>
+                                <td>
+                                    <?php if ($isOverdue): ?>
+                                        <span class="badge bg-danger">Overdue</span>
+                                    <?php elseif ($isUpcoming): ?>
+                                        <span class="badge bg-warning">Upcoming</span>
+                                    <?php else: ?>
+                                        <span class="badge bg-success">On Track</span>
+                                    <?php endif; ?>
+                                </td>
+                            </tr>
+                        <?php endwhile; ?>
+                    </tbody>
+                </table>
+            <?php else: ?>
+                <div class="empty-message">
+                    <i class="fas fa-calendar-check"></i>
+                    <p>No schedule information available yet.</p>
+                </div>
+            <?php endif; ?>
