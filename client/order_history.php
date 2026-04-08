@@ -6,6 +6,7 @@ require_once __DIR__ . '/../config.php';
 session_start();
 
 // Redirect to login if not authenticated
+$current_page = $_SERVER['REQUEST_URI'];
 if (empty($_SESSION['user'])) {
     header('Location: ../login.php?redirect=' . urlencode($current_page));
     exit;
@@ -15,6 +16,70 @@ $clientId = (int) ($_SESSION['user']['clientid'] ?? 0);
 if ($clientId <= 0) {
     http_response_code(403);
     die('Invalid session.');
+}
+
+// Handle inspection actions
+$inspection_message = '';
+$inspection_error = '';
+
+if ($_SERVER["REQUEST_METHOD"] === "POST") {
+    $order_id = isset($_POST['order_id']) ? intval($_POST['order_id']) : 0;
+    $action = isset($_POST['inspection_action']) ? $_POST['inspection_action'] : '';
+    
+    if ($order_id > 0 && $action === 'pass') {
+        // Pass inspection - redirect to payment page
+        header("Location: payment_construction2.php?orderid=" . $order_id);
+        exit;
+    } elseif ($order_id > 0 && $action === 'fail') {
+        // Fail inspection - change status back to 'Construction begins'
+        $update_sql = "UPDATE `Order` SET ostatus = 'Construction begins' WHERE orderid = ? AND ostatus = 'Waiting for inspection'";
+        $update_stmt = mysqli_prepare($mysqli, $update_sql);
+        mysqli_stmt_bind_param($update_stmt, "i", $order_id);
+        
+        if (mysqli_stmt_execute($update_stmt)) {
+            $inspection_message = "Inspection failed. Status has been changed back to 'Construction begins'. Please contact your supplier to address the issues.";
+            
+            // Notify supplier
+            $supplier_sql = "SELECT supplierid FROM `Order` WHERE orderid = ?";
+            $supplier_stmt = mysqli_prepare($mysqli, $supplier_sql);
+            mysqli_stmt_bind_param($supplier_stmt, "i", $order_id);
+            mysqli_stmt_execute($supplier_stmt);
+            $supplier_result = mysqli_stmt_get_result($supplier_stmt);
+            $supplier_row = mysqli_fetch_assoc($supplier_result);
+            $supplier_id = $supplier_row['supplierid'];
+            mysqli_stmt_close($supplier_stmt);
+            
+            if ($supplier_id) {
+                $notify_sql = "INSERT INTO Notification (user_type, user_id, orderid, message, type, created_at) 
+                               VALUES ('supplier', ?, ?, 'Client inspection failed for Order #" . $order_id . ". Construction needs to be continued.', 'inspection_failed', NOW())";
+                $notify_stmt = mysqli_prepare($mysqli, $notify_sql);
+                mysqli_stmt_bind_param($notify_stmt, "ii", $supplier_id, $order_id);
+                mysqli_stmt_execute($notify_stmt);
+                mysqli_stmt_close($notify_stmt);
+            }
+            
+            // Also notify manager
+            $manager_sql = "SELECT managerid FROM `Schedule` WHERE orderid = ? LIMIT 1";
+            $manager_stmt = mysqli_prepare($mysqli, $manager_sql);
+            mysqli_stmt_bind_param($manager_stmt, "i", $order_id);
+            mysqli_stmt_execute($manager_stmt);
+            $manager_result = mysqli_stmt_get_result($manager_stmt);
+            $manager_row = mysqli_fetch_assoc($manager_result);
+            if ($manager_row) {
+                $manager_id = $manager_row['managerid'];
+                $notify_manager_sql = "INSERT INTO Notification (user_type, user_id, orderid, message, type, created_at) 
+                                       VALUES ('manager', ?, ?, 'Client inspection failed for Order #" . $order_id . ". Construction status reverted to Construction begins.', 'inspection_failed', NOW())";
+                $notify_manager_stmt = mysqli_prepare($mysqli, $notify_manager_sql);
+                mysqli_stmt_bind_param($notify_manager_stmt, "ii", $manager_id, $order_id);
+                mysqli_stmt_execute($notify_manager_stmt);
+                mysqli_stmt_close($notify_manager_stmt);
+            }
+            mysqli_stmt_close($manager_stmt);
+        } else {
+            $inspection_error = "Failed to update inspection status.";
+        }
+        mysqli_stmt_close($update_stmt);
+    }
 }
 
 // Fetch client details
@@ -157,6 +222,10 @@ if (!empty($_GET['msg'])) {
             background-color: #d4edda;
             color: #155724;
         }
+        .status-waiting_inspection {
+            background-color: #fff3cd;
+            color: #856404;
+        }
 
         .order-body {
             display: flex;
@@ -282,6 +351,66 @@ if (!empty($_GET['msg'])) {
             background-color: #1a252f;
             color: white;
         }
+        
+        .btn-inspection-pass {
+            background-color: #27ae60;
+            color: white;
+        }
+        
+        .btn-inspection-pass:hover {
+            background-color: #229954;
+            color: white;
+        }
+        
+        .btn-inspection-fail {
+            background-color: #e74c3c;
+            color: white;
+        }
+        
+        .btn-inspection-fail:hover {
+            background-color: #c0392b;
+            color: white;
+        }
+        
+        .inspection-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 0.75rem;
+        }
+        
+        .inspection-buttons form {
+            margin: 0;
+        }
+        
+        .alert-info {
+            background-color: #e8f4f8;
+            border-left: 4px solid #3498db;
+        }
+        .btn-inspection-pass {
+    background-color: #27ae60;
+    color: white;
+}
+
+.btn-inspection-pass:hover {
+    background-color: #229954;
+    color: white;
+}
+
+.btn-inspection-fail {
+    background-color: #e74c3c;
+    color: white;
+}
+
+.btn-inspection-fail:hover {
+    background-color: #c0392b;
+    color: white;
+}
+
+.inspection-buttons {
+    display: flex;
+    gap: 10px;
+    margin-top: 0;
+}
     </style>
 </head>
 
@@ -291,6 +420,28 @@ if (!empty($_GET['msg'])) {
     <main class="container mt-4">
         <div class="order-history-container">
             <h1 class="page-title"><i class="fas fa-history me-2"></i>Project History</h1>
+
+            <!-- Flash messages -->
+            <?php if ($flash_msg): ?>
+                <div class="<?= $flash_class ?> alert-dismissible fade show" role="alert">
+                    <?= $flash_msg ?>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            <?php endif; ?>
+            
+            <?php if ($inspection_message): ?>
+                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                    <i class="fas fa-check-circle me-2"></i><?= $inspection_message ?>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            <?php endif; ?>
+            
+            <?php if ($inspection_error): ?>
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                    <i class="fas fa-exclamation-triangle me-2"></i><?= $inspection_error ?>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            <?php endif; ?>
 
             <?php if ($orders->num_rows > 0): ?>
                 <?php while ($order = $orders->fetch_assoc()): ?>
@@ -313,6 +464,8 @@ if (!empty($_GET['msg'])) {
                         $statusClass = 'status-Coordinating_Contractors';
                     } elseif ($statusLower === 'construction begins') {
                         $statusClass = 'status-construction_begins';
+                    } elseif ($statusLower === 'waiting for inspection') {
+                        $statusClass = 'status-waiting_inspection';
                     }
 
                     // Fetch the first image from DesignImage table
@@ -469,6 +622,30 @@ if (!empty($_GET['msg'])) {
                                     <i class="fas fa-calendar-alt me-1"></i>Construction Schedule
                                 </a>
                             <?php endif; ?>
+                            
+                          <!-- Inspection buttons for Waiting for inspection status -->
+<?php if ($statusLower === 'waiting for inspection'): ?>
+    <div class="inspection-buttons" onclick="event.stopPropagation();">
+        <!-- Pass Inspection - Redirect to payment_construction2.php -->
+        <form method="POST" style="display: inline;">
+            <input type="hidden" name="order_id" value="<?= (int) $order['orderid'] ?>">
+            <input type="hidden" name="inspection_action" value="pass">
+            <button type="submit" class="view-details-btn btn-inspection-pass">
+                <i class="fas fa-check-circle me-1"></i>Inspection Completed
+            </button>
+        </form>
+        
+        <!-- Fail Inspection - Change status back to Construction begins -->
+        <form method="POST" style="display: inline;" 
+              onsubmit="return confirm('Are you sure you want to mark this inspection as FAILED? The project status will change back to \"Construction begins\" and the supplier will need to continue work.');">
+            <input type="hidden" name="order_id" value="<?= (int) $order['orderid'] ?>">
+            <input type="hidden" name="inspection_action" value="fail">
+            <button type="submit" class="view-details-btn btn-inspection-fail">
+                <i class="fas fa-times-circle me-1"></i>Failed Inspection
+            </button>
+        </form>
+    </div>
+<?php endif; ?>
                         </div>
                     </div>
                 <?php endwhile; ?>
