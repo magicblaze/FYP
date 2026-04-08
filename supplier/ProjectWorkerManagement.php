@@ -318,9 +318,13 @@ mysqli_stmt_close($workers_stmt);
 	                            <a href="distribution.php?orderid=<?= $project['orderid'] ?>" class="btn-payment ms-2">
 	                                <i class="fas fa-file-invoice-dollar me-1"></i>Distribution
 	                            </a>
+                               <?php 
+                                $constructionStatuses = ['preparing', 'PREPARING', 'Construction begins', 'construction begins'];
+                                if (in_array($project['ostatus'], $constructionStatuses)): ?>
                                 <a href="construction_stage.php?orderid=<?= $project['orderid'] ?>" class="btn-payment ms-2" style="background: #2c3e50;">
                                     <i class="fas fa-hard-hat me-1"></i>Construction Stage
                                 </a>
+                                <?php endif; ?>
 	                        <?php elseif ($project['supplier_status'] === 'Rejected'): ?>
                             <span class="badge bg-danger p-2">Rejected</span>
                         <?php endif; ?>

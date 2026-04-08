@@ -48,7 +48,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         $table_check = "SHOW TABLES LIKE 'ConstructionScheduleHistory'";
         $table_result = mysqli_query($mysqli, $table_check);
         if (mysqli_num_rows($table_result) == 0) {
-            // Create the history table if it doesn't exist
             $create_table = "
             CREATE TABLE IF NOT EXISTS `ConstructionScheduleHistory` (
                 `history_id` INT NOT NULL AUTO_INCREMENT,
@@ -80,17 +79,16 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         $new_version = $version_row['new_version'] ?? 1;
         mysqli_stmt_close($version_stmt);
         
-        // Insert into history table - FIXED: 7 placeholders (?, ?, ?, ?, ?, ?, ?)
+        // Insert into history table
         $insert_sql = "INSERT INTO ConstructionScheduleHistory 
                        (orderid, construction_start_date, construction_end_date, status, version, created_by, created_by_id) 
                        VALUES (?, ?, ?, 'pending', ?, ?, ?)";
         $insert_stmt = mysqli_prepare($mysqli, $insert_sql);
-        // Bind: orderid(i), start_date(s), end_date(s), version(i), created_by(s), created_by_id(i)
         $created_by = 'supplier';
         mysqli_stmt_bind_param($insert_stmt, "issisi", $order_id, $construction_start_date, $construction_end_date, $new_version, $created_by, $supplier_id);
         
         if (mysqli_stmt_execute($insert_stmt)) {
-            // Update main Schedule table with latest dates and pending status
+            // Update main Schedule table
             $check_sql = "SELECT scheduleid FROM Schedule WHERE orderid = ?";
             $check_stmt = mysqli_prepare($mysqli, $check_sql);
             mysqli_stmt_bind_param($check_stmt, "i", $order_id);
@@ -106,18 +104,50 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                 $update_stmt = mysqli_prepare($mysqli, $update_sql);
                 mysqli_stmt_bind_param($update_stmt, "ssi", $construction_start_date, $construction_end_date, $order_id);
             } else {
-                $insert_schedule_sql = "INSERT INTO Schedule (orderid, managerid, construction_start_date, construction_end_date, construction_date_status) 
-                                        SELECT ?, managerid, ?, ?, 'pending' FROM `Order` WHERE orderid = ?";
-                $update_stmt = mysqli_prepare($mysqli, $insert_schedule_sql);
-                mysqli_stmt_bind_param($update_stmt, "issi", $order_id, $construction_start_date, $construction_end_date, $order_id);
+                // Insert into Schedule - check if managerid column exists
+                $check_columns = "SHOW COLUMNS FROM Schedule";
+                $columns_result = mysqli_query($mysqli, $check_columns);
+                $has_managerid = false;
+                while ($col = mysqli_fetch_assoc($columns_result)) {
+                    if ($col['Field'] == 'managerid') {
+                        $has_managerid = true;
+                        break;
+                    }
+                }
+                
+                if ($has_managerid) {
+                    // Try to get a manager from Order_Contractors
+                    $get_manager_sql = "SELECT oc.managerid FROM Order_Contractors oc WHERE oc.orderid = ? LIMIT 1";
+                    $get_manager_stmt = mysqli_prepare($mysqli, $get_manager_sql);
+                    mysqli_stmt_bind_param($get_manager_stmt, "i", $order_id);
+                    mysqli_stmt_execute($get_manager_stmt);
+                    $manager_result = mysqli_stmt_get_result($get_manager_stmt);
+                    $manager_row = mysqli_fetch_assoc($manager_result);
+                    $manager_id = $manager_row['managerid'] ?? 1;
+                    mysqli_stmt_close($get_manager_stmt);
+                    
+                    $insert_schedule_sql = "INSERT INTO Schedule (orderid, managerid, construction_start_date, construction_end_date, construction_date_status) 
+                                            VALUES (?, ?, ?, ?, 'pending')";
+                    $update_stmt = mysqli_prepare($mysqli, $insert_schedule_sql);
+                    mysqli_stmt_bind_param($update_stmt, "iiss", $order_id, $manager_id, $construction_start_date, $construction_end_date);
+                } else {
+                    $insert_schedule_sql = "INSERT INTO Schedule (orderid, construction_start_date, construction_end_date, construction_date_status) 
+                                            VALUES (?, ?, ?, 'pending')";
+                    $update_stmt = mysqli_prepare($mysqli, $insert_schedule_sql);
+                    mysqli_stmt_bind_param($update_stmt, "iss", $order_id, $construction_start_date, $construction_end_date);
+                }
             }
             
             if (mysqli_stmt_execute($update_stmt)) {
                 $message = "Construction dates have been set and sent to client for confirmation.";
             } else {
-                $error = "Failed to update schedule.";
+                $error = "Failed to update schedule: " . mysqli_error($mysqli);
             }
-            mysqli_stmt_close($update_stmt);
+            
+            if (isset($update_stmt)) {
+                mysqli_stmt_close($update_stmt);
+            }
+            mysqli_stmt_close($check_stmt);
         } else {
             $error = "Failed to save construction dates. Please try again.";
         }
@@ -126,10 +156,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 }
 
 // Fetch current schedule data (latest pending version if any)
-$schedule_sql = "SELECT s.construction_start_date, s.construction_end_date, s.construction_date_status,
-                        (SELECT status FROM ConstructionScheduleHistory 
-                         WHERE orderid = s.orderid AND status = 'accepted' 
-                         ORDER BY version DESC LIMIT 1) as accepted_status_exists
+$schedule_sql = "SELECT s.construction_start_date, s.construction_end_date, s.construction_date_status
                  FROM Schedule s
                  WHERE s.orderid = ?";
 $schedule_stmt = mysqli_prepare($mysqli, $schedule_sql);
@@ -349,6 +376,7 @@ mysqli_stmt_close($order_stmt);
                                     <tr>
                                         <td>#<?= $history['version'] ?></td>
                                         <td><?= date('M d, Y', strtotime($history['construction_start_date'])) ?></td>
+                                        <td>To</td>
                                         <td><?= date('M d, Y', strtotime($history['construction_end_date'])) ?></td>
                                         <td>
                                             <?php if ($history['status'] == 'accepted'): ?>
@@ -367,8 +395,9 @@ mysqli_stmt_close($order_stmt);
                     </div>
                 </div>
             </div>
-        <?php endif; ?>
+        <?php endif; 
         mysqli_stmt_close($history_stmt);
+        ?>
     </div>
     
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
