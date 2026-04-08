@@ -240,7 +240,8 @@ CREATE TABLE `Order` (
   `gross_floor_area` decimal(10,2) DEFAULT NULL,
   `Requirements` varchar(255) DEFAULT NULL,
   `designid` int NOT NULL,
-  `ostatus` ENUM('waiting confirm', 'designing', 'reviewing design proposal', 'waiting for review design', 'drafting 2nd proposal', 'waiting client review', 'waiting 2nd design phase payment', 'waiting final design phase payment' , 'waiting 1st construction phase payment', 'complete', 'rejected','Coordinating Contractors','preparing', 'waiting client reassignment', 'waiting client confirm construction date', 'In construction', 'waiting start construction Pay','Construction begins') DEFAULT 'waiting confirm',
+  `ostatus` ENUM('waiting confirm', 'designing', 'reviewing design proposal', 'waiting for review design', 'drafting 2nd proposal', 'waiting client review', 'waiting 2nd design phase payment', 'waiting final design phase payment' , 'waiting 1st construction phase payment', 'complete', 'rejected','Coordinating Contractors','preparing', 'waiting client reassignment', 'waiting client confirm construction date', 'In construction', 'waiting start construction Pay','Construction begins',
+    'Waiting for inspection') DEFAULT 'waiting confirm',
   `designedPicture` VARCHAR(500) DEFAULT NULL,
   `supplierid` int DEFAULT NULL,
   `supplier_status` ENUM('Pending', 'Accepted', 'Rejected') DEFAULT 'Pending',
@@ -830,6 +831,9 @@ MODIFY COLUMN `construction_date_status` ENUM('pending', 'accepted', 'rejected')
 ALTER TABLE `Schedule` 
 ADD COLUMN `current_version` INT DEFAULT 1,
 ADD COLUMN `parent_schedule_id` INT DEFAULT NULL;
+
+-- Add actual_completion_date to Order table
+ALTER TABLE `Order` ADD COLUMN `actual_completion_date` DATE DEFAULT NULL AFTER `ostatus`;
 
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;

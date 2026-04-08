@@ -300,10 +300,13 @@ mysqli_stmt_close($order_stmt);
                     </div>
                     
                     <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-                        <button type="submit" class="btn btn-primary px-4">
-                            <i class="fas fa-paper-plane me-2"></i>
-                            <?= ($pending_version && $schedule && $schedule['construction_date_status'] == 'pending') ? 'Resend Schedule' : 'Send for Client Confirmation' ?>
-                        </button>
+                        <a href="construction_calendar.php?orderid=<?= $order_id ?>" class="btn btn-info px-4 me-2">
+                        <i class="fas fa-calendar-alt me-2"></i>View Construction Schedule
+                        </a>
+                    <button type="submit" class="btn btn-primary px-4">
+                        <i class="fas fa-paper-plane me-2"></i>
+                        <?= ($pending_version && $schedule && $schedule['construction_date_status'] == 'pending') ? 'Resend Schedule' : 'Send for Client Confirmation' ?>
+                    </button>
                     </div>
                 </form>
             </div>
