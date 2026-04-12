@@ -622,6 +622,28 @@ if (!empty($_GET['msg'])) {
                                     <i class="fas fa-calendar-alt me-1"></i>Construction Schedule
                                 </a>
                             <?php endif; ?>
+
+<?php 
+$view_report_statuses = ['construction begins', 'waiting for inspection', 'complete'];
+if (in_array($statusLower, $view_report_statuses)):
+    // Check if any submitted reports exist for this order
+    $report_check_sql = "SELECT COUNT(*) as report_count FROM WeeklyConstructionReport WHERE orderid = ? AND status = 'submitted'";
+    $report_check_stmt = $mysqli->prepare($report_check_sql);
+    $report_check_stmt->bind_param("i", $orderId);
+    $report_check_stmt->execute();
+    $report_check_result = $report_check_stmt->get_result()->fetch_assoc();
+    $has_reports = ($report_check_result && $report_check_result['report_count'] > 0);
+    $report_check_stmt->close();
+    
+    if ($has_reports):
+?>
+    <a href="view_weekly_reports.php?orderid=<?= (int) $order['orderid'] ?>" class="view-details-btn" style="background-color: #20c997;" onclick="event.stopPropagation();">
+        <i class="fas fa-file-alt me-1"></i>View Reports
+    </a>
+<?php 
+    endif;
+endif; 
+?>
                             
                           <!-- Inspection buttons for Waiting for inspection status -->
 <?php if ($statusLower === 'waiting for inspection'): ?>

@@ -60,27 +60,50 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             mysqli_stmt_close($update_history_stmt);
             
             // Update main Schedule table
-            $update_sql = "UPDATE Schedule SET construction_date_status = 'accepted' WHERE orderid = ?";
+            $update_sql = "UPDATE Schedule SET construction_date_status = 'accepted', current_version = ? WHERE orderid = ?";
             $update_stmt = mysqli_prepare($mysqli, $update_sql);
-            mysqli_stmt_bind_param($update_stmt, "i", $order_id);
-            
-            if (mysqli_stmt_execute($update_stmt)) {
-                // Update order status to 'Construction begins'
-                $order_update_sql = "UPDATE `Order` SET ostatus = 'Construction begins' WHERE orderid = ?";
-                $order_update_stmt = mysqli_prepare($mysqli, $order_update_sql);
-                mysqli_stmt_bind_param($order_update_stmt, "i", $order_id);
-                mysqli_stmt_execute($order_update_stmt);
-                mysqli_stmt_close($order_update_stmt);
-                
-                $message = "You have accepted the construction schedule. Construction will begin as scheduled.";
-            } else {
-                $error = "Failed to accept schedule. Please try again.";
-            }
+            $new_version = $pending_version['version'];
+            mysqli_stmt_bind_param($update_stmt, "ii", $new_version, $order_id);
+            mysqli_stmt_execute($update_stmt);
             mysqli_stmt_close($update_stmt);
+            
+            // Check if construction payment has already been made
+            $check_payment_sql = "SELECT o.ostatus, 
+                                         (SELECT COUNT(*) FROM ConstructionPaymentRecord WHERE orderid = ?) as payment_count
+                                  FROM `Order` o
+                                  WHERE o.orderid = ?";
+            $check_stmt = mysqli_prepare($mysqli, $check_payment_sql);
+            mysqli_stmt_bind_param($check_stmt, "ii", $order_id, $order_id);
+            mysqli_stmt_execute($check_stmt);
+            $check_result = mysqli_stmt_get_result($check_stmt);
+            $payment_check = mysqli_fetch_assoc($check_result);
+            mysqli_stmt_close($check_stmt);
+            
+            $has_paid = ($payment_check && ($payment_check['ostatus'] == 'Construction begins' || $payment_check['payment_count'] > 0));
+            
+            // Close pending statement
+            mysqli_stmt_close($pending_stmt);
+            
+            if ($has_paid) {
+                // Already paid, just update order status message
+                $message = "Construction schedule has been updated and accepted. Construction will begin on " . date('F d, Y', strtotime($pending_version['construction_start_date'])) . ".";
+                
+                // Also update order status if needed
+                $order_update = "UPDATE `Order` SET ostatus = 'Construction begins' WHERE orderid = ?";
+                $order_stmt = mysqli_prepare($mysqli, $order_update);
+                mysqli_stmt_bind_param($order_stmt, "i", $order_id);
+                mysqli_stmt_execute($order_stmt);
+                mysqli_stmt_close($order_stmt);
+            } else {
+                // First time accepting - redirect to payment
+                header('Location: construction_payment.php?orderid=' . $order_id);
+                exit;
+            }
         } else {
             $error = "No pending schedule found to accept.";
+            if (isset($pending_stmt)) mysqli_stmt_close($pending_stmt);
         }
-        mysqli_stmt_close($pending_stmt);
+        
     } elseif ($action === 'reject') {
         $rejection_reason = $_POST['rejection_reason'] ?? '';
         
@@ -164,6 +187,19 @@ $schedule = $pending_schedule ?: $accepted_schedule;
 $is_pending = ($pending_schedule !== null);
 $is_accepted = ($accepted_schedule !== null && !$is_pending);
 $no_schedule = ($schedule === null);
+
+// Check if payment has been made (for display message)
+$has_paid_display = false;
+if ($is_pending) {
+    $check_payment_sql = "SELECT (SELECT COUNT(*) FROM ConstructionPaymentRecord WHERE orderid = ?) as payment_count FROM `Order` WHERE orderid = ?";
+    $check_stmt = mysqli_prepare($mysqli, $check_payment_sql);
+    mysqli_stmt_bind_param($check_stmt, "ii", $order_id, $order_id);
+    mysqli_stmt_execute($check_stmt);
+    $check_result = mysqli_stmt_get_result($check_stmt);
+    $payment_check = mysqli_fetch_assoc($check_result);
+    mysqli_stmt_close($check_stmt);
+    $has_paid_display = ($payment_check && $payment_check['payment_count'] > 0);
+}
 ?>
 
 <!DOCTYPE html>
@@ -288,7 +324,11 @@ $no_schedule = ($schedule === null);
                     <?php if ($is_pending): ?>
                         <div class="alert alert-info">
                             <i class="fas fa-info-circle me-2"></i>
-                            Please review the proposed construction timeline. Once you accept, construction will begin as scheduled.
+                            <?php if ($has_paid_display): ?>
+                                Please review the proposed construction timeline. Accepting will update the construction schedule.
+                            <?php else: ?>
+                                Please review the proposed construction timeline. Once you accept, you will be redirected to make a payment.
+                            <?php endif; ?>
                         </div>
                         
                         <div class="d-flex justify-content-center gap-3 mt-4">
@@ -410,6 +450,7 @@ $no_schedule = ($schedule === null);
     </div>
     
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
     <?php include __DIR__ . '/../Public/chat_widget.php'; ?>
 </body>
 </html>

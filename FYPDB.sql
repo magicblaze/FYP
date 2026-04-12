@@ -796,6 +796,44 @@ CREATE TABLE IF NOT EXISTS `ConstructionScheduleHistory` (
     FOREIGN KEY (`orderid`) REFERENCES `Order` (`orderid`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS `WeeklyConstructionReport` (
+    `report_id` INT NOT NULL AUTO_INCREMENT,
+    `orderid` INT NOT NULL,
+    `week_number` INT NOT NULL,
+    `week_start_date` DATE NOT NULL,
+    `week_end_date` DATE NOT NULL,
+    `work_completed` TEXT,
+    `work_planned` TEXT,
+    `progress_percentage` INT DEFAULT 0,
+    `image_paths` TEXT,
+    `request_extra_fee` TINYINT DEFAULT 0,
+    `extra_fee_amount` DECIMAL(12,2) DEFAULT NULL,
+    `extra_fee_reason` TEXT,
+    `status` ENUM('draft', 'submitted') DEFAULT 'draft',
+    `submitted_at` TIMESTAMP NULL,
+    `created_by_id` INT NOT NULL,
+    `created_by_type` VARCHAR(50) NOT NULL,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`report_id`),
+    KEY `orderid_idx` (`orderid`),
+    KEY `week_number_idx` (`week_number`),
+    FOREIGN KEY (`orderid`) REFERENCES `Order` (`orderid`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `ConstructionPaymentRecord` (
+    `record_id` INT NOT NULL AUTO_INCREMENT,
+    `orderid` INT NOT NULL,
+    `installment_number` INT NOT NULL,
+    `percentage` INT NOT NULL,
+    `amount` DECIMAL(12,2) NOT NULL,
+    `milestone` VARCHAR(255),
+    `paid_at` DATETIME NOT NULL,
+    PRIMARY KEY (`record_id`),
+    KEY `orderid_idx` (`orderid`),
+    FOREIGN KEY (`orderid`) REFERENCES `Order` (`orderid`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- Insert initial wallet records for existing managers
 INSERT INTO `ManagerWallet` (`managerid`, `balance`, `total_earned`, `total_withdrawn`, `pending_balance`)
 SELECT managerid, 0, 0, 0, 0 FROM Manager
@@ -834,6 +872,14 @@ ADD COLUMN `parent_schedule_id` INT DEFAULT NULL;
 
 -- Add actual_completion_date to Order table
 ALTER TABLE `Order` ADD COLUMN `actual_completion_date` DATE DEFAULT NULL AFTER `ostatus`;
+
+ALTER TABLE `WeeklyConstructionReport` 
+ADD COLUMN `client_feedback` TEXT DEFAULT NULL,
+ADD COLUMN `client_feedback_at` TIMESTAMP NULL DEFAULT NULL,
+ADD COLUMN `designer_feedback` TEXT DEFAULT NULL,
+ADD COLUMN `designer_feedback_at` TIMESTAMP NULL DEFAULT NULL,
+ADD COLUMN `supplier_response` TEXT DEFAULT NULL,
+ADD COLUMN `supplier_response_at` TIMESTAMP NULL DEFAULT NULL;
 
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;

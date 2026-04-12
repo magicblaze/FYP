@@ -1,4 +1,5 @@
 <?php
+// OrderManager.php - 修改后的完整文件
 require_once __DIR__ . '/../config.php';
 session_start();
 
@@ -40,6 +41,39 @@ if (!$stmt->execute()) {
   die('Database error.');
 }
 $res = $stmt->get_result();
+
+// Collect all orders first
+$orders_list = [];
+if ($res && $res->num_rows) {
+  while ($row = $res->fetch_assoc()) {
+    $orders_list[] = $row;
+  }
+}
+
+// Check which orders have reports (for eligible statuses)
+$orders_with_reports = [];
+$order_ids_for_check = [];
+foreach ($orders_list as $order) {
+  $statusLower = strtolower($order['ostatus'] ?? '');
+  // Eligible statuses for showing reports button
+  $eligible_statuses = ['construction begins', 'waiting for inspection', 'complete'];
+  if (in_array($statusLower, $eligible_statuses)) {
+    $order_ids_for_check[] = $order['orderid'];
+  }
+}
+
+if (!empty($order_ids_for_check)) {
+  $ids_str = implode(',', $order_ids_for_check);
+  $report_check_sql = "SELECT orderid, COUNT(*) as report_count FROM WeeklyConstructionReport 
+                       WHERE orderid IN ($ids_str) AND status = 'submitted'
+                       GROUP BY orderid";
+  $report_check_result = $mysqli->query($report_check_sql);
+  if ($report_check_result) {
+    while ($row = $report_check_result->fetch_assoc()) {
+      $orders_with_reports[$row['orderid']] = $row['report_count'];
+    }
+  }
+}
 ?>
 <!doctype html>
 <html lang="en">
@@ -66,6 +100,15 @@ $res = $stmt->get_result();
       box-shadow: 0 2px 10px rgba(0,0,0,0.06) !important;
       transform: none !important;
     }
+    .btn-report {
+      background-color: #20c997;
+      color: white;
+      margin-left: 5px;
+    }
+    .btn-report:hover {
+      background-color: #1ba87e;
+      color: white;
+    }
   </style>
 </head>
 
@@ -89,8 +132,15 @@ $res = $stmt->get_result();
               </tr>
             </thead>
             <tbody>
-              <?php if ($res && $res->num_rows):
-                while ($row = $res->fetch_assoc()): ?>
+              <?php if (!empty($orders_list)):
+                foreach ($orders_list as $row): 
+                  $statusLower = strtolower($row['ostatus'] ?? '');
+                  // Eligible statuses for showing reports button
+                  $eligible_statuses = ['construction begins', 'waiting for inspection', 'complete'];
+                  $is_eligible = in_array($statusLower, $eligible_statuses);
+                  // Show reports button only if eligible AND reports exist
+                  $show_report_btn = ($is_eligible && isset($orders_with_reports[$row['orderid']]));
+                ?>
                   <tr>
                     <td>#<?= (int) $row['orderid'] ?></td>
                     <td><?= htmlspecialchars($row['designName'] ?? '—') ?></td>
@@ -102,9 +152,14 @@ $res = $stmt->get_result();
                     <td id="status_<?= (int) $row['orderid'] ?>"><?= htmlspecialchars($row['ostatus'] ?? '') ?></td>
                     <td class="text-end" id="actions_<?= (int) $row['orderid'] ?>">
                       <a href="design_orders.php?orderid=<?= (int) $row['orderid'] ?>" class="btn btn-sm btn-primary">View</a>
+                      <?php if ($show_report_btn): ?>
+                        <a href="designer_view_reports.php?orderid=<?= (int) $row['orderid'] ?>" class="btn btn-sm btn-primary">
+                          Reports
+                        </a>
+                      <?php endif; ?>
                     </td>
                   </tr>
-                <?php endwhile; else: ?>
+                <?php endforeach; else: ?>
                 <tr>
                   <td colspan="7" class="text-center text-muted py-4">No projects found.</td>
                 </tr>
