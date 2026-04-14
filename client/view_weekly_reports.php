@@ -77,6 +77,158 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['submit_feedback'])) {
     }
 }
 
+// Get order payment plan and total cost
+$payment_plan_sql = "SELECT payment_plan, total_cost FROM `Order` o 
+                     JOIN OrderPayment op ON o.payment_id = op.payment_id 
+                     WHERE o.orderid = ?";
+$payment_plan_stmt = mysqli_prepare($mysqli, $payment_plan_sql);
+mysqli_stmt_bind_param($payment_plan_stmt, "i", $order_id);
+mysqli_stmt_execute($payment_plan_stmt);
+$payment_plan_result = mysqli_stmt_get_result($payment_plan_stmt);
+$payment_plan_row = mysqli_fetch_assoc($payment_plan_result);
+$payment_plan = $payment_plan_row['payment_plan'] ?? 'full';
+$total_cost = floatval($payment_plan_row['total_cost'] ?? 0);
+mysqli_stmt_close($payment_plan_stmt);
+
+// Get all paid milestones from ConstructionPaymentRecord
+$paid_milestones = [];
+$paid_records_sql = "SELECT percentage, milestone, paid_at FROM ConstructionPaymentRecord 
+                     WHERE orderid = ? AND status = 'paid'";
+$paid_records_stmt = mysqli_prepare($mysqli, $paid_records_sql);
+mysqli_stmt_bind_param($paid_records_stmt, "i", $order_id);
+mysqli_stmt_execute($paid_records_stmt);
+$paid_records_result = mysqli_stmt_get_result($paid_records_stmt);
+while ($record = mysqli_fetch_assoc($paid_records_result)) {
+    $paid_milestones[] = $record['percentage'];
+}
+mysqli_stmt_close($paid_records_stmt);
+
+// Get pending payment if any
+$pending_payment = null;
+$pending_sql = "SELECT * FROM ConstructionPaymentRecord 
+                WHERE orderid = ? AND status = 'pending' 
+                ORDER BY record_id ASC LIMIT 1";
+$pending_stmt = mysqli_prepare($mysqli, $pending_sql);
+mysqli_stmt_bind_param($pending_stmt, "i", $order_id);
+mysqli_stmt_execute($pending_stmt);
+$pending_result = mysqli_stmt_get_result($pending_stmt);
+$pending_payment = mysqli_fetch_assoc($pending_result);
+mysqli_stmt_close($pending_stmt);
+
+// Function to create pending payment record
+function createPendingPayment($order_id, $percentage, $amount, $milestone_name, $mysqli) {
+    // Check if pending record already exists for this milestone
+    $check_sql = "SELECT record_id FROM ConstructionPaymentRecord 
+                  WHERE orderid = ? AND percentage = ? AND status = 'pending'";
+    $check_stmt = mysqli_prepare($mysqli, $check_sql);
+    mysqli_stmt_bind_param($check_stmt, "ii", $order_id, $percentage);
+    mysqli_stmt_execute($check_stmt);
+    $check_result = mysqli_stmt_get_result($check_stmt);
+    $existing = mysqli_fetch_assoc($check_result);
+    mysqli_stmt_close($check_stmt);
+    
+    if ($existing) {
+        return $existing['record_id'];
+    }
+    
+    // Calculate installment number based on percentage
+    if ($percentage == 25) $installment_number = 1;
+    elseif ($percentage == 50) $installment_number = 2;
+    elseif ($percentage == 75) $installment_number = 3;
+    elseif ($percentage == 100) $installment_number = 4;
+    else $installment_number = 1;
+    
+    $insert_sql = "INSERT INTO ConstructionPaymentRecord 
+                   (orderid, installment_number, percentage, amount, milestone, paid_at, status)
+                   VALUES (?, ?, ?, ?, ?, NULL, 'pending')";
+    $insert_stmt = mysqli_prepare($mysqli, $insert_sql);
+    mysqli_stmt_bind_param($insert_stmt, "iiids", $order_id, $installment_number, $percentage, $amount, $milestone_name);
+    mysqli_stmt_execute($insert_stmt);
+    $record_id = mysqli_insert_id($mysqli);
+    mysqli_stmt_close($insert_stmt);
+    
+    return $record_id;
+}
+
+// Function to check if payment is needed for a specific milestone
+function needsPayment($milestone_percentage, $paid_milestones, $current_week_progress, $payment_plan) {
+    if ($payment_plan == 'full') {
+        return false;
+    }
+    
+    if ($payment_plan == 'installment_25') {
+        if ($milestone_percentage == 25) {
+            return (!in_array(25, $paid_milestones) && $current_week_progress >= 0);
+        } elseif ($milestone_percentage == 50) {
+            return (!in_array(50, $paid_milestones) && $current_week_progress >= 25);
+        } elseif ($milestone_percentage == 75) {
+            return (!in_array(75, $paid_milestones) && $current_week_progress >= 50);
+        } elseif ($milestone_percentage == 100) {
+            return (!in_array(100, $paid_milestones) && $current_week_progress >= 75);
+        }
+    } elseif ($payment_plan == 'installment_50') {
+        if ($milestone_percentage == 50) {
+            return (!in_array(50, $paid_milestones) && $current_week_progress >= 0);
+        } elseif ($milestone_percentage == 100) {
+            return (!in_array(100, $paid_milestones) && $current_week_progress >= 50);
+        }
+    }
+    return false;
+}
+
+// Function to get milestone display name
+function getMilestoneName($milestone_percentage) {
+    switch($milestone_percentage) {
+        case 25: return 'Initial Payment (0-25%)';
+        case 50: return '25-50% Completion Payment';
+        case 75: return '50-75% Completion Payment';
+        case 100: return '75-100% Final Payment';
+        default: return $milestone_percentage . '% Payment';
+    }
+}
+
+// Function to get milestone short name for button
+function getMilestoneShortName($milestone_percentage) {
+    switch($milestone_percentage) {
+        case 25: return 'Initial (0-25%)';
+        case 50: return '25-50%';
+        case 75: return '50-75%';
+        case 100: return '75-100%';
+        default: return $milestone_percentage . '%';
+    }
+}
+
+// Function to calculate payment amount for milestone
+function getPaymentAmount($milestone_percentage, $total_cost, $payment_plan) {
+    if ($payment_plan == 'installment_25') {
+        return $total_cost * 0.25;
+    } elseif ($payment_plan == 'installment_50') {
+        return $total_cost * 0.5;
+    }
+    return 0;
+}
+
+// Handle payment request - create pending record and redirect
+if (isset($_GET['pay_milestone']) && isset($_GET['percentage'])) {
+    $pay_percentage = intval($_GET['percentage']);
+    $pay_amount = getPaymentAmount($pay_percentage, $total_cost, $payment_plan);
+    $pay_milestone_name = getMilestoneName($pay_percentage);
+    
+    // Create pending payment record
+    $record_id = createPendingPayment($order_id, $pay_percentage, $pay_amount, $pay_milestone_name, $mysqli);
+    
+    // Update order status to waiting for payment
+    $update_order_sql = "UPDATE `Order` SET ostatus = 'Waiting for construction payment' WHERE orderid = ?";
+    $update_order_stmt = mysqli_prepare($mysqli, $update_order_sql);
+    mysqli_stmt_bind_param($update_order_stmt, "i", $order_id);
+    mysqli_stmt_execute($update_order_stmt);
+    mysqli_stmt_close($update_order_stmt);
+    
+    // Redirect to payment page
+    header("Location: construction_payment_installment.php?orderid={$order_id}&amount={$pay_amount}&milestone=" . urlencode($pay_milestone_name) . "&percentage={$pay_percentage}&record_id={$record_id}");
+    exit;
+}
+
 // Fetch all weekly reports for this order
 $reports_sql = "SELECT * FROM WeeklyConstructionReport 
                 WHERE orderid = ? 
@@ -133,7 +285,14 @@ mysqli_stmt_close($order_detail_stmt);
         .badge-status { padding: 0.35rem 0.75rem; border-radius: 20px; font-size: 0.8rem; }
         .badge-submitted { background-color: #28a745; color: white; }
         .badge-draft { background-color: #ffc107; color: #212529; }
-        textarea { width: 100%; border: 1px solid #dee2e6; border-radius: 8px; padding: 0.75rem; resize: vertical; }
+        .btn-pay-milestone { background-color: #e67e22; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; text-decoration: none; display: inline-block; font-size: 0.85rem; }
+        .btn-pay-milestone:hover { background-color: #d35400; color: white; }
+        .milestone-paid { background-color: #27ae60; color: white; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.75rem; display: inline-block; margin-left: 0.5rem; }
+        .milestone-pending { background-color: #e67e22; color: white; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.75rem; display: inline-block; margin-left: 0.5rem; }
+        .payment-alert { background-color: #fef3c7; border-left: 4px solid #e67e22; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; }
+        .btn-pay { background-color: #e67e22; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; text-decoration: none; display: inline-block; }
+        .btn-pay:hover { background-color: #d35400; color: white; }
+        .milestones-container { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; }
     </style>
 </head>
 <body>
@@ -143,6 +302,23 @@ mysqli_stmt_close($order_detail_stmt);
         <a href="order_history.php" class="btn btn-outline-secondary mb-3">
             <i class="fas fa-arrow-left me-1"></i>Back to Projects
         </a>
+        
+        <!-- Payment Required Alert for pending payment -->
+        <?php if ($pending_payment): ?>
+            <div class="payment-alert">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <i class="fas fa-credit-card me-2 fa-lg"></i>
+                        <strong>Payment Required!</strong> 
+                        <?= getMilestoneName($pending_payment['percentage']) ?> of $<?= number_format($pending_payment['amount'], 2) ?> is due.
+                    </div>
+                    <a href="construction_payment_installment.php?orderid=<?= $order_id ?>&amount=<?= $pending_payment['amount'] ?>&milestone=<?= urlencode($pending_payment['milestone']) ?>&percentage=<?= $pending_payment['percentage'] ?>&record_id=<?= $pending_payment['record_id'] ?>" 
+                       class="btn-pay">
+                        <i class="fas fa-credit-card me-1"></i>Pay Now
+                    </a>
+                </div>
+            </div>
+        <?php endif; ?>
         
         <div class="card">
             <div class="card-header">
@@ -164,7 +340,7 @@ mysqli_stmt_close($order_detail_stmt);
                     </div>
                     <div class="col-md-6">
                         <strong>Status:</strong> 
-                        <span class="badge-status bg-<?= $order_status == 'Construction begins' ? 'primary' : ($order_status == 'Waiting for inspection' ? 'warning' : 'secondary') ?>">
+                        <span class="badge-status <?= $order_status == 'Waiting for construction payment' ? 'bg-warning' : (($order_status == 'Construction begins' || $order_status == 'preparing') ? 'bg-primary' : ($order_status == 'Waiting for inspection' ? 'bg-info' : 'bg-secondary')) ?>">
                             <?= htmlspecialchars($order_status) ?>
                         </span>
                     </div>
@@ -192,7 +368,34 @@ mysqli_stmt_close($order_detail_stmt);
                     </div>
                 <?php else: ?>
                     <?php foreach ($reports as $report): ?>
-                        <?php $can_feedback = ($report['status'] == 'submitted' && empty($report['client_feedback']) && $order_status != 'complete'); ?>
+                        <?php 
+                        $can_feedback = ($report['status'] == 'submitted' && empty($report['client_feedback']) && $order_status != 'complete' && $order_status != 'Waiting for construction payment');
+                        $current_progress = $report['progress_percentage'];
+                        
+                        // Determine which milestones are relevant for this payment plan
+                        $all_milestones = [];
+                        if ($payment_plan == 'installment_25') {
+                            $all_milestones = [25, 50, 75, 100];
+                        } elseif ($payment_plan == 'installment_50') {
+                            $all_milestones = [50, 100];
+                        }
+                        
+                        // Check which milestones need payment based on current progress
+                        $milestone_status = [];
+                        foreach ($all_milestones as $milestone) {
+                            $is_paid = in_array($milestone, $paid_milestones);
+                            $needs_payment = needsPayment($milestone, $paid_milestones, $current_progress, $payment_plan);
+                            
+                            $milestone_status[] = [
+                                'percentage' => $milestone,
+                                'name' => getMilestoneName($milestone),
+                                'short_name' => getMilestoneShortName($milestone),
+                                'is_paid' => $is_paid,
+                                'needs_payment' => $needs_payment,
+                                'amount' => getPaymentAmount($milestone, $total_cost, $payment_plan)
+                            ];
+                        }
+                        ?>
                         <div class="report-card">
                             <div class="report-header" onclick="toggleReport(<?= $report['week_number'] ?>)">
                                 <div class="d-flex justify-content-between align-items-center">
@@ -215,6 +418,18 @@ mysqli_stmt_close($order_detail_stmt);
                                 <div class="progress-bar-custom mt-2">
                                     <div class="progress-fill bg-primary" style="width: <?= $report['progress_percentage'] ?>%;"></div>
                                 </div>
+                                <!-- Milestone Status Display -->
+                                <?php if ($payment_plan != 'full'): ?>
+                                    <div class="milestones-container mt-2">
+                                        <?php foreach ($milestone_status as $ms): ?>
+                                            <?php if ($ms['is_paid']): ?>
+                                                <span class="milestone-paid"><i class="fas fa-check-circle"></i> <?= $ms['short_name'] ?> Paid</span>
+                                            <?php elseif ($ms['needs_payment'] && $order_status != 'Waiting for construction payment'): ?>
+                                                <span class="milestone-pending"><i class="fas fa-hourglass-half"></i> <?= $ms['short_name'] ?> - Pending</span>
+                                            <?php endif; ?>
+                                        <?php endforeach; ?>
+                                    </div>
+                                <?php endif; ?>
                             </div>
                             <div class="report-body" id="report-body-<?= $report['week_number'] ?>" style="display: none;">
                                 <div class="mb-3">
@@ -253,6 +468,28 @@ mysqli_stmt_close($order_detail_stmt);
                                         <strong><i class="fas fa-building me-1"></i>Supplier Response:</strong>
                                         <p class="mb-1"><?= nl2br(htmlspecialchars($report['supplier_response'])) ?></p>
                                         <small class="text-muted">Responded: <?= date('M d, Y H:i', strtotime($report['supplier_response_at'])) ?></small>
+                                    </div>
+                                <?php endif; ?>
+                                
+                                <!-- Payment Buttons for Milestones that need payment -->
+                                <?php 
+                                $needs_payment_milestones = array_filter($milestone_status, function($ms) {
+                                    return $ms['needs_payment'] && !$ms['is_paid'];
+                                });
+                                ?>
+                                <?php if (!empty($needs_payment_milestones) && $order_status != 'Waiting for construction payment'): ?>
+                                    <div class="mt-3">
+                                        <hr>
+                                        <h6><i class="fas fa-credit-card me-2 text-warning"></i>Milestone Payments Required</h6>
+                                        <div class="d-flex gap-2 flex-wrap">
+                                            <?php foreach ($needs_payment_milestones as $ms): ?>
+                                                <a href="?orderid=<?= $order_id ?>&pay_milestone=1&percentage=<?= $ms['percentage'] ?>" 
+                                                   class="btn-pay-milestone" onclick="event.stopPropagation();">
+                                                    <i class="fas fa-credit-card me-1"></i>Pay <?= $ms['short_name'] ?> ($<?= number_format($ms['amount'], 2) ?>)
+                                                </a>
+                                            <?php endforeach; ?>
+                                        </div>
+                                        <small class="text-muted">Payment required when construction reaches the milestone progress.</small>
                                     </div>
                                 <?php endif; ?>
                                 

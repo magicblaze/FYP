@@ -279,7 +279,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['save_report'])) {
             if ($status == 'submitted') {
                 $report_message = "Weekly report for Week $week_number submitted to client and designer!";
                 
-                // Notify client and designer
+                // Notify client
                 $client_sql = "SELECT clientid FROM `Order` WHERE orderid = ?";
                 $client_stmt = mysqli_prepare($mysqli, $client_sql);
                 mysqli_stmt_bind_param($client_stmt, "i", $order_id);
@@ -313,6 +313,104 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['save_report'])) {
                     mysqli_stmt_close($notify_designer_stmt);
                 }
                 mysqli_stmt_close($designer_stmt);
+                
+                // Check if payment needs to be triggered based on progress
+                $payment_plan_sql = "SELECT payment_plan, total_cost FROM `Order` o 
+                                     JOIN OrderPayment op ON o.payment_id = op.payment_id 
+                                     WHERE o.orderid = ?";
+                $payment_plan_stmt = mysqli_prepare($mysqli, $payment_plan_sql);
+                mysqli_stmt_bind_param($payment_plan_stmt, "i", $order_id);
+                mysqli_stmt_execute($payment_plan_stmt);
+                $payment_plan_result = mysqli_stmt_get_result($payment_plan_stmt);
+                $payment_plan_row = mysqli_fetch_assoc($payment_plan_result);
+                $payment_plan = $payment_plan_row['payment_plan'] ?? 'full';
+                $total_cost = floatval($payment_plan_row['total_cost'] ?? 0);
+                mysqli_stmt_close($payment_plan_stmt);
+                
+                // Get current total amount paid
+                $paid_sql = "SELECT total_amount_paid FROM OrderPayment 
+                             WHERE payment_id = (SELECT payment_id FROM `Order` WHERE orderid = ?)";
+                $paid_stmt = mysqli_prepare($mysqli, $paid_sql);
+                mysqli_stmt_bind_param($paid_stmt, "i", $order_id);
+                mysqli_stmt_execute($paid_stmt);
+                $paid_result = mysqli_stmt_get_result($paid_stmt);
+                $paid_row = mysqli_fetch_assoc($paid_result);
+                $total_paid = floatval($paid_row['total_amount_paid'] ?? 0);
+                mysqli_stmt_close($paid_stmt);
+                
+                // Get maximum progress from all submitted reports
+                $max_progress_sql = "SELECT MAX(progress_percentage) as max_progress 
+                                     FROM WeeklyConstructionReport 
+                                     WHERE orderid = ? AND status = 'submitted'";
+                $max_progress_stmt = mysqli_prepare($mysqli, $max_progress_sql);
+                mysqli_stmt_bind_param($max_progress_stmt, "i", $order_id);
+                mysqli_stmt_execute($max_progress_stmt);
+                $max_progress_result = mysqli_stmt_get_result($max_progress_stmt);
+                $max_progress_row = mysqli_fetch_assoc($max_progress_result);
+                $current_max_progress = intval($max_progress_row['max_progress'] ?? 0);
+                mysqli_stmt_close($max_progress_stmt);
+                
+                // Determine if payment is needed based on payment plan
+                $amount_to_pay = 0;
+                $milestone = '';
+                $should_trigger_payment = false;
+                
+                if ($payment_plan == 'installment_25') {
+                    if ($current_max_progress >= 25 && $total_paid < $total_cost * 0.25) {
+                        $amount_to_pay = $total_cost * 0.25;
+                        $milestone = 'Initial Payment (25%)';
+                        $should_trigger_payment = true;
+                    } elseif ($current_max_progress >= 50 && $total_paid < $total_cost * 0.5) {
+                        $amount_to_pay = $total_cost * 0.25;
+                        $milestone = '50% Completion Payment';
+                        $should_trigger_payment = true;
+                    } elseif ($current_max_progress >= 75 && $total_paid < $total_cost * 0.75) {
+                        $amount_to_pay = $total_cost * 0.25;
+                        $milestone = '75% Completion Payment';
+                        $should_trigger_payment = true;
+                    } elseif ($current_max_progress >= 100 && $total_paid < $total_cost) {
+                        $amount_to_pay = $total_cost * 0.25;
+                        $milestone = 'Final Payment (100%)';
+                        $should_trigger_payment = true;
+                    }
+                } elseif ($payment_plan == 'installment_50') {
+                    if ($current_max_progress >= 50 && $total_paid < $total_cost) {
+                        $amount_to_pay = $total_cost * 0.5;
+                        $milestone = '50% Completion Payment';
+                        $should_trigger_payment = true;
+                    }
+                }
+                
+                if ($should_trigger_payment && $amount_to_pay > 0) {
+    // Create pending payment record
+    $payment_record_sql = "INSERT INTO ConstructionPaymentRecord 
+                           (orderid, installment_number, percentage, amount, milestone, paid_at, status)
+                           VALUES (?, ?, ?, ?, ?, NULL, 'pending')";
+    $installment_number = ceil($current_max_progress / 25);
+    $payment_record_stmt = mysqli_prepare($mysqli, $payment_record_sql);
+    mysqli_stmt_bind_param($payment_record_stmt, "iiids", 
+        $order_id, $installment_number, $current_max_progress, $amount_to_pay, $milestone);
+    mysqli_stmt_execute($payment_record_stmt);
+    mysqli_stmt_close($payment_record_stmt);
+    
+    // REMOVED: Do NOT update order status - keep it as 'Construction begins'
+    // $update_order_sql = "UPDATE `Order` SET ostatus = 'Waiting for construction payment' WHERE orderid = ?";
+    // $update_order_stmt = mysqli_prepare($mysqli, $update_order_sql);
+    // mysqli_stmt_bind_param($update_order_stmt, "i", $order_id);
+    // mysqli_stmt_execute($update_order_stmt);
+    // mysqli_stmt_close($update_order_stmt);
+    
+    $report_message .= " A payment of $" . number_format($amount_to_pay, 2) . " is now required for the next construction phase.";
+    
+    // Notify client about required payment
+    $payment_notify_sql = "INSERT INTO Notification (user_type, user_id, orderid, message, type, created_at) 
+                           VALUES ('client', ?, ?, 'Construction has reached $current_max_progress% completion. A payment of $" . number_format($amount_to_pay, 2) . " is required to continue.', 'payment_required', NOW())";
+    $payment_notify_stmt = mysqli_prepare($mysqli, $payment_notify_sql);
+    mysqli_stmt_bind_param($payment_notify_stmt, "ii", $client_id, $order_id);
+    mysqli_stmt_execute($payment_notify_stmt);
+    mysqli_stmt_close($payment_notify_stmt);
+}
+                
             } else {
                 $report_message = "Weekly report for Week $week_number saved as draft.";
             }
@@ -336,6 +434,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['save_report'])) {
             if ($status == 'submitted') {
                 $report_message = "Weekly report for Week $week_number submitted to client and designer!";
                 
+                // Notify client
                 $client_sql = "SELECT clientid FROM `Order` WHERE orderid = ?";
                 $client_stmt = mysqli_prepare($mysqli, $client_sql);
                 mysqli_stmt_bind_param($client_stmt, "i", $order_id);
@@ -352,6 +451,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['save_report'])) {
                 mysqli_stmt_execute($notify_stmt);
                 mysqli_stmt_close($notify_stmt);
                 
+                // Notify designer
                 $designer_sql = "SELECT d.designerid FROM Design d JOIN `Order` o ON o.designid = d.designid WHERE o.orderid = ?";
                 $designer_stmt = mysqli_prepare($mysqli, $designer_sql);
                 mysqli_stmt_bind_param($designer_stmt, "i", $order_id);
@@ -368,6 +468,104 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['save_report'])) {
                     mysqli_stmt_close($notify_designer_stmt);
                 }
                 mysqli_stmt_close($designer_stmt);
+                
+                // Check if payment needs to be triggered based on progress
+                $payment_plan_sql = "SELECT payment_plan, total_cost FROM `Order` o 
+                                     JOIN OrderPayment op ON o.payment_id = op.payment_id 
+                                     WHERE o.orderid = ?";
+                $payment_plan_stmt = mysqli_prepare($mysqli, $payment_plan_sql);
+                mysqli_stmt_bind_param($payment_plan_stmt, "i", $order_id);
+                mysqli_stmt_execute($payment_plan_stmt);
+                $payment_plan_result = mysqli_stmt_get_result($payment_plan_stmt);
+                $payment_plan_row = mysqli_fetch_assoc($payment_plan_result);
+                $payment_plan = $payment_plan_row['payment_plan'] ?? 'full';
+                $total_cost = floatval($payment_plan_row['total_cost'] ?? 0);
+                mysqli_stmt_close($payment_plan_stmt);
+                
+                // Get current total amount paid
+                $paid_sql = "SELECT total_amount_paid FROM OrderPayment 
+                             WHERE payment_id = (SELECT payment_id FROM `Order` WHERE orderid = ?)";
+                $paid_stmt = mysqli_prepare($mysqli, $paid_sql);
+                mysqli_stmt_bind_param($paid_stmt, "i", $order_id);
+                mysqli_stmt_execute($paid_stmt);
+                $paid_result = mysqli_stmt_get_result($paid_stmt);
+                $paid_row = mysqli_fetch_assoc($paid_result);
+                $total_paid = floatval($paid_row['total_amount_paid'] ?? 0);
+                mysqli_stmt_close($paid_stmt);
+                
+                // Get maximum progress from all submitted reports
+                $max_progress_sql = "SELECT MAX(progress_percentage) as max_progress 
+                                     FROM WeeklyConstructionReport 
+                                     WHERE orderid = ? AND status = 'submitted'";
+                $max_progress_stmt = mysqli_prepare($mysqli, $max_progress_sql);
+                mysqli_stmt_bind_param($max_progress_stmt, "i", $order_id);
+                mysqli_stmt_execute($max_progress_stmt);
+                $max_progress_result = mysqli_stmt_get_result($max_progress_stmt);
+                $max_progress_row = mysqli_fetch_assoc($max_progress_result);
+                $current_max_progress = intval($max_progress_row['max_progress'] ?? 0);
+                mysqli_stmt_close($max_progress_stmt);
+                
+                // Determine if payment is needed based on payment plan
+                $amount_to_pay = 0;
+                $milestone = '';
+                $should_trigger_payment = false;
+                
+                if ($payment_plan == 'installment_25') {
+                    if ($current_max_progress >= 25 && $total_paid < $total_cost * 0.25) {
+                        $amount_to_pay = $total_cost * 0.25;
+                        $milestone = 'Initial Payment (25%)';
+                        $should_trigger_payment = true;
+                    } elseif ($current_max_progress >= 50 && $total_paid < $total_cost * 0.5) {
+                        $amount_to_pay = $total_cost * 0.25;
+                        $milestone = '50% Completion Payment';
+                        $should_trigger_payment = true;
+                    } elseif ($current_max_progress >= 75 && $total_paid < $total_cost * 0.75) {
+                        $amount_to_pay = $total_cost * 0.25;
+                        $milestone = '75% Completion Payment';
+                        $should_trigger_payment = true;
+                    } elseif ($current_max_progress >= 100 && $total_paid < $total_cost) {
+                        $amount_to_pay = $total_cost * 0.25;
+                        $milestone = 'Final Payment (100%)';
+                        $should_trigger_payment = true;
+                    }
+                } elseif ($payment_plan == 'installment_50') {
+                    if ($current_max_progress >= 50 && $total_paid < $total_cost) {
+                        $amount_to_pay = $total_cost * 0.5;
+                        $milestone = '50% Completion Payment';
+                        $should_trigger_payment = true;
+                    }
+                }
+                
+                if ($should_trigger_payment && $amount_to_pay > 0) {
+                    // Create pending payment record
+                    $payment_record_sql = "INSERT INTO ConstructionPaymentRecord 
+                                           (orderid, installment_number, percentage, amount, milestone, paid_at, status)
+                                           VALUES (?, ?, ?, ?, ?, NULL, 'pending')";
+                    $installment_number = ceil($current_max_progress / 25);
+                    $payment_record_stmt = mysqli_prepare($mysqli, $payment_record_sql);
+                    mysqli_stmt_bind_param($payment_record_stmt, "iiids", 
+                        $order_id, $installment_number, $current_max_progress, $amount_to_pay, $milestone);
+                    mysqli_stmt_execute($payment_record_stmt);
+                    mysqli_stmt_close($payment_record_stmt);
+                    
+                    // Update order status to waiting for payment
+                    $update_order_sql = "UPDATE `Order` SET ostatus = 'Waiting for construction payment' WHERE orderid = ?";
+                    $update_order_stmt = mysqli_prepare($mysqli, $update_order_sql);
+                    mysqli_stmt_bind_param($update_order_stmt, "i", $order_id);
+                    mysqli_stmt_execute($update_order_stmt);
+                    mysqli_stmt_close($update_order_stmt);
+                    
+                    $report_message .= " A payment of $" . number_format($amount_to_pay, 2) . " is now required for the next construction phase.";
+                    
+                    // Notify client about required payment
+                    $payment_notify_sql = "INSERT INTO Notification (user_type, user_id, orderid, message, type, created_at) 
+                                           VALUES ('client', ?, ?, 'Construction has reached $current_max_progress% completion. A payment of $" . number_format($amount_to_pay, 2) . " is required to continue.', 'payment_required', NOW())";
+                    $payment_notify_stmt = mysqli_prepare($mysqli, $payment_notify_sql);
+                    mysqli_stmt_bind_param($payment_notify_stmt, "ii", $client_id, $order_id);
+                    mysqli_stmt_execute($payment_notify_stmt);
+                    mysqli_stmt_close($payment_notify_stmt);
+                }
+                
             } else {
                 $report_message = "Weekly report for Week $week_number saved as draft.";
             }
@@ -513,7 +711,7 @@ $is_complete = ($order_info['ostatus'] == 'complete');
 $can_mark_complete = $is_construction_ongoing && !$is_complete && !$is_waiting_inspection;
 $can_request_extension = $end_date && $today > $end_date && !$pending_extension && $is_construction_ongoing;
 
-// ==================== CALENDAR GENERATION ====================
+// Calendar generation
 $current_month = isset($_GET['month']) ? (int)$_GET['month'] : date('m');
 $current_year = isset($_GET['year']) ? (int)$_GET['year'] : date('Y');
 
@@ -637,8 +835,6 @@ $month_name = date('F', mktime(0, 0, 0, $current_month, 1));
         .detail-label { font-weight: 600; color: #3498db; font-size: 0.85rem; text-transform: uppercase; margin-bottom: 0.3rem; }
         .detail-value { color: #2c3e50; font-size: 1rem; }
         .info-message { background-color: #e8f4f8; border-left: 4px solid #3498db; padding: 1rem; border-radius: 8px; margin-top: 1rem; }
-        
-        /* Weekly Report Styles */
         .week-card { background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-top: 1.5rem; overflow: hidden; }
         .week-header { padding: 1rem 1.5rem; cursor: pointer; transition: background-color 0.2s; }
         .week-header.bg-success-light { background-color: #d4edda; }
@@ -768,7 +964,7 @@ $month_name = date('F', mktime(0, 0, 0, $current_month, 1));
                                     <?php if ($start_date && $end_date && $day['date'] >= $start_date && $day['date'] <= $end_date && !$day['is_start'] && !$day['is_end'] && !$day['is_today']): ?>
                                         <div class="construction-badge"><i class="fas fa-hard-hat"></i></div>
                                     <?php endif; ?>
-                                 </td>
+                                    
                             <?php endif; ?>
                         <?php endforeach; ?>
                     </tr>
@@ -857,250 +1053,9 @@ $month_name = date('F', mktime(0, 0, 0, $current_month, 1));
                         <div class="progress-fill bg-primary" style="width: <?= $current_progress ?>%;"></div>
                     </div>
                 </div>
-<div class="week-body" id="week-body-<?= $week['week_number'] ?>" style="display: none;">
-    <?php if ($can_edit): ?>
-        <form method="POST" enctype="multipart/form-data" onsubmit="return true;">
-            <input type="hidden" name="week_number" value="<?= $week['week_number'] ?>">
-            <input type="hidden" name="week_start" value="<?= $week['week_start'] ?>">
-            <input type="hidden" name="week_end" value="<?= $week['week_end'] ?>">
-            <input type="hidden" name="action_type" id="action_type_<?= $week['week_number'] ?>" value="save">
-            
-            <div class="mb-3">
-                <label class="report-label"><i class="fas fa-percent me-1 text-primary"></i>Work Progress (%)</label>
-                <input type="range" class="form-range" name="progress_percentage" min="<?= $min_progress ?>" max="100" step="1" value="<?= $current_progress ?>" oninput="this.nextElementSibling.value = this.value">
-                <output><?= $current_progress ?>%</output>
-                <small class="text-muted d-block">Previous week progress: <?= $min_progress ?>% | Must be >= <?= $min_progress ?>%</small>
-            </div>
-            
-            <div class="mb-3">
-                <label class="report-label"><i class="fas fa-check-circle me-1 text-success"></i>Work Completed This Week</label>
-                <textarea class="report-textarea" name="work_completed" rows="4" placeholder="Describe what has been accomplished this week..."><?= htmlspecialchars($existing['work_completed'] ?? '') ?></textarea>
-            </div>
-            
-            <div class="mb-3">
-                <label class="report-label"><i class="fas fa-tasks me-1 text-info"></i>Planned Work for Next Week</label>
-                <textarea class="report-textarea" name="work_planned" rows="4" placeholder="Describe what will be done next week..."><?= htmlspecialchars($existing['work_planned'] ?? '') ?></textarea>
-            </div>
-            
-            <div class="mb-3">
-                <label class="report-label"><i class="fas fa-image me-1 text-secondary"></i>Upload Images (Optional)</label>
-                <div id="uploadContainer_<?= $week['week_number'] ?>" class="upload-section">
-                    <label class="upload-area" id="uploadArea_<?= $week['week_number'] ?>">
-                        <div>
-                            <i class="fas fa-cloud-upload-alt" style="font-size: 2rem; color: #3498db; margin-bottom: 0.5rem; display: block;"></i>
-                            <strong>Click to upload or drag & drop</strong>
-                            <p class="text-muted mb-0" style="font-size: 0.9rem;">JPG, PNG, GIF, WebP (Max 10MB)</p>
-                        </div>
-                        <input type="file" id="fileInput_<?= $week['week_number'] ?>" name="report_images[]" multiple accept="image/*" style="display: none;" onchange="previewImages(<?= $week['week_number'] ?>, this.files)">
-                    </label>
-                    <div id="previewSection_<?= $week['week_number'] ?>" style="display: none;">
-                        <div class="preview-section">
-                            <p style="margin-bottom: 0.5rem; color: #6c757d; font-size: 0.9rem;">
-                                <strong>Preview:</strong>
-                            </p>
-                            <div id="imagePreviewList_<?= $week['week_number'] ?>" class="image-preview"></div>
-                            <div class="text-muted small">Images will be uploaded when you click Save Draft or Submit.</div>
-                        </div>
-                    </div>
-                </div>
-                
-                <?php if (!empty($existing['image_paths'])): 
-                    $saved_images = json_decode($existing['image_paths'], true);
-                    if ($saved_images): ?>
-                    <div class="image-preview mt-2">
-                        <?php foreach ($saved_images as $img): ?>
-                            <img src="../<?= $img ?>" alt="Progress Image" onclick="window.open('../<?= $img ?>', '_blank')">
-                        <?php endforeach; ?>
-                    </div>
-                <?php endif; endif; ?>
-            </div>
-            
-            <div class="mb-3 border rounded p-3">
-                <div class="form-check">
-                    <input class="form-check-input" type="checkbox" name="request_extra_fee" id="request_extra_fee_<?= $week['week_number'] ?>" value="1" <?= ($existing && $existing['request_extra_fee']) ? 'checked' : '' ?>>
-                    <label class="form-check-label fw-bold" for="request_extra_fee_<?= $week['week_number'] ?>">
-                        <i class="fas fa-dollar-sign me-1 text-warning"></i>Request Additional Construction Fee
-                    </label>
-                </div>
-            </div>
-            
-            <div class="d-flex gap-2">
-                <?php if (!$existing || $existing['status'] != 'submitted'): ?>
-                    <button type="submit" name="save_report" class="btn btn-secondary" onclick="setActionType(<?= $week['week_number'] ?>, 'save')">
-                        <i class="fas fa-save me-1"></i>Save Draft
-                    </button>
-                    <button type="submit" name="save_report" class="btn btn-primary" onclick="return confirmSubmit(<?= $week['week_number'] ?>)">
-                        <i class="fas fa-paper-plane me-1"></i>Submit to Client & Designer
-                    </button>
-                <?php endif; ?>
-            </div>
-        </form>
-        
-        <!-- Display existing feedback if any (for draft mode too) -->
-        <?php if ($existing && (!empty($existing['client_feedback']) || !empty($existing['designer_feedback']))): ?>
-            <div class="mt-3">
-                <hr>
-                <h6><i class="fas fa-comments me-2"></i>Feedback Received</h6>
-                
-                <?php if (!empty($existing['client_feedback'])): ?>
-                    <div class="feedback-box client-feedback">
-                        <strong><i class="fas fa-user me-1"></i>Client Feedback:</strong>
-                        <p class="mb-1"><?= nl2br(htmlspecialchars($existing['client_feedback'])) ?></p>
-                        <small class="text-muted">Submitted: <?= date('M d, Y H:i', strtotime($existing['client_feedback_at'])) ?></small>
-                    </div>
-                <?php endif; ?>
-                
-                <?php if (!empty($existing['designer_feedback'])): ?>
-                    <div class="feedback-box designer-feedback">
-                        <strong><i class="fas fa-user-tie me-1"></i>Designer Feedback:</strong>
-                        <p class="mb-1"><?= nl2br(htmlspecialchars($existing['designer_feedback'])) ?></p>
-                        <small class="text-muted">Submitted: <?= date('M d, Y H:i', strtotime($existing['designer_feedback_at'])) ?></small>
-                    </div>
-                <?php endif; ?>
-            </div>
-        <?php endif; ?>
-        
-    <?php elseif ($is_locked): ?>
-        <!-- View only mode for submitted reports -->
-        <div class="mb-3">
-            <label class="report-label"><i class="fas fa-percent me-1 text-primary"></i>Progress</label>
-            <div class="progress-bar-custom">
-                <div class="progress-fill bg-primary" style="width: <?= $existing['progress_percentage'] ?>%;"></div>
-            </div>
-            <p class="mt-2"><?= $existing['progress_percentage'] ?>% Complete</p>
-        </div>
-        
-        <div class="mb-3">
-            <label class="report-label"><i class="fas fa-check-circle me-1 text-success"></i>Work Completed</label>
-            <p class="border rounded p-2 bg-light"><?= nl2br(htmlspecialchars($existing['work_completed'] ?? '')) ?></p>
-        </div>
-        
-        <div class="mb-3">
-            <label class="report-label"><i class="fas fa-tasks me-1 text-info"></i>Planned Work</label>
-            <p class="border rounded p-2 bg-light"><?= nl2br(htmlspecialchars($existing['work_planned'] ?? '')) ?></p>
-        </div>
-        
-        <?php if (!empty($existing['image_paths'])): 
-            $view_images = json_decode($existing['image_paths'], true);
-            if ($view_images): ?>
-            <div class="mb-3">
-                <label class="report-label"><i class="fas fa-image me-1"></i>Images</label>
-                <div class="image-preview">
-                    <?php foreach ($view_images as $img): ?>
-                        <img src="../<?= $img ?>" alt="Progress Image" style="cursor: pointer;" onclick="window.open('../<?= $img ?>', '_blank')">
-                    <?php endforeach; ?>
-                </div>
-            </div>
-        <?php endif; endif; ?>
-        
-        <?php if ($existing['request_extra_fee']): ?>
-            <div class="alert alert-warning">
-                <i class="fas fa-dollar-sign me-2"></i>
-                <strong>Additional Fee Requested</strong> - Client will be notified.
-            </div>
-        <?php endif; ?>
-        
-        <!-- Display feedback for submitted reports -->
-        <div class="mt-3">
-            <hr>
-            <h6><i class="fas fa-comments me-2"></i>Feedback & Responses</h6>
-            
-            <?php if (!empty($existing['client_feedback'])): ?>
-                <div class="feedback-box client-feedback">
-                    <strong><i class="fas fa-user me-1"></i>Client Feedback:</strong>
-                    <p class="mb-1"><?= nl2br(htmlspecialchars($existing['client_feedback'])) ?></p>
-                    <small class="text-muted">Submitted: <?= date('M d, Y H:i', strtotime($existing['client_feedback_at'])) ?></small>
-                </div>
-            <?php endif; ?>
-            
-            <?php if (!empty($existing['designer_feedback'])): ?>
-                <div class="feedback-box designer-feedback">
-                    <strong><i class="fas fa-user-tie me-1"></i>Designer Feedback:</strong>
-                    <p class="mb-1"><?= nl2br(htmlspecialchars($existing['designer_feedback'])) ?></p>
-                    <small class="text-muted">Submitted: <?= date('M d, Y H:i', strtotime($existing['designer_feedback_at'])) ?></small>
-                </div>
-            <?php endif; ?>
-            
-            <?php if (!empty($existing['supplier_response'])): ?>
-                <div class="feedback-box supplier-response">
-                    <strong><i class="fas fa-building me-1"></i>Your Response:</strong>
-                    <p class="mb-1"><?= nl2br(htmlspecialchars($existing['supplier_response'])) ?></p>
-                    <small class="text-muted">Responded: <?= date('M d, Y H:i', strtotime($existing['supplier_response_at'])) ?></small>
-                </div>
-            <?php else: ?>
-                <?php if (!empty($existing['client_feedback']) || !empty($existing['designer_feedback'])): ?>
-                    <form method="POST" class="mt-3">
-                        <input type="hidden" name="week_number" value="<?= $week['week_number'] ?>">
-                        <div class="mb-2">
-                            <label class="report-label"><i class="fas fa-reply me-1"></i>Your Response to Feedback</label>
-                            <textarea class="report-textarea" name="supplier_response" rows="3" placeholder="Respond to client/designer feedback..."></textarea>
-                        </div>
-                        <button type="submit" name="respond_feedback" class="btn btn-primary btn-sm">
-                            <i class="fas fa-paper-plane me-1"></i>Send Response
-                        </button>
-                    </form>
-                <?php endif; ?>
-            <?php endif; ?>
-        </div>
-        
-        <div class="alert alert-info mt-3">
-            <i class="fas fa-info-circle me-2"></i>This report has been submitted and is no longer editable.
-        </div>
-    <?php else: ?>
-        <div class="alert alert-warning">
-            <i class="fas fa-lock me-2"></i>This report cannot be edited because the project is completed or under inspection.
-        </div>
-    <?php endif; ?>
-</div>
-            </div>
-            <?php endfor; ?>
-            
-            <!-- Add More Weeks Button -->
-            <?php if ($displayed_weeks < count($weeks_data) && $is_construction_ongoing && !$is_complete): ?>
-            <div class="text-center mt-3">
-                <button class="btn-add-week" onclick="showAllWeeks()">
-                    <i class="fas fa-plus me-2"></i>Show More Weeks (<?= count($weeks_data) - $displayed_weeks ?> more)
-                </button>
-            </div>
-            <?php endif; ?>
-            
-            <!-- Hidden weeks for JavaScript to show -->
-            <?php for ($i = $max_weeks_to_show; $i < count($weeks_data); $i++):
-                $week = $weeks_data[$i];
-                $existing = $week['existing_report'];
-                $is_locked = $existing && $existing['status'] == 'submitted';
-                $can_edit = !$is_locked && !$is_complete && !$is_waiting_inspection;
-                $min_progress = $week['max_prev_progress'];
-                $current_progress = $existing ? $existing['progress_percentage'] : $min_progress;
-            ?>
-            <div class="week-card extra-week" style="display: none;">
-                <div class="week-header <?= $existing && $existing['status'] == 'submitted' ? 'bg-success-light' : ($week['is_current'] ? 'bg-warning-light' : 'bg-secondary-light') ?>" onclick="toggleWeek(<?= $week['week_number'] ?>)">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <strong><i class="fas fa-calendar-week me-2"></i>Week <?= $week['week_number'] ?></strong>
-                            <span class="text-muted ms-2"><?= date('M d', strtotime($week['week_start'])) ?> - <?= date('M d', strtotime($week['week_end'])) ?></span>
-                            <?php if ($existing && $existing['status'] == 'submitted'): ?>
-                                <span class="badge bg-success ms-2"><i class="fas fa-check-circle"></i> Submitted</span>
-                            <?php elseif ($existing && $existing['status'] == 'draft'): ?>
-                                <span class="badge bg-warning ms-2"><i class="fas fa-pencil-alt"></i> Draft</span>
-                            <?php elseif (!$existing): ?>
-                                <span class="badge bg-secondary ms-2"><i class="fas fa-plus"></i> Not Started</span>
-                            <?php endif; ?>
-                        </div>
-                        <div>
-                            <?php if ($existing && $existing['progress_percentage'] > 0): ?>
-                                <span class="badge bg-primary"><?= $existing['progress_percentage'] ?>% Complete</span>
-                            <?php endif; ?>
-                            <i class="fas fa-chevron-down ms-2"></i>
-                        </div>
-                    </div>
-                    <div class="progress-bar-custom mt-2">
-                        <div class="progress-fill bg-primary" style="width: <?= $current_progress ?>%;"></div>
-                    </div>
-                </div>
                 <div class="week-body" id="week-body-<?= $week['week_number'] ?>" style="display: none;">
                     <?php if ($can_edit): ?>
-                        <form method="POST" enctype="multipart/form-data">
+                        <form method="POST" enctype="multipart/form-data" id="reportForm_<?= $week['week_number'] ?>">
                             <input type="hidden" name="week_number" value="<?= $week['week_number'] ?>">
                             <input type="hidden" name="week_start" value="<?= $week['week_start'] ?>">
                             <input type="hidden" name="week_end" value="<?= $week['week_end'] ?>">
@@ -1167,17 +1122,16 @@ $month_name = date('F', mktime(0, 0, 0, $current_month, 1));
                             
                             <div class="d-flex gap-2">
                                 <?php if (!$existing || $existing['status'] != 'submitted'): ?>
-                                    <button type="submit" name="save_report" class="btn btn-secondary" onclick="document.getElementById('action_type_<?= $week['week_number'] ?>').value='save'">
+                                    <button type="submit" name="save_report" class="btn btn-secondary" onclick="setActionTypeAndSubmit(<?= $week['week_number'] ?>, 'save')">
                                         <i class="fas fa-save me-1"></i>Save Draft
                                     </button>
-                                    <button type="submit" name="save_report" class="btn btn-primary" onclick="return confirm('Submit this weekly report to client and designer? Once submitted, you cannot edit it again.'); document.getElementById('action_type_<?= $week['week_number'] ?>').value='submit'">
+                                    <button type="submit" name="save_report" class="btn btn-primary" onclick="return confirmSubmitAndSetAction(<?= $week['week_number'] ?>)">
                                         <i class="fas fa-paper-plane me-1"></i>Submit to Client & Designer
                                     </button>
                                 <?php endif; ?>
                             </div>
                         </form>
                         
-                        <!-- Display existing feedback if any -->
                         <?php if ($existing && (!empty($existing['client_feedback']) || !empty($existing['designer_feedback']))): ?>
                             <div class="mt-3">
                                 <hr>
@@ -1202,7 +1156,6 @@ $month_name = date('F', mktime(0, 0, 0, $current_month, 1));
                         <?php endif; ?>
                         
                     <?php elseif ($is_locked): ?>
-                        <!-- View only mode for submitted reports -->
                         <div class="mb-3">
                             <label class="report-label"><i class="fas fa-percent me-1 text-primary"></i>Progress</label>
                             <div class="progress-bar-custom">
@@ -1241,7 +1194,244 @@ $month_name = date('F', mktime(0, 0, 0, $current_month, 1));
                             </div>
                         <?php endif; ?>
                         
-                        <!-- Display feedback for submitted reports -->
+                        <div class="mt-3">
+                            <hr>
+                            <h6><i class="fas fa-comments me-2"></i>Feedback & Responses</h6>
+                            
+                            <?php if (!empty($existing['client_feedback'])): ?>
+                                <div class="feedback-box client-feedback">
+                                    <strong><i class="fas fa-user me-1"></i>Client Feedback:</strong>
+                                    <p class="mb-1"><?= nl2br(htmlspecialchars($existing['client_feedback'])) ?></p>
+                                    <small class="text-muted">Submitted: <?= date('M d, Y H:i', strtotime($existing['client_feedback_at'])) ?></small>
+                                </div>
+                            <?php endif; ?>
+                            
+                            <?php if (!empty($existing['designer_feedback'])): ?>
+                                <div class="feedback-box designer-feedback">
+                                    <strong><i class="fas fa-user-tie me-1"></i>Designer Feedback:</strong>
+                                    <p class="mb-1"><?= nl2br(htmlspecialchars($existing['designer_feedback'])) ?></p>
+                                    <small class="text-muted">Submitted: <?= date('M d, Y H:i', strtotime($existing['designer_feedback_at'])) ?></small>
+                                </div>
+                            <?php endif; ?>
+                            
+                            <?php if (!empty($existing['supplier_response'])): ?>
+                                <div class="feedback-box supplier-response">
+                                    <strong><i class="fas fa-building me-1"></i>Your Response:</strong>
+                                    <p class="mb-1"><?= nl2br(htmlspecialchars($existing['supplier_response'])) ?></p>
+                                    <small class="text-muted">Responded: <?= date('M d, Y H:i', strtotime($existing['supplier_response_at'])) ?></small>
+                                </div>
+                            <?php else: ?>
+                                <?php if (!empty($existing['client_feedback']) || !empty($existing['designer_feedback'])): ?>
+                                    <form method="POST" class="mt-3">
+                                        <input type="hidden" name="week_number" value="<?= $week['week_number'] ?>">
+                                        <div class="mb-2">
+                                            <label class="report-label"><i class="fas fa-reply me-1"></i>Your Response to Feedback</label>
+                                            <textarea class="report-textarea" name="supplier_response" rows="3" placeholder="Respond to client/designer feedback..."></textarea>
+                                        </div>
+                                        <button type="submit" name="respond_feedback" class="btn btn-primary btn-sm">
+                                            <i class="fas fa-paper-plane me-1"></i>Send Response
+                                        </button>
+                                    </form>
+                                <?php endif; ?>
+                            <?php endif; ?>
+                        </div>
+                        
+                        <div class="alert alert-info mt-3">
+                            <i class="fas fa-info-circle me-2"></i>This report has been submitted and is no longer editable.
+                        </div>
+                    <?php else: ?>
+                        <div class="alert alert-warning">
+                            <i class="fas fa-lock me-2"></i>This report cannot be edited because the project is completed or under inspection.
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+            <?php endfor; ?>
+            
+            <!-- Add More Weeks Button -->
+            <?php if ($displayed_weeks < count($weeks_data) && $is_construction_ongoing && !$is_complete): ?>
+            <div class="text-center mt-3">
+                <button class="btn-add-week" onclick="showAllWeeks()">
+                    <i class="fas fa-plus me-2"></i>Show More Weeks (<?= count($weeks_data) - $displayed_weeks ?> more)
+                </button>
+            </div>
+            <?php endif; ?>
+            
+            <!-- Hidden weeks for JavaScript to show -->
+            <?php for ($i = $max_weeks_to_show; $i < count($weeks_data); $i++):
+                $week = $weeks_data[$i];
+                $existing = $week['existing_report'];
+                $is_locked = $existing && $existing['status'] == 'submitted';
+                $can_edit = !$is_locked && !$is_complete && !$is_waiting_inspection;
+                $min_progress = $week['max_prev_progress'];
+                $current_progress = $existing ? $existing['progress_percentage'] : $min_progress;
+            ?>
+            <div class="week-card extra-week" style="display: none;">
+                <div class="week-header <?= $existing && $existing['status'] == 'submitted' ? 'bg-success-light' : ($week['is_current'] ? 'bg-warning-light' : 'bg-secondary-light') ?>" onclick="toggleWeek(<?= $week['week_number'] ?>)">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong><i class="fas fa-calendar-week me-2"></i>Week <?= $week['week_number'] ?></strong>
+                            <span class="text-muted ms-2"><?= date('M d', strtotime($week['week_start'])) ?> - <?= date('M d', strtotime($week['week_end'])) ?></span>
+                            <?php if ($existing && $existing['status'] == 'submitted'): ?>
+                                <span class="badge bg-success ms-2"><i class="fas fa-check-circle"></i> Submitted</span>
+                            <?php elseif ($existing && $existing['status'] == 'draft'): ?>
+                                <span class="badge bg-warning ms-2"><i class="fas fa-pencil-alt"></i> Draft</span>
+                            <?php elseif (!$existing): ?>
+                                <span class="badge bg-secondary ms-2"><i class="fas fa-plus"></i> Not Started</span>
+                            <?php endif; ?>
+                        </div>
+                        <div>
+                            <?php if ($existing && $existing['progress_percentage'] > 0): ?>
+                                <span class="badge bg-primary"><?= $existing['progress_percentage'] ?>% Complete</span>
+                            <?php endif; ?>
+                            <i class="fas fa-chevron-down ms-2"></i>
+                        </div>
+                    </div>
+                    <div class="progress-bar-custom mt-2">
+                        <div class="progress-fill bg-primary" style="width: <?= $current_progress ?>%;"></div>
+                    </div>
+                </div>
+                <div class="week-body" id="week-body-<?= $week['week_number'] ?>" style="display: none;">
+                    <?php if ($can_edit): ?>
+                        <form method="POST" enctype="multipart/form-data" id="reportForm_<?= $week['week_number'] ?>">
+                            <input type="hidden" name="week_number" value="<?= $week['week_number'] ?>">
+                            <input type="hidden" name="week_start" value="<?= $week['week_start'] ?>">
+                            <input type="hidden" name="week_end" value="<?= $week['week_end'] ?>">
+                            <input type="hidden" name="action_type" id="action_type_<?= $week['week_number'] ?>" value="save">
+                            
+                            <div class="mb-3">
+                                <label class="report-label"><i class="fas fa-percent me-1 text-primary"></i>Work Progress (%)</label>
+                                <input type="range" class="form-range" name="progress_percentage" min="<?= $min_progress ?>" max="100" step="1" value="<?= $current_progress ?>" oninput="this.nextElementSibling.value = this.value">
+                                <output><?= $current_progress ?>%</output>
+                                <small class="text-muted d-block">Previous week progress: <?= $min_progress ?>% | Must be >= <?= $min_progress ?>%</small>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="report-label"><i class="fas fa-check-circle me-1 text-success"></i>Work Completed This Week</label>
+                                <textarea class="report-textarea" name="work_completed" rows="4" placeholder="Describe what has been accomplished this week..."><?= htmlspecialchars($existing['work_completed'] ?? '') ?></textarea>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="report-label"><i class="fas fa-tasks me-1 text-info"></i>Planned Work for Next Week</label>
+                                <textarea class="report-textarea" name="work_planned" rows="4" placeholder="Describe what will be done next week..."><?= htmlspecialchars($existing['work_planned'] ?? '') ?></textarea>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="report-label"><i class="fas fa-image me-1 text-secondary"></i>Upload Images (Optional)</label>
+                                <div id="uploadContainer_<?= $week['week_number'] ?>" class="upload-section">
+                                    <label class="upload-area" id="uploadArea_<?= $week['week_number'] ?>">
+                                        <div>
+                                            <i class="fas fa-cloud-upload-alt" style="font-size: 2rem; color: #3498db; margin-bottom: 0.5rem; display: block;"></i>
+                                            <strong>Click to upload or drag & drop</strong>
+                                            <p class="text-muted mb-0" style="font-size: 0.9rem;">JPG, PNG, GIF, WebP (Max 10MB)</p>
+                                        </div>
+                                        <input type="file" id="fileInput_<?= $week['week_number'] ?>" name="report_images[]" multiple accept="image/*" style="display: none;" onchange="previewImages(<?= $week['week_number'] ?>, this.files)">
+                                    </label>
+                                    <div id="previewSection_<?= $week['week_number'] ?>" style="display: none;">
+                                        <div class="preview-section">
+                                            <p style="margin-bottom: 0.5rem; color: #6c757d; font-size: 0.9rem;">
+                                                <strong>Preview:</strong>
+                                            </p>
+                                            <div id="imagePreviewList_<?= $week['week_number'] ?>" class="image-preview"></div>
+                                            <div class="text-muted small">Images will be uploaded when you click Save Draft or Submit.</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <?php if (!empty($existing['image_paths'])): 
+                                    $saved_images = json_decode($existing['image_paths'], true);
+                                    if ($saved_images): ?>
+                                    <div class="image-preview mt-2">
+                                        <?php foreach ($saved_images as $img): ?>
+                                            <img src="../<?= $img ?>" alt="Progress Image" onclick="window.open('../<?= $img ?>', '_blank')">
+                                        <?php endforeach; ?>
+                                    </div>
+                                <?php endif; endif; ?>
+                            </div>
+                            
+                            <div class="mb-3 border rounded p-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="request_extra_fee" id="request_extra_fee_<?= $week['week_number'] ?>" value="1" <?= ($existing && $existing['request_extra_fee']) ? 'checked' : '' ?>>
+                                    <label class="form-check-label fw-bold" for="request_extra_fee_<?= $week['week_number'] ?>">
+                                        <i class="fas fa-dollar-sign me-1 text-warning"></i>Request Additional Construction Fee
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <div class="d-flex gap-2">
+                                <?php if (!$existing || $existing['status'] != 'submitted'): ?>
+                                    <button type="submit" name="save_report" class="btn btn-secondary" onclick="setActionTypeAndSubmit(<?= $week['week_number'] ?>, 'save')">
+                                        <i class="fas fa-save me-1"></i>Save Draft
+                                    </button>
+                                    <button type="submit" name="save_report" class="btn btn-primary" onclick="return confirmSubmitAndSetAction(<?= $week['week_number'] ?>)">
+                                        <i class="fas fa-paper-plane me-1"></i>Submit to Client & Designer
+                                    </button>
+                                <?php endif; ?>
+                            </div>
+                        </form>
+                        
+                        <?php if ($existing && (!empty($existing['client_feedback']) || !empty($existing['designer_feedback']))): ?>
+                            <div class="mt-3">
+                                <hr>
+                                <h6><i class="fas fa-comments me-2"></i>Feedback Received</h6>
+                                
+                                <?php if (!empty($existing['client_feedback'])): ?>
+                                    <div class="feedback-box client-feedback">
+                                        <strong><i class="fas fa-user me-1"></i>Client Feedback:</strong>
+                                        <p class="mb-1"><?= nl2br(htmlspecialchars($existing['client_feedback'])) ?></p>
+                                        <small class="text-muted">Submitted: <?= date('M d, Y H:i', strtotime($existing['client_feedback_at'])) ?></small>
+                                    </div>
+                                <?php endif; ?>
+                                
+                                <?php if (!empty($existing['designer_feedback'])): ?>
+                                    <div class="feedback-box designer-feedback">
+                                        <strong><i class="fas fa-user-tie me-1"></i>Designer Feedback:</strong>
+                                        <p class="mb-1"><?= nl2br(htmlspecialchars($existing['designer_feedback'])) ?></p>
+                                        <small class="text-muted">Submitted: <?= date('M d, Y H:i', strtotime($existing['designer_feedback_at'])) ?></small>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                        <?php endif; ?>
+                        
+                    <?php elseif ($is_locked): ?>
+                        <div class="mb-3">
+                            <label class="report-label"><i class="fas fa-percent me-1 text-primary"></i>Progress</label>
+                            <div class="progress-bar-custom">
+                                <div class="progress-fill bg-primary" style="width: <?= $existing['progress_percentage'] ?>%;"></div>
+                            </div>
+                            <p class="mt-2"><?= $existing['progress_percentage'] ?>% Complete</p>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="report-label"><i class="fas fa-check-circle me-1 text-success"></i>Work Completed</label>
+                            <p class="border rounded p-2 bg-light"><?= nl2br(htmlspecialchars($existing['work_completed'] ?? '')) ?></p>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="report-label"><i class="fas fa-tasks me-1 text-info"></i>Planned Work</label>
+                            <p class="border rounded p-2 bg-light"><?= nl2br(htmlspecialchars($existing['work_planned'] ?? '')) ?></p>
+                        </div>
+                        
+                        <?php if (!empty($existing['image_paths'])): 
+                            $view_images = json_decode($existing['image_paths'], true);
+                            if ($view_images): ?>
+                            <div class="mb-3">
+                                <label class="report-label"><i class="fas fa-image me-1"></i>Images</label>
+                                <div class="image-preview">
+                                    <?php foreach ($view_images as $img): ?>
+                                        <img src="../<?= $img ?>" alt="Progress Image" style="cursor: pointer;" onclick="window.open('../<?= $img ?>', '_blank')">
+                                    <?php endforeach; ?>
+                                </div>
+                            </div>
+                        <?php endif; endif; ?>
+                        
+                        <?php if ($existing['request_extra_fee']): ?>
+                            <div class="alert alert-warning">
+                                <i class="fas fa-dollar-sign me-2"></i>
+                                <strong>Additional Fee Requested</strong> - Client will be notified.
+                            </div>
+                        <?php endif; ?>
+                        
                         <div class="mt-3">
                             <hr>
                             <h6><i class="fas fa-comments me-2"></i>Feedback & Responses</h6>
@@ -1392,14 +1582,24 @@ $month_name = date('F', mktime(0, 0, 0, $current_month, 1));
             <div class="card-header bg-secondary text-white"><h5 class="mb-0"><i class="fas fa-history me-2"></i>Extension History</h5></div>
             <div class="card-body p-0">
                 <table class="table table-bordered mb-0">
-                    <thead class="table-light"><tr><th>Version</th><th>Requested End Date</th><th>Reason</th><th>Status</th><th>Requested Date</th></tr></thead>
+                    <thead class="table-light"><tr><th>Version</th><th>Requested End Date</th><th>Reason</th><th>Status</th><th>Requested Date</th><tr></thead>
                     <tbody>
                         <?php while ($ext = mysqli_fetch_assoc($history_result)): ?>
                         <tr>
                             <td>#<?= $ext['extension_version'] ?></td>
                             <td><?= date('Y-m-d', strtotime($ext['requested_end_date'])) ?></td>
+                            <td><?= htmlspecialchars(substr($ext['reason'], 0, 50)) ?>
+                                                        <td><?= date('Y-m-d', strtotime($ext['requested_end_date'])) ?></td>
                             <td><?= htmlspecialchars(substr($ext['reason'], 0, 50)) ?>...</td>
-                            <td><?php if ($ext['status'] == 'accepted'): ?><span class="badge bg-success">Accepted</span><?php elseif ($ext['status'] == 'rejected'): ?><span class="badge bg-danger">Rejected</span><?php else: ?><span class="badge bg-warning">Pending</span><?php endif; ?></td>
+                            <td>
+                                <?php if ($ext['status'] == 'accepted'): ?>
+                                    <span class="badge bg-success">Accepted</span>
+                                <?php elseif ($ext['status'] == 'rejected'): ?>
+                                    <span class="badge bg-danger">Rejected</span>
+                                <?php else: ?>
+                                    <span class="badge bg-warning">Pending</span>
+                                <?php endif; ?>
+                            </td>
                             <td><?= date('Y-m-d H:i', strtotime($ext['requested_at'])) ?></td>
                         </tr>
                         <?php endwhile; ?>
@@ -1414,23 +1614,31 @@ $month_name = date('F', mktime(0, 0, 0, $current_month, 1));
     
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-            // 设置 action_type 的值
-    function setActionType(weekNumber, action) {
-        document.getElementById('action_type_' + weekNumber).value = action;
-        // 让表单正常提交
-        return true;
-    }
-    
-    // 确认提交并设置 action_type 为 submit
-    function confirmSubmit(weekNumber) {
-        if (confirm('Submit this weekly report to client and designer? Once submitted, you cannot edit it again.')) {
-            document.getElementById('action_type_' + weekNumber).value = 'submit';
+        // Store selected images for each week
+        let selectedImages = {};
+        
+        // Function to set action type and submit form
+        function setActionTypeAndSubmit(weekNumber, action) {
+            document.getElementById('action_type_' + weekNumber).value = action;
+            const form = document.getElementById('reportForm_' + weekNumber);
+            if (form) {
+                form.submit();
+            }
             return true;
         }
-        return false;
-    }
-        // 存储每个周选择的图片
-        let selectedImages = {};
+        
+        // Function to confirm submission and set action type to submit
+        function confirmSubmitAndSetAction(weekNumber) {
+            if (confirm('Submit this weekly report to client and designer? Once submitted, you cannot edit it again.')) {
+                document.getElementById('action_type_' + weekNumber).value = 'submit';
+                const form = document.getElementById('reportForm_' + weekNumber);
+                if (form) {
+                    form.submit();
+                }
+                return true;
+            }
+            return false;
+        }
         
         function showOrderDetails() {
             new bootstrap.Modal(document.getElementById('orderDetailsModal')).show();
@@ -1454,7 +1662,7 @@ $month_name = date('F', mktime(0, 0, 0, $current_month, 1));
             if (button) button.style.display = 'none';
         }
         
-        // 图片预览函数
+        // Image preview function
         function previewImages(weekNumber, files) {
             if (!files || files.length === 0) return;
             
@@ -1479,7 +1687,7 @@ $month_name = date('F', mktime(0, 0, 0, $current_month, 1));
                 selectedImages[weekNumber].push(file);
             }
             
-            // 更新预览
+            // Update preview
             const previewContainer = document.getElementById('imagePreviewList_' + weekNumber);
             const previewSection = document.getElementById('previewSection_' + weekNumber);
             const uploadArea = document.getElementById('uploadArea_' + weekNumber);
@@ -1536,7 +1744,7 @@ $month_name = date('F', mktime(0, 0, 0, $current_month, 1));
             }
         }
         
-        // 初始化拖拽上传
+        // Initialize drag and drop upload
         document.querySelectorAll('[id^="uploadArea_"]').forEach(area => {
             area.addEventListener('dragover', function (e) {
                 e.preventDefault();

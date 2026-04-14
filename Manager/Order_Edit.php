@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 session_start();
 require_once dirname(__DIR__) . '/config.php';
 
@@ -28,6 +28,7 @@ if ($order_check['count'] == 0) {
 
 // Use prepared statement to prevent SQL injection - ADDED cost field
 $sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.cost, o.deposit, o.supplierid, o.supplier_status,
+        o.inspection_date, o.inspection_status, o.client_suggested_date,
 	       c.clientid, c.cname as client_name, c.ctel, c.cemail, c.budget,
 	           d.designid, d.designName, d.expect_price as design_price, d.tag as design_tag, d.supplierid as design_supplierid,
 	           s.scheduleid, s.OrderFinishDate, s.DesignFinishDate,
@@ -166,6 +167,180 @@ $edit_cost = isset($_GET['edit']) && $_GET['edit'] == 'cost';
 $edit_reference = isset($_GET['edit']) && $_GET['edit'] == 'reference';
 $edit_delivery = isset($_GET['edit']) && $_GET['edit'] == 'delivery';
 
+// ========== START: INSPECTION POST HANDLING ==========
+// Handle send inspection request
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_inspection_request'])) {
+    $inspection_date_post = $_POST['inspection_date'] ?? '';
+    $inspection_time_post = $_POST['inspection_time'] ?? '';
+    
+    if (!empty($inspection_date_post) && !empty($inspection_time_post)) {
+        $inspection_datetime = $inspection_date_post . ' ' . $inspection_time_post . ':00';
+        
+        $update_sql = "UPDATE `Order` SET 
+                       inspection_date = ?,
+                       inspection_status = 'pending',
+                       client_suggested_date = NULL
+                       WHERE orderid = ?";
+        $update_stmt = mysqli_prepare($mysqli, $update_sql);
+        mysqli_stmt_bind_param($update_stmt, "si", $inspection_datetime, $orderid);
+        mysqli_stmt_execute($update_stmt);
+        mysqli_stmt_close($update_stmt);
+        
+        // Notify client
+        $client_id = $order['clientid'];
+        $notify_sql = "INSERT INTO Notification (user_type, user_id, orderid, message, type, created_at) 
+                       VALUES ('client', ?, ?, 'An inspection appointment has been requested for Order #$orderid on " . date('Y-m-d H:i', strtotime($inspection_datetime)) . ". Please confirm or suggest a new time.', 'inspection_request', NOW())";
+        $notify_stmt = mysqli_prepare($mysqli, $notify_sql);
+        mysqli_stmt_bind_param($notify_stmt, "ii", $client_id, $orderid);
+        mysqli_stmt_execute($notify_stmt);
+        mysqli_stmt_close($notify_stmt);
+        
+        if (ob_get_length()) ob_clean();
+        header("Location: Order_Edit.php?id=" . $orderid . "&msg=inspection_sent");
+        exit();
+    }
+}
+
+// Handle accept client suggestion
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accept_client_suggestion'])) {
+    $suggested_date = $_POST['client_suggested_date'] ?? '';
+    
+    if (!empty($suggested_date)) {
+        $update_sql = "UPDATE `Order` SET 
+                       inspection_date = ?,
+                       inspection_status = 'accepted',
+                       client_suggested_date = NULL
+                       WHERE orderid = ?";
+        $update_stmt = mysqli_prepare($mysqli, $update_sql);
+        mysqli_stmt_bind_param($update_stmt, "si", $suggested_date, $orderid);
+        mysqli_stmt_execute($update_stmt);
+        mysqli_stmt_close($update_stmt);
+        
+        // Notify client
+        $client_id = $order['clientid'];
+        $notify_sql = "INSERT INTO Notification (user_type, user_id, orderid, message, type, created_at) 
+                       VALUES ('client', ?, ?, 'Your suggested inspection time for Order #$orderid has been accepted. Inspection scheduled for " . date('Y-m-d H:i', strtotime($suggested_date)) . ".', 'inspection_accepted', NOW())";
+        $notify_stmt = mysqli_prepare($mysqli, $notify_sql);
+        mysqli_stmt_bind_param($notify_stmt, "ii", $client_id, $orderid);
+        mysqli_stmt_execute($notify_stmt);
+        mysqli_stmt_close($notify_stmt);
+        
+        if (ob_get_length()) ob_clean();
+        header("Location: Order_Edit.php?id=" . $orderid . "&msg=inspection_accepted");
+        exit();
+    }
+}
+
+// Handle reject client suggestion
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reject_client_suggestion'])) {
+    $new_datetime = $_POST['new_inspection_datetime'] ?? '';
+    
+    if (!empty($new_datetime)) {
+        $update_sql = "UPDATE `Order` SET 
+                       inspection_date = ?,
+                       inspection_status = 'pending',
+                       client_suggested_date = NULL
+                       WHERE orderid = ?";
+        $update_stmt = mysqli_prepare($mysqli, $update_sql);
+        mysqli_stmt_bind_param($update_stmt, "si", $new_datetime, $orderid);
+        mysqli_stmt_execute($update_stmt);
+        mysqli_stmt_close($update_stmt);
+        
+        // Notify client
+        $client_id = $order['clientid'];
+        $notify_sql = "INSERT INTO Notification (user_type, user_id, orderid, message, type, created_at) 
+                       VALUES ('client', ?, ?, 'A new inspection time has been proposed for Order #$orderid on " . date('Y-m-d H:i', strtotime($new_datetime)) . ". Please confirm.', 'inspection_reschedule', NOW())";
+        $notify_stmt = mysqli_prepare($mysqli, $notify_sql);
+        mysqli_stmt_bind_param($notify_stmt, "ii", $client_id, $orderid);
+        mysqli_stmt_execute($notify_stmt);
+        mysqli_stmt_close($notify_stmt);
+        
+        if (ob_get_length()) ob_clean();
+        header("Location: Order_Edit.php?id=" . $orderid . "&msg=inspection_rescheduled");
+        exit();
+    }
+}
+
+// Handle mark inspection as completed (Step 1 - changes status to inspection_completed)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_inspection_completed'])) {
+    $update_order_sql = "UPDATE `Order` SET ostatus = 'inspection_completed' WHERE orderid = ?";
+    $update_order_stmt = mysqli_prepare($mysqli, $update_order_sql);
+    mysqli_stmt_bind_param($update_order_stmt, "i", $orderid);
+    if (mysqli_stmt_execute($update_order_stmt)) {
+        // Notify client
+        $client_id = $order['clientid'];
+        $notify_sql = "INSERT INTO Notification (user_type, user_id, orderid, message, type, created_at) 
+                       VALUES ('client', ?, ?, 'Inspection for Order #$orderid has been completed. The inspection report is being prepared.', 'inspection_completed', NOW())";
+        $notify_stmt = mysqli_prepare($mysqli, $notify_sql);
+        mysqli_stmt_bind_param($notify_stmt, "ii", $client_id, $orderid);
+        mysqli_stmt_execute($notify_stmt);
+        mysqli_stmt_close($notify_stmt);
+        
+        if (ob_get_length()) ob_clean();
+        header("Location: Order_Edit.php?id=" . $orderid . "&msg=inspection_marked_completed");
+        exit();
+    }
+    mysqli_stmt_close($update_order_stmt);
+}
+
+// Handle submit inspection report (Step 2 - does NOT change order status)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_inspection_report'])) {
+    $report_content = $_POST['report_content'] ?? '';
+    $uploaded_files = [];
+    
+    if (!empty($_FILES['report_files']['name'][0])) {
+        $upload_dir = __DIR__ . '/../uploads/inspection_reports/';
+        if (!file_exists($upload_dir)) {
+            mkdir($upload_dir, 0777, true);
+        }
+        
+        foreach ($_FILES['report_files']['tmp_name'] as $key => $tmp_name) {
+            if ($_FILES['report_files']['error'][$key] == 0) {
+                $filename = time() . '_' . $orderid . '_' . $key . '_' . basename($_FILES['report_files']['name'][$key]);
+                $target_path = $upload_dir . $filename;
+                if (move_uploaded_file($tmp_name, $target_path)) {
+                    $uploaded_files[] = 'uploads/inspection_reports/' . $filename;
+                }
+            }
+        }
+    }
+    
+    $file_paths_str = !empty($uploaded_files) ? json_encode($uploaded_files) : null;
+    
+    // Get inspection date
+    $get_date_sql = "SELECT inspection_date FROM `Order` WHERE orderid = ?";
+    $get_date_stmt = mysqli_prepare($mysqli, $get_date_sql);
+    mysqli_stmt_bind_param($get_date_stmt, "i", $orderid);
+    mysqli_stmt_execute($get_date_stmt);
+    $get_date_result = mysqli_stmt_get_result($get_date_stmt);
+    $date_row = mysqli_fetch_assoc($get_date_result);
+    $inspection_date_val = $date_row['inspection_date'] ?? date('Y-m-d H:i:s');
+    mysqli_stmt_close($get_date_stmt);
+    
+    // Insert inspection report (DO NOT update order status)
+    $insert_report_sql = "INSERT INTO InspectionReport 
+                          (orderid, inspection_date, report_content, file_paths, submitted_by, submitted_by_type, submitted_at, result)
+                          VALUES (?, ?, ?, ?, ?, 'manager', NOW(), 'pass')";
+    $insert_report_stmt = mysqli_prepare($mysqli, $insert_report_sql);
+    mysqli_stmt_bind_param($insert_report_stmt, "isssi", $orderid, $inspection_date_val, $report_content, $file_paths_str, $user_id);
+    mysqli_stmt_execute($insert_report_stmt);
+    mysqli_stmt_close($insert_report_stmt);
+    
+    // Notify client
+    $client_id = $order['clientid'];
+    $notify_sql = "INSERT INTO Notification (user_type, user_id, orderid, message, type, created_at) 
+                   VALUES ('client', ?, ?, 'Inspection report for Order #$orderid has been submitted. Please review and confirm completion.', 'inspection_report', NOW())";
+    $notify_stmt = mysqli_prepare($mysqli, $notify_sql);
+    mysqli_stmt_bind_param($notify_stmt, "ii", $client_id, $orderid);
+    mysqli_stmt_execute($notify_stmt);
+    mysqli_stmt_close($notify_stmt);
+    
+    if (ob_get_length()) ob_clean();
+    header("Location: Order_Edit.php?id=" . $orderid . "&msg=report_submitted");
+    exit();
+}
+// ========== END: INSPECTION POST HANDLING ==========
+
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     // Handle supplier assignment
     if (isset($_POST['assign_supplier'])) {
@@ -178,7 +353,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             exit();
         }
     }
-
 
     // Handle sending reassignment request to client
     if (isset($_POST['send_reassignment_request'])) {
@@ -348,8 +522,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             exit();
         }
     }
-
-
 
     if (isset($_POST['assign_designer'])) {
         $designer_id = intval($_POST['designer_id']);
@@ -784,7 +956,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
             row.id = 'fee-row-' + feeIndex;
             row.className = 'table-success'; // Highlight new rows
             row.innerHTML = `
-                        <td>
+                        <tr>
                             <small>${name} <span class="badge bg-success ms-1">Not saved</span></small>
                             ${desc ? '<br><small class="text-muted">' + desc + '</small>' : ''}
                             <input type="hidden" name="new_fees[${feeIndex}][name]" value="${name}" form="cost-edit-form">
@@ -940,6 +1112,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                 'coordinating contractors' => ['class' => 'alert-info', 'icon' => 'fa-users-cog', 'title' => 'Coordinating Contractors', 'text' => 'We are coordinating with contractors for the next steps.'],
                 'complete' => ['class' => 'alert-success', 'icon' => 'fa-check-circle', 'title' => 'Complete', 'text' => 'Project completed successfully.'],
                 'rejected' => ['class' => 'alert-danger', 'icon' => 'fa-times-circle', 'title' => 'Rejected', 'text' => 'Project has been rejected. See notes for reason.'],
+                'inspection_completed' => ['class' => 'alert-success', 'icon' => 'fa-clipboard-check', 'title' => 'Inspection Completed', 'text' => 'Inspection has been completed. Please submit the inspection report to the client.'],
             ];
 
             $banner = $status_map[$banner_status] ?? ['class' => 'alert-info', 'icon' => 'fa-info-circle', 'title' => ucwords($banner_status), 'text' => 'Status: ' . $banner_status];
@@ -962,6 +1135,11 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                 'second_proposal_submitted' => ['class' => 'alert-success', 'icon' => 'fa-check-circle', 'text' => '2nd Proposal submitted successfully!'],
                 'confirmed' => ['class' => 'alert-success', 'icon' => 'fa-check-circle', 'text' => 'Order confirmed successfully!'],
                 'rejected' => ['class' => 'alert-danger', 'icon' => 'fa-times-circle', 'text' => 'Order rejected.'],
+                'inspection_sent' => ['class' => 'alert-success', 'icon' => 'fa-paper-plane', 'text' => 'Inspection request sent to client successfully!'],
+                'inspection_accepted' => ['class' => 'alert-success', 'icon' => 'fa-check-circle', 'text' => 'Client suggestion accepted! Inspection scheduled.'],
+                'inspection_rescheduled' => ['class' => 'alert-info', 'icon' => 'fa-calendar-alt', 'text' => 'New inspection time proposed to client.'],
+                'inspection_marked_completed' => ['class' => 'alert-success', 'icon' => 'fa-clipboard-check', 'text' => 'Inspection marked as completed! You can now upload the inspection report.'],
+                'report_submitted' => ['class' => 'alert-success', 'icon' => 'fa-file-alt', 'text' => 'Inspection report submitted to client successfully!'],
             ];
             
             if ($msg && isset($msg_map[$msg])) {
@@ -1128,6 +1306,9 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                         case 'reject':
                                             $status_class = 'bg-danger';
                                             break;
+                                        case 'inspection_completed':
+                                            $status_class = 'bg-success';
+                                            break;
                                         default:
                                             $status_class = 'bg-secondary';
                                     }
@@ -1220,9 +1401,6 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                         </div>
                     </div>
                 </div>
-
-
-
 
                 <!-- Edit Sections -->
                 <div class="row mt-3">
@@ -1554,7 +1732,6 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                                 </table>
                                             </div>
 
-
                                             <!-- Combined Cost Edit Form -->
                                             <form method="post" id="cost-edit-form">
                                                 <input type="hidden" name="save_cost_changes" value="1">
@@ -1616,7 +1793,6 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                             </div>
                         </div>
 
-
                         <div class="col-12">
                             <div class="card">
                                 <div class="card-header">
@@ -1642,7 +1818,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                                 </thead>
                                                 <tbody>
                                                     <?php foreach ($references as $ref):
-                                                        $refStatus = strtolower(trim($ref['status'] ?? 'pending'));
+                                                        $refStatus = strtolower(trim($ref['status'] ?? ''));
                                                         $displayPrice = isset($ref['price']) && $ref['price'] !== null ? (float) $ref['price'] : (float) ($ref['product_price'] ?? 0);
                                                         $badgeClass = 'bg-secondary';
                                                         if (in_array($refStatus, ['waiting confirm', 'pending']))
@@ -1795,6 +1971,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                             </div>
                         </div>
                     <?php endif; // end of drafting 2nd proposal section ?>
+                    
                     <?php if ($status === 'coordinating contractors'): ?>
                         <!-- Assign Constructor for Worker Allocation -->
                         <div class="col-lg-6 mb-4">
@@ -1888,6 +2065,371 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                             </div>
                         </div>
                     <?php endif; ?>
+
+<!-- ========== INSPECTION APPOINTMENT SECTION (UPDATED) ========== -->
+<?php if ($status == 'waiting for inspection' || $status == 'inspection_completed'): ?>
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-calendar-check me-2"></i>Inspection Appointment
+                </h5>
+            </div>
+            <div class="card-body">
+                <?php
+                // Get current inspection data
+                $inspection_sql = "SELECT inspection_date, inspection_status, client_suggested_date, ostatus 
+                                   FROM `Order` WHERE orderid = ?";
+                $inspection_stmt = mysqli_prepare($mysqli, $inspection_sql);
+                mysqli_stmt_bind_param($inspection_stmt, "i", $orderid);
+                mysqli_stmt_execute($inspection_stmt);
+                $inspection_result = mysqli_stmt_get_result($inspection_stmt);
+                $inspection_data = mysqli_fetch_assoc($inspection_result);
+                mysqli_stmt_close($inspection_stmt);
+                
+                $inspection_date = $inspection_data['inspection_date'] ?? null;
+                $inspection_status = $inspection_data['inspection_status'] ?? null;
+                $client_suggested_date = $inspection_data['client_suggested_date'] ?? null;
+                $current_ostatus = $inspection_data['ostatus'] ?? '';
+                
+                // Check if inspection is already passed (inspection_completed)
+                $is_inspection_completed = ($current_ostatus == 'inspection_completed');
+                $has_report_submitted = false;
+                
+                // Check if report already submitted
+                if ($is_inspection_completed) {
+                    $check_report_sql = "SELECT COUNT(*) as cnt FROM InspectionReport WHERE orderid = ? AND result = 'pass'";
+                    $check_report_stmt = mysqli_prepare($mysqli, $check_report_sql);
+                    mysqli_stmt_bind_param($check_report_stmt, "i", $orderid);
+                    mysqli_stmt_execute($check_report_stmt);
+                    $check_report_result = mysqli_stmt_get_result($check_report_stmt);
+                    $check_report_row = mysqli_fetch_assoc($check_report_result);
+                    $has_report_submitted = ($check_report_row['cnt'] > 0);
+                    mysqli_stmt_close($check_report_stmt);
+                }
+                ?>
+                
+                <!-- Show message if inspection is marked completed -->
+                <?php if ($is_inspection_completed && !$has_report_submitted): ?>
+                    <div class="alert alert-success mb-4">
+                        <i class="fas fa-check-circle me-2 fa-lg"></i>
+                        <strong>Inspection Completed!</strong> The inspection has been marked as completed. 
+                        Please submit the inspection report below.
+                    </div>
+                <?php endif; ?>
+                
+                <!-- Show message if report already submitted -->
+                <?php if ($has_report_submitted): ?>
+                    <div class="text-center p-4">
+                        <i class="fas fa-check-circle fa-4x text-success mb-3"></i>
+                        <h4 class="text-success">Inspection Report Submitted</h4>
+                        <p>The inspection report has been submitted to the client.</p>
+                        <p class="text-muted">Waiting for client to review and confirm completion.</p>
+                    </div>
+                <?php else: ?>
+                
+                <!-- Status Row -->
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <div class="p-3 bg-light rounded">
+                            <i class="fas fa-info-circle me-2 text-info"></i>
+                            <strong>Inspection Status:</strong><br>
+                            <?php
+                            $status_badge = '';
+                            $status_text = '';
+                            $status_icon = '';
+                            
+                            if ($is_inspection_completed) {
+                                $status_badge = 'bg-success';
+                                $status_text = 'Inspection Completed - Report Pending';
+                                $status_icon = 'fa-check-circle';
+                            } else {
+                                switch ($inspection_status) {
+                                    case 'pending':
+                                        $status_badge = 'bg-warning';
+                                        $status_text = 'Waiting for Client Response';
+                                        $status_icon = 'fa-hourglass-half';
+                                        break;
+                                    case 'accepted':
+                                        $status_badge = 'bg-success';
+                                        $status_text = 'Accepted - Inspection Scheduled';
+                                        $status_icon = 'fa-check-circle';
+                                        break;
+                                    case 'rejected':
+                                        $status_badge = 'bg-danger';
+                                        $status_text = 'Rejected - Please Reschedule';
+                                        $status_icon = 'fa-times-circle';
+                                        break;
+                                    case 'client_suggested':
+                                        $status_badge = 'bg-info';
+                                        $status_text = 'Client Suggested New Time';
+                                        $status_icon = 'fa-calendar-alt';
+                                        break;
+                                    default:
+                                        $status_badge = 'bg-secondary';
+                                        $status_text = 'Not Scheduled';
+                                        $status_icon = 'fa-clock';
+                                }
+                            }
+                            ?>
+                            <span class="badge <?php echo $status_badge; ?> mt-1">
+                                <i class="fas <?php echo $status_icon; ?> me-1"></i><?php echo $status_text; ?>
+                            </span>
+                        </div>
+                    </div>
+                    <?php if ($inspection_date && $inspection_status != 'rejected' && !$is_inspection_completed): ?>
+                        <div class="col-md-6">
+                            <div class="p-3 bg-light rounded">
+                                <i class="fas fa-calendar-alt me-2 text-primary"></i>
+                                <strong>Proposed Inspection Date:</strong><br>
+                                <span class="text-primary">
+                                    <i class="fas fa-calendar-day me-1"></i>
+                                    <?php echo date('F d, Y', strtotime($inspection_date)); ?>
+                                    <i class="fas fa-clock ms-2 me-1"></i>
+                                    <?php echo date('h:i A', strtotime($inspection_date)); ?>
+                                </span>
+                            </div>
+                        </div>
+                    <?php elseif ($inspection_date && $inspection_status == 'accepted' && !$is_inspection_completed): ?>
+                        <div class="col-md-6">
+                            <div class="p-3 bg-success text-white rounded">
+                                <i class="fas fa-calendar-check me-2"></i>
+                                <strong>Confirmed Inspection Date:</strong><br>
+                                <span>
+                                    <i class="fas fa-calendar-day me-1"></i>
+                                    <?php echo date('F d, Y', strtotime($inspection_date)); ?>
+                                    <i class="fas fa-clock ms-2 me-1"></i>
+                                    <?php echo date('h:i A', strtotime($inspection_date)); ?>
+                                </span>
+                            </div>
+                        </div>
+                    <?php endif; ?>
+                </div>
+                
+                <!-- Client Suggested Date Display -->
+                <?php if ($inspection_status == 'client_suggested' && $client_suggested_date && !$is_inspection_completed): ?>
+                <div class="alert alert-info mb-3">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap">
+                        <div>
+                            <i class="fas fa-calendar-alt me-2 fa-lg"></i>
+                            <strong>Client Suggested Time:</strong>
+                            <?php echo date('F d, Y h:i A', strtotime($client_suggested_date)); ?>
+                        </div>
+                        <div class="mt-2 mt-sm-0">
+                            <button type="button" class="btn btn-sm btn-success me-2" onclick="acceptSuggestion()">
+                                <i class="fas fa-check me-1"></i>Accept
+                            </button>
+                            <button type="button" class="btn btn-sm btn-danger" onclick="rejectSuggestion()">
+                                <i class="fas fa-times me-1"></i>Reject & Propose New
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <?php endif; ?>
+                
+                <!-- Send Inspection Request Form (only when not inspection completed and not pending/accepted) -->
+                <?php if (!$is_inspection_completed && (!$inspection_date || $inspection_status == 'rejected') && $inspection_status != 'pending' && $inspection_status != 'accepted' && $inspection_status != 'client_suggested'): ?>
+                    <div class="mt-3">
+                        <div class="card border-info">
+                            <div class="card-header bg-light">
+                                <h6 class="mb-0">
+                                    <i class="fas fa-calendar-plus me-2 text-info"></i>
+                                    <?php echo ($inspection_status == 'rejected') ? 'Reschedule Inspection' : 'Request Inspection'; ?>
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <form method="post" class="row g-3 align-items-end">
+                                    <div class="col-md-5">
+                                        <label class="form-label fw-bold">
+                                            <i class="fas fa-calendar-alt me-1 text-info"></i>Date
+                                        </label>
+                                        <input type="date" name="inspection_date" class="form-control" 
+                                               min="<?php echo date('Y-m-d', strtotime('+1 day')); ?>"
+                                               value="<?php echo ($inspection_date && $inspection_status == 'rejected') ? date('Y-m-d', strtotime($inspection_date)) : ''; ?>"
+                                               required>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label fw-bold">
+                                            <i class="fas fa-clock me-1 text-info"></i>Time
+                                        </label>
+                                        <select name="inspection_time" class="form-select" required>
+                                            <option value="">-- Select Time --</option>
+                                            <option value="09:00">09:00 AM</option>
+                                            <option value="10:00">10:00 AM</option>
+                                            <option value="11:00">11:00 AM</option>
+                                            <option value="12:00">12:00 PM</option>
+                                            <option value="13:00">01:00 PM</option>
+                                            <option value="14:00">02:00 PM</option>
+                                            <option value="15:00">03:00 PM</option>
+                                            <option value="16:00">04:00 PM</option>
+                                            <option value="17:00">05:00 PM</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <button type="submit" name="send_inspection_request" class="btn btn-primary w-100">
+                                            <i class="fas fa-paper-plane me-2"></i>Send Request
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                <?php elseif ($inspection_status == 'pending' && $inspection_date && !$is_inspection_completed): ?>
+                    <div class="text-center mt-3 p-4 bg-light rounded border">
+                        <i class="fas fa-clock fa-3x text-warning mb-3"></i>
+                        <h5 class="text-warning mb-2">Waiting for Client Response</h5>
+                        <p class="mb-1">Inspection request has been sent to the client.</p>
+                        <p class="mb-0 text-muted small">Proposed date: <?php echo date('F d, Y h:i A', strtotime($inspection_date)); ?></p>
+                    </div>
+                <?php elseif ($inspection_status == 'rejected' && !$inspection_date && !$is_inspection_completed): ?>
+                    <div class="text-center mt-3 p-4 bg-light rounded border border-danger">
+                        <i class="fas fa-times-circle fa-3x text-danger mb-3"></i>
+                        <h5 class="text-danger mb-2">Inspection Request Rejected</h5>
+                        <p class="mb-0">Please propose a new inspection date using the form above.</p>
+                    </div>
+                <?php endif; ?>
+                
+                <!-- Step 1: Pass Inspection Button (only when inspection is accepted and not yet marked completed) -->
+                <?php if ($inspection_status == 'accepted' && !$is_inspection_completed && !$has_report_submitted): ?>
+                    <div class="mt-4 pt-3 border-top">
+                        <div class="row">
+                            <div class="col-md-12">
+                                <div class="card border-success">
+                                    <div class="card-header bg-success text-white">
+                                        <h6 class="mb-0">
+                                            <i class="fas fa-clipboard-check me-2"></i>Step 1: Complete Inspection
+                                        </h6>
+                                    </div>
+                                    <div class="card-body text-center">
+                                        <p class="mb-3">Click the button below to mark the inspection as completed. 
+                                        After this, you will be able to upload the inspection report.</p>
+                                        <form method="post" onsubmit="return confirm('Mark inspection as completed? This will change the order status to inspection_completed.');">
+                                            <input type="hidden" name="mark_inspection_completed" value="1">
+                                            <button type="submit" class="btn btn-success btn-lg">
+                                                <i class="fas fa-check-circle me-2"></i>Pass Inspection
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                <?php endif; ?>
+                
+                <!-- Step 2: Submit Report (only when inspection is completed and report not yet submitted) -->
+                <?php if ($is_inspection_completed && !$has_report_submitted): ?>
+                    <div class="mt-4 pt-3 border-top">
+                        <div class="card border-primary">
+                            <div class="card-header bg-primary text-white">
+                                <h6 class="mb-0">
+                                    <i class="fas fa-file-upload me-2"></i>Step 2: Submit Inspection Report
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <form method="POST" enctype="multipart/form-data">
+                                    <div class="mb-3">
+                                        <label class="form-label fw-bold">Inspection Report <span class="text-danger">*</span></label>
+                                        <textarea name="report_content" class="form-control" rows="5" 
+                                                  placeholder="Enter inspection findings, notes, and conclusions..." required></textarea>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label fw-bold">Attach Files (Images, PDFs, etc.)</label>
+                                        <input type="file" name="report_files[]" class="form-control" multiple 
+                                               accept="image/*,.pdf,.doc,.docx" id="reportFiles">
+                                        <small class="text-muted">You can upload multiple files (images, PDFs, documents)</small>
+                                    </div>
+                                    <div id="filePreview" class="mt-2"></div>
+                                    <div class="alert alert-info mt-3">
+                                        <i class="fas fa-info-circle me-2"></i>
+                                        This report will be sent to the client. The order status will remain as inspection_completed.
+                                    </div>
+                                    <button type="submit" name="submit_inspection_report" class="btn btn-primary btn-lg w-100" 
+                                            onclick="return confirm('Submit inspection report to client? The client will need to confirm completion.');">
+                                        <i class="fas fa-paper-plane me-2"></i>Submit Report to Client
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                <?php endif; ?>
+                
+                <?php endif; /* end of !has_report_submitted */ ?>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- File Preview Script for Inspection -->
+<script>
+function acceptSuggestion() {
+    var suggestedDate = '<?php echo $client_suggested_date; ?>';
+    if (confirm('Accept the suggested inspection time?\n\nSuggested Time: ' + new Date(suggestedDate).toLocaleString())) {
+        var form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '';
+        var input1 = document.createElement('input');
+        input1.type = 'hidden';
+        input1.name = 'accept_client_suggestion';
+        input1.value = '1';
+        var input2 = document.createElement('input');
+        input2.type = 'hidden';
+        input2.name = 'client_suggested_date';
+        input2.value = suggestedDate;
+        form.appendChild(input1);
+        form.appendChild(input2);
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
+
+function rejectSuggestion() {
+    var newDateTime = prompt('Propose a new inspection date and time (YYYY-MM-DD HH:MM):\n\nExample: 2026-05-01 14:30', '<?php echo date('Y-m-d H:i', strtotime('+2 days')); ?>');
+    if (newDateTime && newDateTime.trim() !== '') {
+        var datetimeRegex = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/;
+        if (!datetimeRegex.test(newDateTime.trim())) {
+            alert('Please use format: YYYY-MM-DD HH:MM (e.g., 2026-05-01 14:30)');
+            return;
+        }
+        var form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '';
+        var input1 = document.createElement('input');
+        input1.type = 'hidden';
+        input1.name = 'reject_client_suggestion';
+        input1.value = '1';
+        var input2 = document.createElement('input');
+        input2.type = 'hidden';
+        input2.name = 'new_inspection_datetime';
+        input2.value = newDateTime.trim();
+        form.appendChild(input1);
+        form.appendChild(input2);
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
+
+// File preview for report files
+var reportFileInput = document.getElementById('reportFiles');
+if (reportFileInput) {
+    reportFileInput.addEventListener('change', function(e) {
+        var preview = document.getElementById('filePreview');
+        if (preview) {
+            preview.innerHTML = '';
+            var files = e.target.files;
+            for (var i = 0; i < files.length; i++) {
+                var file = files[i];
+                var fileDiv = document.createElement('div');
+                fileDiv.className = 'd-inline-block me-2 mb-2 p-2 border rounded';
+                fileDiv.innerHTML = '<i class="fas fa-file me-1"></i> ' + file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
+                preview.appendChild(fileDiv);
+            }
+        }
+    });
+}
+</script>
+<?php endif; /* End of inspection section */ ?>
+
                     <?php if ($status === 'preparing'): ?>
                          <!-- Assign Constructor for Worker Allocation -->
                         <div class="col-lg-6 mb-4">
@@ -1965,6 +2507,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                 </div>
                             </div>
                         </div>
+
                         <!-- Worker Allocation Status Card -->
                         <div class="col-lg-6 mb-4">
                             <div class="card h-100">

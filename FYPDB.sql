@@ -881,6 +881,86 @@ ADD COLUMN `designer_feedback_at` TIMESTAMP NULL DEFAULT NULL,
 ADD COLUMN `supplier_response` TEXT DEFAULT NULL,
 ADD COLUMN `supplier_response_at` TIMESTAMP NULL DEFAULT NULL;
 
+-- Add payment_plan column to Order table
+ALTER TABLE `Order` ADD COLUMN `payment_plan` ENUM('full', 'installment_25', 'installment_50') DEFAULT 'full' AFTER `ostatus`;
+
+-- Update existing orders with their payment plans (example for order 4)
+UPDATE `Order` SET `payment_plan` = 'installment_25' WHERE `orderid` = 4;
+
+-- Add status column to ConstructionPaymentRecord table
+ALTER TABLE `ConstructionPaymentRecord` 
+ADD COLUMN `status` ENUM('pending', 'paid') DEFAULT 'pending' AFTER `paid_at`;
+
+-- Update existing records
+UPDATE `ConstructionPaymentRecord` SET `status` = 'paid' WHERE `paid_at` IS NOT NULL;
+UPDATE `ConstructionPaymentRecord` SET `status` = 'pending' WHERE `paid_at` IS NULL;
+
+-- Modify the ConstructionPaymentRecord table to allow NULL paid_at
+ALTER TABLE `ConstructionPaymentRecord` 
+MODIFY COLUMN `paid_at` DATETIME NULL DEFAULT NULL;
+
+-- Add inspection columns to Order table
+ALTER TABLE `Order` 
+ADD COLUMN `inspection_date` DATETIME NULL DEFAULT NULL,
+ADD COLUMN `inspection_status` ENUM('pending', 'accepted', 'rejected', 'client_suggested') DEFAULT NULL,
+ADD COLUMN `client_suggested_date` DATETIME NULL DEFAULT NULL;
+
+-- Create inspection reports table
+CREATE TABLE IF NOT EXISTS `InspectionReport` (
+    `report_id` INT NOT NULL AUTO_INCREMENT,
+    `orderid` INT NOT NULL,
+    `inspection_date` DATETIME NOT NULL,
+    `report_content` TEXT,
+    `file_paths` TEXT,
+    `submitted_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `submitted_by` INT NOT NULL,
+    `submitted_by_type` VARCHAR(50) NOT NULL,
+    `status` ENUM('draft', 'submitted') DEFAULT 'submitted',
+    PRIMARY KEY (`report_id`),
+    KEY `orderid_idx` (`orderid`),
+    FOREIGN KEY (`orderid`) REFERENCES `Order` (`orderid`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+ALTER TABLE `InspectionReport` 
+ADD COLUMN `result` ENUM('pass', 'fail') DEFAULT NULL AFTER `status`;
+
+
+ALTER TABLE `Order` 
+MODIFY COLUMN `ostatus` ENUM(
+    'waiting confirm', 
+    'designing', 
+    'reviewing design proposal', 
+    'waiting for review design', 
+    'drafting 2nd proposal', 
+    'waiting client review', 
+    'waiting 2nd design phase payment', 
+    'waiting final design phase payment', 
+    'waiting 1st construction phase payment', 
+    'complete', 
+    'rejected',
+    'Coordinating Contractors',
+    'preparing', 
+    'waiting client reassignment', 
+    'waiting client confirm construction date', 
+    'In construction', 
+    'waiting start construction Pay',
+    'Construction begins',
+    'Waiting for inspection',
+    'inspection_completed'         
+) DEFAULT 'waiting confirm';
+
+-- Create table to track client inspection confirmation
+CREATE TABLE IF NOT EXISTS `InspectionConfirmation` (
+    `confirmation_id` INT NOT NULL AUTO_INCREMENT,
+    `orderid` INT NOT NULL,
+    `clientid` INT NOT NULL,
+    `confirmed_at` DATETIME NOT NULL,
+    PRIMARY KEY (`confirmation_id`),
+    UNIQUE KEY `unique_order_client` (`orderid`, `clientid`),
+    FOREIGN KEY (`orderid`) REFERENCES `Order` (`orderid`) ON DELETE CASCADE,
+    FOREIGN KEY (`clientid`) REFERENCES `Client` (`clientid`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
 /*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;

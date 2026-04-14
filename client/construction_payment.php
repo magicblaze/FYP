@@ -51,6 +51,13 @@ $error = '';
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $payment_plan = $_POST['payment_plan'] ?? '';
     $total_cost = floatval($order['total_cost']);
+
+     // Save payment plan to database
+      $update_plan_sql = "UPDATE `Order` SET payment_plan = ? WHERE orderid = ?";
+      $update_plan_stmt = mysqli_prepare($mysqli, $update_plan_sql);
+      mysqli_stmt_bind_param($update_plan_stmt, "si", $payment_plan, $order_id);
+      mysqli_stmt_execute($update_plan_stmt);
+      mysqli_stmt_close($update_plan_stmt);
     
     if ($payment_plan === 'full') {
         $_SESSION['construction_payment'] = [

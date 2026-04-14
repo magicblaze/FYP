@@ -624,7 +624,7 @@ if (!empty($_GET['msg'])) {
                             <?php endif; ?>
 
 <?php 
-$view_report_statuses = ['construction begins', 'waiting for inspection', 'complete'];
+$view_report_statuses = ['construction begins', 'waiting for inspection','inspection_completed', 'complete'];
 if (in_array($statusLower, $view_report_statuses)):
     // Check if any submitted reports exist for this order
     $report_check_sql = "SELECT COUNT(*) as report_count FROM WeeklyConstructionReport WHERE orderid = ? AND status = 'submitted'";
@@ -642,31 +642,29 @@ if (in_array($statusLower, $view_report_statuses)):
     </a>
 <?php 
     endif;
-endif; 
-?>
-                            
-                          <!-- Inspection buttons for Waiting for inspection status -->
-<?php if ($statusLower === 'waiting for inspection'): ?>
-    <div class="inspection-buttons" onclick="event.stopPropagation();">
-        <!-- Pass Inspection - Redirect to payment_construction2.php -->
-        <form method="POST" style="display: inline;">
-            <input type="hidden" name="order_id" value="<?= (int) $order['orderid'] ?>">
-            <input type="hidden" name="inspection_action" value="pass">
-            <button type="submit" class="view-details-btn btn-inspection-pass">
-                <i class="fas fa-check-circle me-1"></i>Inspection Completed
-            </button>
-        </form>
-        
-        <!-- Fail Inspection - Change status back to Construction begins -->
-        <form method="POST" style="display: inline;" 
-              onsubmit="return confirm('Are you sure you want to mark this inspection as FAILED? The project status will change back to \"Construction begins\" and the supplier will need to continue work.');">
-            <input type="hidden" name="order_id" value="<?= (int) $order['orderid'] ?>">
-            <input type="hidden" name="inspection_action" value="fail">
-            <button type="submit" class="view-details-btn btn-inspection-fail">
-                <i class="fas fa-times-circle me-1"></i>Failed Inspection
-            </button>
-        </form>
-    </div>
+endif;
+    
+    // Handle Waiting for construction payment status - Show payment button
+    if ($statusLower === 'waiting for construction payment'): ?>
+        <?php
+        // Get pending payment amount from ConstructionPaymentRecord
+        $pending_payment_sql = "SELECT amount, milestone FROM ConstructionPaymentRecord 
+                                WHERE orderid = ? AND status = 'pending' 
+                                ORDER BY record_id ASC LIMIT 1";
+        $pending_payment_stmt = $mysqli->prepare($pending_payment_sql);
+        $pending_payment_stmt->bind_param("i", $orderId);
+        $pending_payment_stmt->execute();
+        $pending_payment_result = $pending_payment_stmt->get_result();
+        $pending_payment = $pending_payment_result->fetch_assoc();
+        $pending_payment_stmt->close();
+        ?>
+        <a href="construction_payment_installment.php?orderid=<?= (int) $order['orderid'] ?>&amount=<?= $pending_payment['amount'] ?>&milestone=<?= urlencode($pending_payment['milestone']) ?>" 
+           class="view-details-btn" style="background-color: #e67e22;" onclick="event.stopPropagation();">
+            <i class="fas fa-credit-card me-1"></i>Pay Construction Installment
+        </a>
+</div>
+</div> 
+
 <?php endif; ?>
                         </div>
                     </div>

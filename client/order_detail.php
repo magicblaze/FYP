@@ -7,7 +7,7 @@ session_start();
 
 // Redirect to login if not authenticated
 if (empty($_SESSION['user'])) {
-    header('Location: ../login.php?redirect=' . urlencode($current_page));
+    header('Location: ../login.php?redirect=' . urlencode($_SERVER['REQUEST_URI']));
     exit;
 }
 
@@ -20,14 +20,116 @@ if ($clientId <= 0) {
 // Get order ID from URL
 $orderId = (int) ($_GET['orderid'] ?? 0);
 if ($orderId <= 0) {
-    // Gracefully handle requests without a valid order id (for example URLs like ?designerid=null)
-    // Redirect users to the order history page instead of returning a 400 error.
     error_log('[order_detail] missing or invalid orderid. Request URI: ' . ($_SERVER['REQUEST_URI'] ?? ''));
     exit;
 }
 
+// ========== Handle Inspection Actions ==========
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Accept inspection
+    if (isset($_POST['accept_inspection'])) {
+        $update_sql = "UPDATE `Order` SET inspection_status = 'accepted', client_suggested_date = NULL WHERE orderid = ? AND clientid = ?";
+        $update_stmt = mysqli_prepare($mysqli, $update_sql);
+        mysqli_stmt_bind_param($update_stmt, "ii", $orderId, $clientId);
+        mysqli_stmt_execute($update_stmt);
+        mysqli_stmt_close($update_stmt);
+        
+        // Notify manager
+        $notify_sql = "INSERT INTO Notification (user_type, user_id, orderid, message, type, created_at) 
+                       VALUES ('manager', (SELECT managerid FROM Schedule WHERE orderid = ? LIMIT 1), ?, 'Client has accepted the inspection for Order #$orderId.', 'inspection_accepted', NOW())";
+        $notify_stmt = mysqli_prepare($mysqli, $notify_sql);
+        mysqli_stmt_bind_param($notify_stmt, "ii", $orderId, $orderId);
+        mysqli_stmt_execute($notify_stmt);
+        mysqli_stmt_close($notify_stmt);
+        
+        header("Location: order_detail.php?orderid=" . $orderId . "&msg=inspection_accepted");
+        exit;
+    }
+    
+    // Reject inspection with suggested time
+    if (isset($_POST['reject_inspection'])) {
+        $suggested_date = $_POST['suggested_date'] ?? '';
+        $suggested_time = $_POST['suggested_time'] ?? '';
+        
+        if (!empty($suggested_date) && !empty($suggested_time)) {
+            $suggested_datetime = $suggested_date . ' ' . $suggested_time . ':00';
+            $update_sql = "UPDATE `Order` SET 
+                           inspection_status = 'client_suggested',
+                           client_suggested_date = ?
+                           WHERE orderid = ? AND clientid = ?";
+            $update_stmt = mysqli_prepare($mysqli, $update_sql);
+            mysqli_stmt_bind_param($update_stmt, "sii", $suggested_datetime, $orderId, $clientId);
+            mysqli_stmt_execute($update_stmt);
+            mysqli_stmt_close($update_stmt);
+            
+            // Notify manager
+            $notify_sql = "INSERT INTO Notification (user_type, user_id, orderid, message, type, created_at) 
+                           VALUES ('manager', (SELECT managerid FROM Schedule WHERE orderid = ? LIMIT 1), ?, 'Client has suggested a new inspection time for Order #$orderId: " . date('Y-m-d H:i', strtotime($suggested_datetime)) . "', 'inspection_suggested', NOW())";
+            $notify_stmt = mysqli_prepare($mysqli, $notify_sql);
+            mysqli_stmt_bind_param($notify_stmt, "ii", $orderId, $orderId);
+            mysqli_stmt_execute($notify_stmt);
+            mysqli_stmt_close($notify_stmt);
+            
+            header("Location: order_detail.php?orderid=" . $orderId . "&msg=inspection_suggested");
+            exit;
+        }
+    }
+    
+    // Confirm inspection report and proceed to payment
+    if (isset($_POST['confirm_inspection_report'])) {
+        // Check if already confirmed
+        $check_sql = "SELECT COUNT(*) as cnt FROM InspectionConfirmation WHERE orderid = ? AND clientid = ?";
+        $check_stmt = mysqli_prepare($mysqli, $check_sql);
+        mysqli_stmt_bind_param($check_stmt, "ii", $orderId, $clientId);
+        mysqli_stmt_execute($check_stmt);
+        $check_result = mysqli_stmt_get_result($check_stmt);
+        $check_row = mysqli_fetch_assoc($check_result);
+        $already_confirmed = ($check_row['cnt'] > 0);
+        mysqli_stmt_close($check_stmt);
+        
+        if (!$already_confirmed) {
+            // Insert confirmation record
+            $insert_confirm_sql = "INSERT INTO InspectionConfirmation (orderid, clientid, confirmed_at) VALUES (?, ?, NOW())";
+            $insert_confirm_stmt = mysqli_prepare($mysqli, $insert_confirm_sql);
+            mysqli_stmt_bind_param($insert_confirm_stmt, "ii", $orderId, $clientId);
+            mysqli_stmt_execute($insert_confirm_stmt);
+            mysqli_stmt_close($insert_confirm_stmt);
+        }
+        
+        // Update order status to waiting for final construction payment
+        $update_sql = "UPDATE `Order` SET ostatus = 'waiting 1st construction phase payment' WHERE orderid = ? AND clientid = ?";
+        $update_stmt = mysqli_prepare($mysqli, $update_sql);
+        mysqli_stmt_bind_param($update_stmt, "ii", $orderId, $clientId);
+        mysqli_stmt_execute($update_stmt);
+        mysqli_stmt_close($update_stmt);
+        
+        // Notify manager
+        $notify_sql = "INSERT INTO Notification (user_type, user_id, orderid, message, type, created_at) 
+                       VALUES ('manager', (SELECT managerid FROM Schedule WHERE orderid = ? LIMIT 1), ?, 'Client has confirmed the inspection report for Order #$orderId and is ready for final payment.', 'inspection_confirmed', NOW())";
+        $notify_stmt = mysqli_prepare($mysqli, $notify_sql);
+        mysqli_stmt_bind_param($notify_stmt, "ii", $orderId, $orderId);
+        mysqli_stmt_execute($notify_stmt);
+        mysqli_stmt_close($notify_stmt);
+        
+        header("Location: order_detail.php?orderid=" . $orderId . "&msg=inspection_confirmed");
+        exit;
+    }
+    
+    // Confirm project completion after inspection (legacy)
+    if (isset($_POST['confirm_project_completion'])) {
+        $update_sql = "UPDATE `Order` SET ostatus = 'complete' WHERE orderid = ? AND clientid = ?";
+        $update_stmt = mysqli_prepare($mysqli, $update_sql);
+        mysqli_stmt_bind_param($update_stmt, "ii", $orderId, $clientId);
+        mysqli_stmt_execute($update_stmt);
+        mysqli_stmt_close($update_stmt);
+        
+        header("Location: payment_construction3.php?orderid=" . $orderId);
+        exit;
+    }
+}
+// ========== End Inspection Handling ==========
+
 // Fetch order details with verification that it belongs to the client
-// --- MODIFIED: Added o.final_payment to the query ---
 $orderSql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.gross_floor_area, o.deposit,
               o.supplierid, o.supplier_status,
               d.designid, d.expect_price, d.tag, dz.dname, dz.designerid,
@@ -82,8 +184,6 @@ $payment = [
 ];
 
 $commissionTotal = $payment['commission_1st'] + $payment['commission_final'];
-
-// expose gross floor area
 $gfaDisplay = isset($order['gross_floor_area']) ? (float) $order['gross_floor_area'] : 0.0;
 
 // Fetch client details
@@ -92,7 +192,6 @@ $clientStmt->bind_param("i", $clientId);
 $clientStmt->execute();
 $clientData = $clientStmt->get_result()->fetch_assoc();
 
-// Expose designer id for this order (used when opening chat by designer)
 $designerIdForOrder = isset($order['designerid']) ? (int) $order['designerid'] : 0;
 
 // Fetch products/materials for this order
@@ -165,7 +264,6 @@ $referencesSql = "SELECT r.id AS orderreferenceid, r.productid, r.designid, r.ad
 $referencesStmt = $mysqli->prepare($referencesSql);
 if (!$referencesStmt) {
     error_log('[order_detail] failed to prepare references SQL: ' . $mysqli->error);
-    // Fall back to an empty result set so the page can render without fatal error
     $references = $mysqli->query("SELECT NULL WHERE 0");
 } else {
     $referencesStmt->bind_param("i", $orderId);
@@ -222,6 +320,38 @@ $design_total = $payment['total_design_payment'];
 // Format display variables
 $budgetDisplay = $order['budget'] ?? 0;
 $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€”';
+
+// Get inspection data for display
+$inspection_sql = "SELECT inspection_date, inspection_status, client_suggested_date, ostatus 
+                   FROM `Order` WHERE orderid = ? AND clientid = ?";
+$inspection_stmt = $mysqli->prepare($inspection_sql);
+$inspection_stmt->bind_param("ii", $orderId, $clientId);
+$inspection_stmt->execute();
+$inspection_result = $inspection_stmt->get_result();
+$inspection_data = $inspection_result->fetch_assoc();
+$inspection_stmt->close();
+
+$inspection_date = $inspection_data['inspection_date'] ?? null;
+$inspection_status = $inspection_data['inspection_status'] ?? null;
+$client_suggested_date = $inspection_data['client_suggested_date'] ?? null;
+$current_ostatus = $inspection_data['ostatus'] ?? '';
+
+// Check if report exists
+$has_report_sql = "SELECT COUNT(*) as cnt FROM InspectionReport WHERE orderid = ? AND result = 'pass'";
+$has_report_stmt = $mysqli->prepare($has_report_sql);
+$has_report_stmt->bind_param("i", $orderId);
+$has_report_stmt->execute();
+$has_report_result = $has_report_stmt->get_result();
+$has_report_row = $has_report_result->fetch_assoc();
+$has_inspection_report = ($has_report_row['cnt'] > 0);
+$has_report_stmt->close();
+
+// Show inspection report if conditions met
+$show_inspection_report = ($inspection_status == 'completed' || $current_ostatus == 'inspection_completed' || $has_inspection_report);
+
+
+
+$msg = isset($_GET['msg']) ? $_GET['msg'] : '';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -654,6 +784,7 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€
                         your payment method in your profile, then proceed.</div>
                 </div>
             <?php endif; ?>
+            
             <!-- Requirements Section -->
             <?php if (!empty($order['Requirements'])): ?>
                 <div class="section-title">
@@ -662,6 +793,259 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€
                 <div class="info-card">
                     <p class="mb-0"><?= htmlspecialchars($order['Requirements']) ?></p>
                 </div>
+            <?php endif; ?>
+            
+            <!-- Inspection Confirmation Section for Client -->
+            <?php if ($msg == 'inspection_accepted'): ?>
+                <div class="alert alert-success mb-3"><i class="fas fa-check-circle me-2"></i>Inspection accepted successfully!</div>
+            <?php elseif ($msg == 'inspection_suggested'): ?>
+                <div class="alert alert-info mb-3"><i class="fas fa-calendar-alt me-2"></i>Your suggested time has been sent to the manager.</div>
+            <?php elseif ($msg == 'inspection_confirmed'): ?>
+                <div class="alert alert-success mb-3"><i class="fas fa-check-circle me-2"></i>Inspection report confirmed! You can now proceed to final payment.</div>
+            <?php endif; ?>
+
+            <!-- Inspection Status Display -->
+            <?php if ($inspection_status == 'pending' && $inspection_date): ?>
+            <div class="section-title">
+                <i class="fas fa-calendar-check me-2"></i>Inspection Appointment
+            </div>
+            <div class="info-card">
+                <div class="text-center mb-4">
+                    <h5>Proposed Inspection Date & Time:</h5>
+                    <h3 class="text-primary">
+                        <?php echo date('F d, Y h:i A', strtotime($inspection_date)); ?>
+                    </h3>
+                </div>
+                
+                <div class="d-flex gap-3">
+                    <form method="POST" style="flex:1">
+                        <button type="submit" name="accept_inspection" class="btn btn-success w-100" 
+                                onclick="return confirm('Accept this inspection date and time?');">
+                            <i class="fas fa-check-circle me-2"></i>Accept
+                        </button>
+                    </form>
+                    <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#suggestTimeModal">
+                        <i class="fas fa-calendar-alt me-2"></i>Suggest New Time
+                    </button>
+                </div>
+            </div>
+
+            <!-- Suggest Time Modal -->
+            <div class="modal fade" id="suggestTimeModal" tabindex="-1">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <form method="POST">
+                            <div class="modal-header bg-warning">
+                                <h5 class="modal-title"><i class="fas fa-calendar-alt me-2"></i>Suggest New Inspection Time</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <input type="hidden" name="reject_inspection" value="1">
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Proposed Date</label>
+                                    <input type="date" name="suggested_date" class="form-control" 
+                                           min="<?php echo date('Y-m-d', strtotime('+1 day')); ?>" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Proposed Time</label>
+                                    <select name="suggested_time" class="form-select" required>
+                                        <option value="">-- Select Time --</option>
+                                        <option value="09:00:00">09:00 AM</option>
+                                        <option value="10:00:00">10:00 AM</option>
+                                        <option value="11:00:00">11:00 AM</option>
+                                        <option value="12:00:00">12:00 PM</option>
+                                        <option value="13:00:00">01:00 PM</option>
+                                        <option value="14:00:00">02:00 PM</option>
+                                        <option value="15:00:00">03:00 PM</option>
+                                        <option value="16:00:00">04:00 PM</option>
+                                        <option value="17:00:00">05:00 PM</option>
+                                    </select>
+                                </div>
+                                <p class="text-muted small">The manager will review your suggestion and confirm.</p>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                <button type="submit" class="btn btn-warning">Send Suggestion</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            
+            <?php elseif ($inspection_status == 'client_suggested'): ?>
+            <div class="section-title">
+                <i class="fas fa-clock me-2"></i>Inspection Status
+            </div>
+            <div class="info-card">
+                <div class="alert alert-info mb-0">
+                    <i class="fas fa-info-circle me-2"></i>
+                    Your suggested time has been sent to the manager. Waiting for confirmation.
+                    <?php if ($client_suggested_date): ?>
+                        <br><small>Suggested: <?php echo date('F d, Y h:i A', strtotime($client_suggested_date)); ?></small>
+                    <?php endif; ?>
+                </div>
+            </div>
+            
+            <?php elseif ($inspection_status == 'accepted' && $inspection_date): ?>
+            <div class="section-title">
+                <i class="fas fa-check-circle me-2"></i>Inspection Confirmed
+            </div>
+            <div class="info-card">
+                <div class="alert alert-success mb-0">
+                    <i class="fas fa-check-circle me-2"></i>
+                    Inspection scheduled for: <strong><?php echo date('F d, Y h:i A', strtotime($inspection_date)); ?></strong>
+                </div>
+            </div>
+            
+            <?php elseif ($inspection_status == 'rejected' && $inspection_date): ?>
+            <div class="section-title">
+                <i class="fas fa-calendar-alt me-2"></i>Inspection Rescheduled
+            </div>
+            <div class="info-card">
+                <div class="text-center mb-4">
+                    <h5>Manager Proposed New Inspection Date & Time:</h5>
+                    <h3 class="text-warning">
+                        <?php echo date('F d, Y h:i A', strtotime($inspection_date)); ?>
+                    </h3>
+                </div>
+                
+                <div class="d-flex gap-3">
+                    <form method="POST" style="flex:1">
+                        <button type="submit" name="accept_inspection" class="btn btn-success w-100" 
+                                onclick="return confirm('Accept this inspection date and time?');">
+                            <i class="fas fa-check-circle me-2"></i>Accept
+                        </button>
+                    </form>
+                    <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#suggestTimeModal">
+                        <i class="fas fa-calendar-alt me-2"></i>Suggest New Time
+                    </button>
+                </div>
+            </div>
+                        <?php endif; ?>
+            
+            <?php if ($show_inspection_report): ?>
+<div class="section-title">
+    <i class="fas fa-file-alt me-2"></i>Inspection Report
+</div>
+<div class="info-card">
+    <?php
+    // Fetch inspection report
+    $report_sql = "SELECT * FROM InspectionReport WHERE orderid = ? AND result = 'pass' ORDER BY submitted_at DESC LIMIT 1";
+    $report_stmt = $mysqli->prepare($report_sql);
+    $report_stmt->bind_param("i", $orderId);
+    $report_stmt->execute();
+    $report_result = $report_stmt->get_result();
+    $inspection_report = $report_result->fetch_assoc();
+    $report_stmt->close();
+    
+    if ($inspection_report):
+                    
+                    // Decode file paths
+                    $attached_files = [];
+                    if (!empty($inspection_report['file_paths'])) {
+                        $attached_files = json_decode($inspection_report['file_paths'], true);
+                        if (!is_array($attached_files)) {
+                            $attached_files = [];
+                        }
+                    }
+                    
+                    // Check if client has already confirmed
+                    $confirm_check_sql = "SELECT COUNT(*) as cnt FROM InspectionConfirmation WHERE orderid = ? AND clientid = ?";
+                    $confirm_check_stmt = $mysqli->prepare($confirm_check_sql);
+                    $confirm_check_stmt->bind_param("ii", $orderId, $clientId);
+                    $confirm_check_stmt->execute();
+                    $confirm_check_result = $confirm_check_stmt->get_result();
+                    $confirm_check_row = mysqli_fetch_assoc($confirm_check_result);
+                    $has_confirmed = ($confirm_check_row['cnt'] > 0);
+                    $confirm_check_stmt->close();
+                ?>
+                    <div class="alert alert-success mb-3">
+                        <i class="fas fa-check-circle me-2"></i>
+                        <strong>Inspection Completed</strong><br>
+                        Inspection was completed on <?php echo date('F d, Y h:i A', strtotime($inspection_report['submitted_at'])); ?>
+                    </div>
+                    
+                    <!-- Inspection Report Content -->
+                    <div class="mb-4">
+                        <div class="card border-primary">
+                            <div class="card-header bg-primary text-white">
+                                <h5 class="mb-0"><i class="fas fa-file-alt me-2"></i>Inspection Report Details</h5>
+                            </div>
+                            <div class="card-body">
+                                <?php if (!empty($inspection_report['report_content'])): ?>
+                                    <div class="mb-3">
+                                        <strong><i class="fas fa-pen me-2"></i>Report Content:</strong>
+                                        <div class="border rounded p-3 bg-light mt-2" style="white-space: pre-wrap;">
+                                            <?php echo nl2br(htmlspecialchars($inspection_report['report_content'])); ?>
+                                        </div>
+                                    </div>
+                                <?php endif; ?>
+                                
+                                <?php if (!empty($attached_files)): ?>
+                                    <div class="mb-3">
+                                        <strong><i class="fas fa-paperclip me-2"></i>Attached Files:</strong>
+                                        <div class="row mt-2">
+                                            <?php foreach ($attached_files as $file): 
+                                                $file_url = "../" . $file;
+                                                $file_ext = strtolower(pathinfo($file, PATHINFO_EXTENSION));
+                                                $image_extensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'];
+                                            ?>
+                                                <div class="col-md-4 col-sm-6 mb-3">
+                                                    <div class="card h-100">
+                                                        <?php if (in_array($file_ext, $image_extensions)): ?>
+                                                            <img src="<?php echo $file_url; ?>" class="card-img-top" alt="Inspection Image" style="height: 150px; object-fit: cover; cursor: pointer;" onclick="viewImage('<?php echo $file_url; ?>')">
+                                                        <?php else: ?>
+                                                            <div class="card-body text-center">
+                                                                <i class="fas fa-file-alt fa-3x text-secondary mb-2"></i>
+                                                            </div>
+                                                        <?php endif; ?>
+                                                        <div class="card-body p-2 text-center">
+                                                            <a href="<?php echo $file_url; ?>" target="_blank" class="btn btn-sm btn-outline-primary w-100">
+                                                                <i class="fas fa-download me-1"></i> <?php echo basename($file); ?>
+                                                            </a>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <?php if (!$has_confirmed): ?>
+                        <div class="alert alert-info mt-3">
+                            <i class="fas fa-info-circle me-2"></i>
+                            <strong>Please Review the Inspection Report</strong><br>
+                            After reviewing the inspection report, click the confirm button below to complete the project and proceed to final payment.
+                        </div>
+                        
+                        <div class="text-center mt-4">
+                            <form method="POST" onsubmit="return confirm('Have you reviewed the inspection report? Confirm to proceed to final payment.');">
+                                <input type="hidden" name="confirm_inspection_report" value="1">
+                                <button type="submit" class="btn btn-success btn-lg">
+                                    <i class="fas fa-check-circle me-2"></i>Confirm & Proceed to Final Payment
+                                </button>
+                            </form>
+                        </div>
+                    <?php else: ?>
+                        <div class="alert alert-success text-center">
+                            <i class="fas fa-check-circle me-2 fa-lg"></i>
+                            <strong>You have confirmed the inspection report!</strong><br>
+                            <a href="payment_construction2.php?orderid=<?php echo $orderId; ?>" class="btn btn-primary mt-2">
+                                <i class="fas fa-credit-card me-2"></i>Go to Final Payment
+                            </a>
+                        </div>
+                    <?php endif; ?>
+                    
+                <?php else: ?>
+                    <div class="alert alert-info">
+                        <i class="fas fa-clock me-2"></i>
+                        Inspection report is being prepared. You will be notified when available.
+                    </div>
+                <?php endif; ?>
+            </div>
             <?php endif; ?>
 
             <!-- References Section -->
@@ -673,7 +1057,6 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€
                     <?php
                     $referencesTotal = 0;
                     while ($ref = $references->fetch_assoc()):
-                        // product reference
                         if (!empty($ref['productid']) && !empty($ref['pname'])):
                             $price = (float) ($ref['product_price'] ?? 0);
                             $referencesTotal += $price;
@@ -699,7 +1082,6 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€
                                 </div>
                             </div>
                             <?php
-                            // design reference
                         elseif (!empty($ref['designid']) && !empty($ref['design_name'])):
                             $dprice = (float) ($ref['design_price'] ?? 0);
                             $referencesTotal += $dprice;
@@ -718,8 +1100,7 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€
                                         echo '<div style="width:36px;height:36px;border-radius:6px;background:#f1f3f5;border:1px solid #ddd;display:flex;align-items:center;justify-content:center;font-size:0.7rem;color:#888;">IMG</div>';
                                     }
                                     ?>
-                                    <span><i class="fas fa-image me-2"></i><?= htmlspecialchars($ref['design_name']) ?> (Design
-                                        Reference)</span>
+                                    <span><i class="fas fa-image me-2"></i><?= htmlspecialchars($ref['design_name']) ?> (Design Reference)</span>
                                 </div>
                                 <div class="info-value">
                                     <span class="price-highlight">$<?= number_format($dprice, 2) ?></span>
@@ -732,8 +1113,7 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€
                     <?php if ($referencesTotal > 0): ?>
                         <div class="info-row" style="border-top: 2px solid #3498db; margin-top: 0.5rem; padding-top: 0.75rem;">
                             <span class="info-label"><strong>References Total:</strong></span>
-                            <span
-                                class="info-value price-highlight"><strong>$<?= number_format($referencesTotal, 2) ?></strong></span>
+                            <span class="info-value price-highlight"><strong>$<?= number_format($referencesTotal, 2) ?></strong></span>
                         </div>
                     <?php endif; ?>
                 </div>
@@ -763,8 +1143,7 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€
                                 <td>
                                     <strong><?= htmlspecialchars($product['pname']) ?></strong>
                                     <?php if (!empty($product['description'])): ?>
-                                        <br><small
-                                            class="text-muted"><?= htmlspecialchars(substr($product['description'], 0, 60)) ?></small>
+                                        <br><small class="text-muted"><?= htmlspecialchars(substr($product['description'], 0, 60)) ?></small>
                                     <?php endif; ?>
                                 </td>
                                 <td>
@@ -792,14 +1171,12 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€
                                         default => '#CCCCCC'
                                     };
                                     ?>
-                                    <div style="display: inline-block; width: 30px; height: 30px; background-color: <?= $colorHex ?>; border: 1px solid #999; border-radius: 4px; title='<?= htmlspecialchars($colorName) ?>'"
-                                        title="<?= htmlspecialchars($colorName) ?>"></div>
+                                    <div style="display: inline-block; width: 30px; height: 30px; background-color: <?= $colorHex ?>; border: 1px solid #999; border-radius: 4px;" title="<?= htmlspecialchars($colorName) ?>"></div>
                                 </td>
                                 <td><?= htmlspecialchars($product['category']) ?></td>
                                 <td class="price-highlight">$<?= number_format((float) $product['price'], 2) ?></td>
                                 <td><?= (int) $product['quantity'] ?></td>
-                                <td class="price-highlight">
-                                    $<?= number_format((float) $product['price'] * $product['quantity'], 2) ?></td>
+                                <td class="price-highlight">$<?= number_format((float) $product['price'] * $product['quantity'], 2) ?></td>
                                 <td>
                                     <?php
                                     $status = $product['status'] ?? 'Pending';
@@ -835,7 +1212,6 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€
                 </div>
             <?php endif; ?>
 
-
             <!-- Back Button -->
             <div class="d-flex justify-content-start mt-4">
                 <?php if ($statusLower === 'waiting for review design'): ?>
@@ -856,9 +1232,8 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€
                             if (rejectBtn && form && reasonInput) {
                                 rejectBtn.addEventListener('click', function(){
                                     const r = prompt('Please enter a reason for rejection (optional):');
-                                    if (r === null) return; // user cancelled
+                                    if (r === null) return;
                                     reasonInput.value = r || 'Client rejected the proposal';
-                                    // set a hidden input to indicate rejection and submit
                                     const hidden = document.createElement('input'); hidden.type='hidden'; hidden.name='reject_design'; hidden.value='1'; form.appendChild(hidden);
                                     form.submit();
                                 });
@@ -878,6 +1253,14 @@ $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : 'â€
             const modal = document.createElement('div');
             modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;z-index:2000;';
             modal.innerHTML = '<div style="max-width:90%;max-height:90%;"><img src="../uploads/designed_Picture/' + filename + '" style="max-width:100%;max-height:100%;border-radius:8px;" onclick="this.parentElement.parentElement.remove();"><p style="color:white;text-align:center;margin-top:1rem;cursor:pointer;" onclick="this.parentElement.parentElement.remove();">Click to close</p></div>';
+            document.body.appendChild(modal);
+        }
+        
+        function viewImage(imageUrl) {
+            const modal = document.createElement('div');
+            modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.9);display:flex;align-items:center;justify-content:center;z-index:9999;cursor:pointer;';
+            modal.innerHTML = '<div style="max-width:90%;max-height:90%;"><img src="' + imageUrl + '" style="max-width:100%;max-height:100%;border-radius:8px;"><p style="color:white;text-align:center;margin-top:1rem;">Click anywhere to close</p></div>';
+            modal.onclick = function() { this.remove(); };
             document.body.appendChild(modal);
         }
     </script>
