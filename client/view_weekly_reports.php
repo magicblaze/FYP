@@ -91,6 +91,7 @@ $total_cost = floatval($payment_plan_row['total_cost'] ?? 0);
 mysqli_stmt_close($payment_plan_stmt);
 
 // Get all paid milestones from ConstructionPaymentRecord
+// For 50% plan, we store percentage as 50 for first milestone and 100 for second milestone
 $paid_milestones = [];
 $paid_records_sql = "SELECT percentage, milestone, paid_at FROM ConstructionPaymentRecord 
                      WHERE orderid = ? AND status = 'paid'";
@@ -136,6 +137,8 @@ function createPendingPayment($order_id, $percentage, $amount, $milestone_name, 
     elseif ($percentage == 50) $installment_number = 2;
     elseif ($percentage == 75) $installment_number = 3;
     elseif ($percentage == 100) $installment_number = 4;
+    elseif ($percentage == 50 && $milestone_name == '0-50% Completion Payment') $installment_number = 1;
+    elseif ($percentage == 100 && $milestone_name == '50-100% Final Payment') $installment_number = 2;
     else $installment_number = 1;
     
     $insert_sql = "INSERT INTO ConstructionPaymentRecord 
@@ -167,6 +170,7 @@ function needsPayment($milestone_percentage, $paid_milestones, $current_week_pro
             return (!in_array(100, $paid_milestones) && $current_week_progress >= 75);
         }
     } elseif ($payment_plan == 'installment_50') {
+        // For 50% plan: milestone 50 = first payment (0-50%), milestone 100 = second payment (50-100%)
         if ($milestone_percentage == 50) {
             return (!in_array(50, $paid_milestones) && $current_week_progress >= 0);
         } elseif ($milestone_percentage == 100) {
@@ -177,25 +181,41 @@ function needsPayment($milestone_percentage, $paid_milestones, $current_week_pro
 }
 
 // Function to get milestone display name
-function getMilestoneName($milestone_percentage) {
-    switch($milestone_percentage) {
-        case 25: return 'Initial Payment (0-25%)';
-        case 50: return '25-50% Completion Payment';
-        case 75: return '50-75% Completion Payment';
-        case 100: return '75-100% Final Payment';
-        default: return $milestone_percentage . '% Payment';
+function getMilestoneName($milestone_percentage, $payment_plan = 'full') {
+    if ($payment_plan == 'installment_50') {
+        if ($milestone_percentage == 50) {
+            return '0-50% Completion Payment';
+        } elseif ($milestone_percentage == 100) {
+            return '50-100% Final Payment';
+        }
+    } elseif ($payment_plan == 'installment_25') {
+        switch($milestone_percentage) {
+            case 25: return '0-25% Initial Payment';
+            case 50: return '25-50% Completion Payment';
+            case 75: return '50-75% Completion Payment';
+            case 100: return '75-100% Final Payment';
+        }
     }
+    return $milestone_percentage . '% Payment';
 }
 
 // Function to get milestone short name for button
-function getMilestoneShortName($milestone_percentage) {
-    switch($milestone_percentage) {
-        case 25: return 'Initial (0-25%)';
-        case 50: return '25-50%';
-        case 75: return '50-75%';
-        case 100: return '75-100%';
-        default: return $milestone_percentage . '%';
+function getMilestoneShortName($milestone_percentage, $payment_plan = 'full') {
+    if ($payment_plan == 'installment_50') {
+        if ($milestone_percentage == 50) {
+            return '0-50%';
+        } elseif ($milestone_percentage == 100) {
+            return '50-100%';
+        }
+    } elseif ($payment_plan == 'installment_25') {
+        switch($milestone_percentage) {
+            case 25: return '0-25%';
+            case 50: return '25-50%';
+            case 75: return '50-75%';
+            case 100: return '75-100%';
+        }
     }
+    return $milestone_percentage . '%';
 }
 
 // Function to calculate payment amount for milestone
@@ -203,6 +223,7 @@ function getPaymentAmount($milestone_percentage, $total_cost, $payment_plan) {
     if ($payment_plan == 'installment_25') {
         return $total_cost * 0.25;
     } elseif ($payment_plan == 'installment_50') {
+        // Each milestone is 50% of total cost
         return $total_cost * 0.5;
     }
     return 0;
@@ -212,7 +233,7 @@ function getPaymentAmount($milestone_percentage, $total_cost, $payment_plan) {
 if (isset($_GET['pay_milestone']) && isset($_GET['percentage'])) {
     $pay_percentage = intval($_GET['percentage']);
     $pay_amount = getPaymentAmount($pay_percentage, $total_cost, $payment_plan);
-    $pay_milestone_name = getMilestoneName($pay_percentage);
+    $pay_milestone_name = getMilestoneName($pay_percentage, $payment_plan);
     
     // Create pending payment record
     $record_id = createPendingPayment($order_id, $pay_percentage, $pay_amount, $pay_milestone_name, $mysqli);
@@ -310,7 +331,7 @@ mysqli_stmt_close($order_detail_stmt);
                     <div>
                         <i class="fas fa-credit-card me-2 fa-lg"></i>
                         <strong>Payment Required!</strong> 
-                        <?= getMilestoneName($pending_payment['percentage']) ?> of $<?= number_format($pending_payment['amount'], 2) ?> is due.
+                        <?= getMilestoneName($pending_payment['percentage'], $payment_plan) ?> of $<?= number_format($pending_payment['amount'], 2) ?> is due.
                     </div>
                     <a href="construction_payment_installment.php?orderid=<?= $order_id ?>&amount=<?= $pending_payment['amount'] ?>&milestone=<?= urlencode($pending_payment['milestone']) ?>&percentage=<?= $pending_payment['percentage'] ?>&record_id=<?= $pending_payment['record_id'] ?>" 
                        class="btn-pay">
@@ -340,7 +361,7 @@ mysqli_stmt_close($order_detail_stmt);
                     </div>
                     <div class="col-md-6">
                         <strong>Status:</strong> 
-                        <span class="badge-status <?= $order_status == 'Waiting for construction payment' ? 'bg-warning' : (($order_status == 'Construction begins' || $order_status == 'preparing') ? 'bg-primary' : ($order_status == 'Waiting for inspection' ? 'bg-info' : 'bg-secondary')) ?>">
+                        <span class="badge-status <?= $order_status == 'Construction begins' ? 'bg-primary text-white' : (($order_status == 'Waiting for construction payment' ? 'bg-warning' : (($order_status == 'Construction begins' || $order_status == 'preparing') ? 'bg-primary' : ($order_status == 'Waiting for inspection' ? 'bg-info' : 'bg-secondary')))) ?>">
                             <?= htmlspecialchars($order_status) ?>
                         </span>
                     </div>
@@ -377,6 +398,7 @@ mysqli_stmt_close($order_detail_stmt);
                         if ($payment_plan == 'installment_25') {
                             $all_milestones = [25, 50, 75, 100];
                         } elseif ($payment_plan == 'installment_50') {
+                            // For 50% payment plan: milestones at 50% (first) and 100% (second)
                             $all_milestones = [50, 100];
                         }
                         
@@ -388,8 +410,8 @@ mysqli_stmt_close($order_detail_stmt);
                             
                             $milestone_status[] = [
                                 'percentage' => $milestone,
-                                'name' => getMilestoneName($milestone),
-                                'short_name' => getMilestoneShortName($milestone),
+                                'name' => getMilestoneName($milestone, $payment_plan),
+                                'short_name' => getMilestoneShortName($milestone, $payment_plan),
                                 'is_paid' => $is_paid,
                                 'needs_payment' => $needs_payment,
                                 'amount' => getPaymentAmount($milestone, $total_cost, $payment_plan)

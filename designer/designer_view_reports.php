@@ -159,7 +159,7 @@ mysqli_stmt_close($order_detail_stmt);
                     </div>
                     <div class="col-md-6">
                         <strong>Status:</strong> 
-                        <span class="badge-status bg-<?= $order_status == 'Construction begins' ? 'primary' : 'secondary' ?>">
+                        <span class="badge-status <?= $order_status == 'Construction begins' ? 'bg-primary text-white' : 'bg-secondary' ?>">
                             <?= htmlspecialchars($order_status) ?>
                         </span>
                     </div>

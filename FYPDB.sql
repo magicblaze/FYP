@@ -946,7 +946,8 @@ MODIFY COLUMN `ostatus` ENUM(
     'waiting start construction Pay',
     'Construction begins',
     'Waiting for inspection',
-    'inspection_completed'         
+    'inspection_completed',
+     'inspection_failed'          
 ) DEFAULT 'waiting confirm';
 
 -- Create table to track client inspection confirmation

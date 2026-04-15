@@ -263,7 +263,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reject_client_suggest
 
 // Handle mark inspection as completed (Step 1 - changes status to inspection_completed)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_inspection_completed'])) {
-    $update_order_sql = "UPDATE `Order` SET ostatus = 'inspection_completed' WHERE orderid = ?";
+    $update_order_sql = "UPDATE `Order` SET ostatus = 'inspection_completed', inspection_status = NULL WHERE orderid = ?";
     $update_order_stmt = mysqli_prepare($mysqli, $update_order_sql);
     mysqli_stmt_bind_param($update_order_stmt, "i", $orderid);
     if (mysqli_stmt_execute($update_order_stmt)) {
@@ -283,9 +283,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_inspection_compl
     mysqli_stmt_close($update_order_stmt);
 }
 
-// Handle submit inspection report (Step 2 - does NOT change order status)
+// Handle fail inspection - Step 1: only change status to inspection_failed
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fail_inspection'])) {
+    // Update order status to inspection_failed and clear inspection_status
+    $update_order_sql = "UPDATE `Order` SET ostatus = 'inspection_failed', inspection_status = NULL WHERE orderid = ?";
+    $update_order_stmt = mysqli_prepare($mysqli, $update_order_sql);
+    mysqli_stmt_bind_param($update_order_stmt, "i", $orderid);
+    
+    if (mysqli_stmt_execute($update_order_stmt)) {
+        // Notify client about inspection failure
+        $client_id = $order['clientid'];
+        $notify_sql = "INSERT INTO Notification (user_type, user_id, orderid, message, type, created_at) 
+                       VALUES ('client', ?, ?, 'Inspection for Order #$orderid has FAILED. The inspection report is being prepared.', 'inspection_failed', NOW())";
+        $notify_stmt = mysqli_prepare($mysqli, $notify_sql);
+        mysqli_stmt_bind_param($notify_stmt, "ii", $client_id, $orderid);
+        mysqli_stmt_execute($notify_stmt);
+        mysqli_stmt_close($notify_stmt);
+        
+        if (ob_get_length()) ob_clean();
+        header("Location: Order_Edit.php?id=" . $orderid . "&msg=inspection_failed_marked");
+        exit();
+    }
+    mysqli_stmt_close($update_order_stmt);
+}
+
+// Handle submit inspection report (Step 2)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_inspection_report'])) {
     $report_content = $_POST['report_content'] ?? '';
+    $report_result = $_POST['report_result'] ?? 'pass'; // 获取 pass 或 fail
     $uploaded_files = [];
     
     if (!empty($_FILES['report_files']['name'][0])) {
@@ -317,26 +342,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_inspection_rep
     $inspection_date_val = $date_row['inspection_date'] ?? date('Y-m-d H:i:s');
     mysqli_stmt_close($get_date_stmt);
     
-    // Insert inspection report (DO NOT update order status)
+    // Insert inspection report
     $insert_report_sql = "INSERT INTO InspectionReport 
                           (orderid, inspection_date, report_content, file_paths, submitted_by, submitted_by_type, submitted_at, result)
-                          VALUES (?, ?, ?, ?, ?, 'manager', NOW(), 'pass')";
+                          VALUES (?, ?, ?, ?, ?, 'manager', NOW(), ?)";
     $insert_report_stmt = mysqli_prepare($mysqli, $insert_report_sql);
-    mysqli_stmt_bind_param($insert_report_stmt, "isssi", $orderid, $inspection_date_val, $report_content, $file_paths_str, $user_id);
+    mysqli_stmt_bind_param($insert_report_stmt, "isssss", $orderid, $inspection_date_val, $report_content, $file_paths_str, $user_id, $report_result);
     mysqli_stmt_execute($insert_report_stmt);
     mysqli_stmt_close($insert_report_stmt);
     
     // Notify client
     $client_id = $order['clientid'];
+    $result_text = ($report_result == 'pass') ? 'passed' : 'failed';
     $notify_sql = "INSERT INTO Notification (user_type, user_id, orderid, message, type, created_at) 
-                   VALUES ('client', ?, ?, 'Inspection report for Order #$orderid has been submitted. Please review and confirm completion.', 'inspection_report', NOW())";
+                   VALUES ('client', ?, ?, 'Inspection report for Order #$orderid has been submitted. Result: " . $result_text . ". Please review and confirm.', 'inspection_report', NOW())";
     $notify_stmt = mysqli_prepare($mysqli, $notify_sql);
     mysqli_stmt_bind_param($notify_stmt, "ii", $client_id, $orderid);
     mysqli_stmt_execute($notify_stmt);
     mysqli_stmt_close($notify_stmt);
     
+    // Notify supplier if inspection failed
+    if ($report_result == 'fail' && !empty($order['supplierid'])) {
+        $supplier_id = $order['supplierid'];
+        $notify_supplier_sql = "INSERT INTO Notification (user_type, user_id, orderid, message, type, created_at) 
+                                VALUES ('supplier', ?, ?, 'Inspection for Order #$orderid has FAILED. Please review the inspection report.', 'inspection_failed', NOW())";
+        $notify_supplier_stmt = mysqli_prepare($mysqli, $notify_supplier_sql);
+        mysqli_stmt_bind_param($notify_supplier_stmt, "ii", $supplier_id, $orderid);
+        mysqli_stmt_execute($notify_supplier_stmt);
+        mysqli_stmt_close($notify_supplier_stmt);
+    }
+    
     if (ob_get_length()) ob_clean();
-    header("Location: Order_Edit.php?id=" . $orderid . "&msg=report_submitted");
+    $msg = ($report_result == 'pass') ? 'report_submitted' : 'fail_report_submitted';
+    header("Location: Order_Edit.php?id=" . $orderid . "&msg=" . $msg);
     exit();
 }
 // ========== END: INSPECTION POST HANDLING ==========
@@ -1113,7 +1151,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                 'complete' => ['class' => 'alert-success', 'icon' => 'fa-check-circle', 'title' => 'Complete', 'text' => 'Project completed successfully.'],
                 'rejected' => ['class' => 'alert-danger', 'icon' => 'fa-times-circle', 'title' => 'Rejected', 'text' => 'Project has been rejected. See notes for reason.'],
                 'inspection_completed' => ['class' => 'alert-success', 'icon' => 'fa-clipboard-check', 'title' => 'Inspection Completed', 'text' => 'Inspection has been completed. Please submit the inspection report to the client.'],
-            ];
+                'inspection_failed' => ['class' => 'alert-danger', 'icon' => 'fa-times-circle', 'title' => 'Inspection Failed', 'text' => 'Inspection has failed. Please submit the inspection report to the client and supplier.'],            ];
 
             $banner = $status_map[$banner_status] ?? ['class' => 'alert-info', 'icon' => 'fa-info-circle', 'title' => ucwords($banner_status), 'text' => 'Status: ' . $banner_status];
             ?>
@@ -1140,7 +1178,10 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                 'inspection_rescheduled' => ['class' => 'alert-info', 'icon' => 'fa-calendar-alt', 'text' => 'New inspection time proposed to client.'],
                 'inspection_marked_completed' => ['class' => 'alert-success', 'icon' => 'fa-clipboard-check', 'text' => 'Inspection marked as completed! You can now upload the inspection report.'],
                 'report_submitted' => ['class' => 'alert-success', 'icon' => 'fa-file-alt', 'text' => 'Inspection report submitted to client successfully!'],
-            ];
+                'inspection_failed' => ['class' => 'alert-danger', 'icon' => 'fa-times-circle', 'text' => 'Inspection marked as FAILED. The client has been notified.'],
+                'inspection_failed_marked' => ['class' => 'alert-danger', 'icon' => 'fa-times-circle', 'text' => 'Inspection marked as FAILED! You can now upload the inspection report. The supplier will also be notified.'],
+                'fail_report_submitted' => ['class' => 'alert-danger', 'icon' => 'fa-file-alt', 'text' => 'Inspection report submitted to client and supplier successfully!'],
+                ];
             
             if ($msg && isset($msg_map[$msg])) {
                 $msg_info = $msg_map[$msg];
@@ -2067,7 +2108,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                     <?php endif; ?>
 
 <!-- ========== INSPECTION APPOINTMENT SECTION (UPDATED) ========== -->
-<?php if ($status == 'waiting for inspection' || $status == 'inspection_completed'): ?>
+<?php if ($status == 'waiting for inspection' || $status == 'inspection_completed' || $status == 'inspection_failed'): ?>
 <div class="row mt-4">
     <div class="col-12">
         <div class="card">
@@ -2097,17 +2138,17 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                 $is_inspection_completed = ($current_ostatus == 'inspection_completed');
                 $has_report_submitted = false;
                 
-                // Check if report already submitted
-                if ($is_inspection_completed) {
-                    $check_report_sql = "SELECT COUNT(*) as cnt FROM InspectionReport WHERE orderid = ? AND result = 'pass'";
-                    $check_report_stmt = mysqli_prepare($mysqli, $check_report_sql);
-                    mysqli_stmt_bind_param($check_report_stmt, "i", $orderid);
-                    mysqli_stmt_execute($check_report_stmt);
-                    $check_report_result = mysqli_stmt_get_result($check_report_stmt);
-                    $check_report_row = mysqli_fetch_assoc($check_report_result);
-                    $has_report_submitted = ($check_report_row['cnt'] > 0);
-                    mysqli_stmt_close($check_report_stmt);
-                }
+                // Check if report already submitted (for both pass and fail)
+if ($is_inspection_completed || $current_ostatus == 'inspection_failed') {
+    $check_report_sql = "SELECT COUNT(*) as cnt FROM InspectionReport WHERE orderid = ? AND result IN ('pass', 'fail')";
+    $check_report_stmt = mysqli_prepare($mysqli, $check_report_sql);
+    mysqli_stmt_bind_param($check_report_stmt, "i", $orderid);
+    mysqli_stmt_execute($check_report_stmt);
+    $check_report_result = mysqli_stmt_get_result($check_report_stmt);
+    $check_report_row = mysqli_fetch_assoc($check_report_result);
+    $has_report_submitted = ($check_report_row['cnt'] > 0);
+    mysqli_stmt_close($check_report_stmt);
+}
                 ?>
                 
                 <!-- Show message if inspection is marked completed -->
@@ -2290,70 +2331,119 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                     </div>
                 <?php endif; ?>
                 
-                <!-- Step 1: Pass Inspection Button (only when inspection is accepted and not yet marked completed) -->
-                <?php if ($inspection_status == 'accepted' && !$is_inspection_completed && !$has_report_submitted): ?>
-                    <div class="mt-4 pt-3 border-top">
-                        <div class="row">
-                            <div class="col-md-12">
-                                <div class="card border-success">
-                                    <div class="card-header bg-success text-white">
-                                        <h6 class="mb-0">
-                                            <i class="fas fa-clipboard-check me-2"></i>Step 1: Complete Inspection
-                                        </h6>
-                                    </div>
-                                    <div class="card-body text-center">
-                                        <p class="mb-3">Click the button below to mark the inspection as completed. 
-                                        After this, you will be able to upload the inspection report.</p>
-                                        <form method="post" onsubmit="return confirm('Mark inspection as completed? This will change the order status to inspection_completed.');">
-                                            <input type="hidden" name="mark_inspection_completed" value="1">
-                                            <button type="submit" class="btn btn-success btn-lg">
-                                                <i class="fas fa-check-circle me-2"></i>Pass Inspection
-                                            </button>
-                                        </form>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                <?php endif; ?>
+<!-- Step 1: Complete Inspection (with Pass/Fail options) -->
+<?php if ($inspection_status == 'accepted' && !$is_inspection_completed && $current_ostatus != 'inspection_failed' && !$has_report_submitted): ?>
+    <div class="mt-4 pt-3 border-top">
+        <div class="card border-success">
+            <div class="card-header bg-success text-white">
+                <h6 class="mb-0">
+                    <i class="fas fa-clipboard-check me-2"></i>Step 1: Complete Inspection
+                </h6>
+            </div>
+            <div class="card-body text-center">
+                <p class="mb-3">Click the button below to mark the inspection as completed. 
+                After this, you will be able to upload the inspection report.</p>
+                <div class="row g-3">
+<div class="row g-3">
+    <div class="col-md-6">
+        <form method="post" id="passInspectionForm" onsubmit="return confirmPassInspection();">
+            <input type="hidden" name="mark_inspection_completed" value="1">
+            <button type="submit" class="btn btn-success btn-lg w-100">
+                <i class="fas fa-check-circle me-2"></i>Pass Inspection
+            </button>
+        </form>
+    </div>
+    <div class="col-md-6">
+        <form method="post" id="failInspectionForm" onsubmit="return confirmFailInspection();">
+            <input type="hidden" name="fail_inspection" value="1">
+            <button type="submit" class="btn btn-danger btn-lg w-100">
+                <i class="fas fa-times-circle me-2"></i>Fail Inspection
+            </button>
+        </form>
+    </div>
+</div>
+            </div>
+        </div>
+    </div>
+<?php endif; ?>
                 
-                <!-- Step 2: Submit Report (only when inspection is completed and report not yet submitted) -->
-                <?php if ($is_inspection_completed && !$has_report_submitted): ?>
-                    <div class="mt-4 pt-3 border-top">
-                        <div class="card border-primary">
-                            <div class="card-header bg-primary text-white">
-                                <h6 class="mb-0">
-                                    <i class="fas fa-file-upload me-2"></i>Step 2: Submit Inspection Report
-                                </h6>
-                            </div>
-                            <div class="card-body">
-                                <form method="POST" enctype="multipart/form-data">
-                                    <div class="mb-3">
-                                        <label class="form-label fw-bold">Inspection Report <span class="text-danger">*</span></label>
-                                        <textarea name="report_content" class="form-control" rows="5" 
-                                                  placeholder="Enter inspection findings, notes, and conclusions..." required></textarea>
-                                    </div>
-                                    <div class="mb-3">
-                                        <label class="form-label fw-bold">Attach Files (Images, PDFs, etc.)</label>
-                                        <input type="file" name="report_files[]" class="form-control" multiple 
-                                               accept="image/*,.pdf,.doc,.docx" id="reportFiles">
-                                        <small class="text-muted">You can upload multiple files (images, PDFs, documents)</small>
-                                    </div>
-                                    <div id="filePreview" class="mt-2"></div>
-                                    <div class="alert alert-info mt-3">
-                                        <i class="fas fa-info-circle me-2"></i>
-                                        This report will be sent to the client. The order status will remain as inspection_completed.
-                                    </div>
-                                    <button type="submit" name="submit_inspection_report" class="btn btn-primary btn-lg w-100" 
-                                            onclick="return confirm('Submit inspection report to client? The client will need to confirm completion.');">
-                                        <i class="fas fa-paper-plane me-2"></i>Submit Report to Client
-                                    </button>
-                                </form>
-                            </div>
-                        </div>
+<!-- Step 2: Submit Report (when inspection is completed OR inspection_failed, and report not yet submitted) -->
+<?php if (($is_inspection_completed || $current_ostatus == 'inspection_failed') && !$has_report_submitted): ?>
+    <div class="mt-4 pt-3 border-top">
+        <div class="card border-primary">
+            <div class="card-header bg-primary text-white">
+                <h6 class="mb-0">
+                    <i class="fas fa-file-upload me-2"></i>Step 2: Submit Inspection Report
+                </h6>
+            </div>
+            <div class="card-body">
+                <form method="POST" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Inspection Report <span class="text-danger">*</span></label>
+                        <textarea name="report_content" class="form-control" rows="5" 
+                                  placeholder="Enter inspection findings, notes, and conclusions..." required></textarea>
                     </div>
-                <?php endif; ?>
-                
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Attach Files (Images, PDFs, etc.)</label>
+                        <input type="file" name="report_files[]" class="form-control" multiple 
+                               accept="image/*,.pdf,.doc,.docx" id="reportFiles">
+                        <small class="text-muted">You can upload multiple files (images, PDFs, documents)</small>
+                    </div>
+                    <div id="filePreview" class="mt-2"></div>
+                    
+                    <!-- Hidden input to determine pass/fail -->
+                    <input type="hidden" name="report_result" value="<?php echo ($current_ostatus == 'inspection_failed') ? 'fail' : 'pass'; ?>">
+                    
+                    <div class="alert alert-info mt-3">
+                        <i class="fas fa-info-circle me-2"></i>
+                        This report will be sent to the client.
+                        <?php if ($current_ostatus == 'inspection_failed'): ?>
+                            <strong>The supplier will also be notified.</strong>
+                        <?php endif; ?>
+                    </div>
+                    <button type="submit" name="submit_inspection_report" class="btn btn-primary btn-lg w-100" 
+                            onclick="return confirm('Submit inspection report to client<?php echo ($current_ostatus == 'inspection_failed') ? ' and supplier' : ''; ?>? The client will need to confirm completion.');">
+                        <i class="fas fa-paper-plane me-2"></i>Submit Report to Client<?php echo ($current_ostatus == 'inspection_failed') ? ' & Supplier' : ''; ?>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+<?php endif; ?>
+
+                <!-- Fail Inspection Modal -->
+<div class="modal fade" id="failInspectionModal" tabindex="-1" aria-labelledby="failInspectionModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="failInspectionModalLabel">
+                    <i class="fas fa-times-circle me-2"></i>Fail Inspection
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="post" onsubmit="return confirm('Are you sure you want to mark this inspection as FAILED? This will reject the order.');">
+                <div class="modal-body">
+                    <input type="hidden" name="fail_inspection" value="1">
+                    <div class="mb-3">
+                        <label for="fail_reason" class="form-label fw-bold">Reason for Failure <span class="text-danger">*</span></label>
+                        <textarea id="fail_reason" name="fail_reason" class="form-control" rows="4" 
+                                  placeholder="Please provide detailed reasons why the inspection failed..." required></textarea>
+                    </div>
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <strong>Note:</strong> Failing the inspection will reject this order. The client will be notified.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-times-circle me-2"></i>Confirm Fail
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
                 <?php endif; /* end of !has_report_submitted */ ?>
             </div>
         </div>
@@ -2381,6 +2471,14 @@ function acceptSuggestion() {
         document.body.appendChild(form);
         form.submit();
     }
+
+}
+function confirmPassInspection() {
+    return confirm('Mark inspection as PASSED? This will change the order status to inspection_completed.');
+}
+
+function confirmFailInspection() {
+    return confirm('Mark inspection as FAIL? This will change the order status to inspection_failed.');
 }
 
 function rejectSuggestion() {

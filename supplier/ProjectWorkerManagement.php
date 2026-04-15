@@ -44,6 +44,30 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["handle_assignment"]))
     }
 }
 
+// Handle inspection recovery (inspection_failed -> Construction begins)
+if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["confirm_inspection_recovery"])) {
+    $order_id = intval($_POST["order_id"]);
+    
+    // Update order status to Construction begins
+    $update_sql = "UPDATE `Order` SET ostatus = 'Construction begins' WHERE orderid = ? AND supplierid = ?";
+    $update_stmt = mysqli_prepare($mysqli, $update_sql);
+    mysqli_stmt_bind_param($update_stmt, "ii", $order_id, $supplier_id);
+    
+    if (mysqli_stmt_execute($update_stmt)) {
+        // Optional: Add notification to manager
+        $notify_sql = "INSERT INTO Notification (user_type, user_id, orderid, message, type, created_at) 
+                       VALUES ('manager', (SELECT managerid FROM Schedule WHERE orderid = ? LIMIT 1), ?, 'Supplier has reviewed the failed inspection and confirmed to proceed with construction for Order #$order_id.', 'inspection_recovery', NOW())";
+        $notify_stmt = mysqli_prepare($mysqli, $notify_sql);
+        mysqli_stmt_bind_param($notify_stmt, "ii", $order_id, $order_id);
+        mysqli_stmt_execute($notify_stmt);
+        mysqli_stmt_close($notify_stmt);
+        
+        header("Location: ProjectWorkerManagement.php?msg=construction_started");
+        exit();
+    }
+    mysqli_stmt_close($update_stmt);
+}
+
 // Fetch all projects (orders) that contain this supplier's products
 $projects_sql = "
     SELECT DISTINCT 
@@ -58,7 +82,10 @@ $projects_sql = "
         c.ctel,
         c.address,
         (SELECT COUNT(DISTINCT od2.productid) FROM `OrderDelivery` od2 JOIN `Product` p2 ON od2.productid = p2.productid WHERE od2.orderid = o.orderid AND p2.supplierid = ?) as product_count,
-        (SELECT COUNT(DISTINCT wa.workerid) FROM `workerallocation` wa JOIN `Worker` w ON wa.workerid = w.workerid WHERE wa.orderid = o.orderid AND w.supplierid = ?) as allocated_workers
+        (SELECT COUNT(DISTINCT wa.workerid) FROM `workerallocation` wa JOIN `Worker` w ON wa.workerid = w.workerid WHERE wa.orderid = o.orderid AND w.supplierid = ?) as allocated_workers,
+        (SELECT report_content FROM InspectionReport WHERE orderid = o.orderid AND result = 'fail' ORDER BY submitted_at DESC LIMIT 1) as fail_report_content,
+        (SELECT file_paths FROM InspectionReport WHERE orderid = o.orderid AND result = 'fail' ORDER BY submitted_at DESC LIMIT 1) as fail_report_files,
+        (SELECT submitted_at FROM InspectionReport WHERE orderid = o.orderid AND result = 'fail' ORDER BY submitted_at DESC LIMIT 1) as fail_report_date
     FROM `Order` o
     JOIN Client c ON o.clientid = c.clientid
     WHERE o.supplierid = ?
@@ -233,6 +260,20 @@ mysqli_stmt_close($workers_stmt);
             <i class="fas fa-arrow-left"></i>Back to Dashboard
         </a>
 
+        <!-- Success Message -->
+<?php if (isset($_GET['msg']) && $_GET['msg'] == 'construction_started'): ?>
+    <div class="alert alert-success mb-4">
+        <i class="fas fa-check-circle me-2"></i>
+        Project has been moved to Construction stage successfully!
+    </div>
+<?php endif; ?>
+
+<?php if (isset($_GET['msg']) && $_GET['msg'] == 'recovery_failed'): ?>
+    <div class="alert alert-danger mb-4">
+        <i class="fas fa-exclamation-triangle me-2"></i>
+        Failed to update project status. Please try again.
+    </div>
+<?php endif; ?>
         <!-- Statistics Section -->
         <div class="row mb-4">
             <div class="col-md-3">
@@ -325,6 +366,12 @@ mysqli_stmt_close($workers_stmt);
                                     <i class="fas fa-hard-hat me-1"></i>Construction Stage
                                 </a>
                                 <?php endif; ?>
+    <!-- Inspection Failed Recovery Button -->
+    <?php if ($project['ostatus'] == 'inspection_failed'): ?>
+        <button type="button" class="btn-payment ms-2" data-bs-toggle="modal" data-bs-target="#inspectionReportModal<?= $project['orderid'] ?>">
+            <i class="fas fa-file-invoice-dollar me-1"></i>View Inspection Report
+        </button>
+    <?php endif; ?>
 	                        <?php elseif ($project['supplier_status'] === 'Rejected'): ?>
                             <span class="badge bg-danger p-2">Rejected</span>
                         <?php endif; ?>
@@ -497,6 +544,111 @@ mysqli_stmt_close($workers_stmt);
                         </div>
                     </div>
                 </div>
+<div class="modal fade" id="inspectionReportModal<?= $project['orderid'] ?>" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title"><i class="fas fa-file-alt me-2"></i>Inspection Report - Project #<?= $project['orderid'] ?></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <?php
+                // Fetch the fail inspection report
+                $fail_report_sql = "SELECT ir.report_content, ir.file_paths, ir.submitted_at, ir.result, o.ostatus 
+                                   FROM InspectionReport ir 
+                                   JOIN `Order` o ON ir.orderid = o.orderid
+                                   WHERE ir.orderid = ? AND ir.result = 'fail' 
+                                   ORDER BY ir.submitted_at DESC LIMIT 1";
+                $fail_report_stmt = mysqli_prepare($mysqli, $fail_report_sql);
+                mysqli_stmt_bind_param($fail_report_stmt, "i", $project['orderid']);
+                mysqli_stmt_execute($fail_report_stmt);
+                $fail_report_result = mysqli_stmt_get_result($fail_report_stmt);
+                $fail_report = mysqli_fetch_assoc($fail_report_result);
+                mysqli_stmt_close($fail_report_stmt);
+                
+                if ($fail_report):
+                    $attached_files = [];
+                    if (!empty($fail_report['file_paths'])) {
+                        $attached_files = json_decode($fail_report['file_paths'], true);
+                        if (!is_array($attached_files)) {
+                            $attached_files = [];
+                        }
+                    }
+                ?>
+                    <div class="alert alert-danger mb-3">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <strong>Inspection Failed</strong><br>
+                        The inspection failed on <?= date('F d, Y h:i A', strtotime($fail_report['submitted_at'])) ?>.
+                        Please review the report below. After confirming, the project will proceed to construction.
+                    </div>
+                    
+                    <div class="card mb-3">
+                        <div class="card-header bg-danger text-white">
+                            <strong><i class="fas fa-file-alt me-2"></i>Report Content</strong>
+                        </div>
+                        <div class="card-body">
+                            <div style="white-space: pre-wrap;"><?= nl2br(htmlspecialchars($fail_report['report_content'])) ?></div>
+                        </div>
+                    </div>
+                    
+                    <?php if (!empty($attached_files)): ?>
+                        <div class="card mb-3">
+                            <div class="card-header bg-info text-white">
+                                <strong><i class="fas fa-paperclip me-2"></i>Attached Files</strong>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <?php foreach ($attached_files as $file): 
+                                        $file_url = "../" . $file;
+                                        $file_ext = strtolower(pathinfo($file, PATHINFO_EXTENSION));
+                                        $image_extensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'];
+                                    ?>
+                                        <div class="col-md-4 col-sm-6 mb-3">
+                                            <div class="card h-100">
+                                                <?php if (in_array($file_ext, $image_extensions)): ?>
+                                                    <img src="<?= $file_url ?>" class="card-img-top" alt="Inspection Image" style="height: 150px; object-fit: cover; cursor: pointer;" onclick="window.open('<?= $file_url ?>')">
+                                                <?php else: ?>
+                                                    <div class="card-body text-center">
+                                                        <i class="fas fa-file-alt fa-3x text-secondary mb-2"></i>
+                                                    </div>
+                                                <?php endif; ?>
+                                                <div class="card-body p-2 text-center">
+                                                    <a href="<?= $file_url ?>" target="_blank" class="btn btn-sm btn-outline-primary w-100">
+                                                        <i class="fas fa-download me-1"></i> <?= basename($file) ?>
+                                                    </a>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    <?php endforeach; ?>
+                                </div>
+                            </div>
+                        </div>
+                    <?php endif; ?>
+                    
+                    <div class="alert alert-warning mt-3">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Note:</strong> After confirming, the project status will change to "Construction begins".
+                    </div>
+                    
+                    <form method="POST" class="mt-3" onsubmit="return confirm('Have you reviewed the inspection report? Confirm to proceed to construction stage.');">
+                        <input type="hidden" name="confirm_inspection_recovery" value="1">
+                        <input type="hidden" name="order_id" value="<?= $project['orderid'] ?>">
+                        <button type="submit" class="btn btn-success w-100 btn-lg">
+                            <i class="fas fa-check-circle me-2"></i>Confirm & Proceed to Construction
+                        </button>
+                    </form>
+                    
+                <?php else: ?>
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        No inspection report available. Please contact the manager.
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+</div>
+
             <?php endforeach; ?>
         <?php else: ?>
             <div class="project-card">

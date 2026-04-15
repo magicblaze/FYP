@@ -85,6 +85,10 @@ if (!$pending_record) {
         exit;
     }
     $record_id = $pending_record['record_id'];
+    // Update percentage from database record if provided
+    if (isset($pending_record['percentage'])) {
+        $percentage = intval($pending_record['percentage']);
+    }
 }
 
 // Payment success flag
@@ -171,13 +175,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Get milestone display name
+// ============================================
+// FIXED: Get milestone display name based on actual percentage
+// ============================================
+// First try to get from passed parameter, then from milestone string
 $milestone_display = '';
-if ($percentage == 25) $milestone_display = 'Initial Payment (0-25%)';
-elseif ($percentage == 50) $milestone_display = '25-50% Completion Payment';
-elseif ($percentage == 75) $milestone_display = '50-75% Completion Payment';
-elseif ($percentage == 100) $milestone_display = '75-100% Final Payment';
-else $milestone_display = $milestone;
+
+if ($percentage > 0) {
+    // Based on actual percentage value
+    if ($percentage == 25) {
+        $milestone_display = '25% Milestone Payment (0-25% Completion)';
+    } elseif ($percentage == 50) {
+        $milestone_display = '50% Milestone Payment (25-50% Completion)';
+    } elseif ($percentage == 75) {
+        $milestone_display = '75% Milestone Payment (50-75% Completion)';
+    } elseif ($percentage == 100) {
+        $milestone_display = '100% Final Payment (75-100% Completion)';
+    } else {
+        // Fallback to milestone string if percentage is not standard
+        $milestone_display = $milestone;
+    }
+} else {
+    // If no percentage, try to parse from milestone string
+    $milestone_display = $milestone;
+}
+
+// If still empty, use a default based on payment plan and amount
+if (empty($milestone_display)) {
+    if ($payment_plan == 'installment_25') {
+        // For 25% installment plan, determine which payment this is
+        if ($amount == $total_cost * 0.25) {
+            $milestone_display = '25% Milestone Payment (Deposit)';
+        } elseif ($amount == $total_cost * 0.5) {
+            $milestone_display = '50% Milestone Payment';
+        } elseif ($amount == $total_cost * 0.75) {
+            $milestone_display = '75% Milestone Payment';
+        } else {
+            $milestone_display = 'Final Payment';
+        }
+    } elseif ($payment_plan == 'installment_50') {
+        if ($amount == $total_cost * 0.5) {
+            $milestone_display = '50% Milestone Payment';
+        } else {
+            $milestone_display = 'Final Payment';
+        }
+    } else {
+        $milestone_display = 'Full Payment';
+    }
+}
 
 // Calculate progress steps based on payment plan
 if ($payment_plan == 'installment_25') {
@@ -188,19 +233,22 @@ if ($payment_plan == 'installment_25') {
     elseif ($percentage == 100) $current_step = 4;
     else $current_step = 1;
     
-    $step_labels = ['Deposit', '25% Payment', '50% Payment', '75% Payment'];
+    $step_labels = ['25% Payment', '50% Payment', '75% Payment', '100% Final Payment'];
 } elseif ($payment_plan == 'installment_50') {
     $total_installments = 2;
     if ($percentage == 50) $current_step = 1;
     elseif ($percentage == 100) $current_step = 2;
     else $current_step = 1;
     
-    $step_labels = ['Deposit', 'Final Payment'];
+    $step_labels = ['50% Payment', 'Final Payment'];
 } else {
     $total_installments = 1;
     $current_step = 1;
     $step_labels = ['Full Payment'];
 }
+
+// For the confirmation message, generate a clear description
+$confirm_message = "Confirm payment HK$" . number_format($amount, 2) . " for " . $milestone_display . "?";
 ?>
 
 <!DOCTYPE html>
@@ -359,12 +407,9 @@ if ($payment_plan == 'installment_25') {
             font-size: 0.9rem;
         }
         
-        .milestone-info {
-            background: #fff3cd;
-            border-left: 4px solid #e67e22;
-            padding: 1rem;
-            border-radius: 6px;
-            margin-bottom: 1rem;
+        .negative-amount {
+            color: #dc3545;
+            font-weight: bold;
         }
     </style>
 </head>
@@ -420,12 +465,6 @@ if ($payment_plan == 'installment_25') {
                     <?php endfor; ?>
                 </div>
 
-                <!-- Milestone Info -->
-                <div class="milestone-info">
-                    <i class="fas fa-info-circle me-2"></i>
-                    <strong>Current Milestone:</strong> <?php echo $milestone_display; ?>
-                </div>
-
                 <!-- Payment Section -->
                 <div class="payment-section">
                     <h5 class="mb-3"><i class="fas fa-credit-card me-2"></i>Milestone Payment</h5>
@@ -452,7 +491,11 @@ if ($payment_plan == 'installment_25') {
                             </div>
                             <div class="d-flex justify-content-between">
                                 <span>Remaining After Payment:</span>
-                                <span>HK$<?php echo number_format($remaining_after, 2); ?></span>
+                                <?php if ($remaining_after < 0): ?>
+                                    <span class="negative-amount">HK$<?php echo number_format($remaining_after, 2); ?></span>
+                                <?php else: ?>
+                                    <span>HK$<?php echo number_format($remaining_after, 2); ?></span>
+                                <?php endif; ?>
                             </div>
                         </div>
                         
@@ -466,6 +509,11 @@ if ($payment_plan == 'installment_25') {
                         <div class="budget-info">
                             <i class="fas fa-wallet me-2"></i>
                             Remaining Budget after this payment: <strong>HK$<?php echo number_format($remaining_budget, 2); ?></strong>
+                        </div>
+                    <?php else: ?>
+                        <div class="budget-info" style="background: #fff3cd; border-left-color: #ffc107;">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            <strong>Budget Alert:</strong> This payment exceeds your remaining budget by <strong>HK$<?php echo number_format(abs($remaining_budget), 2); ?></strong>
                         </div>
                     <?php endif; ?>
                 </div>
@@ -489,7 +537,7 @@ if ($payment_plan == 'installment_25') {
                                 <a href="view_weekly_reports.php?orderid=<?php echo $order_id; ?>" class="btn btn-secondary">Back to Reports</a>
                             <?php else: ?>
                                 <button type="submit" name="proceed_pay" class="btn btn-success" 
-                                        onclick="return confirm('Confirm payment HK$<?php echo number_format($amount, 2); ?> for <?php echo $milestone_display; ?>?');">
+                                        onclick="return confirm('<?php echo addslashes($confirm_message); ?>');">
                                     <i class="fas fa-credit-card me-1"></i>
                                     Pay HK$<?php echo number_format($amount, 2); ?>
                                 </button>

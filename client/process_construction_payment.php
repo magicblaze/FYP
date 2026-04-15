@@ -48,6 +48,21 @@ if (!empty($order['payment_method'])) {
     $paymentMethodData = json_decode($order['payment_method'], true) ?? [];
 }
 
+// Define milestone messages based on payment plan and installment index
+function getMilestoneMessage($plan, $installment_index, $total_installments) {
+    if ($plan === 'installment_25') {
+        $percentages = [0, 25, 50, 75];
+        $current_percent = $percentages[$installment_index];
+        return "Installment " . ($installment_index + 1) . " of 4 - {$current_percent}% Complete";
+    } elseif ($plan === 'installment_50') {
+        $percentages = [0, 50];
+        $current_percent = $percentages[$installment_index];
+        return "Installment " . ($installment_index + 1) . " of 2 - {$current_percent}% Complete";
+    } else {
+        return "Full Construction Payment";
+    }
+}
+
 // Handle payment submission
 $message = '';
 $error = '';
@@ -81,12 +96,12 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['proceed_pay'])) {
             
             // Store installment payment record (if table exists)
             $installment_sql = "INSERT INTO ConstructionPaymentRecord 
-                                (orderid, installment_number, percentage, amount, milestone, paid_at)
-                                VALUES (?, ?, ?, ?, ?, NOW())";
+                                (orderid, installment_number, percentage, amount, milestone, paid_at, status)
+                                VALUES (?, ?, ?, ?, ?, NOW(), 'paid')";
             $installment_stmt = mysqli_prepare($mysqli, $installment_sql);
             if ($installment_stmt) {
                 $current_percentage = $installments[$installment_index]['percentage'];
-                $milestone = $installments[$installment_index]['milestone'];
+                $milestone = getMilestoneMessage($plan, $installment_index, count($installments));
                 $installment_num = $installment_index + 1;
                 mysqli_stmt_bind_param($installment_stmt, "iiids", $order_id, $installment_num, $current_percentage, $amount_to_pay, $milestone);
                 mysqli_stmt_execute($installment_stmt);
@@ -115,7 +130,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['proceed_pay'])) {
                 $_SESSION['construction_payment']['installment_index'] = $installment_index + 1;
                 $_SESSION['construction_payment']['amount'] = $installments[$installment_index + 1]['amount'];
                 
-                $next_milestone = $installments[$installment_index + 1]['milestone'];
+                $next_milestone = getMilestoneMessage($plan, $installment_index + 1, count($installments));
                 $payment_success = true;
                 $message = "Payment successful! Your next payment of $" . number_format($installments[$installment_index + 1]['amount'], 2) . " will be due at {$next_milestone}.";
             }
@@ -132,6 +147,7 @@ $current_installment_info = $installments[$installment_index];
 $total_cost = floatval($order['total_cost']);
 $total_paid = floatval($order['total_amount_paid']);
 $remaining_budget = floatval($order['budget']) - $total_paid;
+$current_milestone = getMilestoneMessage($plan, $installment_index, count($installments));
 
 // Determine progress steps based on payment plan
 if ($plan === 'installment_25') {
@@ -374,7 +390,7 @@ if ($plan === 'installment_25') {
 
                 <!-- Payment Section -->
                 <div class="payment-section">
-                    <h5 class="mb-3"><i class="fas fa-credit-card me-2"></i><?php echo $current_installment_info['milestone']; ?></h5>
+                    <h5 class="mb-3"><i class="fas fa-credit-card me-2"></i><?php echo htmlspecialchars($current_milestone); ?></h5>
                     
                     <div class="payment-detail">
                         <div class="payment-detail-item">
