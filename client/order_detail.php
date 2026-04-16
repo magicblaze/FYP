@@ -99,7 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         // Update order status to waiting for final construction payment
-        $update_sql = "UPDATE `Order` SET ostatus = 'waiting 1st construction phase payment' WHERE orderid = ? AND clientid = ?";
+        $update_sql = "UPDATE `Order` SET ostatus = 'inspection_completed' WHERE orderid = ? AND clientid = ?";
         $update_stmt = mysqli_prepare($mysqli, $update_sql);
         mysqli_stmt_bind_param($update_stmt, "ii", $orderId, $clientId);
         mysqli_stmt_execute($update_stmt);
@@ -1070,9 +1070,8 @@ $show_inspection_report = ($has_inspection_report || $current_ostatus == 'inspec
         <?php else: ?>
             <div class="alert alert-success text-center">
                 <i class="fas fa-check-circle me-2 fa-lg"></i>
-                <strong>You have confirmed the inspection report!</strong><br>
                 <a href="payment_construction2.php?orderid=<?php echo $orderId; ?>" class="btn btn-primary mt-2">
-                    <i class="fas fa-credit-card me-2"></i>Go to Final Payment
+                    <i class="fas fa-credit-card me-2"></i>Confirm & Proceed to Final Payment
                 </a>
             </div>
         <?php endif; ?>

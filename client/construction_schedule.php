@@ -379,14 +379,12 @@ if ($is_pending) {
                 <div class="card-body p-0">
                     <div class="table-responsive">
                         <table class="table table-sm mb-0">
-                            <thead class="table-light">
+                            <thead>
                                 <tr>
                                     <th>Version</th>
                                     <th>Start Date</th>
                                     <th>End Date</th>
                                     <th>Status</th>
-                                    <th>Date Sent</th>
-                                    <th>Response Date</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -402,13 +400,6 @@ if ($is_pending) {
                                                 <span class="badge bg-danger">Rejected</span>
                                             <?php else: ?>
                                                 <span class="badge bg-warning">Pending</span>
-                                            <?php endif; ?>
-                                        </td>
-                                        <td><?= date('M d, Y H:i', strtotime($history['created_at'])) ?></td>
-                                        <td>
-                                            <?= $history['responded_at'] ? date('M d, Y H:i', strtotime($history['responded_at'])) : '-' ?>
-                                            <?php if ($history['rejection_reason']): ?>
-                                                <br><small class="text-danger">Reason: <?= htmlspecialchars($history['rejection_reason']) ?></small>
                                             <?php endif; ?>
                                         </td>
                                     </tr>
