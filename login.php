@@ -5,6 +5,22 @@ session_start();
 
 $error = '';
 
+// reCAPTCHA v3 keys can be provided via environment variables or constants.
+$recaptchaSiteKey = getenv('RECAPTCHA_SITE_KEY');
+if ($recaptchaSiteKey === false && defined('RECAPTCHA_SITE_KEY')) {
+    $recaptchaSiteKey = RECAPTCHA_SITE_KEY;
+}
+$recaptchaSiteKey = is_string($recaptchaSiteKey) ? trim($recaptchaSiteKey) : '';
+
+$recaptchaSecretKey = getenv('RECAPTCHA_SECRET_KEY');
+if ($recaptchaSecretKey === false && defined('RECAPTCHA_SECRET_KEY')) {
+    $recaptchaSecretKey = RECAPTCHA_SECRET_KEY;
+}
+$recaptchaSecretKey = is_string($recaptchaSecretKey) ? trim($recaptchaSecretKey) : '';
+
+$recaptchaAction = 'login';
+$recaptchaMinScore = 0.5;
+
 // If already logged in, redirect by role (use same destinations as post-login switch)
 if (isset($_SESSION['user'])) {
     $role = $_SESSION['user']['role'] ?? 'client';
@@ -105,10 +121,88 @@ function findUserByEmailAcrossRoles(mysqli $mysqli, string $email, array $roleCo
     return null;
 }
 
+function verifyRecaptchaToken(
+    string $secretKey,
+    string $token,
+    string $expectedAction,
+    float $minScore,
+    ?string $remoteIp = null
+): bool {
+    if ($secretKey === '' || $token === '') {
+        return false;
+    }
+
+    $verifyUrl = 'https://www.google.com/recaptcha/api/siteverify';
+    $postData = [
+        'secret'   => $secretKey,
+        'response' => $token,
+    ];
+
+    if (!empty($remoteIp)) {
+        $postData['remoteip'] = $remoteIp;
+    }
+
+    $encodedPostData = http_build_query($postData);
+    $responseBody = '';
+
+    if (function_exists('curl_init')) {
+        $ch = curl_init($verifyUrl);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => $encodedPostData,
+            CURLOPT_TIMEOUT        => 10,
+        ]);
+        $curlResponse = curl_exec($ch);
+        if ($curlResponse !== false) {
+            $responseBody = $curlResponse;
+        }
+        curl_close($ch);
+    } else {
+        $context = stream_context_create([
+            'http' => [
+                'method'  => 'POST',
+                'header'  => "Content-type: application/x-www-form-urlencoded\r\n",
+                'content' => $encodedPostData,
+                'timeout' => 10,
+            ],
+        ]);
+        $streamResponse = @file_get_contents($verifyUrl, false, $context);
+        if ($streamResponse !== false) {
+            $responseBody = $streamResponse;
+        }
+    }
+
+    if ($responseBody === '') {
+        return false;
+    }
+
+    $decoded = json_decode($responseBody, true);
+    if (!is_array($decoded) || empty($decoded['success'])) {
+        return false;
+    }
+
+    $responseAction = isset($decoded['action']) ? (string)$decoded['action'] : '';
+    $responseScore = isset($decoded['score']) ? (float)$decoded['score'] : 0.0;
+
+    if ($responseAction !== $expectedAction) {
+        return false;
+    }
+
+    return $responseScore >= $minScore;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $redirect = $_POST['redirect'] ?? ($_GET['redirect'] ?? '');
+    $recaptchaToken = $_POST['g-recaptcha-response'] ?? '';
 
-    if (empty($_POST['email']) || empty($_POST['password'])) {
+    if ($recaptchaSiteKey === '' || $recaptchaSecretKey === '') {
+        $error = 'reCAPTCHA is not configured. Please contact the administrator.';
+    } elseif (empty($recaptchaToken)) {
+        $error = 'Security verification failed. Please try again.';
+    } elseif (!verifyRecaptchaToken($recaptchaSecretKey, $recaptchaToken, $recaptchaAction, $recaptchaMinScore, $_SERVER['REMOTE_ADDR'] ?? null)) {
+        $error = 'reCAPTCHA verification failed. Please try again.';
+    } elseif (empty($_POST['email']) || empty($_POST['password'])) {
         $error = 'Please enter your email and password.';
     } else {
         $email = trim($_POST['email']);
@@ -185,15 +279,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="col-12" style="max-width: 520px;">
                 <div class="card">
                     <div class="card-body">
-                        <h1 class="h4 text-center mb-3 text-dark">HappyDesign</h1>
+                        <h1 class="h4 text-center mb-3 text-dark">HappyDesign - Interior Design Project Management App</h1>
                         <p class="text-center text-muted mb-4">Please sign in to continue</p>
 
                         <?php if ($error): ?>
                             <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
                         <?php endif; ?>
 
+                        <?php if (empty($recaptchaSiteKey)): ?>
+                            <div class="alert alert-warning">Login is temporarily unavailable because reCAPTCHA keys are missing.</div>
+                        <?php endif; ?>
+
                         <form method="POST" autocomplete="on" novalidate>
                             <input type="hidden" name="redirect" value="<?= htmlspecialchars($_GET['redirect'] ?? '') ?>">
+                            <input type="hidden" name="g-recaptcha-response" id="g-recaptcha-response" value="">
                             <div class="mb-3">
                                 <label for="email" class="form-label">Email address</label>
                                 <input id="email" type="email" class="form-control" name="email" required>
@@ -213,6 +312,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
         </div>
     </main>
+        <?php if (!empty($recaptchaSiteKey)): ?>
+                <script src="https://www.google.com/recaptcha/api.js?render=<?= urlencode($recaptchaSiteKey) ?>"></script>
+                <script>
+                    (function () {
+                        const form = document.querySelector('form[method="POST"]');
+                        const tokenInput = document.getElementById('g-recaptcha-response');
+                        if (!form || !tokenInput || typeof grecaptcha === 'undefined') {
+                            return;
+                        }
+
+                        form.addEventListener('submit', function (event) {
+                            event.preventDefault();
+                            grecaptcha.ready(function () {
+                                grecaptcha.execute('<?= htmlspecialchars($recaptchaSiteKey, ENT_QUOTES) ?>', { action: '<?= htmlspecialchars($recaptchaAction, ENT_QUOTES) ?>' })
+                                    .then(function (token) {
+                                        tokenInput.value = token;
+                                        form.submit();
+                                    });
+                            });
+                        });
+                    })();
+                </script>
+        <?php endif; ?>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
