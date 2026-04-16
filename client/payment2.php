@@ -21,8 +21,8 @@ $amount = isset($_GET['amount']) ? floatval($_GET['amount']) : 0;
 $sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.cost, o.designid, o.deposit,
                d.expect_price as design_price, d.tag,
                c.clientid, c.cname, c.payment_method, c.budget,
-               op.design_fee_designer_2nd, op.design_fee_manager_1st,
-               op.total_amount_due, op.total_amount_paid, op.payment_status
+           op.total_cost,
+           op.design_fee_designer_2nd_pct, op.design_fee_manager_1st_pct
         FROM `Order` o
         LEFT JOIN `Design` d ON o.designid = d.designid
         LEFT JOIN `Client` c ON o.clientid = c.clientid
@@ -37,12 +37,23 @@ if (!$order) {
     die('Project not found or access denied.');
 }
 
-// Get payment values from OrderPayment
-$design_fee_designer_2nd = isset($order['design_fee_designer_2nd']) ? floatval($order['design_fee_designer_2nd']) : 0;
-$design_fee_manager_1st = isset($order['design_fee_manager_1st']) ? floatval($order['design_fee_manager_1st']) : 0;
+// Calculate payment values from OrderPayment percentage configuration
+$total_cost = isset($order['total_cost']) ? floatval($order['total_cost']) : 0;
+$design_fee_designer_2nd_pct = isset($order['design_fee_designer_2nd_pct']) ? floatval($order['design_fee_designer_2nd_pct']) : 0;
+$design_fee_manager_1st_pct = isset($order['design_fee_manager_1st_pct']) ? floatval($order['design_fee_manager_1st_pct']) : 0;
+$design_fee_designer_2nd = $total_cost * ($design_fee_designer_2nd_pct / 100);
+$design_fee_manager_1st = $total_cost * ($design_fee_manager_1st_pct / 100);
 $total_design_fees = $design_fee_designer_2nd + $design_fee_manager_1st;
-$total_amount_due = isset($order['total_amount_due']) ? floatval($order['total_amount_due']) : 0;
-$total_amount_paid = isset($order['total_amount_paid']) ? floatval($order['total_amount_paid']) : 0;
+$total_amount_due = $total_cost;
+
+$paid_total_sql = "SELECT IFNULL(SUM(amount), 0) AS total_paid FROM ConstructionPaymentRecord WHERE orderid = ? AND status = 'paid'";
+$paid_total_stmt = mysqli_prepare($mysqli, $paid_total_sql);
+mysqli_stmt_bind_param($paid_total_stmt, "i", $orderid);
+mysqli_stmt_execute($paid_total_stmt);
+$paid_total_result = mysqli_stmt_get_result($paid_total_stmt);
+$paid_total_row = mysqli_fetch_assoc($paid_total_result);
+$total_amount_paid = floatval($paid_total_row['total_paid'] ?? 0);
+mysqli_stmt_close($paid_total_stmt);
 
 $current_budget = isset($order['budget']) ? floatval($order['budget']) : 0;
 
@@ -77,19 +88,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             mysqli_stmt_execute($u_stmt);
             mysqli_stmt_close($u_stmt);
 
-            // Update OrderPayment
-            $op_sql = "UPDATE OrderPayment SET 
-                       total_amount_paid = total_amount_paid + ?,
-                       payment_status = CASE 
-                           WHEN total_amount_paid + ? >= total_amount_due THEN 'settled'
-                           ELSE 'partial_paid'
-                       END,
-                       last_payment_date = NOW()
-                       WHERE payment_id = (SELECT payment_id FROM `Order` WHERE orderid = ?)";
-            $op_stmt = mysqli_prepare($mysqli, $op_sql);
-            mysqli_stmt_bind_param($op_stmt, "ddi", $total_design_fees, $total_design_fees, $orderid);
-            mysqli_stmt_execute($op_stmt);
-            mysqli_stmt_close($op_stmt);
+            $milestone = 'Design Phase Payment 2';
+            $installment_number = 2;
+            $percentage = intval(round($design_fee_designer_2nd_pct + $design_fee_manager_1st_pct));
+            $pay_record_sql = "INSERT INTO ConstructionPaymentRecord (orderid, installment_number, percentage, amount, milestone, paid_at, status) VALUES (?, ?, ?, ?, ?, NOW(), 'paid')";
+            $pay_record_stmt = mysqli_prepare($mysqli, $pay_record_sql);
+            mysqli_stmt_bind_param($pay_record_stmt, "iiids", $orderid, $installment_number, $percentage, $total_design_fees, $milestone);
+            mysqli_stmt_execute($pay_record_stmt);
+            mysqli_stmt_close($pay_record_stmt);
 
             mysqli_commit($mysqli);
 
@@ -301,7 +307,7 @@ $stage_title = '2nd Payment';
                 <?php if (isset($_GET['success'])): ?>
                     <div class="alert alert-success alert-message">
                         <i class="fas fa-check-circle me-2"></i>
-                        2nd Payment completed successfully! HK$<?php echo number_format($total_design_fees, 2); ?> received.
+                        Payment successful.
                     </div>
                 <?php endif; ?>
 
@@ -412,7 +418,7 @@ $stage_title = '2nd Payment';
                     <?php if ($payment_success): ?>
                         <div class="alert alert-success mt-3">
                             <i class="fas fa-check-circle me-2"></i>
-                            2nd Payment completed successfully! HK$<?php echo number_format($total_design_fees, 2); ?> received.
+                            Payment successful.
                         </div>
                     <?php endif; ?>
                 </div>

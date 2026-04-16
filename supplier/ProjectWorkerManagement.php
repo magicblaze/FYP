@@ -107,8 +107,13 @@ while ($row = mysqli_fetch_assoc($projects_result)) {
                               c.clientid, c.cname as client_name, c.ctel, c.cemail, c.budget,
                               d.designid, d.designName, d.expect_price as design_price, d.tag as design_tag, d.supplierid as design_supplierid,
                               s.scheduleid, s.OrderFinishDate, s.DesignFinishDate,
-                              op.payment_id, op.total_design_payment, op.total_construction_payment, op.materials_cost,
-                               op.commission_1st, op.commission_final, op.total_amount_due,
+                                  op.payment_id,
+                                  IFNULL(op.total_cost, 0) * ((IFNULL(op.design_fee_designer_1st_pct, 0) + IFNULL(op.design_fee_designer_2nd_pct, 0) + IFNULL(op.design_fee_manager_1st_pct, 0) + IFNULL(op.design_fee_manager_2nd_pct, 0)) / 100) AS total_design_payment,
+                                  IFNULL(op.total_cost, 0) * (IFNULL(op.construction_main_pct, 0) / 100) AS total_construction_payment,
+                                  IFNULL(op.total_cost, 0) * (IFNULL(op.materials_pct, 0) / 100) AS materials_cost,
+                                  IFNULL(op.total_cost, 0) * (IFNULL(op.commission_1st_pct, 0) / 100) AS commission_1st,
+                                  IFNULL(op.total_cost, 0) * (IFNULL(op.commission_final_pct, 0) / 100) AS commission_final,
+                                  IFNULL(op.total_cost, 0) AS total_amount_due,
                                dp.filename as designed_picture_filename
                        FROM `Order` o
                        LEFT JOIN `Client` c ON o.clientid = c.clientid

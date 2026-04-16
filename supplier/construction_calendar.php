@@ -328,8 +328,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['save_report'])) {
                 mysqli_stmt_close($payment_plan_stmt);
                 
                 // Get current total amount paid
-                $paid_sql = "SELECT total_amount_paid FROM OrderPayment 
-                             WHERE payment_id = (SELECT payment_id FROM `Order` WHERE orderid = ?)";
+                $paid_sql = "SELECT IFNULL(SUM(amount), 0) AS total_amount_paid
+                             FROM ConstructionPaymentRecord
+                             WHERE orderid = ? AND status = 'paid'";
                 $paid_stmt = mysqli_prepare($mysqli, $paid_sql);
                 mysqli_stmt_bind_param($paid_stmt, "i", $order_id);
                 mysqli_stmt_execute($paid_stmt);
@@ -483,8 +484,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['save_report'])) {
                 mysqli_stmt_close($payment_plan_stmt);
                 
                 // Get current total amount paid
-                $paid_sql = "SELECT total_amount_paid FROM OrderPayment 
-                             WHERE payment_id = (SELECT payment_id FROM `Order` WHERE orderid = ?)";
+                $paid_sql = "SELECT IFNULL(SUM(amount), 0) AS total_amount_paid
+                             FROM ConstructionPaymentRecord
+                             WHERE orderid = ? AND status = 'paid'";
                 $paid_stmt = mysqli_prepare($mysqli, $paid_sql);
                 mysqli_stmt_bind_param($paid_stmt, "i", $order_id);
                 mysqli_stmt_execute($paid_stmt);
@@ -615,7 +617,8 @@ mysqli_stmt_close($pending_stmt);
 // Fetch order info
 $order_sql = "SELECT o.orderid, o.ostatus, o.odate, o.actual_completion_date, o.Requirements,
                      c.cname as client_name, c.clientid,
-                     op.total_amount_due, op.total_amount_paid,
+                     IFNULL(op.total_cost, 0) AS total_amount_due,
+                     (SELECT IFNULL(SUM(cpr.amount), 0) FROM ConstructionPaymentRecord cpr WHERE cpr.orderid = o.orderid AND cpr.status = 'paid') AS total_amount_paid,
                      d.designid
               FROM `Order` o 
               JOIN Client c ON o.clientid = c.clientid 
@@ -1495,7 +1498,7 @@ $month_name = date('F', mktime(0, 0, 0, $current_month, 1));
                 <div class="row">
                     <?php if ($can_mark_complete): ?>
                     <div class="col-md-6 mb-3">
-                        <form method="POST" onsubmit="return confirm('Mark construction as complete? Status will change to \"Waiting for inspection\".');">
+                        <form method="POST" onsubmit="return confirm('Mark construction as complete? Status will change to Waiting for inspection.');">
                             <input type="hidden" name="mark_complete" value="1">
                             <button type="submit" class="btn btn-success btn-lg w-100"><i class="fas fa-check-circle me-2"></i>Mark as Complete</button>
                         </form>
@@ -1582,14 +1585,12 @@ $month_name = date('F', mktime(0, 0, 0, $current_month, 1));
             <div class="card-header bg-secondary text-white"><h5 class="mb-0"><i class="fas fa-history me-2"></i>Extension History</h5></div>
             <div class="card-body p-0">
                 <table class="table table-bordered mb-0">
-                    <thead class="table-light"><tr><th>Version</th><th>Requested End Date</th><th>Reason</th><th>Status</th><th>Requested Date</th><tr></thead>
+                    <thead class="table-light"><tr><th>Version</th><th>Requested End Date</th><th>Reason</th><th>Status</th><th>Requested Date</th></tr></thead>
                     <tbody>
                         <?php while ($ext = mysqli_fetch_assoc($history_result)): ?>
                         <tr>
                             <td>#<?= $ext['extension_version'] ?></td>
                             <td><?= date('Y-m-d', strtotime($ext['requested_end_date'])) ?></td>
-                            <td><?= htmlspecialchars(substr($ext['reason'], 0, 50)) ?>
-                                                        <td><?= date('Y-m-d', strtotime($ext['requested_end_date'])) ?></td>
                             <td><?= htmlspecialchars(substr($ext['reason'], 0, 50)) ?>...</td>
                             <td>
                                 <?php if ($ext['status'] == 'accepted'): ?>

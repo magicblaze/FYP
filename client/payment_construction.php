@@ -20,12 +20,12 @@ $amount = isset($_GET['amount']) ? floatval($_GET['amount']) : 0;
 $sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.cost, o.designid, o.deposit, o.final_payment,
                d.expect_price as design_price, d.tag,
                c.clientid, c.cname, c.payment_method, c.budget,
-               op.design_fee_designer_1st, op.design_fee_designer_2nd,
-               op.design_fee_manager_1st, op.design_fee_manager_2nd,
-               op.commission_1st, op.commission_final,
-               op.construction_main_price, op.construction_deposit,
-               op.materials_cost, op.inspection_fee, op.contractor_fee,
-               op.total_amount_due, op.total_amount_paid, op.payment_status
+           op.total_cost,
+           op.design_fee_designer_2nd_pct, op.design_fee_manager_1st_pct,
+           op.design_fee_manager_2nd_pct, op.commission_1st_pct,
+           op.commission_final_pct, op.construction_main_pct,
+           op.construction_deposit_pct, op.materials_pct,
+           op.inspection_pct, op.contractor_pct
         FROM `Order` o
         LEFT JOIN `Design` d ON o.designid = d.designid
         LEFT JOIN `Client` c ON o.clientid = c.clientid
@@ -40,19 +40,39 @@ if (!$order) {
     die('Project not found or access denied.');
 }
 
-// Get payment values from OrderPayment
-$construction_deposit = isset($order['construction_deposit']) ? floatval($order['construction_deposit']) : 0;
-$materials_cost_allocated = isset($order['materials_cost']) ? floatval($order['materials_cost']) : 0;
-$design_fee_manager_1st = isset($order['design_fee_manager_1st']) ? floatval($order['design_fee_manager_1st']) : 0;
-$design_fee_designer_2nd = isset($order['design_fee_designer_2nd']) ? floatval($order['design_fee_designer_2nd']) : 0;
-$design_fee_manager_2nd = isset($order['design_fee_manager_2nd']) ? floatval($order['design_fee_manager_2nd']) : 0;
-$commission_1st = isset($order['commission_1st']) ? floatval($order['commission_1st']) : 0;
-$commission_final = isset($order['commission_final']) ? floatval($order['commission_final']) : 0;
-$construction_main_price = isset($order['construction_main_price']) ? floatval($order['construction_main_price']) : 0;
-$inspection_fee = isset($order['inspection_fee']) ? floatval($order['inspection_fee']) : 0;
-$contractor_fee = isset($order['contractor_fee']) ? floatval($order['contractor_fee']) : 0;
-$total_amount_due = isset($order['total_amount_due']) ? floatval($order['total_amount_due']) : 0;
-$total_amount_paid = isset($order['total_amount_paid']) ? floatval($order['total_amount_paid']) : 0;
+// Get payment values from percentage configuration
+$total_cost = isset($order['total_cost']) ? floatval($order['total_cost']) : 0;
+$construction_main_pct = isset($order['construction_main_pct']) ? floatval($order['construction_main_pct']) : 0;
+$construction_deposit_pct = isset($order['construction_deposit_pct']) ? floatval($order['construction_deposit_pct']) : 0;
+$materials_pct = isset($order['materials_pct']) ? floatval($order['materials_pct']) : 0;
+$design_fee_manager_1st_pct = isset($order['design_fee_manager_1st_pct']) ? floatval($order['design_fee_manager_1st_pct']) : 0;
+$design_fee_designer_2nd_pct = isset($order['design_fee_designer_2nd_pct']) ? floatval($order['design_fee_designer_2nd_pct']) : 0;
+$design_fee_manager_2nd_pct = isset($order['design_fee_manager_2nd_pct']) ? floatval($order['design_fee_manager_2nd_pct']) : 0;
+$commission_1st_pct = isset($order['commission_1st_pct']) ? floatval($order['commission_1st_pct']) : 0;
+$commission_final_pct = isset($order['commission_final_pct']) ? floatval($order['commission_final_pct']) : 0;
+$inspection_pct = isset($order['inspection_pct']) ? floatval($order['inspection_pct']) : 0;
+$contractor_pct = isset($order['contractor_pct']) ? floatval($order['contractor_pct']) : 0;
+
+$construction_main_price = $total_cost * ($construction_main_pct / 100);
+$construction_deposit = $construction_main_price * ($construction_deposit_pct / 100);
+$materials_cost_allocated = $total_cost * ($materials_pct / 100);
+$design_fee_manager_1st = $total_cost * ($design_fee_manager_1st_pct / 100);
+$design_fee_designer_2nd = $total_cost * ($design_fee_designer_2nd_pct / 100);
+$design_fee_manager_2nd = $total_cost * ($design_fee_manager_2nd_pct / 100);
+$commission_1st = $total_cost * ($commission_1st_pct / 100);
+$commission_final = $total_cost * ($commission_final_pct / 100);
+$inspection_fee = $total_cost * ($inspection_pct / 100);
+$contractor_fee = $total_cost * ($contractor_pct / 100);
+$total_amount_due = $total_cost;
+
+$paid_total_sql = "SELECT IFNULL(SUM(amount), 0) AS total_paid FROM ConstructionPaymentRecord WHERE orderid = ? AND status = 'paid'";
+$paid_total_stmt = mysqli_prepare($mysqli, $paid_total_sql);
+mysqli_stmt_bind_param($paid_total_stmt, "i", $orderid);
+mysqli_stmt_execute($paid_total_stmt);
+$paid_total_result = mysqli_stmt_get_result($paid_total_stmt);
+$paid_total_row = mysqli_fetch_assoc($paid_total_result);
+$total_amount_paid = floatval($paid_total_row['total_paid'] ?? 0);
+mysqli_stmt_close($paid_total_stmt);
 $design_price = isset($order['design_price']) ? floatval($order['design_price']) : 0;
 $current_budget = isset($order['budget']) ? floatval($order['budget']) : 0;
 
@@ -100,19 +120,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         mysqli_begin_transaction($mysqli);
         
         try {
-            // Update OrderPayment
-            $op_sql = "UPDATE OrderPayment SET 
-                       total_amount_paid = total_amount_paid + ?,
-                       payment_status = CASE 
-                           WHEN total_amount_paid + ? >= total_amount_due THEN 'settled'
-                           ELSE 'partial_paid'
-                       END,
-                       last_payment_date = NOW()
-                       WHERE payment_id = (SELECT payment_id FROM `Order` WHERE orderid = ?)";
-            $op_stmt = mysqli_prepare($mysqli, $op_sql);
-            mysqli_stmt_bind_param($op_stmt, "ddi", $total_to_pay, $total_to_pay, $orderid);
-            mysqli_stmt_execute($op_stmt);
-            mysqli_stmt_close($op_stmt);
+            $milestone = 'Construction Deposit Payment';
+            $installment_number = 4;
+            $percentage = intval(round($construction_main_pct * ($construction_deposit_pct / 100)));
+            $pay_record_sql = "INSERT INTO ConstructionPaymentRecord (orderid, installment_number, percentage, amount, milestone, paid_at, status) VALUES (?, ?, ?, ?, ?, NOW(), 'paid')";
+            $pay_record_stmt = mysqli_prepare($mysqli, $pay_record_sql);
+            mysqli_stmt_bind_param($pay_record_stmt, "iiids", $orderid, $installment_number, $percentage, $total_to_pay, $milestone);
+            mysqli_stmt_execute($pay_record_stmt);
+            mysqli_stmt_close($pay_record_stmt);
             
             // Update order status to Coordinating Contractors (like original payment_construction.php)
             $u_sql = "UPDATE `Order` SET ostatus = 'Coordinating Contractors' WHERE orderid = ? AND clientid = ?";
@@ -317,7 +332,7 @@ $stage_title = 'Construction Deposit';
                 <?php if (isset($_GET['success'])): ?>
                     <div class="alert alert-success alert-message">
                         <i class="fas fa-check-circle me-2"></i>
-                        Construction deposit completed successfully! HK$<?php echo number_format($total_to_pay, 2); ?> received.
+                        Payment successful.
                     </div>
                 <?php endif; ?>
                 

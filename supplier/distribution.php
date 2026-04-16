@@ -45,11 +45,13 @@ $success_message = '';
 
 // Handle BATCH UPDATE of allocation percentages
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['batch_update'])) {
-    $percentages = $_POST['percentages']; 
+    $percentages = $_POST['percentages'];
     $total = 0;
-    foreach($percentages as $p) { $total += floatval($p); }
-    
-    if ($total > 100.01) { 
+    foreach ($percentages as $p) {
+        $total += floatval($p);
+    }
+
+    if ($total > 100.01) {
         $error_message = "Error: Total percentage cannot exceed 100%. Current total: " . number_format($total, 1) . "%";
     } else {
         mysqli_begin_transaction($mysqli);
@@ -92,7 +94,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_fee'])) {
     $fee_name = mysqli_real_escape_string($mysqli, $_POST['fee_name']);
     $fee_amount = floatval($_POST['fee_amount']);
     $fee_description = mysqli_real_escape_string($mysqli, $_POST['fee_description']);
-    
+
     if (empty($fee_name) || $fee_amount <= 0) {
         $error_message = "Please provide a valid fee name and amount.";
     } else {
@@ -148,13 +150,18 @@ $additional_fees = mysqli_fetch_all(mysqli_stmt_get_result($fees_stmt), MYSQLI_A
 
 // Calculate totals
 $total_allocated_percent = 0;
-foreach($allocated_workers as $aw) { $total_allocated_percent += floatval($aw['percentage']); }
+foreach ($allocated_workers as $aw) {
+    $total_allocated_percent += floatval($aw['percentage']);
+}
 $total_extra_fees = 0;
-foreach($additional_fees as $fee) { $total_extra_fees += $fee['amount']; }
+foreach ($additional_fees as $fee) {
+    $total_extra_fees += $fee['amount'];
+}
 ?>
 
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -163,27 +170,105 @@ foreach($additional_fees as $fee) { $total_extra_fees += $fee['amount']; }
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="../css/styles.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
     <style>
-        body { background-color: #f4f7f6; }
-        .card { border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05 ); border: none; margin-bottom: 1.5rem; }
-        .worker-img { width: 40px; height: 40px; object-fit: cover; border-radius: 50%; }
-        .back-btn { color: #7f8c8d; text-decoration: none; font-weight: 600; transition: all 0.3s; }
-        .back-btn:hover { color: #3498db; transform: translateX(-5px); }
-        .section-title { border-left: 4px solid #3498db; padding-left: 10px; margin-bottom: 20px; font-weight: 700; }
-        .chart-container { position: relative; height: 280px; width: 100%; }
-        .percent-input { width: 80px !important; text-align: center; }
-        .unallocated-box { background: #f8f9fa; border: 1px dashed #dee2e6; border-radius: 8px; padding: 10px; }
-        .limit-reached { color: #e74c3c !important; font-weight: bold; }
-        .fee-list-container { max-height: 350px; overflow-y: auto; }
-        .fee-item { border-left: 3px solid #e67e22; background: #fffaf5; margin-bottom: 12px; padding: 12px; border-radius: 6px; }
-        .fee-desc { font-size: 11px; color: #7f8c8d; margin-top: 4px; font-style: italic; }
-        .default-pay-box { background: #e8f4fd; border: 1px solid #3498db; border-radius: 8px; padding: 10px; margin-bottom: 15px; }
-        .table thead th { color: #000 !important; }
+        body {
+            background-color: #f4f7f6;
+        }
+
+        .card {
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            border: none;
+            margin-bottom: 1.5rem;
+        }
+
+        .worker-img {
+            width: 40px;
+            height: 40px;
+            object-fit: cover;
+            border-radius: 50%;
+        }
+
+        .back-btn {
+            color: #7f8c8d;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .back-btn:hover {
+            color: #3498db;
+            transform: translateX(-5px);
+        }
+
+        .section-title {
+            border-left: 4px solid #3498db;
+            padding-left: 10px;
+            margin-bottom: 20px;
+            font-weight: 700;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 280px;
+            width: 100%;
+        }
+
+        .percent-input {
+            width: 80px !important;
+            text-align: center;
+        }
+
+        .unallocated-box {
+            background: #f8f9fa;
+            border: 1px dashed #dee2e6;
+            border-radius: 8px;
+            padding: 10px;
+        }
+
+        .limit-reached {
+            color: #e74c3c !important;
+            font-weight: bold;
+        }
+
+        .fee-list-container {
+            max-height: 350px;
+            overflow-y: auto;
+        }
+
+        .fee-item {
+            border-left: 3px solid #e67e22;
+            background: #fffaf5;
+            margin-bottom: 12px;
+            padding: 12px;
+            border-radius: 6px;
+        }
+
+        .fee-desc {
+            font-size: 11px;
+            color: #7f8c8d;
+            margin-top: 4px;
+            font-style: italic;
+        }
+
+        .default-pay-box {
+            background: #e8f4fd;
+            border: 1px solid #3498db;
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 15px;
+        }
+
+        .table thead th {
+            color: #000 !important;
+        }
     </style>
 </head>
+
 <body>
     <?php include_once __DIR__ . '/../includes/header.php'; ?>
-    
+
     <div class="container mt-4 mb-5">
         <div class="d-flex justify-content-between align-items-center mb-4">
             <a href="ProjectWorkerManagement.php" class="back-btn">
@@ -196,29 +281,37 @@ foreach($additional_fees as $fee) { $total_extra_fees += $fee['amount']; }
         </div>
 
         <?php if ($success_message): ?>
-            <div class="alert alert-success alert-dismissible fade show shadow-sm mb-4"><?= $success_message ?><button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+            <div class="alert alert-success alert-dismissible fade show shadow-sm mb-4"><?= $success_message ?><button
+                    type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
         <?php endif; ?>
         <?php if ($error_message): ?>
-            <div class="alert alert-danger alert-dismissible fade show shadow-sm mb-4"><?= $error_message ?><button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+            <div class="alert alert-danger alert-dismissible fade show shadow-sm mb-4"><?= $error_message ?><button
+                    type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
         <?php endif; ?>
 
         <div class="row">
             <!-- Top Row: Chart on Left, Worker List on Right -->
             <div class="col-lg-5 mb-4">
                 <div class="card p-4 h-100">
-                    <h4 class="section-title">Visual Distribution</h4>
+                    <h4 class="section-title">Overview</h4>
                     <div class="chart-container mb-3">
                         <canvas id="distributionChart"></canvas>
-                    </div>
-                    <div class="unallocated-box text-center">
-                        <span class="text-muted small">Remaining Unallocated:</span>
-                        <h4 id="remainingPercent" class="mb-0 text-primary">0.0%</h4>
                     </div>
                     <div class="card bg-light border-0 p-3 mt-3">
                         <h6 class="small text-muted mb-2">Summary Info</h6>
                         <div class="d-flex justify-content-between mb-1">
+                            <span class="small">Total Budget:</span>
+                            <span
+                                class="small fw-bold text-success">$<?= number_format(floatval($order_info['budget'] ?? 0), 2) ?></span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-1">
                             <span class="small">Total Workers:</span>
                             <span class="small fw-bold"><?= count($allocated_workers) ?></span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-1">
+                            <span class="small">Remaining Budget:</span>
+                            <span class="small fw-bold" id="remainingPercent" class="mb-0 text-primary">0.0%</span>
+                            <small id="remainingBudget" class="text-muted">$0.00</small>
                         </div>
                         <div class="d-flex justify-content-between mb-1">
                             <span class="small">Extra Fees:</span>
@@ -232,7 +325,8 @@ foreach($additional_fees as $fee) { $total_extra_fees += $fee['amount']; }
                 <div class="card p-4 h-100">
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <h4 class="section-title mb-0">1. Worker Pay Split (%)</h4>
-                        <button type="submit" form="batchUpdateForm" name="batch_update" id="saveBtn" class="btn btn-primary btn-sm px-4 shadow-sm">
+                        <button type="submit" form="batchUpdateForm" name="batch_update" id="saveBtn"
+                            class="btn btn-primary btn-sm px-4 shadow-sm">
                             <i class="fas fa-save me-1"></i> Save All Changes
                         </button>
                     </div>
@@ -245,14 +339,17 @@ foreach($additional_fees as $fee) { $total_extra_fees += $fee['amount']; }
                         </div>
                         <form method="POST" class="d-flex align-items-center">
                             <div class="input-group input-group-sm" style="width: 120px;">
-                                <input type="number" name="default_pay_value" id="defaultPayValue" class="form-control" value="<?= number_format($supplier_default_pay, 1) ?>" min="0" max="100" step="0.1">
+                                <input type="number" name="default_pay_value" id="defaultPayValue" class="form-control"
+                                    value="<?= number_format($supplier_default_pay, 1) ?>" min="0" max="100" step="0.1">
                                 <span class="input-group-text">%</span>
                             </div>
-                            <button type="submit" name="set_default_pay" class="btn btn-sm btn-primary ms-2">Set Default Pay</button>
-                            <button type="button" onclick="applyDefaultPay()" class="btn btn-sm btn-outline-secondary ms-2">Apply to 0% Workers</button>
+                            <button type="submit" name="set_default_pay" class="btn btn-sm btn-primary ms-2">Set Default
+                                Pay</button>
+                            <button type="button" onclick="applyDefaultPay()"
+                                class="btn btn-sm btn-outline-secondary ms-2">Apply Distribution</button>
                         </form>
                     </div>
-                    
+
                     <form method="POST" id="batchUpdateForm">
                         <div class="table-responsive">
                             <table class="table table-hover align-middle">
@@ -268,27 +365,29 @@ foreach($additional_fees as $fee) { $total_extra_fees += $fee['amount']; }
                                         <tr class="worker-row" data-id="<?= $worker['allocation_id'] ?>">
                                             <td>
                                                 <div class="d-flex align-items-center">
-                                                    <img src="../uploads/worker/<?= $worker['image'] ?: 'default.jpg' ?>" class="worker-img me-2 border">
+                                                    <img src="../uploads/worker/<?= $worker['image'] ?: 'default.jpg' ?>"
+                                                        class="worker-img me-2 border">
                                                     <div>
-                                                        <span class="fw-bold d-block small"><?= htmlspecialchars($worker['name']) ?></span>
+                                                        <span
+                                                            class="fw-bold d-block small"><?= htmlspecialchars($worker['name']) ?></span>
                                                     </div>
                                                 </div>
                                             </td>
                                             <td class="text-center">
                                                 <div class="input-group input-group-sm mx-auto" style="width: 100px;">
-                                                    <input type="number" name="percentages[<?= $worker['allocation_id'] ?>]" 
-                                                           class="form-control percent-input" 
-                                                           data-id="<?= $worker['allocation_id'] ?>"
-                                                           value="<?= number_format($worker['percentage'], 1) ?>" 
-                                                           min="0" max="100" step="0.1"
-                                                           oninput="syncFromInput(<?= $worker['allocation_id'] ?>, this.value)">
+                                                    <input type="number" name="percentages[<?= $worker['allocation_id'] ?>]"
+                                                        class="form-control percent-input"
+                                                        data-id="<?= $worker['allocation_id'] ?>"
+                                                        value="<?= number_format($worker['percentage'], 1) ?>" min="0"
+                                                        max="100" step="0.1"
+                                                        oninput="syncFromInput(<?= $worker['allocation_id'] ?>, this.value)">
                                                 </div>
                                             </td>
                                             <td>
-                                                <input type="range" class="form-range worker-slider" 
-                                                       data-id="<?= $worker['allocation_id'] ?>"
-                                                       value="<?= $worker['percentage'] ?>" min="0" max="100" step="0.1"
-                                                       oninput="syncFromSlider(<?= $worker['allocation_id'] ?>, this.value)">
+                                                <input type="range" class="form-range worker-slider"
+                                                    data-id="<?= $worker['allocation_id'] ?>"
+                                                    value="<?= $worker['percentage'] ?>" min="0" max="100" step="0.1"
+                                                    oninput="syncFromSlider(<?= $worker['allocation_id'] ?>, this.value)">
                                             </td>
                                         </tr>
                                     <?php endforeach; ?>
@@ -298,7 +397,8 @@ foreach($additional_fees as $fee) { $total_extra_fees += $fee['amount']; }
                     </form>
 
                     <?php if (empty($allocated_workers)): ?>
-                        <p class="text-center py-5 text-muted">No workers allocated. Go back to Team Allocation to add workers.</p>
+                        <p class="text-center py-5 text-muted">No workers allocated. Go back to Team Allocation to add
+                            workers.</p>
                     <?php endif; ?>
                 </div>
             </div>
@@ -313,20 +413,24 @@ foreach($additional_fees as $fee) { $total_extra_fees += $fee['amount']; }
                             <form method="POST" class="bg-light p-3 rounded">
                                 <div class="mb-2">
                                     <label class="small fw-bold text-muted">Fee Name</label>
-                                    <input type="text" name="fee_name" class="form-control form-control-sm" placeholder="e.g. Special Bonus" required>
+                                    <input type="text" name="fee_name" class="form-control form-control-sm"
+                                        placeholder="e.g. Special Bonus" required>
                                 </div>
                                 <div class="mb-2">
                                     <label class="small fw-bold text-muted">Amount ($)</label>
                                     <div class="input-group input-group-sm">
                                         <span class="input-group-text">$</span>
-                                        <input type="number" name="fee_amount" class="form-control" placeholder="0.00" step="0.01" required>
+                                        <input type="number" name="fee_amount" class="form-control" placeholder="0.00"
+                                            step="0.01" required>
                                     </div>
                                 </div>
                                 <div class="mb-3">
                                     <label class="small fw-bold text-muted">Description</label>
-                                    <textarea name="fee_description" class="form-control form-control-sm" rows="2" placeholder="Describe the purpose of this fee..."></textarea>
+                                    <textarea name="fee_description" class="form-control form-control-sm" rows="2"
+                                        placeholder="Describe the purpose of this fee..."></textarea>
                                 </div>
-                                <button type="submit" name="add_fee" class="btn btn-sm btn-success w-100">Add New Fee</button>
+                                <button type="submit" name="add_fee" class="btn btn-sm btn-success w-100">Add New
+                                    Fee</button>
                             </form>
                         </div>
                         <!-- Right side of section: List with Descriptions -->
@@ -339,23 +443,29 @@ foreach($additional_fees as $fee) { $total_extra_fees += $fee['amount']; }
                                                 <div class="fee-item d-flex justify-content-between align-items-start">
                                                     <div class="flex-grow-1 overflow-hidden">
                                                         <div class="d-flex justify-content-between align-items-center mb-1">
-                                                            <span class="fw-bold small text-truncate" title="<?= htmlspecialchars($fee['fee_name']) ?>"><?= htmlspecialchars($fee['fee_name']) ?></span>
-                                                            <span class="text-primary small fw-bold">$<?= number_format($fee['amount'], 2) ?></span>
+                                                            <span class="fw-bold small text-truncate"
+                                                                title="<?= htmlspecialchars($fee['fee_name']) ?>"><?= htmlspecialchars($fee['fee_name']) ?></span>
+                                                            <span
+                                                                class="text-primary small fw-bold">$<?= number_format($fee['amount'], 2) ?></span>
                                                         </div>
                                                         <?php if (!empty($fee['description'])): ?>
                                                             <div class="fee-desc"><?= htmlspecialchars($fee['description']) ?></div>
                                                         <?php endif; ?>
                                                     </div>
-                                                    <form method="POST" onsubmit="return confirm('Are you sure you want to delete this fee? This action cannot be undone.')">
+                                                    <form method="POST"
+                                                        onsubmit="return confirm('Are you sure you want to delete this fee? This action cannot be undone.')">
                                                         <input type="hidden" name="fee_id" value="<?= $fee['fee_id'] ?>">
-                                                        <button type="submit" name="delete_fee" class="btn btn-link text-danger p-0 ms-2"><i class="fas fa-trash-alt fa-xs"></i></button>
+                                                        <button type="submit" name="delete_fee"
+                                                            class="btn btn-link text-danger p-0 ms-2"><i
+                                                                class="fas fa-trash-alt fa-xs"></i></button>
                                                     </form>
                                                 </div>
                                             </div>
                                         <?php endforeach; ?>
                                     </div>
                                 <?php else: ?>
-                                    <p class="text-center text-muted py-5 small">No extra fees added yet. Use the form on the left to add commissions or other costs.</p>
+                                    <p class="text-center text-muted py-5 small">No extra fees added yet. Use the form on
+                                        the left to add commissions or other costs.</p>
                                 <?php endif; ?>
                             </div>
                         </div>
@@ -367,17 +477,39 @@ foreach($additional_fees as $fee) { $total_extra_fees += $fee['amount']; }
 
     <script>
         const workers = <?= json_encode($allocated_workers) ?>;
+        const projectBudget = <?= floatval($order_info['budget'] ?? 0) ?>;
+        const additionalFeesTotal = <?= floatval($total_extra_fees) ?>;
+        const additionalFeesCount = <?= count($additional_fees) ?>;
+        const hasAdditionalFees = additionalFeesCount > 0;
         let chart;
+
+        function formatCurrency(amount) {
+            return '$' + (amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
 
         function initChart() {
             const ctx = document.getElementById('distributionChart').getContext('2d');
+            const workerPercentages = workers.map(w => parseFloat(w.percentage) || 0);
+            const workerTotalPercent = workerPercentages.reduce((a, b) => a + b, 0);
+            const workerBudgetData = workerPercentages.map(p => (projectBudget * p) / 100);
+            const allocatedBudget = workerBudgetData.reduce((a, b) => a + b, 0);
+            const chartLabels = workers.map(w => w.name).concat(['Unallocated']);
+            const chartData = workerBudgetData.concat([Math.max(0, projectBudget - allocatedBudget)]);
+            const chartColors = [
+                '#3498db', '#2ecc71', '#f1c40f', '#e74c3c', '#9b59b6', '#1abc9c', '#f39c12', '#d35400', '#7f8c8d'
+            ].slice(0, workers.length).concat(['#ecf0f1']);
+
+            if (hasAdditionalFees && additionalFeesTotal > 0) {
+                chartLabels.push('Additional Fees');
+                chartData.push(additionalFeesTotal);
+                chartColors.push('#e67e22');
+            }
+
             const data = {
-                labels: workers.map(w => w.name).concat(['Unallocated']),
+                labels: chartLabels,
                 datasets: [{
-                    data: workers.map(w => parseFloat(w.percentage)).concat([Math.max(0, 100 - workers.reduce((a, b) => a + parseFloat(b.percentage), 0))]),
-                    backgroundColor: [
-                        '#3498db', '#2ecc71', '#f1c40f', '#e74c3c', '#9b59b6', '#1abc9c', '#f39c12', '#d35400', '#7f8c8d'
-                    ].slice(0, workers.length).concat(['#ecf0f1']),
+                    data: chartData,
+                    backgroundColor: chartColors,
                     borderWidth: 2
                 }]
             };
@@ -389,30 +521,44 @@ foreach($additional_fees as $fee) { $total_extra_fees += $fee['amount']; }
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
-                        legend: { display: false }
+                        legend: { display: false },
+                        datalabels: {
+                            color: '#2c3e50',
+                            anchor: 'end',
+                            align: 'end',
+                            offset: 6,
+                            clamp: true,
+                            font: { weight: '600', size: 10 },
+                            formatter: (value, context) => {
+                                if (!value || value <= 0) return null;
+                                const label = context.chart.data.labels[context.dataIndex] || '';
+                                return label + '\n' + formatCurrency(value);
+                            }
+                        }
                     },
                     cutout: '75%'
-                }
+                },
+                plugins: [ChartDataLabels]
             });
-            updateRemaining();
+            updateRemaining(workerTotalPercent);
         }
 
         function applyDefaultPay() {
             const defaultValue = parseFloat(document.getElementById('defaultPayValue').value) || 0;
             const inputs = document.querySelectorAll('.percent-input');
-            
+
             inputs.forEach(input => {
                 const currentVal = parseFloat(input.value) || 0;
                 if (currentVal === 0) {
                     const id = input.dataset.id;
                     const otherTotal = calculateOtherTotal(parseInt(id));
                     let finalVal = defaultValue;
-                    
+
                     // Cap to remaining percentage
                     if (otherTotal + finalVal > 100) {
                         finalVal = Math.max(0, 100 - otherTotal);
                     }
-                    
+
                     input.value = finalVal.toFixed(1);
                     document.querySelector(`.worker-slider[data-id="${id}"]`).value = finalVal;
                 }
@@ -463,12 +609,12 @@ foreach($additional_fees as $fee) { $total_extra_fees += $fee['amount']; }
         function updateChart() {
             const inputs = document.querySelectorAll('.percent-input');
             let total = 0;
-            const newData = [];
-            
+            const workerBudgetData = [];
+
             inputs.forEach((input) => {
                 let val = parseFloat(input.value) || 0;
                 total += val;
-                newData.push(val);
+                workerBudgetData.push((projectBudget * val) / 100);
             });
 
             const remainingDisplay = document.getElementById('remainingPercent');
@@ -482,8 +628,12 @@ foreach($additional_fees as $fee) { $total_extra_fees += $fee['amount']; }
                 saveBtn.disabled = false;
             }
 
-            newData.push(Math.max(0, 100 - total));
-            chart.data.datasets[0].data = newData;
+            const allocatedBudget = workerBudgetData.reduce((a, b) => a + b, 0);
+            workerBudgetData.push(Math.max(0, projectBudget - allocatedBudget));
+            if (hasAdditionalFees && additionalFeesTotal > 0) {
+                workerBudgetData.push(additionalFeesTotal);
+            }
+            chart.data.datasets[0].data = workerBudgetData;
             chart.update();
             updateRemaining(total);
         }
@@ -494,9 +644,12 @@ foreach($additional_fees as $fee) { $total_extra_fees += $fee['amount']; }
             }
             const remaining = (100 - total).toFixed(1);
             document.getElementById('remainingPercent').innerText = remaining + '%';
+            const remainingBudgetValue = Math.max(0, (projectBudget * (100 - total)) / 100);
+            document.getElementById('remainingBudget').innerText = formatCurrency(remainingBudgetValue);
         }
 
         window.onload = initChart;
     </script>
 </body>
+
 </html>

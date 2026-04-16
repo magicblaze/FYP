@@ -46,6 +46,8 @@ DROP TABLE IF EXISTS `UserLike`;
 DROP TABLE IF EXISTS `workerallocation`;
 DROP TABLE IF EXISTS `AIRecommendItem`;
 DROP TABLE IF EXISTS `OrderPayment`;
+DROP TABLE IF EXISTS `client_feedback`;
+DROP TABLE IF EXISTS `WeeklyConstructionReport`;
 
 -- Client table
 CREATE TABLE `Client` (
@@ -239,9 +241,16 @@ CREATE TABLE `Order` (
   `cost` decimal(10,2) DEFAULT NULL,
   `gross_floor_area` decimal(10,2) DEFAULT NULL,
   `Requirements` varchar(255) DEFAULT NULL,
+  `deposit_amount` DECIMAL(10,2) DEFAULT 0.00,
+  `final_payment` DECIMAL(10,2) DEFAULT 0.00,
   `designid` int NOT NULL,
   `ostatus` ENUM('waiting confirm', 'designing', 'reviewing design proposal', 'waiting for review design', 'drafting 2nd proposal', 'waiting client review', 'waiting 2nd design phase payment', 'waiting final design phase payment' , 'waiting 1st construction phase payment', 'complete', 'rejected','Coordinating Contractors','preparing', 'waiting client reassignment', 'waiting client confirm construction date', 'In construction', 'waiting start construction Pay','Construction begins',
-    'Waiting for inspection') DEFAULT 'waiting confirm',
+    'Waiting for inspection', 'inspection_completed', 'inspection_failed') DEFAULT 'waiting confirm',
+  `payment_plan` ENUM('full', 'installment_25', 'installment_50') DEFAULT 'full',
+  `actual_completion_date` DATE DEFAULT NULL,
+  `inspection_date` DATETIME NULL DEFAULT NULL,
+  `inspection_status` ENUM('pending', 'accepted', 'rejected', 'client_suggested') DEFAULT NULL,
+  `client_suggested_date` DATETIME NULL DEFAULT NULL,
   `designedPicture` VARCHAR(500) DEFAULT NULL,
   `supplierid` int DEFAULT NULL,
   `supplier_status` ENUM('Pending', 'Accepted', 'Rejected') DEFAULT 'Pending',
@@ -268,39 +277,23 @@ CREATE TABLE `OrderPayment` (
   `payment_id` INT NOT NULL AUTO_INCREMENT,
   `total_cost` DECIMAL(12, 2) NOT NULL,
   
-  -- Designing Phase Payments (10% of total)
-  `design_fee_designer_1st` DECIMAL(12, 2) DEFAULT 0.00,
-  `design_fee_designer_2nd` DECIMAL(12, 2) DEFAULT 0.00,
-  `design_fee_manager_1st` DECIMAL(12, 2) DEFAULT 0.00,
-  `design_fee_manager_2nd` DECIMAL(12, 2) DEFAULT 0.00,
-  `design_deposit` DECIMAL(12, 2) DEFAULT 2000.00,
-  `commission_1st` DECIMAL(12, 2) DEFAULT 0.00,
-  
-  -- Construction Phase Payments (90% of total)
-  `construction_main_price` DECIMAL(12, 2) DEFAULT 0.00,
-  `construction_deposit` DECIMAL(12, 2) DEFAULT 0.00,
-  `materials_cost` DECIMAL(12, 2) DEFAULT 0.00,
-  `inspection_fee` DECIMAL(12, 2) DEFAULT 0.00,
-  `contractor_fee` DECIMAL(12, 2) DEFAULT 0.00,
-  `commission_final` DECIMAL(12, 2) DEFAULT 0.00,
-  
-  -- Additional Fees
-  `additional_fees` DECIMAL(12, 2) DEFAULT 0.00,
-  
-  -- Payment Summary
-  `total_design_payment` DECIMAL(12, 2) DEFAULT 0.00,
-  `total_construction_payment` DECIMAL(12, 2) DEFAULT 0.00,
-  `total_amount_due` DECIMAL(12, 2) DEFAULT 0.00,
-  `total_amount_paid` DECIMAL(12, 2) DEFAULT 0.00,
-  
-  `payment_status` ENUM('pending', 'partial_paid', 'settled') DEFAULT 'pending',
-  `last_payment_date` DATETIME DEFAULT NULL,
+  -- Stored percentage configuration
+  `design_fee_designer_1st_pct` DECIMAL(5,2) NOT NULL DEFAULT 2.50,
+  `design_fee_designer_2nd_pct` DECIMAL(5,2) NOT NULL DEFAULT 2.50,
+  `design_fee_manager_1st_pct` DECIMAL(5,2) NOT NULL DEFAULT 2.50,
+  `design_fee_manager_2nd_pct` DECIMAL(5,2) NOT NULL DEFAULT 2.50,
+  `commission_1st_pct` DECIMAL(5,2) NOT NULL DEFAULT 5.00,
+  `construction_main_pct` DECIMAL(5,2) NOT NULL DEFAULT 80.00,
+  `construction_deposit_pct` DECIMAL(5,2) NOT NULL DEFAULT 20.00,
+  `materials_pct` DECIMAL(5,2) NOT NULL DEFAULT 45.00,
+  `inspection_pct` DECIMAL(5,2) NOT NULL DEFAULT 5.00,
+  `contractor_pct` DECIMAL(5,2) NOT NULL DEFAULT 30.00,
+  `commission_final_pct` DECIMAL(5,2) NOT NULL DEFAULT 5.00,
   
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   
-  PRIMARY KEY (`payment_id`),
-  KEY `payment_status_idx` (`payment_status`)
+  PRIMARY KEY (`payment_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Sample OrderPayment data for existing orders
@@ -308,10 +301,10 @@ CREATE TABLE `OrderPayment` (
 -- Order 1: total_cost=400k, design=40k+2k, materials=180k, contractor=120k, inspector=20k, commission_1st=20k, deposit=64k, commission_final=40k
 -- Order 2: total_cost=350k, design=35k+2k, materials=157.5k, contractor=105k, inspector=17.5k, commission_1st=17.5k, deposit=56k, commission_final=35k
 -- Order 3: total_cost=300k, design=30k+2k, materials=135k, contractor=90k, inspector=15k, commission_1st=15k, deposit=48k, commission_final=30k
-INSERT INTO `OrderPayment` (`total_cost`, `design_fee_designer_1st`, `design_fee_designer_2nd`, `design_fee_manager_1st`, `design_fee_manager_2nd`, `design_deposit`, `commission_1st`, `construction_main_price`, `construction_deposit`, `materials_cost`, `inspection_fee`, `contractor_fee`, `commission_final`, `total_design_payment`, `total_construction_payment`, `total_amount_due`, `total_amount_paid`, `payment_status`) VALUES
-(400000.00, 10000.00, 10000.00, 10000.00, 10000.00, 2000.00, 20000.00, 320000.00, 64000.00, 180000.00, 20000.00, 120000.00, 40000.00, 62000.00, 424000.00, 486000.00, 0.00, 'pending'),
-(350000.00, 8750.00, 8750.00, 8750.00, 8750.00, 2000.00, 17500.00, 280000.00, 56000.00, 157500.00, 17500.00, 105000.00, 35000.00, 54500.00, 371000.00, 425500.00, 0.00, 'pending'),
-(300000.00, 7500.00, 7500.00, 7500.00, 7500.00, 2000.00, 15000.00, 240000.00, 48000.00, 135000.00, 15000.00, 90000.00, 30000.00, 47500.00, 318000.00, 365500.00, 0.00, 'pending');
+INSERT INTO `OrderPayment` (`total_cost`, `design_fee_designer_1st_pct`, `design_fee_designer_2nd_pct`, `design_fee_manager_1st_pct`, `design_fee_manager_2nd_pct`, `commission_1st_pct`, `construction_main_pct`, `construction_deposit_pct`, `materials_pct`, `inspection_pct`, `contractor_pct`, `commission_final_pct`) VALUES
+(400000.00, 2.50, 2.50, 2.50, 2.50, 5.00, 80.00, 20.00, 45.00, 5.00, 30.00, 5.00),
+(350000.00, 2.50, 2.50, 2.50, 2.50, 5.00, 80.00, 20.00, 45.00, 5.00, 30.00, 5.00),
+(300000.00, 2.50, 2.50, 2.50, 2.50, 5.00, 80.00, 20.00, 45.00, 5.00, 30.00, 5.00);
 
 -- Update Order to link to OrderPayment for all orders
 UPDATE `Order` SET `payment_id` = 1 WHERE `orderid` = 1;
@@ -323,6 +316,8 @@ CREATE TABLE `OrderReference` (
   `id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
   `orderid` INT NOT NULL,
   `productid` INT DEFAULT NULL,
+  `color` VARCHAR(100) DEFAULT NULL,
+  `quantity` INT DEFAULT NULL,
   `messageid` INT DEFAULT NULL,
   `designid` INT DEFAULT NULL,
   `added_by_type` VARCHAR(50) DEFAULT NULL,
@@ -333,6 +328,8 @@ CREATE TABLE `OrderReference` (
   `price` DECIMAL(10, 2) DEFAULT NULL,
   KEY `orderid_idx` (`orderid`),
   KEY `productid_idx` (`productid`),
+  KEY `idx_color` (`color`),
+  KEY `idx_quantity` (`quantity`),
   KEY `designid_idx` (`designid`),
   CONSTRAINT `fk_or_orderid` FOREIGN KEY (`orderid`) REFERENCES `Order` (`orderid`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -473,6 +470,8 @@ CREATE TABLE `Schedule` (
   `construction_start_date` date DEFAULT NULL,
    `construction_end_date` date DEFAULT NULL,
    `construction_date_status` ENUM('pending', 'accepted', 'rejected') DEFAULT 'pending',
+    `current_version` INT DEFAULT 1,
+    `parent_schedule_id` INT DEFAULT NULL,
   PRIMARY KEY (`scheduleid`),
   KEY `orderid_pk_idx` (`orderid`),
   KEY `managerid_pk_idx` (`managerid`),
@@ -815,6 +814,13 @@ CREATE TABLE IF NOT EXISTS `WeeklyConstructionReport` (
     `created_by_type` VARCHAR(50) NOT NULL,
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deposit_amount` DECIMAL(10,2) DEFAULT 0.00,
+    `client_feedback` TEXT DEFAULT NULL,
+    `client_feedback_at` TIMESTAMP NULL DEFAULT NULL,
+    `designer_feedback` TEXT DEFAULT NULL,
+    `designer_feedback_at` TIMESTAMP NULL DEFAULT NULL,
+    `supplier_response` TEXT DEFAULT NULL,
+    `supplier_response_at` TIMESTAMP NULL DEFAULT NULL,
     PRIMARY KEY (`report_id`),
     KEY `orderid_idx` (`orderid`),
     KEY `week_number_idx` (`week_number`),
@@ -828,7 +834,8 @@ CREATE TABLE IF NOT EXISTS `ConstructionPaymentRecord` (
     `percentage` INT NOT NULL,
     `amount` DECIMAL(12,2) NOT NULL,
     `milestone` VARCHAR(255),
-    `paid_at` DATETIME NOT NULL,
+    `paid_at` DATETIME NULL,
+    `status` ENUM('pending', 'paid') DEFAULT 'pending',
     PRIMARY KEY (`record_id`),
     KEY `orderid_idx` (`orderid`),
     FOREIGN KEY (`orderid`) REFERENCES `Order` (`orderid`) ON DELETE CASCADE
@@ -845,53 +852,29 @@ SELECT supplierid, 0, 0, 0, 0 FROM Supplier
 WHERE supplierid NOT IN (SELECT supplierid FROM SupplierWallet);
 
 
-ALTER TABLE `Order` ADD COLUMN `deposit_amount` DECIMAL(10,2) DEFAULT 0.00 AFTER `Requirements`;
-
-ALTER TABLE `Order` ADD COLUMN `final_payment` DECIMAL(10,2) DEFAULT 0.00 AFTER `deposit_amount`;
+-- deposit_amount and final_payment are defined directly in Order CREATE TABLE above.
 
 UPDATE `Order` SET `deposit_amount` = `budget` * 0.25 WHERE `deposit_amount` = 0 OR `deposit_amount` IS NULL;
--- Database Update: Add color and quantity to OrderReference table
--- This script adds support for storing product color and quantity selections in order references
-ALTER TABLE `OrderReference` 
-ADD COLUMN `color` VARCHAR(100) DEFAULT NULL AFTER `productid`,
-ADD COLUMN `quantity` INT DEFAULT NULL AFTER `color`;
-
--- Add indexes for better query performance
-ALTER TABLE `OrderReference`
-ADD INDEX `idx_color` (`color`),
-ADD INDEX `idx_quantity` (`quantity`);
+-- color/quantity and related indexes are defined directly in OrderReference CREATE TABLE above.
 
 -- Ensure the construction_date_status column has proper default
 ALTER TABLE `Schedule` 
 MODIFY COLUMN `construction_date_status` ENUM('pending', 'accepted', 'rejected') DEFAULT 'pending';
 
--- Add a version control field to the Schedule table
-ALTER TABLE `Schedule` 
-ADD COLUMN `current_version` INT DEFAULT 1,
-ADD COLUMN `parent_schedule_id` INT DEFAULT NULL;
+-- current_version and parent_schedule_id are defined directly in Schedule CREATE TABLE above.
 
--- Add actual_completion_date to Order table
-ALTER TABLE `Order` ADD COLUMN `actual_completion_date` DATE DEFAULT NULL AFTER `ostatus`;
+-- actual_completion_date is defined directly in Order CREATE TABLE above.
 
-ALTER TABLE `WeeklyConstructionReport` 
-ADD COLUMN `client_feedback` TEXT DEFAULT NULL,
-ADD COLUMN `client_feedback_at` TIMESTAMP NULL DEFAULT NULL,
-ADD COLUMN `designer_feedback` TEXT DEFAULT NULL,
-ADD COLUMN `designer_feedback_at` TIMESTAMP NULL DEFAULT NULL,
-ADD COLUMN `supplier_response` TEXT DEFAULT NULL,
-ADD COLUMN `supplier_response_at` TIMESTAMP NULL DEFAULT NULL;
+-- feedback columns are defined directly in WeeklyConstructionReport CREATE TABLE above.
 
--- Add payment_plan column to Order table
-ALTER TABLE `Order` ADD COLUMN `payment_plan` ENUM('full', 'installment_25', 'installment_50') DEFAULT 'full' AFTER `ostatus`;
+-- payment_plan is defined directly in Order CREATE TABLE above.
 
 -- Update existing orders with their payment plans (example for order 4)
 UPDATE `Order` SET `payment_plan` = 'installment_25' WHERE `orderid` = 4;
 
--- Add status column to ConstructionPaymentRecord table
-ALTER TABLE `ConstructionPaymentRecord` 
-ADD COLUMN `status` ENUM('pending', 'paid') DEFAULT 'pending' AFTER `paid_at`;
+-- status is defined directly in ConstructionPaymentRecord CREATE TABLE above.
 
--- Update existing records
+-- Seed consistency after schema initialization
 UPDATE `ConstructionPaymentRecord` SET `status` = 'paid' WHERE `paid_at` IS NOT NULL;
 UPDATE `ConstructionPaymentRecord` SET `status` = 'pending' WHERE `paid_at` IS NULL;
 
@@ -899,11 +882,9 @@ UPDATE `ConstructionPaymentRecord` SET `status` = 'pending' WHERE `paid_at` IS N
 ALTER TABLE `ConstructionPaymentRecord` 
 MODIFY COLUMN `paid_at` DATETIME NULL DEFAULT NULL;
 
--- Add inspection columns to Order table
-ALTER TABLE `Order` 
-ADD COLUMN `inspection_date` DATETIME NULL DEFAULT NULL,
-ADD COLUMN `inspection_status` ENUM('pending', 'accepted', 'rejected', 'client_suggested') DEFAULT NULL,
-ADD COLUMN `client_suggested_date` DATETIME NULL DEFAULT NULL;
+-- OrderPayment percentage columns are defined directly in CREATE TABLE above.
+
+-- inspection columns are defined directly in Order CREATE TABLE above.
 
 -- Create inspection reports table
 CREATE TABLE IF NOT EXISTS `InspectionReport` (
@@ -916,39 +897,14 @@ CREATE TABLE IF NOT EXISTS `InspectionReport` (
     `submitted_by` INT NOT NULL,
     `submitted_by_type` VARCHAR(50) NOT NULL,
     `status` ENUM('draft', 'submitted') DEFAULT 'submitted',
+    `result` ENUM('pass', 'fail') DEFAULT NULL,
     PRIMARY KEY (`report_id`),
     KEY `orderid_idx` (`orderid`),
     FOREIGN KEY (`orderid`) REFERENCES `Order` (`orderid`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-ALTER TABLE `InspectionReport` 
-ADD COLUMN `result` ENUM('pass', 'fail') DEFAULT NULL AFTER `status`;
 
-
-ALTER TABLE `Order` 
-MODIFY COLUMN `ostatus` ENUM(
-    'waiting confirm', 
-    'designing', 
-    'reviewing design proposal', 
-    'waiting for review design', 
-    'drafting 2nd proposal', 
-    'waiting client review', 
-    'waiting 2nd design phase payment', 
-    'waiting final design phase payment', 
-    'waiting 1st construction phase payment', 
-    'complete', 
-    'rejected',
-    'Coordinating Contractors',
-    'preparing', 
-    'waiting client reassignment', 
-    'waiting client confirm construction date', 
-    'In construction', 
-    'waiting start construction Pay',
-    'Construction begins',
-    'Waiting for inspection',
-    'inspection_completed',
-     'inspection_failed'          
-) DEFAULT 'waiting confirm';
+-- ostatus enum already includes inspection_completed/inspection_failed in CREATE TABLE.
 
 -- Create table to track client inspection confirmation
 CREATE TABLE IF NOT EXISTS `InspectionConfirmation` (

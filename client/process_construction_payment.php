@@ -24,8 +24,7 @@ $installment_index = $payment['installment_index'];
 $installments = $payment['installments'];
 
 // Verify order and get payment method
-$sql = "SELECT o.*, op.total_cost, op.total_amount_paid, op.payment_status, 
-               op.total_design_payment, c.payment_method, c.cname, c.budget, op.payment_id
+$sql = "SELECT o.*, op.total_cost, c.payment_method, c.cname, c.budget, op.payment_id
         FROM `Order` o
         JOIN OrderPayment op ON o.payment_id = op.payment_id
         JOIN Client c ON o.clientid = c.clientid
@@ -41,6 +40,15 @@ if (!$order) {
     header('Location: order_history.php');
     exit;
 }
+
+$paid_total_sql = "SELECT IFNULL(SUM(amount), 0) AS total_paid FROM ConstructionPaymentRecord WHERE orderid = ? AND status = 'paid'";
+$paid_total_stmt = mysqli_prepare($mysqli, $paid_total_sql);
+mysqli_stmt_bind_param($paid_total_stmt, "i", $order_id);
+mysqli_stmt_execute($paid_total_stmt);
+$paid_total_result = mysqli_stmt_get_result($paid_total_stmt);
+$paid_total_row = mysqli_fetch_assoc($paid_total_result);
+$current_total_paid = floatval($paid_total_row['total_paid'] ?? 0);
+mysqli_stmt_close($paid_total_stmt);
 
 // Parse saved payment method
 $paymentMethodData = [];
@@ -77,22 +85,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['proceed_pay'])) {
         mysqli_begin_transaction($mysqli);
         
         try {
-            $new_total_paid = floatval($order['total_amount_paid']) + $amount_to_pay;
             $payment_id = intval($order['payment_id']);
-            
-            // Update OrderPayment
-            $update_sql = "UPDATE OrderPayment 
-                           SET total_amount_paid = ?,
-                               payment_status = CASE 
-                                   WHEN ? >= total_cost THEN 'settled'
-                                   ELSE 'partial_paid'
-                               END,
-                               last_payment_date = NOW()
-                           WHERE payment_id = ?";
-            $update_stmt = mysqli_prepare($mysqli, $update_sql);
-            mysqli_stmt_bind_param($update_stmt, "ddi", $new_total_paid, $new_total_paid, $payment_id);
-            mysqli_stmt_execute($update_stmt);
-            mysqli_stmt_close($update_stmt);
             
             // Store installment payment record (if table exists)
             $installment_sql = "INSERT INTO ConstructionPaymentRecord 
@@ -145,7 +138,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['proceed_pay'])) {
 
 $current_installment_info = $installments[$installment_index];
 $total_cost = floatval($order['total_cost']);
-$total_paid = floatval($order['total_amount_paid']);
+$total_paid = $current_total_paid;
 $remaining_budget = floatval($order['budget']) - $total_paid;
 $current_milestone = getMilestoneMessage($plan, $installment_index, count($installments));
 

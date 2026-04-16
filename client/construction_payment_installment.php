@@ -27,7 +27,7 @@ if ($order_id <= 0 || $amount <= 0) {
 $sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.cost, o.designid, o.deposit, o.final_payment,
                d.expect_price as design_price, d.tag,
                c.clientid, c.cname, c.payment_method, c.budget,
-               op.total_cost, op.total_amount_paid, op.payment_status,
+           op.total_cost,
                o.payment_plan
         FROM `Order` o
         LEFT JOIN `Design` d ON o.designid = d.designid
@@ -44,7 +44,14 @@ if (!$order) {
 }
 
 $total_cost = floatval($order['total_cost'] ?? 0);
-$total_paid = floatval($order['total_amount_paid'] ?? 0);
+$total_paid_sql = "SELECT IFNULL(SUM(amount), 0) AS total_paid FROM ConstructionPaymentRecord WHERE orderid = ? AND status = 'paid'";
+$total_paid_stmt = mysqli_prepare($mysqli, $total_paid_sql);
+mysqli_stmt_bind_param($total_paid_stmt, "i", $order_id);
+mysqli_stmt_execute($total_paid_stmt);
+$total_paid_result = mysqli_stmt_get_result($total_paid_stmt);
+$total_paid_row = mysqli_fetch_assoc($total_paid_result);
+$total_paid = floatval($total_paid_row['total_paid'] ?? 0);
+mysqli_stmt_close($total_paid_stmt);
 $payment_plan = $order['payment_plan'] ?? 'full';
 $current_budget = floatval($order['budget'] ?? 0);
 
@@ -119,21 +126,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 mysqli_stmt_bind_param($update_record_stmt, "i", $record_id);
                 mysqli_stmt_execute($update_record_stmt);
                 mysqli_stmt_close($update_record_stmt);
-                
-                // Update OrderPayment total_amount_paid
-                $new_total_paid = $total_paid + $amount;
-                $update_payment_sql = "UPDATE OrderPayment 
-                                       SET total_amount_paid = ?,
-                                           payment_status = CASE 
-                                               WHEN ? >= total_cost THEN 'settled'
-                                               ELSE 'partial_paid'
-                                           END,
-                                           last_payment_date = NOW()
-                                       WHERE payment_id = (SELECT payment_id FROM `Order` WHERE orderid = ?)";
-                $update_payment_stmt = mysqli_prepare($mysqli, $update_payment_sql);
-                mysqli_stmt_bind_param($update_payment_stmt, "ddi", $new_total_paid, $new_total_paid, $order_id);
-                mysqli_stmt_execute($update_payment_stmt);
-                mysqli_stmt_close($update_payment_stmt);
                 
                 // Check if there are more pending payments for other milestones
                 $check_pending_sql = "SELECT COUNT(*) as pending_count FROM ConstructionPaymentRecord 
@@ -428,7 +420,7 @@ $confirm_message = "Confirm payment HK$" . number_format($amount, 2) . " for " .
                 <?php if (isset($_GET['success'])): ?>
                     <div class="alert alert-success alert-message">
                         <i class="fas fa-check-circle me-2"></i>
-                        Milestone payment completed successfully! HK$<?php echo number_format($amount, 2); ?> received.
+                        Payment successful.
                     </div>
                 <?php endif; ?>
                 

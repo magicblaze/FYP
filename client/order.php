@@ -283,26 +283,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Calculate OrderPayment breakdown based on design expected price (main price)
         // Formula: Design 10% (d5% m5%), material 45%, contractor 30%, inspector 5%, commission 10%
         $total_cost = $main_price;
-        $design_fee_designer_1st = $total_cost * 0.025;  // 2.5%
-        $design_fee_designer_2nd = $total_cost * 0.025;  // 2.5%
-        $design_fee_manager_1st = $total_cost * 0.025;   // 2.5%
-        $design_fee_manager_2nd = $total_cost * 0.025;   // 2.5%
-        $design_deposit = 2000.00;                        // Fixed deposit
-        $commission_1st = $total_cost * 0.05;            // 5% (from design phase)
-        
-        $construction_main_price = $total_cost * 0.80;   // 80% of total goes to construction
+        $design_fee_designer_1st_pct = 2.50;
+        $design_fee_designer_2nd_pct = 2.50;
+        $design_fee_manager_1st_pct = 2.50;
+        $design_fee_manager_2nd_pct = 2.50;
+        $commission_1st_pct = 5.00;
+        $construction_main_pct = 80.00;
+        $construction_deposit_pct = 20.00;
+        $materials_pct = 45.00;
+        $inspection_pct = 5.00;
+        $contractor_pct = 30.00;
+        $commission_final_pct = 5.00;
 
-        $materials_cost = $total_cost * 0.45;            // 45% of total
-        $inspection_fee = $total_cost * 0.05;            // 5% of total
-        $contractor_fee = $total_cost * 0.30;            // 30% of total
-        $commission_final = $total_cost * 0.05;          // 5% (from construction phase)
-
-        $construction_deposit = $construction_main_price * 0.20;  // 20% 
-
-        $total_design_payment = $main_price * 0.10; // Total design payment (10% of design expected price)
-        $total_construction_payment = $construction_main_price;
-        $total_amount_due = $total_design_payment + $total_construction_payment + $commission_final+ $commission_1st;
-        
         $paymentId = null;
         $orderId = null;
 
@@ -321,28 +313,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $orderId = (int) $stmt->insert_id;
             $stmt->close();
 
-            $insPayment = $mysqli->prepare("INSERT INTO OrderPayment (total_cost, design_fee_designer_1st, design_fee_designer_2nd, design_fee_manager_1st, design_fee_manager_2nd, design_deposit, commission_1st, construction_main_price, construction_deposit, materials_cost, inspection_fee, contractor_fee, commission_final, total_design_payment, total_construction_payment, total_amount_due, total_amount_paid, payment_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0.00, 'pending')");
+            $insPayment = $mysqli->prepare("INSERT INTO OrderPayment (total_cost, design_fee_designer_1st_pct, design_fee_designer_2nd_pct, design_fee_manager_1st_pct, design_fee_manager_2nd_pct, commission_1st_pct, construction_main_pct, construction_deposit_pct, materials_pct, inspection_pct, contractor_pct, commission_final_pct) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
             if (!$insPayment) {
                 throw new Exception('Prepare payment insert failed');
             }
             $insPayment->bind_param(
-                "dddddddddddddddd",
+                "dddddddddddd",
                 $total_cost,
-                $design_fee_designer_1st,
-                $design_fee_designer_2nd,
-                $design_fee_manager_1st,
-                $design_fee_manager_2nd,
-                $design_deposit,
-                $commission_1st,
-                $construction_main_price,
-                $construction_deposit,
-                $materials_cost,
-                $inspection_fee,
-                $contractor_fee,
-                $commission_final,
-                $total_design_payment,
-                $total_construction_payment,
-                $total_amount_due
+                $design_fee_designer_1st_pct,
+                $design_fee_designer_2nd_pct,
+                $design_fee_manager_1st_pct,
+                $design_fee_manager_2nd_pct,
+                $commission_1st_pct,
+                $construction_main_pct,
+                $construction_deposit_pct,
+                $materials_pct,
+                $inspection_pct,
+                $contractor_pct,
+                $commission_final_pct
             );
             if (!$insPayment->execute()) {
                 throw new Exception('Payment insert failed');

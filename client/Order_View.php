@@ -15,14 +15,18 @@ $orderid = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
 // Verify order exists and belongs to this client
 $check_order_sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.cost, o.deposit, o.final_payment,
-               o.budget AS order_budget,
-               c.clientid, c.cname as client_name, c.ctel, c.cemail, c.budget AS client_budget,
+               COALESCE(NULLIF(o.budget, 0), op.total_cost, 0) AS order_budget,
+               c.clientid, c.cname as client_name, c.ctel, c.cemail,
                d.designid, d.designName, d.expect_price as design_price, d.tag as design_tag,
                s.scheduleid, s.OrderFinishDate, s.DesignFinishDate,
                des.dname as designer_name, des.status as designer_status,
-               op.total_design_payment, op.total_construction_payment,
-               op.commission_1st, op.commission_final, op.total_amount_due,
-               op.inspection_fee, op.contractor_fee
+         IFNULL(op.total_cost, 0) * ((IFNULL(op.design_fee_designer_1st_pct, 0) + IFNULL(op.design_fee_designer_2nd_pct, 0) + IFNULL(op.design_fee_manager_1st_pct, 0) + IFNULL(op.design_fee_manager_2nd_pct, 0)) / 100) AS total_design_payment,
+         IFNULL(op.total_cost, 0) * (IFNULL(op.construction_main_pct, 0) / 100) AS total_construction_payment,
+         IFNULL(op.total_cost, 0) * (IFNULL(op.commission_1st_pct, 0) / 100) AS commission_1st,
+         IFNULL(op.total_cost, 0) * (IFNULL(op.commission_final_pct, 0) / 100) AS commission_final,
+         IFNULL(op.total_cost, 0) AS total_amount_due,
+         IFNULL(op.total_cost, 0) * (IFNULL(op.inspection_pct, 0) / 100) AS inspection_fee,
+         IFNULL(op.total_cost, 0) * (IFNULL(op.contractor_pct, 0) / 100) AS contractor_fee
         FROM `Order` o
         LEFT JOIN `Client` c ON o.clientid = c.clientid
         LEFT JOIN `Design` d ON o.designid = d.designid

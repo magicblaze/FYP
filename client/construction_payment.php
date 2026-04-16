@@ -17,7 +17,7 @@ if ($order_id <= 0) {
 }
 
 // Verify order belongs to this client
-$sql = "SELECT o.*, d.designName, op.total_cost, op.total_amount_paid, op.payment_status
+$sql = "SELECT o.*, d.designName, op.total_cost
         FROM `Order` o
         JOIN Design d ON o.designid = d.designid
         JOIN OrderPayment op ON o.payment_id = op.payment_id

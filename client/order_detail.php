@@ -136,15 +136,29 @@ $orderSql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.gross_floor
               o.supplierid, o.supplier_status,
               d.designid, d.expect_price, d.tag, dz.dname, dz.designerid,
               c.budget,
-              op.payment_id, op.total_cost,
-              op.design_fee_designer_1st, op.design_fee_designer_2nd,
-              op.design_fee_manager_1st, op.design_fee_manager_2nd,
-              op.design_deposit, op.commission_1st,
-              op.construction_main_price, op.construction_deposit, op.materials_cost,
-              op.inspection_fee, op.contractor_fee, op.commission_final,
-              op.additional_fees,
-              op.total_design_payment, op.total_construction_payment,
-              op.total_amount_due, op.total_amount_paid, op.payment_status
+              op.payment_id, IFNULL(op.total_cost, 0) AS total_cost,
+              IFNULL(op.total_cost, 0) * (IFNULL(op.design_fee_designer_1st_pct, 0) / 100) AS design_fee_designer_1st,
+              IFNULL(op.total_cost, 0) * (IFNULL(op.design_fee_designer_2nd_pct, 0) / 100) AS design_fee_designer_2nd,
+              IFNULL(op.total_cost, 0) * (IFNULL(op.design_fee_manager_1st_pct, 0) / 100) AS design_fee_manager_1st,
+              IFNULL(op.total_cost, 0) * (IFNULL(op.design_fee_manager_2nd_pct, 0) / 100) AS design_fee_manager_2nd,
+              IFNULL(o.deposit, 0) AS design_deposit,
+              IFNULL(op.total_cost, 0) * (IFNULL(op.commission_1st_pct, 0) / 100) AS commission_1st,
+              IFNULL(op.total_cost, 0) * (IFNULL(op.construction_main_pct, 0) / 100) AS construction_main_price,
+              IFNULL(op.total_cost, 0) * (IFNULL(op.construction_main_pct, 0) / 100) * (IFNULL(op.construction_deposit_pct, 0) / 100) AS construction_deposit,
+              IFNULL(op.total_cost, 0) * (IFNULL(op.materials_pct, 0) / 100) AS materials_cost,
+              IFNULL(op.total_cost, 0) * (IFNULL(op.inspection_pct, 0) / 100) AS inspection_fee,
+              IFNULL(op.total_cost, 0) * (IFNULL(op.contractor_pct, 0) / 100) AS contractor_fee,
+              IFNULL(op.total_cost, 0) * (IFNULL(op.commission_final_pct, 0) / 100) AS commission_final,
+              (SELECT IFNULL(SUM(af.amount), 0) FROM AdditionalFee af WHERE af.orderid = o.orderid) AS additional_fees,
+              IFNULL(op.total_cost, 0) * ((IFNULL(op.design_fee_designer_1st_pct, 0) + IFNULL(op.design_fee_designer_2nd_pct, 0) + IFNULL(op.design_fee_manager_1st_pct, 0) + IFNULL(op.design_fee_manager_2nd_pct, 0)) / 100) AS total_design_payment,
+              IFNULL(op.total_cost, 0) * (IFNULL(op.construction_main_pct, 0) / 100) AS total_construction_payment,
+              IFNULL(op.total_cost, 0) AS total_amount_due,
+              (SELECT IFNULL(SUM(cpr.amount), 0) FROM ConstructionPaymentRecord cpr WHERE cpr.orderid = o.orderid AND cpr.status = 'paid') AS total_amount_paid,
+              CASE
+                  WHEN (SELECT IFNULL(SUM(cpr.amount), 0) FROM ConstructionPaymentRecord cpr WHERE cpr.orderid = o.orderid AND cpr.status = 'paid') >= IFNULL(op.total_cost, 0) THEN 'settled'
+                  WHEN (SELECT IFNULL(SUM(cpr.amount), 0) FROM ConstructionPaymentRecord cpr WHERE cpr.orderid = o.orderid AND cpr.status = 'paid') > 0 THEN 'partial_paid'
+                  ELSE 'pending'
+              END AS payment_status
              FROM `Order` o
              JOIN Design d ON o.designid = d.designid
              JOIN Designer dz ON d.designerid = dz.designerid
