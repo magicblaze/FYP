@@ -68,10 +68,10 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             mysqli_stmt_close($update_stmt);
             
             // Check if construction payment has already been made
-            $check_payment_sql = "SELECT o.ostatus, 
-                                         (SELECT COUNT(*) FROM ConstructionPaymentRecord WHERE orderid = ?) as payment_count
-                                  FROM `Order` o
-                                  WHERE o.orderid = ?";
+           $check_payment_sql = "SELECT o.ostatus, 
+                             (SELECT COUNT(*) FROM ConstructionPaymentRecord WHERE orderid = ?) as payment_count
+                      FROM `Order` o
+                      WHERE o.orderid = ?";
             $check_stmt = mysqli_prepare($mysqli, $check_payment_sql);
             mysqli_stmt_bind_param($check_stmt, "ii", $order_id, $order_id);
             mysqli_stmt_execute($check_stmt);
@@ -79,8 +79,25 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             $payment_check = mysqli_fetch_assoc($check_result);
             mysqli_stmt_close($check_stmt);
             
-            $has_paid = ($payment_check && ($payment_check['ostatus'] == 'Construction begins' || $payment_check['payment_count'] > 0));
-            
+            $has_paid = ($payment_check && $payment_check['payment_count'] > 0);
+
+
+$construction_paid_sql = "SELECT COUNT(*) as cnt FROM ConstructionPaymentRecord 
+                          WHERE orderid = ? AND percentage IN (50, 25, 75, 100)";
+$construction_stmt = mysqli_prepare($mysqli, $construction_paid_sql);
+mysqli_stmt_bind_param($construction_stmt, "i", $order_id);
+mysqli_stmt_execute($construction_stmt);
+$construction_result = mysqli_stmt_get_result($construction_stmt);
+$construction_paid = mysqli_fetch_assoc($construction_result)['cnt'] > 0;
+mysqli_stmt_close($construction_stmt);
+
+if ($construction_paid) {
+
+    $message = "Construction schedule has been updated and accepted...";
+} else {
+    header('Location: construction_payment.php?orderid=' . $order_id);
+    exit;
+}
             // Close pending statement
             mysqli_stmt_close($pending_stmt);
             
