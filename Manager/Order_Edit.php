@@ -378,6 +378,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_inspection_rep
         mysqli_stmt_close($notify_supplier_stmt);
     }
     
+
     if (ob_get_length()) ob_clean();
     $msg = ($report_result == 'pass') ? 'report_submitted' : 'fail_report_submitted';
     header("Location: Order_Edit.php?id=" . $orderid . "&msg=" . $msg);
@@ -2144,16 +2145,24 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                 $is_inspection_completed = ($current_ostatus == 'inspection_completed');
                 $has_report_submitted = false;
                 
-                // Check if report already submitted (for both pass and fail)
+// Check if report already submitted for THIS inspection date only
+$has_report_submitted = false;
 if ($is_inspection_completed || $current_ostatus == 'inspection_failed') {
-    $check_report_sql = "SELECT COUNT(*) as cnt FROM InspectionReport WHERE orderid = ? AND result IN ('pass', 'fail')";
-    $check_report_stmt = mysqli_prepare($mysqli, $check_report_sql);
-    mysqli_stmt_bind_param($check_report_stmt, "i", $orderid);
-    mysqli_stmt_execute($check_report_stmt);
-    $check_report_result = mysqli_stmt_get_result($check_report_stmt);
-    $check_report_row = mysqli_fetch_assoc($check_report_result);
-    $has_report_submitted = ($check_report_row['cnt'] > 0);
-    mysqli_stmt_close($check_report_stmt);
+    $current_inspection_date = $inspection_date ?? null;
+    
+    if ($current_inspection_date) {
+        $check_report_sql = "SELECT COUNT(*) as cnt FROM InspectionReport 
+                             WHERE orderid = ? 
+                             AND DATE(inspection_date) = DATE(?)
+                             AND result IN ('pass', 'fail')";
+        $check_report_stmt = mysqli_prepare($mysqli, $check_report_sql);
+        mysqli_stmt_bind_param($check_report_stmt, "is", $orderid, $current_inspection_date);
+        mysqli_stmt_execute($check_report_stmt);
+        $check_report_result = mysqli_stmt_get_result($check_report_stmt);
+        $check_report_row = mysqli_fetch_assoc($check_report_result);
+        $has_report_submitted = ($check_report_row['cnt'] > 0);
+        mysqli_stmt_close($check_report_stmt);
+    }
 }
                 ?>
                 

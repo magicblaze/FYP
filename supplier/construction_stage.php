@@ -365,7 +365,7 @@ mysqli_stmt_close($order_stmt);
                 <div class="card-body p-0">
                     <div class="table-responsive">
                         <table class="table table-sm mb-0">
-                            <thead class="table-light">
+                            <thead class="table-blight">
                                 <tr>
                                     <th>Version</th>
                                     <th>Start Date</th>
@@ -379,7 +379,6 @@ mysqli_stmt_close($order_stmt);
                                     <tr>
                                         <td>#<?= $history['version'] ?></td>
                                         <td><?= date('M d, Y', strtotime($history['construction_start_date'])) ?></td>
-                                        <td>To</td>
                                         <td><?= date('M d, Y', strtotime($history['construction_end_date'])) ?></td>
                                         <td>
                                             <?php if ($history['status'] == 'accepted'): ?>

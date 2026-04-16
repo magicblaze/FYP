@@ -48,15 +48,20 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["handle_assignment"]))
 if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["confirm_inspection_recovery"])) {
     $order_id = intval($_POST["order_id"]);
     
-    // Update order status to Construction begins
-    $update_sql = "UPDATE `Order` SET ostatus = 'Construction begins' WHERE orderid = ? AND supplierid = ?";
+    // Update order status to Construction begins AND clear inspection fields
+    $update_sql = "UPDATE `Order` SET 
+                   ostatus = 'Construction begins',
+                   inspection_date = NULL,
+                   inspection_status = NULL,
+                   client_suggested_date = NULL
+                   WHERE orderid = ? AND supplierid = ?";
     $update_stmt = mysqli_prepare($mysqli, $update_sql);
     mysqli_stmt_bind_param($update_stmt, "ii", $order_id, $supplier_id);
     
     if (mysqli_stmt_execute($update_stmt)) {
         // Optional: Add notification to manager
         $notify_sql = "INSERT INTO Notification (user_type, user_id, orderid, message, type, created_at) 
-                       VALUES ('manager', (SELECT managerid FROM Schedule WHERE orderid = ? LIMIT 1), ?, 'Supplier has reviewed the failed inspection and confirmed to proceed with construction for Order #$order_id.', 'inspection_recovery', NOW())";
+                       VALUES ('manager', (SELECT managerid FROM Schedule WHERE orderid = ? LIMIT 1), ?, 'Supplier has reviewed the failed inspection and confirmed to proceed with construction for Order #$order_id. Inspection fields have been cleared.', 'inspection_recovery', NOW())";
         $notify_stmt = mysqli_prepare($mysqli, $notify_sql);
         mysqli_stmt_bind_param($notify_stmt, "ii", $order_id, $order_id);
         mysqli_stmt_execute($notify_stmt);
@@ -620,7 +625,7 @@ mysqli_stmt_close($workers_stmt);
                                                 <div class="card-body p-2 text-center">
                                                     <a href="<?= $file_url ?>" target="_blank" class="btn btn-sm btn-outline-primary w-100">
                                                         <i class="fas fa-download me-1"></i> <?= basename($file) ?>
-                                                    </a>
+           c                                         </a>
                                                 </div>
                                             </div>
                                         </div>
