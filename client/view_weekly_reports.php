@@ -324,22 +324,7 @@ mysqli_stmt_close($order_detail_stmt);
             <i class="fas fa-arrow-left me-1"></i>Back to Projects
         </a>
         
-        <!-- Payment Required Alert for pending payment -->
-        <?php if ($pending_payment): ?>
-            <div class="payment-alert">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <i class="fas fa-credit-card me-2 fa-lg"></i>
-                        <strong>Payment Required!</strong> 
-                        <?= getMilestoneName($pending_payment['percentage'], $payment_plan) ?> of $<?= number_format($pending_payment['amount'], 2) ?> is due.
-                    </div>
-                    <a href="construction_payment_installment.php?orderid=<?= $order_id ?>&amount=<?= $pending_payment['amount'] ?>&milestone=<?= urlencode($pending_payment['milestone']) ?>&percentage=<?= $pending_payment['percentage'] ?>&record_id=<?= $pending_payment['record_id'] ?>" 
-                       class="btn-pay">
-                        <i class="fas fa-credit-card me-1"></i>Pay Now
-                    </a>
-                </div>
-            </div>
-        <?php endif; ?>
+
         
         <div class="card">
             <div class="card-header">

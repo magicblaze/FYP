@@ -544,13 +544,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['save_report'])) {
                     mysqli_stmt_execute($payment_record_stmt);
                     mysqli_stmt_close($payment_record_stmt);
                     
-                    // Update order status to waiting for payment
-                    $update_order_sql = "UPDATE `Order` SET ostatus = 'Construction begins' WHERE orderid = ?";
-                    $update_order_stmt = mysqli_prepare($mysqli, $update_order_sql);
-                    mysqli_stmt_bind_param($update_order_stmt, "i", $order_id);
-                    mysqli_stmt_execute($update_order_stmt);
-                    mysqli_stmt_close($update_order_stmt);
-                    
                     $report_message .= " A payment of $" . number_format($amount_to_pay, 2) . " is now required for the next construction phase.";
                     
                     // Notify client about required payment
