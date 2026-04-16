@@ -550,7 +550,7 @@
   transition: padding-bottom 260ms cubic-bezier(.2, .9, .2, 1);
 }
 
-/* Quick actions row (Local Assistant) */
+/* Quick actions row (My Customer Service) */
 .chatwidget-quick-actions {
   display: none;
   gap: 8px;

@@ -5,7 +5,6 @@ $pwd = "";
 $db = "fypdb";
 
 // Google reCAPTCHA v3 keys.
-// Paste your keys below, or leave empty and use environment variables:
 // RECAPTCHA_SITE_KEY and RECAPTCHA_SECRET_KEY.
 if (!defined('RECAPTCHA_SITE_KEY')) {
 	define('RECAPTCHA_SITE_KEY', '6Ld2sLosAAAAAIOHEW5OY6rPv9a7Nb7oyPV1XCL_');

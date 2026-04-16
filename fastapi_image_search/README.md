@@ -126,9 +126,3 @@ From your PHP page (e.g., `design_dashboard.php`), call:
 - `POST http://127.0.0.1:8001/search/text` with JSON `{ "query": "...", "top_k": 20 }`
 
 Then use returned `image_path` list to prioritize design IDs in your SQL result ordering.
-
-## Notes
-
-- First run downloads CLIP model (~hundreds of MB).
-- CPU works, but GPU is much faster.
-- Rebuild index whenever new images are added to `uploads/designs`.

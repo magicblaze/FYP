@@ -592,7 +592,7 @@ function initApp(config = {}) {
         if (!hasLocal) {
           rooms.unshift({
             ChatRoomid: 'local-ai',
-            roomname: 'Local Assistant',
+            roomname: 'My Customer Service',
             room_type: 'local',
             description: 'Assistant',
             unread: 0
@@ -627,7 +627,7 @@ function initApp(config = {}) {
       return rooms;
     }).catch(err => {
       console.error('Failed to load rooms', err);
-      const fallback = [{ ChatRoomid: 'local-ai', roomname: 'Local Assistant', room_type: 'local', description: 'Local Q&A (no server)', unread: 0 }];
+      const fallback = [{ ChatRoomid: 'local-ai', roomname: 'My Customer Service', room_type: 'local', description: 'Local Q&A (no server)', unread: 0 }];
       renderAgents(fallback, elements.agentsList, false);
       renderAgents(fallback, elements.agentsListOff, true);
       return fallback;
@@ -1389,7 +1389,7 @@ function initApp(config = {}) {
         });
       }
     } catch (e) {}
-    // wire up option buttons for local assistant suggestions
+    // wire up option buttons for My Customer Service suggestions
     try {
       const optionBtns = wrapper.querySelectorAll('.chat-option-btn');
       optionBtns.forEach(btn => {
@@ -1507,9 +1507,9 @@ function initApp(config = {}) {
       stopPolling();
       lastMessageId = 0;
       currentRoomId = 'local-ai';
-      if (elements.connectionStatus) elements.connectionStatus.textContent = 'Local Assistant';
+      if (elements.connectionStatus) elements.connectionStatus.textContent = 'My Customer Service';
       if (!setHeaderAvatarFromList(agent.ChatRoomid || agent.id || agent.roomId)) {
-        setHeaderAvatar('Local Assistant', true);
+        setHeaderAvatar('My Customer Service', true);
       }
       document.querySelectorAll('#agentsList .list-group-item, #agentsListOffcanvas .list-group-item').forEach(el => {
         el.classList.toggle('active', el.dataset.roomId == (agent.ChatRoomid || agent.id || agent.roomId));
@@ -1693,7 +1693,7 @@ function initApp(config = {}) {
     if (isLocalRoomId(roomId) || isLocalAgent(currentAgent)) {
       const text = (elements.input && elements.input.value || '').trim();
       if (pendingFile || widgetPendingFile) {
-        try { alert('Attachments are not supported in Local Assistant.'); } catch (e) {}
+        try { alert('Attachments are not supported in My Customer Service.'); } catch (e) {}
         try { clearSelectedPreview(document.getElementById(prefix + 'attachPreviewColumn') || document.getElementById('attachPreviewColumn') || document.getElementById('chatwidget_attachPreviewColumn')); } catch(e) {}
         pendingFile = null; widgetPendingFile = null;
         if (elements.send) elements.send.disabled = false;
@@ -1728,7 +1728,7 @@ function initApp(config = {}) {
         const answerText = (data && data.answer) ? String(data.answer) : '';
         const botMsg = {
           content: answerText || 'Sorry, no answer was returned by the local service.',
-          sender_name: 'Local Assistant',
+          sender_name: 'My Customer Service',
           sender_type: 'assistant',
           sender_id: 0,
           timestamp: new Date().toISOString()
@@ -1737,8 +1737,8 @@ function initApp(config = {}) {
         appendLocalHistory(botMsg);
       } catch (err) {
         const errMsg = {
-          content: 'Local assistant is unavailable. Start the local Python service and try again.',
-          sender_name: 'Local Assistant',
+          content: 'My Customer Service is unavailable currently. Please try again later.',
+          sender_name: 'My Customer Service',
           sender_type: 'assistant',
           sender_id: 0,
           timestamp: new Date().toISOString()
@@ -2247,7 +2247,7 @@ function initApp(config = {}) {
         go();
         return;
       }
-      try { selectAgent({ ChatRoomid: 'local-ai', roomname: 'Local Assistant', room_type: 'local', description: 'Assistant' }); } catch (e) {}
+      try { selectAgent({ ChatRoomid: 'local-ai', roomname: 'My Customer Service', room_type: 'local', description: 'Assistant' }); } catch (e) {}
       setTimeout(go, 50);
     });
   }
