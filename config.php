@@ -11,7 +11,7 @@ if (!defined('RECAPTCHA_SITE_KEY')) {
 	define('RECAPTCHA_SITE_KEY', '6Ld2sLosAAAAAIOHEW5OY6rPv9a7Nb7oyPV1XCL_');
 }
 if (!defined('RECAPTCHA_SECRET_KEY')) {
-	define('RECAPTCHA_SECRET_KEY', '6Ld2sLosAAAAAIOHEW5OY6rPv9a7Nb7oyPV1XCL_');
+	define('RECAPTCHA_SECRET_KEY', '6Ld2sLosAAAAANsRmwC7Vrk4teugoVeAa_U093EU');
 }
 
 $mysqli = mysqli_connect($hostname, $user, $pwd, $db)
