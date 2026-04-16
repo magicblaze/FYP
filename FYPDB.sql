@@ -48,6 +48,10 @@ DROP TABLE IF EXISTS `AIRecommendItem`;
 DROP TABLE IF EXISTS `OrderPayment`;
 DROP TABLE IF EXISTS `client_feedback`;
 DROP TABLE IF EXISTS `WeeklyConstructionReport`;
+DROP TABLE IF EXISTS `ConstructionScheduleHistory`;
+DROP TABLE IF EXISTS `ConstructionPaymentRecord`;
+DROP TABLE IF EXISTS `InspectionReport`;
+DROP TABLE IF EXISTS `InspectionConfirmation`;
 
 -- Client table
 CREATE TABLE `Client` (
@@ -919,11 +923,6 @@ CREATE TABLE IF NOT EXISTS `InspectionConfirmation` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 SET FOREIGN_KEY_CHECKS = 0;
-
-DROP TABLE IF EXISTS `WithdrawalRequest`;
-DROP TABLE IF EXISTS `WalletTransaction`;
-DROP TABLE IF EXISTS `SupplierWallet`;
-DROP TABLE IF EXISTS `ManagerWallet`;
 
 SET FOREIGN_KEY_CHECKS = 1;
 
