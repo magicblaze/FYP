@@ -71,7 +71,6 @@ $baseUrl = $scheme . '://' . $host . $appRoot;
         <?php elseif ($role === 'supplier'): ?>
           <li class="nav-item"><a class="nav-link" href="<?= $baseUrl ?>/supplier/dashboard.php">Dashboard</a></li>
           <li class=""><a class="nav-link" href="<?= $baseUrl ?>/supplier/schedule.php">Schedule</a></li>
-          <li class=""><a class="nav-link" href="<?= $baseUrl ?>/supplier/supplier_wallet.php">Wallet</a></li>
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle" href="#" id="browseDropdownSupplier" role="button"
               data-bs-toggle="dropdown" aria-expanded="false">Browse</a>
@@ -84,7 +83,6 @@ $baseUrl = $scheme . '://' . $host . $appRoot;
         <?php elseif ($role === 'manager'): ?>
           <li class="nav-item"><a class="nav-link" href="<?= $baseUrl ?>/Manager/Manager_Dashboard.php">Dashboard</a></li>
           <li class="nav-item"><a class="nav-link" href="<?= $baseUrl ?>/Manager/Order_Management.php">Projects</a></li>
-          <li class="nav-item"><a class="nav-link" href="<?= $baseUrl ?>/Manager/manager_wallet.php">Wallet</a></li>
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle" href="#" id="browseDropdownManager" role="button"
               data-bs-toggle="dropdown" aria-expanded="false">Browse</a>
