@@ -482,7 +482,7 @@ if ($is_pending) {
                             <label for="rejection_reason" class="form-label">Reason for rejection (optional):</label>
                             <textarea class="form-control" id="rejection_reason" name="rejection_reason" rows="3" placeholder="Please provide a reason for rejecting the schedule..."></textarea>
                         </div>
-                        <p class="text-muted small">The supplier will be notified to provide alternative dates.</p>
+                        <p class="text-muted small">The supplier will be notified to provide alternative dates. </p>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>

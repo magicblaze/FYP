@@ -675,7 +675,7 @@ endif;
                 <div class="empty-orders">
                     <i class="fas fa-shopping-bag"></i>
                     <h3>No Project Yet</h3>
-                    <p>You haven't created any projects yet. Browse our designs and place your first project!</p>
+                    <p>You haven't created any projects yet. Browse our designs and place your first project! </p>
                     <a href="../design_dashboard.php" class="btn btn-primary mt-2">
                         <i class="fas fa-search me-2"></i>Browse Designs
                     </a>

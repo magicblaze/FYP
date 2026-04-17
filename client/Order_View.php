@@ -1173,7 +1173,7 @@ if ($show_inspection_report) {
         <!-- Back Button -->
         <div class="d-flex justify-content-between align-items-center mt-4">
             <a href="../client/order_history.php" class="btn btn-secondary"><i class="fas fa-arrow-left me-2"></i>Back
-                to Order History</a>
+                to Order History </a>
         </div>
 
     </div>

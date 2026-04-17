@@ -880,7 +880,7 @@ $current_ostatus = $inspection_data['ostatus'] ?? '';
             <!-- References Section -->
             <?php if ($references->num_rows > 0): ?>
                 <div class="section-title">
-                    <i class="fas fa-link me-2"></i>Product References
+                    <i class="fas fa-link me-2"></i>Product References 
                 </div>
                 <div class="info-card">
                     <?php

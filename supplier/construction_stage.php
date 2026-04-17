@@ -421,7 +421,7 @@ mysqli_stmt_close($order_stmt);
             </div>
         <?php endif; ?>
         
-        <!-- Schedule History with Rejection Reason -->
+        <!-- Schedule History with Rejection Reason  -->
         <?php
         $history_sql = "SELECT * FROM ConstructionScheduleHistory 
                         WHERE orderid = ? 
