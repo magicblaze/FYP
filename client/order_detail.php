@@ -26,7 +26,7 @@ if ($orderId <= 0) {
 // Get message from URL
 $msg = isset($_GET['msg']) ? $_GET['msg'] : '';
 
-// ========== Handle Inspection Actions ==========
+// ========== Handle Inspection Actions (Accept/Suggest Time only) ==========
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Accept inspection
     if (isset($_POST['accept_inspection'])) {
@@ -77,57 +77,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
     
-    // Confirm inspection report and proceed to payment
-    if (isset($_POST['confirm_inspection_report'])) {
-        // Check if already confirmed
-        $check_sql = "SELECT COUNT(*) as cnt FROM InspectionConfirmation WHERE orderid = ? AND clientid = ?";
-        $check_stmt = mysqli_prepare($mysqli, $check_sql);
-        mysqli_stmt_bind_param($check_stmt, "ii", $orderId, $clientId);
-        mysqli_stmt_execute($check_stmt);
-        $check_result = mysqli_stmt_get_result($check_stmt);
-        $check_row = mysqli_fetch_assoc($check_result);
-        $already_confirmed = ($check_row['cnt'] > 0);
-        mysqli_stmt_close($check_stmt);
-        
-        if (!$already_confirmed) {
-            // Insert confirmation record
-            $insert_confirm_sql = "INSERT INTO InspectionConfirmation (orderid, clientid, confirmed_at) VALUES (?, ?, NOW())";
-            $insert_confirm_stmt = mysqli_prepare($mysqli, $insert_confirm_sql);
-            mysqli_stmt_bind_param($insert_confirm_stmt, "ii", $orderId, $clientId);
-            mysqli_stmt_execute($insert_confirm_stmt);
-            mysqli_stmt_close($insert_confirm_stmt);
-        }
-        
-        // Update order status to waiting for final construction payment
-        $update_sql = "UPDATE `Order` SET ostatus = 'inspection_completed' WHERE orderid = ? AND clientid = ?";
-        $update_stmt = mysqli_prepare($mysqli, $update_sql);
-        mysqli_stmt_bind_param($update_stmt, "ii", $orderId, $clientId);
-        mysqli_stmt_execute($update_stmt);
-        mysqli_stmt_close($update_stmt);
-        
-        // Notify manager
-        $notify_sql = "INSERT INTO Notification (user_type, user_id, orderid, message, type, created_at) 
-                       VALUES ('manager', (SELECT managerid FROM Schedule WHERE orderid = ? LIMIT 1), ?, 'Client has confirmed the inspection report for Order #$orderId and is ready for final payment.', 'inspection_confirmed', NOW())";
-        $notify_stmt = mysqli_prepare($mysqli, $notify_sql);
-        mysqli_stmt_bind_param($notify_stmt, "ii", $orderId, $orderId);
-        mysqli_stmt_execute($notify_stmt);
-        mysqli_stmt_close($notify_stmt);
-        
-        header("Location: order_detail.php?orderid=" . $orderId . "&msg=inspection_confirmed");
-        exit;
-    }
-    
-    // Confirm project completion after inspection (legacy)
-    if (isset($_POST['confirm_project_completion'])) {
-        $update_sql = "UPDATE `Order` SET ostatus = 'complete' WHERE orderid = ? AND clientid = ?";
-        $update_stmt = mysqli_prepare($mysqli, $update_sql);
-        mysqli_stmt_bind_param($update_stmt, "ii", $orderId, $clientId);
-        mysqli_stmt_execute($update_stmt);
-        mysqli_stmt_close($update_stmt);
-        
-        header("Location: payment_construction3.php?orderid=" . $orderId);
-        exit;
-    }
+    // REMOVED: confirm_inspection_report and confirm_project_completion - moved to Order_View.php
 }
 // ========== End Inspection Handling ==========
 
@@ -337,7 +287,7 @@ $design_total = $payment['total_design_payment'];
 $budgetDisplay = $order['budget'] ?? 0;
 $phoneDisplay = !empty($clientData['ctel']) ? (string) $clientData['ctel'] : '—';
 
-// Get inspection data for display
+// Get inspection data for display (only for time display, not report)
 $inspection_sql = "SELECT inspection_date, inspection_status, client_suggested_date, ostatus 
                    FROM `Order` WHERE orderid = ? AND clientid = ?";
 $inspection_stmt = $mysqli->prepare($inspection_sql);
@@ -352,18 +302,8 @@ $inspection_status = $inspection_data['inspection_status'] ?? null;
 $client_suggested_date = $inspection_data['client_suggested_date'] ?? null;
 $current_ostatus = $inspection_data['ostatus'] ?? '';
 
-// Check if report exists (both pass and fail)
-$has_report_sql = "SELECT COUNT(*) as cnt FROM InspectionReport WHERE orderid = ? AND result IN ('pass', 'fail')";
-$has_report_stmt = $mysqli->prepare($has_report_sql);
-$has_report_stmt->bind_param("i", $orderId);
-$has_report_stmt->execute();
-$has_report_result = $has_report_stmt->get_result();
-$has_report_row = $has_report_result->fetch_assoc();
-$has_inspection_report = ($has_report_row['cnt'] > 0);
-$has_report_stmt->close();
+// REMOVED: inspection report fetching - moved to Order_View.php
 
-// Show inspection report if report exists OR status is inspection_completed OR inspection_failed
-$show_inspection_report = ($has_inspection_report || $current_ostatus == 'inspection_completed' || $current_ostatus == 'inspection_failed');
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -807,7 +747,7 @@ $show_inspection_report = ($has_inspection_report || $current_ostatus == 'inspec
                 </div>
             <?php endif; ?>
             
-            <!-- Inspection Confirmation Section for Client -->
+            <!-- Inspection Confirmation Section for Client (Time display only) -->
             <?php if ($msg == 'inspection_accepted'): ?>
                 <div class="alert alert-success mb-3"><i class="fas fa-check-circle me-2"></i>Inspection accepted successfully!</div>
             <?php elseif ($msg == 'inspection_suggested'): ?>
@@ -816,7 +756,7 @@ $show_inspection_report = ($has_inspection_report || $current_ostatus == 'inspec
                 <div class="alert alert-success mb-3"><i class="fas fa-check-circle me-2"></i>Inspection report confirmed! You can now proceed to final payment.</div>
             <?php endif; ?>
 
-            <!-- Inspection Status Display -->
+            <!-- Inspection Status Display - Only for time/date, not report -->
             <?php if ($inspection_status == 'pending' && $inspection_date): ?>
             <div class="section-title">
                 <i class="fas fa-calendar-check me-2"></i>Inspection Appointment
@@ -933,169 +873,9 @@ $show_inspection_report = ($has_inspection_report || $current_ostatus == 'inspec
                     </button>
                 </div>
             </div>
-                        <?php endif; ?>
+            <?php endif; ?>
             
-<?php if ($show_inspection_report): ?>
-<div class="section-title">
-    <i class="fas fa-file-alt me-2"></i>Inspection Report
-</div>
-<div class="info-card">
-    <?php
-    // Fetch inspection report - 同时获取 pass 和 fail 的结果
-    $report_sql = "SELECT * FROM InspectionReport WHERE orderid = ? AND result IN ('pass', 'fail') ORDER BY submitted_at DESC LIMIT 1";
-    $report_stmt = $mysqli->prepare($report_sql);
-    $report_stmt->bind_param("i", $orderId);
-    $report_stmt->execute();
-    $report_result = $report_stmt->get_result();
-    $inspection_report = $report_result->fetch_assoc();
-    $report_stmt->close();
-    
-    if ($inspection_report):
-        $report_result_value = $inspection_report['result'] ?? 'pass';
-        $is_report_fail = ($report_result_value == 'fail');
-        
-        // Decode file paths
-        $attached_files = [];
-        if (!empty($inspection_report['file_paths'])) {
-            $attached_files = json_decode($inspection_report['file_paths'], true);
-            if (!is_array($attached_files)) {
-                $attached_files = [];
-            }
-        }
-        
-        // Check if client has already confirmed (only for pass reports)
-        $has_confirmed = false;
-        if (!$is_report_fail) {
-            $confirm_check_sql = "SELECT COUNT(*) as cnt FROM InspectionConfirmation WHERE orderid = ? AND clientid = ?";
-            $confirm_check_stmt = $mysqli->prepare($confirm_check_sql);
-            $confirm_check_stmt->bind_param("ii", $orderId, $clientId);
-            $confirm_check_stmt->execute();
-            $confirm_check_result = $confirm_check_stmt->get_result();
-            $confirm_check_row = mysqli_fetch_assoc($confirm_check_result);
-            $has_confirmed = ($confirm_check_row['cnt'] > 0);
-            $confirm_check_stmt->close();
-        }
-    ?>
-    
-    <!-- 显示报告状态横幅 -->
-    <?php if ($is_report_fail): ?>
-        <div class="alert alert-danger mb-3">
-            <i class="fas fa-times-circle me-2 fa-lg"></i>
-            <strong>Inspection Failed</strong><br>
-            The inspection was completed on <?php echo date('F d, Y h:i A', strtotime($inspection_report['submitted_at'])); ?> with result: FAILED.
-            Please contact the manager for further discussion.
-        </div>
-    <?php else: ?>
-        <div class="alert alert-success mb-3">
-            <i class="fas fa-check-circle me-2"></i>
-            <strong>Inspection Completed</strong><br>
-            Inspection was completed on <?php echo date('F d, Y h:i A', strtotime($inspection_report['submitted_at'])); ?>
-        </div>
-    <?php endif; ?>
-    
-    <!-- Inspection Report Content -->
-    <div class="mb-4">
-        <div class="card border-<?php echo $is_report_fail ? 'danger' : 'primary'; ?>">
-            <div class="card-header bg-<?php echo $is_report_fail ? 'danger' : 'primary'; ?> text-white">
-                <h5 class="mb-0"><i class="fas fa-file-alt me-2"></i>Inspection Report Details</h5>
-            </div>
-            <div class="card-body">
-                <!-- 显示结果 -->
-                <div class="mb-3">
-                    <strong><i class="fas fa-clipboard-list me-2"></i>Result:</strong>
-                    <span class="badge <?php echo $is_report_fail ? 'bg-danger' : 'bg-success'; ?> ms-2">
-                        <?php echo $is_report_fail ? 'FAILED' : 'PASSED'; ?>
-                    </span>
-                </div>
-                
-                <?php if (!empty($inspection_report['report_content'])): ?>
-                    <div class="mb-3">
-                        <strong><i class="fas fa-pen me-2"></i>Report Content:</strong>
-                        <div class="border rounded p-3 bg-light mt-2" style="white-space: pre-wrap;">
-                            <?php echo nl2br(htmlspecialchars($inspection_report['report_content'])); ?>
-                        </div>
-                    </div>
-                <?php endif; ?>
-                
-                <?php if (!empty($attached_files)): ?>
-                    <div class="mb-3">
-                        <strong><i class="fas fa-paperclip me-2"></i>Attached Files:</strong>
-                        <div class="row mt-2">
-                            <?php foreach ($attached_files as $file): 
-                                $file_url = "../" . $file;
-                                $file_ext = strtolower(pathinfo($file, PATHINFO_EXTENSION));
-                                $image_extensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'];
-                            ?>
-                                <div class="col-md-4 col-sm-6 mb-3">
-                                    <div class="card h-100">
-                                        <?php if (in_array($file_ext, $image_extensions)): ?>
-                                            <img src="<?php echo $file_url; ?>" class="card-img-top" alt="Inspection Image" style="height: 150px; object-fit: cover; cursor: pointer;" onclick="viewImage('<?php echo $file_url; ?>')">
-                                        <?php else: ?>
-                                            <div class="card-body text-center">
-                                                <i class="fas fa-file-alt fa-3x text-secondary mb-2"></i>
-                                            </div>
-                                        <?php endif; ?>
-                                        <div class="card-body p-2 text-center">
-                                            <a href="<?php echo $file_url; ?>" target="_blank" class="btn btn-sm btn-outline-primary w-100">
-                                                <i class="fas fa-download me-1"></i> <?php echo basename($file); ?>
-                                            </a>
-                                        </div>
-                                    </div>
-                                </div>
-                            <?php endforeach; ?>
-                        </div>
-                    </div>
-                <?php endif; ?>
-            </div>
-        </div>
-    </div>
-    
-    <!-- 只有 PASS 的报告才显示确认和支付按钮 -->
-    <?php if (!$is_report_fail): ?>
-        <?php if (!$has_confirmed): ?>
-            <div class="alert alert-info mt-3">
-                <i class="fas fa-info-circle me-2"></i>
-                <strong>Please Review the Inspection Report</strong><br>
-                After reviewing the inspection report, click the confirm button below to complete the project and proceed to final payment.
-            </div>
-            
-            <div class="text-center mt-4">
-                <form method="POST" onsubmit="return confirm('Have you reviewed the inspection report? Confirm to proceed to final payment.');">
-                    <input type="hidden" name="confirm_inspection_report" value="1">
-                    <button type="submit" class="btn btn-success btn-lg">
-                        <i class="fas fa-check-circle me-2"></i>Confirm & Proceed to Final Payment
-                    </button>
-                </form>
-            </div>
-        <?php else: ?>
-            <div class="alert alert-success text-center">
-                <i class="fas fa-check-circle me-2 fa-lg"></i>
-                <a href="payment_construction2.php?orderid=<?php echo $orderId; ?>" class="btn btn-primary mt-2">
-                    <i class="fas fa-credit-card me-2"></i>Confirm & Proceed to Final Payment
-                </a>
-            </div>
-        <?php endif; ?>
-    <?php else: ?>
-        <!-- 如果是 FAIL 的报告，只显示联系管理员的提示 -->
-        <div class="alert alert-warning text-center mt-3">
-            <i class="fas fa-exclamation-triangle me-2 fa-lg"></i>
-            <strong>Inspection Failed</strong><br>
-            The inspection did not pass. Please contact the manager to discuss the next steps or required modifications.
-            <hr>
-            <a href="order_history.php" class="btn btn-outline-secondary mt-2">
-                <i class="fas fa-arrow-left me-2"></i>Back to Projects
-            </a>
-        </div>
-    <?php endif; ?>
-    
-<?php else: ?>
-    <div class="alert alert-info">
-        <i class="fas fa-clock me-2"></i>
-        Inspection report is being prepared. You will be notified when available.
-    </div>
-<?php endif; ?>
-</div>
-<?php endif; ?>
+            <!-- REMOVED: Inspection Report Section - Moved to Order_View.php -->
 
             <!-- References Section -->
             <?php if ($references->num_rows > 0): ?>

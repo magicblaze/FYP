@@ -572,7 +572,9 @@ if (!empty($_GET['msg'])) {
                                 'waiting client confirm construction date', 
                                 'in construction',
                                 'waiting client reassignment',
-                                'construction begins'
+                                'construction begins',
+                                'inspection_completed', 
+                                'inspection_failed'
                             ];
                             if (in_array($statusLower, $proposalStatuses)): ?>
                                 <a href="Order_View.php?id=<?= (int) $order['orderid'] ?>" class="view-details-btn"

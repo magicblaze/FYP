@@ -35,131 +35,144 @@ mysqli_stmt_close($verify_stmt);
 $message = '';
 $error = '';
 
-if ($_SERVER["REQUEST_METHOD"] === "POST") {
-    $action = $_POST['action'] ?? '';
-    
-    if ($action === 'accept') {
-        // Get the current pending version
-        $pending_sql = "SELECT * FROM ConstructionScheduleHistory 
-                        WHERE orderid = ? AND status = 'pending' 
-                        ORDER BY version DESC LIMIT 1";
-        $pending_stmt = mysqli_prepare($mysqli, $pending_sql);
-        mysqli_stmt_bind_param($pending_stmt, "i", $order_id);
-        mysqli_stmt_execute($pending_stmt);
-        $pending_result = mysqli_stmt_get_result($pending_stmt);
-        $pending_version = mysqli_fetch_assoc($pending_result);
-        
-        if ($pending_version) {
-            // Update the pending version status to accepted
-            $update_history_sql = "UPDATE ConstructionScheduleHistory 
-                                   SET status = 'accepted', responded_at = NOW() 
-                                   WHERE history_id = ?";
-            $update_history_stmt = mysqli_prepare($mysqli, $update_history_sql);
-            mysqli_stmt_bind_param($update_history_stmt, "i", $pending_version['history_id']);
-            mysqli_stmt_execute($update_history_stmt);
-            mysqli_stmt_close($update_history_stmt);
-            
-            // Update main Schedule table
-            $update_sql = "UPDATE Schedule SET construction_date_status = 'accepted', current_version = ? WHERE orderid = ?";
-            $update_stmt = mysqli_prepare($mysqli, $update_sql);
-            $new_version = $pending_version['version'];
-            mysqli_stmt_bind_param($update_stmt, "ii", $new_version, $order_id);
-            mysqli_stmt_execute($update_stmt);
-            mysqli_stmt_close($update_stmt);
-            
-            // Check if construction payment has already been made
-           $check_payment_sql = "SELECT o.ostatus, 
-                             (SELECT COUNT(*) FROM ConstructionPaymentRecord WHERE orderid = ?) as payment_count
-                      FROM `Order` o
-                      WHERE o.orderid = ?";
-            $check_stmt = mysqli_prepare($mysqli, $check_payment_sql);
-            mysqli_stmt_bind_param($check_stmt, "ii", $order_id, $order_id);
-            mysqli_stmt_execute($check_stmt);
-            $check_result = mysqli_stmt_get_result($check_stmt);
-            $payment_check = mysqli_fetch_assoc($check_result);
-            mysqli_stmt_close($check_stmt);
-            
-            $has_paid = ($payment_check && $payment_check['payment_count'] > 0);
-
-
-$construction_paid_sql = "SELECT COUNT(*) as cnt FROM ConstructionPaymentRecord 
-                          WHERE orderid = ? AND percentage IN (50, 25, 75, 100)";
-$construction_stmt = mysqli_prepare($mysqli, $construction_paid_sql);
-mysqli_stmt_bind_param($construction_stmt, "i", $order_id);
-mysqli_stmt_execute($construction_stmt);
-$construction_result = mysqli_stmt_get_result($construction_stmt);
-$construction_paid = mysqli_fetch_assoc($construction_result)['cnt'] > 0;
-mysqli_stmt_close($construction_stmt);
-
-if ($construction_paid) {
-
-    $message = "Construction schedule has been updated and accepted...";
-} else {
-    header('Location: construction_payment.php?orderid=' . $order_id);
-    exit;
+// Generate CSRF token for the form
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
-            // Close pending statement
+
+if ($_SERVER["REQUEST_METHOD"] === "POST") {
+    // CSRF validation
+    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+        $error = "Invalid request. Please try again.";
+    } else {
+        $action = $_POST['action'] ?? '';
+        
+        if ($action === 'accept') {
+            // Get the current pending version
+            $pending_sql = "SELECT * FROM ConstructionScheduleHistory 
+                            WHERE orderid = ? AND status = 'pending' 
+                            ORDER BY version DESC LIMIT 1";
+            $pending_stmt = mysqli_prepare($mysqli, $pending_sql);
+            mysqli_stmt_bind_param($pending_stmt, "i", $order_id);
+            mysqli_stmt_execute($pending_stmt);
+            $pending_result = mysqli_stmt_get_result($pending_stmt);
+            $pending_version = mysqli_fetch_assoc($pending_result);
+            
+            if ($pending_version) {
+                // Update the pending version status to accepted
+                $update_history_sql = "UPDATE ConstructionScheduleHistory 
+                                       SET status = 'accepted', responded_at = NOW() 
+                                       WHERE history_id = ?";
+                $update_history_stmt = mysqli_prepare($mysqli, $update_history_sql);
+                mysqli_stmt_bind_param($update_history_stmt, "i", $pending_version['history_id']);
+                mysqli_stmt_execute($update_history_stmt);
+                mysqli_stmt_close($update_history_stmt);
+                
+                // Update main Schedule table
+                $update_sql = "UPDATE Schedule SET construction_date_status = 'accepted', current_version = ? WHERE orderid = ?";
+                $update_stmt = mysqli_prepare($mysqli, $update_sql);
+                $new_version = $pending_version['version'];
+                mysqli_stmt_bind_param($update_stmt, "ii", $new_version, $order_id);
+                mysqli_stmt_execute($update_stmt);
+                mysqli_stmt_close($update_stmt);
+                
+                // Close pending statement
+                mysqli_stmt_close($pending_stmt);
+                
+                // Check if construction payment has already been made
+                $construction_paid_sql = "SELECT COUNT(*) as cnt FROM ConstructionPaymentRecord 
+                                          WHERE orderid = ? AND percentage IN (50, 25, 75, 100)";
+                $construction_stmt = mysqli_prepare($mysqli, $construction_paid_sql);
+                mysqli_stmt_bind_param($construction_stmt, "i", $order_id);
+                mysqli_stmt_execute($construction_stmt);
+                $construction_result = mysqli_stmt_get_result($construction_stmt);
+                $construction_paid = mysqli_fetch_assoc($construction_result)['cnt'] > 0;
+                mysqli_stmt_close($construction_stmt);
+
+                if ($construction_paid) {
+                    $message = "Construction schedule has been updated and accepted. Construction will begin on " . date('F d, Y', strtotime($pending_version['construction_start_date'])) . ".";
+                    
+                    // Update order status to 'Construction begins'
+                    $order_update = "UPDATE `Order` SET ostatus = 'Construction begins' WHERE orderid = ?";
+                    $order_stmt = mysqli_prepare($mysqli, $order_update);
+                    mysqli_stmt_bind_param($order_stmt, "i", $order_id);
+                    mysqli_stmt_execute($order_stmt);
+                    mysqli_stmt_close($order_stmt);
+                    
+                    // Regenerate CSRF token and redirect to prevent resubmission
+                    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+                    header("Location: construction_schedule.php?orderid=" . $order_id . "&msg=" . urlencode($message));
+                    exit;
+                } else {
+                    // First time accepting - redirect to payment
+                    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+                    header('Location: construction_payment.php?orderid=' . $order_id);
+                    exit;
+                }
+            } else {
+                $error = "No pending schedule found to accept.";
+                if (isset($pending_stmt)) mysqli_stmt_close($pending_stmt);
+            }
+            
+        } elseif ($action === 'reject') {
+            $rejection_reason = trim($_POST['rejection_reason'] ?? '');
+            
+            // Get the current pending version
+            $pending_sql = "SELECT * FROM ConstructionScheduleHistory 
+                            WHERE orderid = ? AND status = 'pending' 
+                            ORDER BY version DESC LIMIT 1";
+            $pending_stmt = mysqli_prepare($mysqli, $pending_sql);
+            mysqli_stmt_bind_param($pending_stmt, "i", $order_id);
+            mysqli_stmt_execute($pending_stmt);
+            $pending_result = mysqli_stmt_get_result($pending_stmt);
+            $pending_version = mysqli_fetch_assoc($pending_result);
+            
+            if ($pending_version) {
+                // Update the pending version status to rejected with reason
+                $update_history_sql = "UPDATE ConstructionScheduleHistory 
+                                       SET status = 'rejected', 
+                                           responded_at = NOW(), 
+                                           rejection_reason = ? 
+                                       WHERE history_id = ?";
+                $update_history_stmt = mysqli_prepare($mysqli, $update_history_sql);
+                mysqli_stmt_bind_param($update_history_stmt, "si", $rejection_reason, $pending_version['history_id']);
+                mysqli_stmt_execute($update_history_stmt);
+                mysqli_stmt_close($update_history_stmt);
+                
+                // Update main Schedule table
+                $update_sql = "UPDATE Schedule SET construction_date_status = 'rejected' WHERE orderid = ?";
+                $update_stmt = mysqli_prepare($mysqli, $update_sql);
+                mysqli_stmt_bind_param($update_stmt, "i", $order_id);
+                
+                if (mysqli_stmt_execute($update_stmt)) {
+                    $message = "You have rejected the construction schedule. The contractor will be notified to provide alternative dates.";
+                } else {
+                    $error = "Failed to reject schedule. Please try again.";
+                }
+                mysqli_stmt_close($update_stmt);
+            } else {
+                $error = "No pending schedule found to reject.";
+            }
             mysqli_stmt_close($pending_stmt);
             
-            if ($has_paid) {
-                // Already paid, just update order status message
-                $message = "Construction schedule has been updated and accepted. Construction will begin on " . date('F d, Y', strtotime($pending_version['construction_start_date'])) . ".";
-                
-                // Also update order status if needed
-                $order_update = "UPDATE `Order` SET ostatus = 'Construction begins' WHERE orderid = ?";
-                $order_stmt = mysqli_prepare($mysqli, $order_update);
-                mysqli_stmt_bind_param($order_stmt, "i", $order_id);
-                mysqli_stmt_execute($order_stmt);
-                mysqli_stmt_close($order_stmt);
+            // Regenerate CSRF token and redirect to prevent resubmission
+            $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+            if (!empty($error)) {
+                header("Location: construction_schedule.php?orderid=" . $order_id . "&error=" . urlencode($error));
             } else {
-                // First time accepting - redirect to payment
-                header('Location: construction_payment.php?orderid=' . $order_id);
-                exit;
+                header("Location: construction_schedule.php?orderid=" . $order_id . "&msg=" . urlencode($message));
             }
-        } else {
-            $error = "No pending schedule found to accept.";
-            if (isset($pending_stmt)) mysqli_stmt_close($pending_stmt);
+            exit;
         }
-        
-    } elseif ($action === 'reject') {
-        $rejection_reason = $_POST['rejection_reason'] ?? '';
-        
-        // Get the current pending version
-        $pending_sql = "SELECT * FROM ConstructionScheduleHistory 
-                        WHERE orderid = ? AND status = 'pending' 
-                        ORDER BY version DESC LIMIT 1";
-        $pending_stmt = mysqli_prepare($mysqli, $pending_sql);
-        mysqli_stmt_bind_param($pending_stmt, "i", $order_id);
-        mysqli_stmt_execute($pending_stmt);
-        $pending_result = mysqli_stmt_get_result($pending_stmt);
-        $pending_version = mysqli_fetch_assoc($pending_result);
-        
-        if ($pending_version) {
-            // Update the pending version status to rejected
-            $update_history_sql = "UPDATE ConstructionScheduleHistory 
-                                   SET status = 'rejected', responded_at = NOW(), rejection_reason = ? 
-                                   WHERE history_id = ?";
-            $update_history_stmt = mysqli_prepare($mysqli, $update_history_sql);
-            mysqli_stmt_bind_param($update_history_stmt, "si", $rejection_reason, $pending_version['history_id']);
-            mysqli_stmt_execute($update_history_stmt);
-            mysqli_stmt_close($update_history_stmt);
-            
-            // Update main Schedule table
-            $update_sql = "UPDATE Schedule SET construction_date_status = 'rejected' WHERE orderid = ?";
-            $update_stmt = mysqli_prepare($mysqli, $update_sql);
-            mysqli_stmt_bind_param($update_stmt, "i", $order_id);
-            
-            if (mysqli_stmt_execute($update_stmt)) {
-                $message = "You have rejected the construction schedule. The contractor will be notified to provide alternative dates.";
-            } else {
-                $error = "Failed to reject schedule. Please try again.";
-            }
-            mysqli_stmt_close($update_stmt);
-        } else {
-            $error = "No pending schedule found to reject.";
-        }
-        mysqli_stmt_close($pending_stmt);
     }
+}
+
+// Check for message/error from redirect
+if (isset($_GET['msg'])) {
+    $message = htmlspecialchars($_GET['msg']);
+}
+if (isset($_GET['error'])) {
+    $error = htmlspecialchars($_GET['error']);
 }
 
 // Fetch current schedule data (latest pending version)
@@ -349,9 +362,10 @@ if ($is_pending) {
                         </div>
                         
                         <div class="d-flex justify-content-center gap-3 mt-4">
-                            <form method="POST" action="" onsubmit="return confirm('Are you sure you want to ACCEPT this construction schedule?');">
+                            <form method="POST" action="" onsubmit="return disableAcceptButton(this);">
+                                <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
                                 <input type="hidden" name="action" value="accept">
-                                <button type="submit" class="btn-accept">
+                                <button type="submit" id="acceptBtn" class="btn-accept">
                                     <i class="fas fa-check-circle me-2"></i>Accept Schedule
                                 </button>
                             </form>
@@ -402,6 +416,8 @@ if ($is_pending) {
                                     <th>Start Date</th>
                                     <th>End Date</th>
                                     <th>Status</th>
+                                    <th>Your Response</th>
+                                    <th>Reason</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -419,6 +435,25 @@ if ($is_pending) {
                                                 <span class="badge bg-warning">Pending</span>
                                             <?php endif; ?>
                                         </td>
+                                        <td>
+                                            <?php if ($history['responded_at']): ?>
+                                                <?= date('M d, Y H:i', strtotime($history['responded_at'])) ?>
+                                            <?php else: ?>
+                                                <span class="text-muted">—</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td style="max-width: 250px;">
+                                            <?php if ($history['status'] == 'rejected' && !empty($history['rejection_reason'])): ?>
+                                                <div class="small text-danger">
+                                                    <i class="fas fa-comment me-1"></i>
+                                                    <?= nl2br(htmlspecialchars($history['rejection_reason'])) ?>
+                                                </div>
+                                            <?php elseif ($history['status'] == 'rejected'): ?>
+                                                <span class="text-muted">No reason provided</span>
+                                            <?php else: ?>
+                                                <span class="text-muted">—</span>
+                                            <?php endif; ?>
+                                        </td>
                                     </tr>
                                 <?php endwhile; ?>
                             </tbody>
@@ -434,13 +469,14 @@ if ($is_pending) {
     <div class="modal fade" id="rejectModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
-                <form method="POST" action="">
+                <form method="POST" action="" onsubmit="return disableRejectButton(this);">
+                    <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+                    <input type="hidden" name="action" value="reject">
                     <div class="modal-header">
                         <h5 class="modal-title"><i class="fas fa-times-circle text-danger me-2"></i>Reject Schedule</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body">
-                        <input type="hidden" name="action" value="reject">
                         <p>Are you sure you want to reject this construction schedule?</p>
                         <div class="mb-3">
                             <label for="rejection_reason" class="form-label">Reason for rejection (optional):</label>
@@ -450,7 +486,7 @@ if ($is_pending) {
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn btn-danger">Reject Schedule</button>
+                        <button type="submit" id="rejectSubmitBtn" class="btn btn-danger">Reject Schedule</button>
                     </div>
                 </form>
             </div>
@@ -459,6 +495,34 @@ if ($is_pending) {
     
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
+    <script>
+        // Disable accept button after form submission to prevent duplicate submissions
+        function disableAcceptButton(form) {
+            const acceptBtn = document.getElementById('acceptBtn');
+            if (acceptBtn) {
+                acceptBtn.disabled = true;
+                acceptBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processing...';
+                return true;
+            }
+            return true;
+        }
+        
+        // Disable reject button after form submission
+        function disableRejectButton(form) {
+            const rejectBtn = document.getElementById('rejectSubmitBtn');
+            if (rejectBtn) {
+                rejectBtn.disabled = true;
+                rejectBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Submitting...';
+                return true;
+            }
+            return true;
+        }
+        
+        // Prevent form resubmission on page refresh
+        if (window.history.replaceState) {
+            window.history.replaceState(null, null, window.location.href.split('?')[0] + '?orderid=<?= $order_id ?>');
+        }
+    </script>
     <?php include __DIR__ . '/../Public/chat_widget.php'; ?>
 </body>
 </html>
