@@ -150,7 +150,7 @@ if ($construction_paid) {
             mysqli_stmt_bind_param($update_stmt, "i", $order_id);
             
             if (mysqli_stmt_execute($update_stmt)) {
-                $message = "You have rejected the construction schedule. The supplier will be notified to provide alternative dates.";
+                $message = "You have rejected the construction schedule. The contractor will be notified to provide alternative dates.";
             } else {
                 $error = "Failed to reject schedule. Please try again.";
             }
@@ -279,7 +279,7 @@ if ($is_pending) {
                                 <div><strong>Client:</strong> <?= htmlspecialchars($schedule['client_name'] ?? 'N/A') ?></div>
                             </div>
                             <div class="col-md-6">
-                                <div><strong>Supplier:</strong> <?= htmlspecialchars($schedule['supplier_name'] ?? 'N/A') ?></div>
+                                <div><strong>Contractor:</strong> <?= htmlspecialchars($schedule['supplier_name'] ?? 'N/A') ?></div>
                             </div>
                         </div>
                     </div>
@@ -372,7 +372,7 @@ if ($is_pending) {
                     <div class="alert alert-warning text-center">
                         <i class="fas fa-clock fa-2x mb-2 d-block"></i>
                         <strong>No construction schedule available.</strong><br>
-                        The supplier has not set a construction schedule yet.
+                        The contractor has not set a construction schedule yet.
                     </div>
                 <?php endif; ?>
             </div>

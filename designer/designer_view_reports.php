@@ -183,7 +183,7 @@ mysqli_stmt_close($order_detail_stmt);
                     <div class="alert alert-info text-center">
                         <i class="fas fa-info-circle fa-2x mb-2 d-block"></i>
                         <strong>No reports available yet.</strong><br>
-                        The supplier will submit weekly construction reports once construction begins.
+                        The contractor will submit weekly construction reports once construction begins.
                     </div>
                 <?php else: ?>
                     <?php foreach ($reports as $report): ?>
@@ -238,7 +238,7 @@ mysqli_stmt_close($order_detail_stmt);
                                 <?php if ($report['request_extra_fee']): ?>
                                     <div class="alert alert-warning">
                                         <i class="fas fa-dollar-sign me-2"></i>
-                                        <strong>Additional Fee Requested</strong> - Supplier has requested an additional construction fee.
+                                        <strong>Additional Fee Requested</strong> - Contractor has requested an additional construction fee.
                                     </div>
                                 <?php endif; ?>
                                 
@@ -254,7 +254,7 @@ mysqli_stmt_close($order_detail_stmt);
                                 <!-- Display supplier response if any -->
                                 <?php if (!empty($report['supplier_response'])): ?>
                                     <div class="feedback-box supplier-response">
-                                        <strong><i class="fas fa-building me-1"></i>Supplier Response:</strong>
+                                        <strong><i class="fas fa-building me-1"></i>Contractor Response:</strong>
                                         <p class="mb-1"><?= nl2br(htmlspecialchars($report['supplier_response'])) ?></p>
                                         <small class="text-muted">Responded: <?= date('M d, Y H:i', strtotime($report['supplier_response_at'])) ?></small>
                                     </div>

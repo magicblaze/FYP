@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 session_start();
 require_once dirname(__DIR__) . '/config.php';
 
@@ -2010,7 +2010,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                             <?php else: ?>
                                                 <div class="alert alert-warning mb-0">
                                                     <i class="fas fa-exclamation-triangle me-2"></i>
-                                                    Please wait for the supplier's confirmation.
+                                                    Please wait for the contractor's confirmation.
                                                 </div>
                                             <?php endif; ?>
                                         </div>
@@ -2413,7 +2413,7 @@ if ($is_inspection_completed || $current_ostatus == 'inspection_failed') {
                         <i class="fas fa-info-circle me-2"></i>
                         This report will be sent to the client.
                         <?php if ($current_ostatus == 'inspection_failed'): ?>
-                            <strong>The supplier will also be notified.</strong>
+                            <strong>The contractor will also be notified.</strong>
                         <?php endif; ?>
                     </div>
                     <button type="submit" name="submit_inspection_report" class="btn btn-primary btn-lg w-100" 
@@ -2665,7 +2665,7 @@ if (reportFileInput) {
                                         </div>
                                     <?php else: ?>
                                         <div class="alert alert-warning mb-0">
-                                            <i class="fas fa-clock me-2"></i>Waiting for supplier to allocate workers.
+                                            <i class="fas fa-clock me-2"></i>Waiting for contractor to allocate workers.
                                         </div>
                                     <?php endif; ?>
                                 </div>
