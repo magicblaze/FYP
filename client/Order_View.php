@@ -662,13 +662,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <div class="d-flex justify-content-between align-items-center">
                                 <div>
                                     <h5 class="card-title mb-1">
-                                        <i class="fas fa-people-arrows me-2 text-warning"></i>Supplier Reassignment
+                                        <i class="fas fa-people-arrows me-2 text-warning"></i>Contractor Reassignment
                                     </h5>
-                                    <p class="text-muted mb-0 small">Current supplier rejected this project. Click the button to allow other suppliers to view it in supplier search.</p>
+                                    <p class="text-muted mb-0 small">Current contractor rejected this project. Click the button to allow other contractors to view it in contractor search.</p>
                                 </div>
-                                <form method="post" onsubmit="return confirm('Allow other suppliers to view and take this project?');">
+                                <form method="post" onsubmit="return confirm('Allow other contractors to view and take this project?');">
                                     <button type="submit" name="agree_reopen_project" class="btn btn-warning">
-                                        <i class="fas fa-share-square me-1"></i>Agree & Share to Other Suppliers
+                                        <i class="fas fa-share-square me-1"></i>Agree & Share to Other Contractors
                                     </button>
                                 </form>
                             </div>

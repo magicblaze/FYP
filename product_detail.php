@@ -320,7 +320,7 @@ function colorNameToHex($colorInput) {
     </main>
 
     <?php if ($others->num_rows > 0): ?>
-    <section class="detail-gallery" aria-label="Other Products from This Supplier" style="max-width: 1200px; margin: 2rem auto; padding: 0 1rem;">
+    <section class="detail-gallery" aria-label="Other Products from This Contractor" style="max-width: 1200px; margin: 2rem auto; padding: 0 1rem;">
         <h3 style="color: #2c3e50; font-weight: 600; margin-bottom: 1rem; font-size: 1.3rem;">Other Products from <?= htmlspecialchars($product['sname']) ?></h3>
         <div class="detail-gallery-images">
             <?php while ($r = $others->fetch_assoc()): ?>

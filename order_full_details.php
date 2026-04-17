@@ -118,7 +118,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($role === 'client' && isset($_POST['action_construction_date'])) {
         // Security check: only allow if workers are allocated
         if ($_POST['action_construction_date'] === 'accept' && !$workersAllocated) {
-            $updateMessage = "<div class='alert alert-danger alert-dismissible fade show' role='alert'>You cannot accept construction dates until workers have been allocated by the supplier.<button type='button' class='btn-close' data-bs-dismiss='alert' aria-label='Close'></button></div>";
+            $updateMessage = "<div class='alert alert-danger alert-dismissible fade show' role='alert'>You cannot accept construction dates until workers have been allocated by the contractor.<button type='button' class='btn-close' data-bs-dismiss='alert' aria-label='Close'></button></div>";
             goto end_post_processing;
         }
 
