@@ -2744,7 +2744,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                 <div class="card h-100">
                                     <div class="card-header bg-light">
                                         <h5 class="card-title mb-0">
-                                            <i class="fas fa-list me-2"></i>Reference Items
+                                            <i class="fas fa-list me-2"></i>Product & Material Order Placement
                                         </h5>
                                     </div>
                                     <div class="card-body">

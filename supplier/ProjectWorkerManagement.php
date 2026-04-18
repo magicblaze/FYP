@@ -1,8 +1,8 @@
 <?php
 // supplier/ProjectWorkerManagement.php
 // Dedicated page for suppliers to manage worker allocations across all projects
-require_once dirname(__DIR__) . 
-'/config.php';
+require_once dirname(__DIR__) .
+    '/config.php';
 session_start();
 
 // Check if user is logged in as supplier
@@ -18,7 +18,7 @@ $supplier_id = $user['supplierid'];
 if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["handle_assignment"])) {
     $order_id = intval($_POST["order_id"]);
     $action = $_POST["action"]; // 'Accepted' or 'Rejected'
-    
+
     if (in_array($action, ['Accepted', 'Rejected'])) {
         if ($action === 'Accepted') {
             $update_sql = "UPDATE `Order` 
@@ -47,7 +47,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["handle_assignment"]))
 // Handle inspection recovery (inspection_failed -> Construction begins)
 if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["confirm_inspection_recovery"])) {
     $order_id = intval($_POST["order_id"]);
-    
+
     // Update order status to Construction begins AND clear inspection fields
     $update_sql = "UPDATE `Order` SET 
                    ostatus = 'Construction begins',
@@ -57,7 +57,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["confirm_inspection_re
                    WHERE orderid = ? AND supplierid = ?";
     $update_stmt = mysqli_prepare($mysqli, $update_sql);
     mysqli_stmt_bind_param($update_stmt, "ii", $order_id, $supplier_id);
-    
+
     if (mysqli_stmt_execute($update_stmt)) {
         // Optional: Add notification to manager
         $notify_sql = "INSERT INTO Notification (user_type, user_id, orderid, message, type, created_at) 
@@ -66,7 +66,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["confirm_inspection_re
         mysqli_stmt_bind_param($notify_stmt, "ii", $order_id, $order_id);
         mysqli_stmt_execute($notify_stmt);
         mysqli_stmt_close($notify_stmt);
-        
+
         header("Location: ProjectWorkerManagement.php?msg=construction_started");
         exit();
     }
@@ -104,9 +104,9 @@ $projects_result = mysqli_stmt_get_result($projects_stmt);
 $projects = [];
 while ($row = mysqli_fetch_assoc($projects_result)) {
     $order_id = $row['orderid'];
-    
+
     // --- FETCH FULL DETAILS FOR MODAL (Sync with WorkerAllocation.php) ---
-    
+
     // 1. Fetch Order Edit Data
     $edit_order_sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.cost, o.deposit, o.supplierid, o.supplier_status,
                               c.clientid, c.cname as client_name, c.ctel, c.cemail, c.budget,
@@ -137,13 +137,19 @@ while ($row = mysqli_fetch_assoc($projects_result)) {
     $hasRefColor = false;
     $hasRefQuantity = false;
     $refColorRes = mysqli_query($mysqli, "SHOW COLUMNS FROM `OrderReference` LIKE 'color'");
-    if ($refColorRes) { $hasRefColor = (mysqli_num_rows($refColorRes) > 0); mysqli_free_result($refColorRes); }
+    if ($refColorRes) {
+        $hasRefColor = (mysqli_num_rows($refColorRes) > 0);
+        mysqli_free_result($refColorRes);
+    }
     $refQuantityRes = mysqli_query($mysqli, "SHOW COLUMNS FROM `OrderReference` LIKE 'quantity'");
-    if ($refQuantityRes) { $hasRefQuantity = (mysqli_num_rows($refQuantityRes) > 0); mysqli_free_result($refQuantityRes); }
-    
+    if ($refQuantityRes) {
+        $hasRefQuantity = (mysqli_num_rows($refQuantityRes) > 0);
+        mysqli_free_result($refQuantityRes);
+    }
+
     $refColorSelect = $hasRefColor ? 'orr.color' : 'NULL AS color';
     $refQuantitySelect = $hasRefQuantity ? 'orr.quantity' : 'NULL AS quantity';
-    
+
     $ref_sql = "SELECT orr.id, orr.productid, {$refColorSelect}, {$refQuantitySelect}, orr.status, orr.price, orr.note,
                        p.pname, p.price as product_price, p.category, p.description as product_description
                 FROM `OrderReference` orr
@@ -164,15 +170,17 @@ while ($row = mysqli_fetch_assoc($projects_result)) {
     $fees_result = mysqli_stmt_get_result($fees_stmt);
     $fees = mysqli_fetch_all($fees_result, MYSQLI_ASSOC);
     $row['fees'] = $fees;
-    
+
     $total_fees = 0;
-    foreach ($fees as $f) { $total_fees += floatval($f['amount']); }
+    foreach ($fees as $f) {
+        $total_fees += floatval($f['amount']);
+    }
     $row['total_fees'] = $total_fees;
 
     // 4. Calculations
     $design_price = isset($edit_order["design_price"]) ? floatval($edit_order["design_price"]) : 0;
     $original_budget = floatval($edit_order['budget'] ?? 0);
-    
+
     $payment = [
         'total_design_payment' => isset($edit_order['total_design_payment']) ? (float) $edit_order['total_design_payment'] : 0.0,
         'total_construction_payment' => isset($edit_order['total_construction_payment']) ? (float) $edit_order['total_construction_payment'] : 0.0,
@@ -182,7 +190,7 @@ while ($row = mysqli_fetch_assoc($projects_result)) {
         'total_amount_due' => isset($edit_order['total_amount_due']) ? (float) $edit_order['total_amount_due'] : 0.0,
     ];
     $row['payment'] = $payment;
-    
+
     $references_total = 0.0;
     foreach ($references as $r) {
         $rprice = isset($r['price']) && $r['price'] !== null ? (float) $r['price'] : (float) ($r['product_price'] ?? 0);
@@ -222,6 +230,7 @@ mysqli_stmt_close($workers_stmt);
 
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -230,38 +239,212 @@ mysqli_stmt_close($workers_stmt);
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="../css/styles.css">
     <style>
-        body { background-color: #f4f7f6; }
-        .stat-card { background: white; border-radius: 12px; padding: 1.5rem; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05 ); text-align: center; margin-bottom: 1.5rem; transition: all 0.3s ease; }
-        .stat-card:hover { box-shadow: 0 4px 16px rgba(52, 152, 219, 0.15); transform: translateY(-2px); }
-        .stat-number { font-size: 2.5rem; font-weight: 700; color: #3498db; margin-bottom: 0.5rem; }
-        .stat-label { color: #7f8c8d; font-size: 0.95rem; font-weight: 500; }
-        .project-card { background: white; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05); border-left: 4px solid #3498db; transition: all 0.3s ease; }
-        .project-card:hover { box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1); transform: translateX(5px); }
-        .btn-payment { background: #f39c12; color: white; border: none; padding: 8px 15px; border-radius: 8px; font-weight: 600; font-size: 14px; transition: all 0.3s ease; text-decoration: none; display: inline-block; }
-        .btn-payment:hover { background: #e67e22; color: white; box-shadow: 0 4px 12px rgba(230, 126, 34, 0.3); }
-        .project-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; }
-        .project-title { font-size: 1.2rem; font-weight: 600; color: #2c3e50; margin-bottom: 0.5rem; }
-        .status-badge { padding: 5px 15px; border-radius: 20px; font-size: 12px; font-weight: 700; text-transform: uppercase; }
-        .project-info { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid #ecf0f1; }
-        .info-label { color: #7f8c8d; font-size: 13px; margin-bottom: 2px; }
-        .info-value { font-weight: 600; color: #2c3e50; }
-        .action-buttons { display: flex; gap: 0.75rem; flex-wrap: wrap; }
-        .btn-allocate, .btn-detail { border: none; color: white; padding: 0.6rem 1.2rem; border-radius: 8px; font-weight: 600; transition: all 0.3s; text-decoration: none; display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; }
-        .btn-allocate { background: #27ae60; }
-        .btn-allocate:hover { background: #229954; color: white; transform: translateY(-2px); box-shadow: 0 4px 8px rgba(39, 174, 96, 0.3); }
-        .btn-detail { background: #3498db; }
-        .btn-detail:hover { background: #2980b9; color: white; transform: translateY(-2px); box-shadow: 0 4px 8px rgba(52, 152, 219, 0.3); }
-        .back-btn { display: inline-flex; align-items: center; gap: 0.5rem; color: #7f8c8d; text-decoration: none; font-weight: 600; margin-bottom: 1.5rem; transition: all 0.3s; }
-        .back-btn:hover { color: #3498db; transform: translateX(-5px); }
+        body {
+            background-color: #f4f7f6;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            text-align: center;
+            margin-bottom: 1.5rem;
+            transition: all 0.3s ease;
+        }
+
+        .stat-card:hover {
+            box-shadow: 0 4px 16px rgba(52, 152, 219, 0.15);
+            transform: translateY(-2px);
+        }
+
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #3498db;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-label {
+            color: #7f8c8d;
+            font-size: 0.95rem;
+            font-weight: 500;
+        }
+
+        .project-card {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            border-left: 4px solid #3498db;
+            transition: all 0.3s ease;
+        }
+
+        .project-card:hover {
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+            transform: translateX(5px);
+        }
+
+        .btn-payment {
+            background: #f39c12;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-payment:hover {
+            background: #e67e22;
+            color: white;
+            box-shadow: 0 4px 12px rgba(230, 126, 34, 0.3);
+        }
+
+        .project-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 1rem;
+        }
+
+        .project-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 0.5rem;
+        }
+
+        .status-badge {
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .project-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #ecf0f1;
+        }
+
+        .info-label {
+            color: #7f8c8d;
+            font-size: 13px;
+            margin-bottom: 2px;
+        }
+
+        .info-value {
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .btn-allocate,
+        .btn-detail {
+            border: none;
+            color: white;
+            padding: 0.6rem 1.2rem;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        .btn-allocate {
+            background: #27ae60;
+        }
+
+        .btn-allocate:hover {
+            background: #229954;
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(39, 174, 96, 0.3);
+        }
+
+        .btn-detail {
+            background: #3498db;
+        }
+
+        .btn-detail:hover {
+            background: #2980b9;
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(52, 152, 219, 0.3);
+        }
+
+        .back-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: #7f8c8d;
+            text-decoration: none;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            transition: all 0.3s;
+        }
+
+        .back-btn:hover {
+            color: #3498db;
+            transform: translateX(-5px);
+        }
 
         /* Modal Styles (Synced with WorkerAllocation.php) */
-        .detail-card { background: white; border-radius: 12px; padding: 25px; margin-bottom: 25px; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05); }
-        .section-title { font-size: 18px; font-weight: 700; color: #2c3e50; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid #eee; display: flex; align-items: center; gap: 10px; }
-        .table thead th { background-color: #f8f9fa; border-top: none; font-size: 13px; color: #7f8c8d; }
-        .modal-header { background: #3498db; color: white; }
-        .modal-header .btn-close { filter: brightness(0) invert(1); }
+        .detail-card {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+        }
+
+        .section-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #2c3e50;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #eee;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .table thead th {
+            background-color: #f8f9fa;
+            border-top: none;
+            font-size: 13px;
+            color: #7f8c8d;
+        }
+
+        .modal-header {
+            background: #3498db;
+            color: white;
+        }
+
+        .modal-header .btn-close {
+            filter: brightness(0) invert(1);
+        }
     </style>
 </head>
+
 <body>
     <?php include_once __DIR__ . '/../includes/header.php'; ?>
     </br>
@@ -271,19 +454,19 @@ mysqli_stmt_close($workers_stmt);
         </a>
 
         <!-- Success Message -->
-<?php if (isset($_GET['msg']) && $_GET['msg'] == 'construction_started'): ?>
-    <div class="alert alert-success mb-4">
-        <i class="fas fa-check-circle me-2"></i>
-        Project has been moved to Construction stage successfully!
-    </div>
-<?php endif; ?>
+        <?php if (isset($_GET['msg']) && $_GET['msg'] == 'construction_started'): ?>
+            <div class="alert alert-success mb-4">
+                <i class="fas fa-check-circle me-2"></i>
+                Project has been moved to Construction stage successfully!
+            </div>
+        <?php endif; ?>
 
-<?php if (isset($_GET['msg']) && $_GET['msg'] == 'recovery_failed'): ?>
-    <div class="alert alert-danger mb-4">
-        <i class="fas fa-exclamation-triangle me-2"></i>
-        Failed to update project status. Please try again.
-    </div>
-<?php endif; ?>
+        <?php if (isset($_GET['msg']) && $_GET['msg'] == 'recovery_failed'): ?>
+            <div class="alert alert-danger mb-4">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                Failed to update project status. Please try again.
+            </div>
+        <?php endif; ?>
         <!-- Statistics Section -->
         <div class="row mb-4">
             <div class="col-md-3">
@@ -315,16 +498,16 @@ mysqli_stmt_close($workers_stmt);
         <h3 class="mb-3">Your Projects</h3>
         <?php if (count($projects) > 0): ?>
             <?php foreach ($projects as $project): ?>
-                <?php 
-                    $edit_order = $project['edit_order'];
-                    $references = $project['references'];
-                    $fees = $project['fees'];
-                    $payment = $project['payment'];
-                    $total_fees = $project['total_fees'];
-                    $references_total = $project['references_total'];
-                    $deducted_amount = $project['deducted_amount'];
-                    $remaining_budget = $project['remaining_budget'];
-                    $original_budget = floatval($edit_order['budget'] ?? 0);
+                <?php
+                $edit_order = $project['edit_order'];
+                $references = $project['references'];
+                $fees = $project['fees'];
+                $payment = $project['payment'];
+                $total_fees = $project['total_fees'];
+                $references_total = $project['references_total'];
+                $deducted_amount = $project['deducted_amount'];
+                $remaining_budget = $project['remaining_budget'];
+                $original_budget = floatval($edit_order['budget'] ?? 0);
                 ?>
                 <div class="project-card">
                     <div class="project-header">
@@ -362,27 +545,30 @@ mysqli_stmt_close($workers_stmt);
                             <i class="fas fa-eye me-1"></i>Detail
                         </button>
 
-	                        <?php if ($project['supplier_status'] === 'Accepted'): ?>
-	                            <a href="WorkerAllocation.php?orderid=<?= $project['orderid'] ?>" class="btn-allocate">
-	                                <i class="fas fa-users"></i>Manage Workers
-	                            </a>
-	                            <a href="distribution.php?orderid=<?= $project['orderid'] ?>" class="btn-payment ms-2">
-	                                <i class="fas fa-file-invoice-dollar me-1"></i>Distribution
-	                            </a>
-                               <?php 
-                                $constructionStatuses = ['preparing', 'PREPARING', 'Construction begins', 'construction begins'];
-                                if (in_array($project['ostatus'], $constructionStatuses)): ?>
+                        <?php if ($project['supplier_status'] === 'Accepted'): ?>
+                            <a href="WorkerAllocation.php?orderid=<?= $project['orderid'] ?>" class="btn-allocate">
+                                <i class="fas fa-users"></i>Manage Workers
+                            </a>
+                            <a href="distribution.php?orderid=<?= $project['orderid'] ?>" class="btn-payment ms-2">
+                                <i class="fas fa-file-invoice-dollar me-1"></i>Distribution
+                            </a>
+                            <?php
+                            $constructionStatuses = ['preparing', 'PREPARING', 'Construction begins', 'construction begins'];
+                            if (in_array($project['ostatus'], $constructionStatuses)): ?>
                                 <a href="construction_stage.php?orderid=<?= $project['orderid'] ?>" class="btn-payment ms-2" style="background: #2c3e50;">
-                                    <i class="fas fa-hard-hat me-1"></i>Construction Stage
+                                    <i class="fas fa-hard-hat me-1"></i>Set schedule
                                 </a>
-                                <?php endif; ?>
-    <!-- Inspection Failed Recovery Button -->
-    <?php if ($project['ostatus'] == 'inspection_failed'): ?>
-        <button type="button" class="btn-payment ms-2" data-bs-toggle="modal" data-bs-target="#inspectionReportModal<?= $project['orderid'] ?>">
-            <i class="fas fa-file-invoice-dollar me-1"></i>View Inspection Report
-        </button>
-    <?php endif; ?>
-	                        <?php elseif ($project['supplier_status'] === 'Rejected'): ?>
+                                <a href="construction_calendar.php?orderid=<?= $project['orderid'] ?>" class="btn btn-info me-2">
+                                    <i class="fas fa-calendar-alt me-2"></i>View Construction Schedule
+                                </a>
+                            <?php endif; ?>
+                            <!-- Inspection Failed Recovery Button -->
+                            <?php if ($project['ostatus'] == 'inspection_failed'): ?>
+                                <button type="button" class="btn-payment ms-2" data-bs-toggle="modal" data-bs-target="#inspectionReportModal<?= $project['orderid'] ?>">
+                                    <i class="fas fa-file-invoice-dollar me-1"></i>View Inspection Report
+                                </button>
+                            <?php endif; ?>
+                        <?php elseif ($project['supplier_status'] === 'Rejected'): ?>
                             <span class="badge bg-danger p-2">Rejected</span>
                         <?php endif; ?>
                     </div>
@@ -447,71 +633,71 @@ mysqli_stmt_close($workers_stmt);
 
                                         <!-- Design Proposal -->
                                         <?php if (!empty($edit_order['designed_picture_filename'])): ?>
-                                        <div class="detail-card">
-                                            <div class="section-title"><i class="fas fa-paint-brush"></i> Design Proposal</div>
-                                            <div class="text-center">
-                                                <img src="../uploads/designed_Picture/<?= htmlspecialchars($edit_order['designed_picture_filename']) ?>" 
-                                                     alt="Design Proposal" class="img-fluid rounded shadow-sm" style="max-height: 400px; object-fit: contain;">
+                                            <div class="detail-card">
+                                                <div class="section-title"><i class="fas fa-paint-brush"></i> Design Proposal</div>
+                                                <div class="text-center">
+                                                    <img src="../uploads/designed_Picture/<?= htmlspecialchars($edit_order['designed_picture_filename']) ?>"
+                                                        alt="Design Proposal" class="img-fluid rounded shadow-sm" style="max-height: 400px; object-fit: contain;">
+                                                </div>
                                             </div>
-                                        </div>
                                         <?php endif; ?>
 
                                         <!-- Products & Materials -->
                                         <?php if (!empty($references)): ?>
-                                        <div class="detail-card">
-                                            <div class="section-title"><i class="fas fa-couch"></i> Products & Materials</div>
-                                            <div class="table-responsive">
-                                                <table class="table align-middle">
-                                                    <thead>
-                                                        <tr>
-                                                            <th>Item Name</th>
-                                                            <th>Category</th>
-                                                            <th>Status</th>
-                                                            <th class="text-end">Price</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        <?php foreach ($references as $ref): ?>
+                                            <div class="detail-card">
+                                                <div class="section-title"><i class="fas fa-couch"></i> Products & Materials</div>
+                                                <div class="table-responsive">
+                                                    <table class="table align-middle">
+                                                        <thead>
                                                             <tr>
-                                                                <td>
-                                                                    <div class="fw-bold"><?= htmlspecialchars($ref['pname'] ?? 'N/A') ?></div>
-                                                                </td>
-                                                                <td><span class="badge bg-light text-dark"><?= htmlspecialchars($ref['category'] ?? 'N/A') ?></span></td>
-                                                                <td><?= htmlspecialchars($ref['status'] ?? 'Pending') ?></td>
-                                                                <td class="text-end">$<?= number_format($ref['price'] ?? 0, 2) ?></td>
+                                                                <th>Item Name</th>
+                                                                <th>Category</th>
+                                                                <th>Status</th>
+                                                                <th class="text-end">Price</th>
                                                             </tr>
-                                                        <?php endforeach; ?>
-                                                    </tbody>
-                                                </table>
+                                                        </thead>
+                                                        <tbody>
+                                                            <?php foreach ($references as $ref): ?>
+                                                                <tr>
+                                                                    <td>
+                                                                        <div class="fw-bold"><?= htmlspecialchars($ref['pname'] ?? 'N/A') ?></div>
+                                                                    </td>
+                                                                    <td><span class="badge bg-light text-dark"><?= htmlspecialchars($ref['category'] ?? 'N/A') ?></span></td>
+                                                                    <td><?= htmlspecialchars($ref['status'] ?? 'Pending') ?></td>
+                                                                    <td class="text-end">$<?= number_format($ref['price'] ?? 0, 2) ?></td>
+                                                                </tr>
+                                                            <?php endforeach; ?>
+                                                        </tbody>
+                                                    </table>
+                                                </div>
                                             </div>
-                                        </div>
                                         <?php endif; ?>
 
                                         <!-- Additional Fees -->
                                         <?php if (!empty($fees)): ?>
-                                        <div class="detail-card">
-                                            <div class="section-title"><i class="fas fa-plus-circle"></i> Additional Fees</div>
-                                            <div class="table-responsive">
-                                                <table class="table align-middle">
-                                                    <thead>
-                                                        <tr>
-                                                            <th>Fee Name</th>
-                                                            <th>Description</th>
-                                                            <th class="text-end">Amount</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        <?php foreach ($fees as $fee): ?>
+                                            <div class="detail-card">
+                                                <div class="section-title"><i class="fas fa-plus-circle"></i> Additional Fees</div>
+                                                <div class="table-responsive">
+                                                    <table class="table align-middle">
+                                                        <thead>
                                                             <tr>
-                                                                <td class="fw-bold"><?= htmlspecialchars($fee['fee_name']) ?></td>
-                                                                <td><?= htmlspecialchars($fee['description']) ?></td>
-                                                                <td class="text-end">$<?= number_format($fee['amount'], 2) ?></td>
+                                                                <th>Fee Name</th>
+                                                                <th>Description</th>
+                                                                <th class="text-end">Amount</th>
                                                             </tr>
-                                                        <?php endforeach; ?>
-                                                    </tbody>
-                                                </table>
+                                                        </thead>
+                                                        <tbody>
+                                                            <?php foreach ($fees as $fee): ?>
+                                                                <tr>
+                                                                    <td class="fw-bold"><?= htmlspecialchars($fee['fee_name']) ?></td>
+                                                                    <td><?= htmlspecialchars($fee['description']) ?></td>
+                                                                    <td class="text-end">$<?= number_format($fee['amount'], 2) ?></td>
+                                                                </tr>
+                                                            <?php endforeach; ?>
+                                                        </tbody>
+                                                    </table>
+                                                </div>
                                             </div>
-                                        </div>
                                         <?php endif; ?>
 
                                         <!-- Cost Summary -->
@@ -554,110 +740,110 @@ mysqli_stmt_close($workers_stmt);
                         </div>
                     </div>
                 </div>
-<div class="modal fade" id="inspectionReportModal<?= $project['orderid'] ?>" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header bg-warning text-dark">
-                <h5 class="modal-title"><i class="fas fa-file-alt me-2"></i>Inspection Report - Project #<?= $project['orderid'] ?></h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <?php
-                // Fetch the fail inspection report
-                $fail_report_sql = "SELECT ir.report_content, ir.file_paths, ir.submitted_at, ir.result, o.ostatus 
+                <div class="modal fade" id="inspectionReportModal<?= $project['orderid'] ?>" tabindex="-1" aria-hidden="true">
+                    <div class="modal-dialog modal-lg">
+                        <div class="modal-content">
+                            <div class="modal-header bg-warning text-dark">
+                                <h5 class="modal-title"><i class="fas fa-file-alt me-2"></i>Inspection Report - Project #<?= $project['orderid'] ?></h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <?php
+                                // Fetch the fail inspection report
+                                $fail_report_sql = "SELECT ir.report_content, ir.file_paths, ir.submitted_at, ir.result, o.ostatus 
                                    FROM InspectionReport ir 
                                    JOIN `Order` o ON ir.orderid = o.orderid
                                    WHERE ir.orderid = ? AND ir.result = 'fail' 
                                    ORDER BY ir.submitted_at DESC LIMIT 1";
-                $fail_report_stmt = mysqli_prepare($mysqli, $fail_report_sql);
-                mysqli_stmt_bind_param($fail_report_stmt, "i", $project['orderid']);
-                mysqli_stmt_execute($fail_report_stmt);
-                $fail_report_result = mysqli_stmt_get_result($fail_report_stmt);
-                $fail_report = mysqli_fetch_assoc($fail_report_result);
-                mysqli_stmt_close($fail_report_stmt);
-                
-                if ($fail_report):
-                    $attached_files = [];
-                    if (!empty($fail_report['file_paths'])) {
-                        $attached_files = json_decode($fail_report['file_paths'], true);
-                        if (!is_array($attached_files)) {
-                            $attached_files = [];
-                        }
-                    }
-                ?>
-                    <div class="alert alert-danger mb-3">
-                        <i class="fas fa-exclamation-triangle me-2"></i>
-                        <strong>Inspection Failed</strong><br>
-                        The inspection failed on <?= date('F d, Y h:i A', strtotime($fail_report['submitted_at'])) ?>.
-                        Please review the report below. After confirming, the project will proceed to construction.
-                    </div>
-                    
-                    <div class="card mb-3">
-                        <div class="card-header bg-danger text-white">
-                            <strong><i class="fas fa-file-alt me-2"></i>Report Content</strong>
-                        </div>
-                        <div class="card-body">
-                            <div style="white-space: pre-wrap;"><?= nl2br(htmlspecialchars($fail_report['report_content'])) ?></div>
-                        </div>
-                    </div>
-                    
-                    <?php if (!empty($attached_files)): ?>
-                        <div class="card mb-3">
-                            <div class="card-header bg-info text-white">
-                                <strong><i class="fas fa-paperclip me-2"></i>Attached Files</strong>
-                            </div>
-                            <div class="card-body">
-                                <div class="row">
-                                    <?php foreach ($attached_files as $file): 
-                                        $file_url = "../" . $file;
-                                        $file_ext = strtolower(pathinfo($file, PATHINFO_EXTENSION));
-                                        $image_extensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'];
-                                    ?>
-                                        <div class="col-md-4 col-sm-6 mb-3">
-                                            <div class="card h-100">
-                                                <?php if (in_array($file_ext, $image_extensions)): ?>
-                                                    <img src="<?= $file_url ?>" class="card-img-top" alt="Inspection Image" style="height: 150px; object-fit: cover; cursor: pointer;" onclick="window.open('<?= $file_url ?>')">
-                                                <?php else: ?>
-                                                    <div class="card-body text-center">
-                                                        <i class="fas fa-file-alt fa-3x text-secondary mb-2"></i>
-                                                    </div>
-                                                <?php endif; ?>
-                                                <div class="card-body p-2 text-center">
-                                                    <a href="<?= $file_url ?>" target="_blank" class="btn btn-sm btn-outline-primary w-100">
-                                                        <i class="fas fa-download me-1"></i> <?= basename($file) ?>
-           c                                         </a>
+                                $fail_report_stmt = mysqli_prepare($mysqli, $fail_report_sql);
+                                mysqli_stmt_bind_param($fail_report_stmt, "i", $project['orderid']);
+                                mysqli_stmt_execute($fail_report_stmt);
+                                $fail_report_result = mysqli_stmt_get_result($fail_report_stmt);
+                                $fail_report = mysqli_fetch_assoc($fail_report_result);
+                                mysqli_stmt_close($fail_report_stmt);
+
+                                if ($fail_report):
+                                    $attached_files = [];
+                                    if (!empty($fail_report['file_paths'])) {
+                                        $attached_files = json_decode($fail_report['file_paths'], true);
+                                        if (!is_array($attached_files)) {
+                                            $attached_files = [];
+                                        }
+                                    }
+                                ?>
+                                    <div class="alert alert-danger mb-3">
+                                        <i class="fas fa-exclamation-triangle me-2"></i>
+                                        <strong>Inspection Failed</strong><br>
+                                        The inspection failed on <?= date('F d, Y h:i A', strtotime($fail_report['submitted_at'])) ?>.
+                                        Please review the report below. After confirming, the project will proceed to construction.
+                                    </div>
+
+                                    <div class="card mb-3">
+                                        <div class="card-header bg-danger text-white">
+                                            <strong><i class="fas fa-file-alt me-2"></i>Report Content</strong>
+                                        </div>
+                                        <div class="card-body">
+                                            <div style="white-space: pre-wrap;"><?= nl2br(htmlspecialchars($fail_report['report_content'])) ?></div>
+                                        </div>
+                                    </div>
+
+                                    <?php if (!empty($attached_files)): ?>
+                                        <div class="card mb-3">
+                                            <div class="card-header bg-info text-white">
+                                                <strong><i class="fas fa-paperclip me-2"></i>Attached Files</strong>
+                                            </div>
+                                            <div class="card-body">
+                                                <div class="row">
+                                                    <?php foreach ($attached_files as $file):
+                                                        $file_url = "../" . $file;
+                                                        $file_ext = strtolower(pathinfo($file, PATHINFO_EXTENSION));
+                                                        $image_extensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'];
+                                                    ?>
+                                                        <div class="col-md-4 col-sm-6 mb-3">
+                                                            <div class="card h-100">
+                                                                <?php if (in_array($file_ext, $image_extensions)): ?>
+                                                                    <img src="<?= $file_url ?>" class="card-img-top" alt="Inspection Image" style="height: 150px; object-fit: cover; cursor: pointer;" onclick="window.open('<?= $file_url ?>')">
+                                                                <?php else: ?>
+                                                                    <div class="card-body text-center">
+                                                                        <i class="fas fa-file-alt fa-3x text-secondary mb-2"></i>
+                                                                    </div>
+                                                                <?php endif; ?>
+                                                                <div class="card-body p-2 text-center">
+                                                                    <a href="<?= $file_url ?>" target="_blank" class="btn btn-sm btn-outline-primary w-100">
+                                                                        <i class="fas fa-download me-1"></i> <?= basename($file) ?>
+                                                                        c </a>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    <?php endforeach; ?>
                                                 </div>
                                             </div>
                                         </div>
-                                    <?php endforeach; ?>
-                                </div>
+                                    <?php endif; ?>
+
+                                    <div class="alert alert-warning mt-3">
+                                        <i class="fas fa-info-circle me-2"></i>
+                                        <strong>Note:</strong> After confirming, the project status will change to "Construction begins".
+                                    </div>
+
+                                    <form method="POST" class="mt-3" onsubmit="return confirm('Have you reviewed the inspection report? Confirm to proceed to construction stage.');">
+                                        <input type="hidden" name="confirm_inspection_recovery" value="1">
+                                        <input type="hidden" name="order_id" value="<?= $project['orderid'] ?>">
+                                        <button type="submit" class="btn btn-success w-100 btn-lg">
+                                            <i class="fas fa-check-circle me-2"></i>Confirm & Proceed to Construction
+                                        </button>
+                                    </form>
+
+                                <?php else: ?>
+                                    <div class="alert alert-info">
+                                        <i class="fas fa-info-circle me-2"></i>
+                                        No inspection report available. Please contact the manager.
+                                    </div>
+                                <?php endif; ?>
                             </div>
                         </div>
-                    <?php endif; ?>
-                    
-                    <div class="alert alert-warning mt-3">
-                        <i class="fas fa-info-circle me-2"></i>
-                        <strong>Note:</strong> After confirming, the project status will change to "Construction begins".
                     </div>
-                    
-                    <form method="POST" class="mt-3" onsubmit="return confirm('Have you reviewed the inspection report? Confirm to proceed to construction stage.');">
-                        <input type="hidden" name="confirm_inspection_recovery" value="1">
-                        <input type="hidden" name="order_id" value="<?= $project['orderid'] ?>">
-                        <button type="submit" class="btn btn-success w-100 btn-lg">
-                            <i class="fas fa-check-circle me-2"></i>Confirm & Proceed to Construction
-                        </button>
-                    </form>
-                    
-                <?php else: ?>
-                    <div class="alert alert-info">
-                        <i class="fas fa-info-circle me-2"></i>
-                        No inspection report available. Please contact the manager.
-                    </div>
-                <?php endif; ?>
-            </div>
-        </div>
-    </div>
-</div>
+                </div>
 
             <?php endforeach; ?>
         <?php else: ?>
@@ -674,4 +860,5 @@ mysqli_stmt_close($workers_stmt);
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
     <?php include __DIR__ . '/../Public/chat_widget.php'; ?>
 </body>
+
 </html>

@@ -879,6 +879,74 @@ CREATE TABLE IF NOT EXISTS `InspectionConfirmation` (
   END$$
   DELIMITER ;
 
+  DROP TRIGGER IF EXISTS `trg_supplier_status_chat_notify`;
+  DELIMITER $$
+  CREATE TRIGGER `trg_supplier_status_chat_notify`
+  AFTER UPDATE ON `Order`
+  FOR EACH ROW
+  BEGIN
+    DECLARE v_chatroom_id INT DEFAULT NULL;
+    DECLARE v_supplier_name VARCHAR(255) DEFAULT 'Unassigned Constructor';
+    DECLARE v_message TEXT;
+
+    IF NOT (OLD.`supplier_status` <=> NEW.`supplier_status`) THEN
+      -- Resolve room by project id using existing order marker message
+      SELECT `ChatRoomid`
+        INTO v_chatroom_id
+      FROM `Message`
+      WHERE `message_type` = 'order'
+        AND TRIM(`content`) = CAST(NEW.`orderid` AS CHAR)
+      ORDER BY `messageid` DESC
+      LIMIT 1;
+
+      -- Preferred order room name used by client flow
+      SELECT `ChatRoomid`
+        INTO v_chatroom_id
+      FROM `ChatRoom`
+      WHERE v_chatroom_id IS NULL
+        AND `roomname` = CONCAT('Meeting Room - Project-', NEW.`orderid`)
+      ORDER BY `ChatRoomid` DESC
+      LIMIT 1;
+
+      -- Backward-compatible room name used by manager flow
+      IF v_chatroom_id IS NULL THEN
+        SELECT `ChatRoomid`
+          INTO v_chatroom_id
+        FROM `ChatRoom`
+        WHERE `roomname` = CONCAT('order-', NEW.`orderid`)
+        ORDER BY `ChatRoomid` DESC
+        LIMIT 1;
+      END IF;
+
+      IF NEW.`supplierid` IS NOT NULL THEN
+        SELECT `sname`
+          INTO v_supplier_name
+        FROM `Supplier`
+        WHERE `supplierid` = NEW.`supplierid`
+        LIMIT 1;
+      END IF;
+
+      IF v_chatroom_id IS NOT NULL THEN
+        IF NEW.`supplierid` IS NOT NULL THEN
+          INSERT IGNORE INTO `ChatRoomMember` (`ChatRoomid`, `member_type`, `memberid`)
+          VALUES (v_chatroom_id, 'supplier', NEW.`supplierid`);
+        END IF;
+
+        SET v_message = CONCAT(
+          ' Constructor status updated: ',
+          IFNULL(v_supplier_name, CONCAT('Supplier #', NEW.`supplierid`)),
+          ' is now ',
+          IFNULL(NEW.`supplier_status`, 'Unknown'),
+          '.'
+        );
+
+        INSERT INTO `Message` (`sender_type`, `sender_id`, `content`, `message_type`, `ChatRoomid`)
+        VALUES ('system', 0, v_message, 'text', v_chatroom_id);
+      END IF;
+    END IF;
+  END$$
+  DELIMITER ;
+
 SET FOREIGN_KEY_CHECKS = 0;
 
 SET FOREIGN_KEY_CHECKS = 1;

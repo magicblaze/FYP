@@ -78,11 +78,22 @@ $current_budget = isset($order['budget']) ? floatval($order['budget']) : 0;
 
 // Calculate actual material cost from confirmed order references
 $actual_materials_cost = 0.0;
-$materials_sql = "SELECT IFNULL(SUM(COALESCE(orr.price, p.price, 0)), 0) AS material_total
+$hasRefQuantity = false;
+$quantity_column_result = mysqli_query($mysqli, "SHOW COLUMNS FROM `OrderReference` LIKE 'quantity'");
+if ($quantity_column_result) {
+    $hasRefQuantity = (mysqli_num_rows($quantity_column_result) > 0);
+    mysqli_free_result($quantity_column_result);
+}
+
+$quantity_expr = $hasRefQuantity
+    ? "CASE WHEN orr.quantity IS NULL OR orr.quantity <= 0 THEN 1 ELSE orr.quantity END"
+    : "1";
+
+$materials_sql = "SELECT IFNULL(SUM(COALESCE(orr.price, p.price, 0) * {$quantity_expr}), 0) AS material_total
                                     FROM `OrderReference` orr
                                     LEFT JOIN `Product` p ON orr.productid = p.productid
                                     WHERE orr.orderid = ?
-                                        AND (orr.status IS NULL OR LOWER(orr.status) <> 'rejected')";
+                                        AND (orr.status IS NULL OR LOWER(TRIM(orr.status)) <> 'rejected')";
 $materials_stmt = mysqli_prepare($mysqli, $materials_sql);
 if ($materials_stmt) {
         mysqli_stmt_bind_param($materials_stmt, "i", $orderid);

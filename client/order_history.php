@@ -103,6 +103,13 @@ $stmt->bind_param("i", $clientId);
 $stmt->execute();
 $orders = $stmt->get_result();
 
+$hasRefQuantity = false;
+$refQuantityRes = mysqli_query($mysqli, "SHOW COLUMNS FROM `OrderReference` LIKE 'quantity'");
+if ($refQuantityRes) {
+    $hasRefQuantity = (mysqli_num_rows($refQuantityRes) > 0);
+    mysqli_free_result($refQuantityRes);
+}
+
 $flash_msg = '';
 $flash_class = '';
 if (!empty($_GET['msg'])) {
@@ -493,9 +500,16 @@ if (!empty($_GET['msg'])) {
                         $fees_stmt->close();
                     }
 
-                    // Sum product references (use reference price if set, otherwise product.price)
+                    // Sum product references (use reference price if set, otherwise product.price), quantity-aware
                     $refs_total = 0.0;
-                    $refs_sql = "SELECT IFNULL(SUM(COALESCE(orr.price, p.price, 0)),0) as sum_refs FROM OrderReference orr LEFT JOIN Product p ON orr.productid = p.productid WHERE orr.orderid = ?";
+                    $quantityExpr = $hasRefQuantity
+                        ? "CASE WHEN orr.quantity IS NULL OR orr.quantity <= 0 THEN 1 ELSE orr.quantity END"
+                        : "1";
+                    $refs_sql = "SELECT IFNULL(SUM(COALESCE(orr.price, p.price, 0) * {$quantityExpr}),0) as sum_refs
+                                 FROM OrderReference orr
+                                 LEFT JOIN Product p ON orr.productid = p.productid
+                                 WHERE orr.orderid = ?
+                                   AND (orr.status IS NULL OR LOWER(TRIM(orr.status)) <> 'rejected')";
                     $refs_stmt = $mysqli->prepare($refs_sql);
                     if ($refs_stmt) {
                         $refs_stmt->bind_param("i", $orderId);
@@ -506,7 +520,30 @@ if (!empty($_GET['msg'])) {
                     }
 
                     $deposit = isset($order['deposit']) ? (float) $order['deposit'] : 0.0;
-                    $computed_cost = $design_price + $fees_total;
+                    $expected_cost = $design_price + $fees_total;
+
+                    $proposalSubmittedStatuses = [
+                        'reviewing design proposal',
+                        'waiting for review design',
+                        'waiting client review',
+                        'waiting 2nd design phase payment',
+                        'waiting final design phase payment',
+                        'waiting 1st construction phase payment',
+                        'coordinating contractors',
+                        'preparing',
+                        'waiting client reassignment',
+                        'waiting client confirm construction date',
+                        'in construction',
+                        'waiting for inspection',
+                        'inspection_completed',
+                        'inspection_failed',
+                        'waiting start construction pay',
+                        'construction begins',
+                        'complete'
+                    ];
+                    $showActualPrice = in_array($statusLower, $proposalSubmittedStatuses, true);
+                    $display_price_label = $showActualPrice ? 'Actual price' : 'Expected cost';
+                    $display_price_value = $showActualPrice ? ($expected_cost + $refs_total) : $expected_cost;
                     
                     // Calculate final payment amount (final payment + references)
                     $final_payment_amount = $final_payment + $refs_total;
@@ -550,8 +587,8 @@ if (!empty($_GET['msg'])) {
 
                             </div>
                             <div class="order-price-info">
-                                <div class="price-label">Expected cost</div>
-                                <div class="price-value">$<?= number_format($computed_cost, 2) ?></div>
+                                <div class="price-label"><?= htmlspecialchars($display_price_label) ?></div>
+                                <div class="price-value">$<?= number_format($display_price_value, 2) ?></div>
                             </div>
                         </div>
                         <?php if (!empty($order['Requirements'])): ?>
