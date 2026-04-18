@@ -29,6 +29,7 @@ DROP TABLE IF EXISTS `Supplier`;
 DROP TABLE IF EXISTS `Material`;
 DROP TABLE IF EXISTS `Order`;
 DROP TABLE IF EXISTS `AdditionalFee`;
+DROP TABLE IF EXISTS `OrderConstDistri`;
 DROP TABLE IF EXISTS `OrderDelivery`;
 DROP TABLE IF EXISTS `Order_Contractors`;
 DROP TABLE IF EXISTS `Design`;
@@ -583,6 +584,27 @@ CREATE TABLE `workerallocation` (
     FOREIGN KEY (`managerid`) REFERENCES `Manager`(`managerid`) ON DELETE CASCADE
 );
 
+-- Centralized distribution storage for worker split and custom fees
+CREATE TABLE `OrderConstDistri` (
+  `distri_id` INT NOT NULL AUTO_INCREMENT,
+  `orderid` INT NOT NULL,
+  `entry_type` ENUM('worker', 'fee') NOT NULL,
+  `worker_allocation_id` INT DEFAULT NULL,
+  `distribution_name` VARCHAR(255) NOT NULL,
+  `percentage` DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  `amount` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+  `description` TEXT DEFAULT NULL,
+  `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`distri_id`),
+  UNIQUE KEY `ux_ocd_worker_allocation` (`worker_allocation_id`),
+  KEY `idx_ocd_orderid` (`orderid`),
+  KEY `idx_ocd_order_entry` (`orderid`, `entry_type`, `is_active`),
+  CONSTRAINT `fk_ocd_orderid` FOREIGN KEY (`orderid`) REFERENCES `Order`(`orderid`) ON DELETE CASCADE,
+  CONSTRAINT `fk_ocd_worker_allocation` FOREIGN KEY (`worker_allocation_id`) REFERENCES `workerallocation`(`allocation_id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- Seed read status: for each message add rows for members of that chatroom
 -- Message 1 (room 2): manager (memberid 1) is sender -> read, designer (memberid 2) unread
 -- Message 2 (room 2): designer (memberid 2) is sender -> read, manager (memberid 1) unread
@@ -877,14 +899,17 @@ CREATE TABLE IF NOT EXISTS `InspectionConfirmation` (
 
       SELECT IFNULL(SUM(IFNULL(`percentage`, 0)), 0)
         INTO v_worker_percentage_total
-      FROM `workerallocation`
+      FROM `OrderConstDistri`
       WHERE `orderid` = NEW.`orderid`
-        AND IFNULL(`status`, 'Assigned') <> 'Cancelled';
+        AND `entry_type` = 'worker'
+        AND `is_active` = 1;
 
       SELECT IFNULL(SUM(IFNULL(`amount`, 0)), 0)
         INTO v_additional_fee_total
-      FROM `AdditionalFee`
-      WHERE `orderid` = NEW.`orderid`;
+      FROM `OrderConstDistri`
+      WHERE `orderid` = NEW.`orderid`
+        AND `entry_type` = 'fee'
+        AND `is_active` = 1;
 
       SET v_budget = IFNULL(NEW.`budget`, 0);
       IF v_budget > 0 THEN

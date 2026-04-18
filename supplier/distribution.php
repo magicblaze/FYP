@@ -57,6 +57,55 @@ $project_budget = floatval($order_info['budget'] ?? 0);
 $error_message = '';
 $success_message = '';
 
+// Keep worker distribution rows in sync with currently allocated workers
+$sync_insert_sql = "INSERT INTO `OrderConstDistri`
+                                        (`orderid`, `entry_type`, `worker_allocation_id`, `distribution_name`, `percentage`, `amount`, `description`, `is_active`)
+                                        SELECT wa.`orderid`,
+                                                     'worker',
+                                                     wa.`allocation_id`,
+                                                     COALESCE(NULLIF(TRIM(w.`name`), ''), CONCAT('Worker #', wa.`workerid`)),
+                                                     ?,
+                                                     (? * ? / 100),
+                                                     wa.`notes`,
+                                                     CASE WHEN IFNULL(wa.`status`, 'Assigned') = 'Cancelled' THEN 0 ELSE 1 END
+                                        FROM `workerallocation` wa
+                                        JOIN `Worker` w ON w.`workerid` = wa.`workerid`
+                                        LEFT JOIN `OrderConstDistri` ocd ON ocd.`worker_allocation_id` = wa.`allocation_id`
+                                        WHERE wa.`orderid` = ?
+                                            AND w.`supplierid` = ?
+                                            AND ocd.`distri_id` IS NULL";
+$sync_insert_stmt = mysqli_prepare($mysqli, $sync_insert_sql);
+mysqli_stmt_bind_param($sync_insert_stmt, "dddii", $supplier_default_pay, $project_budget, $supplier_default_pay, $order_id, $supplier_id);
+mysqli_stmt_execute($sync_insert_stmt);
+mysqli_stmt_close($sync_insert_stmt);
+
+$sync_update_sql = "UPDATE `OrderConstDistri` ocd
+                                        JOIN `workerallocation` wa ON wa.`allocation_id` = ocd.`worker_allocation_id`
+                                        JOIN `Worker` w ON w.`workerid` = wa.`workerid`
+                                        JOIN `Order` o ON o.`orderid` = wa.`orderid`
+                                        SET ocd.`distribution_name` = COALESCE(NULLIF(TRIM(w.`name`), ''), CONCAT('Worker #', wa.`workerid`)),
+                                                ocd.`description` = wa.`notes`,
+                                                ocd.`is_active` = CASE WHEN IFNULL(wa.`status`, 'Assigned') = 'Cancelled' THEN 0 ELSE 1 END,
+                                                ocd.`amount` = (IFNULL(o.`budget`, 0) * IFNULL(ocd.`percentage`, 0) / 100)
+                                        WHERE ocd.`orderid` = ?
+                                            AND ocd.`entry_type` = 'worker'
+                                            AND w.`supplierid` = ?";
+$sync_update_stmt = mysqli_prepare($mysqli, $sync_update_sql);
+mysqli_stmt_bind_param($sync_update_stmt, "ii", $order_id, $supplier_id);
+mysqli_stmt_execute($sync_update_stmt);
+mysqli_stmt_close($sync_update_stmt);
+
+$sync_delete_sql = "DELETE ocd
+                                        FROM `OrderConstDistri` ocd
+                                        LEFT JOIN `workerallocation` wa ON wa.`allocation_id` = ocd.`worker_allocation_id`
+                                        WHERE ocd.`orderid` = ?
+                                            AND ocd.`entry_type` = 'worker'
+                                            AND wa.`allocation_id` IS NULL";
+$sync_delete_stmt = mysqli_prepare($mysqli, $sync_delete_sql);
+mysqli_stmt_bind_param($sync_delete_stmt, "i", $order_id);
+mysqli_stmt_execute($sync_delete_stmt);
+mysqli_stmt_close($sync_delete_stmt);
+
 // Handle BATCH UPDATE of allocation percentages
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['batch_update'])) {
     $percentages = $_POST['percentages'];
@@ -66,7 +115,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['batch_update'])) {
     }
 
     $fee_total_for_validation = 0.0;
-    $fee_total_sql = "SELECT IFNULL(SUM(amount), 0) AS total_fee FROM `AdditionalFee` WHERE orderid = ?";
+        $fee_total_sql = "SELECT IFNULL(SUM(amount), 0) AS total_fee
+                                            FROM `OrderConstDistri`
+                                            WHERE orderid = ?
+                                                AND entry_type = 'fee'
+                                                AND is_active = 1";
     $fee_total_stmt = mysqli_prepare($mysqli, $fee_total_sql);
     mysqli_stmt_bind_param($fee_total_stmt, "i", $order_id);
     mysqli_stmt_execute($fee_total_stmt);
@@ -84,12 +137,19 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['batch_update'])) {
         mysqli_begin_transaction($mysqli);
         try {
             foreach ($percentages as $allocation_id => $val) {
-                $update_sql = "UPDATE `workerallocation` SET percentage = ? WHERE allocation_id = ? AND orderid = ?";
+                $update_sql = "UPDATE `OrderConstDistri`
+                               SET percentage = ?,
+                                   amount = (? * ? / 100),
+                                   is_active = 1
+                               WHERE entry_type = 'worker'
+                                 AND worker_allocation_id = ?
+                                 AND orderid = ?";
                 $update_stmt = mysqli_prepare($mysqli, $update_sql);
                 $f_val = floatval($val);
                 $i_id = intval($allocation_id);
-                mysqli_stmt_bind_param($update_stmt, "dii", $f_val, $i_id, $order_id);
+                mysqli_stmt_bind_param($update_stmt, "dddii", $f_val, $project_budget, $f_val, $i_id, $order_id);
                 mysqli_stmt_execute($update_stmt);
+                mysqli_stmt_close($update_stmt);
             }
             mysqli_commit($mysqli);
             $success_message = "All percentages updated successfully!";
@@ -142,14 +202,22 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_fee'])) {
 
     if (empty($error_message)) {
         // Remaining budget for new fee = budget - worker allocation amount - existing fees
-        $worker_pct_sql = "SELECT IFNULL(SUM(percentage), 0) AS total_pct FROM `workerallocation` WHERE orderid = ?";
+                $worker_pct_sql = "SELECT IFNULL(SUM(percentage), 0) AS total_pct
+                                                     FROM `OrderConstDistri`
+                                                     WHERE orderid = ?
+                                                         AND entry_type = 'worker'
+                                                         AND is_active = 1";
         $worker_pct_stmt = mysqli_prepare($mysqli, $worker_pct_sql);
         mysqli_stmt_bind_param($worker_pct_stmt, "i", $order_id);
         mysqli_stmt_execute($worker_pct_stmt);
         $worker_pct_row = mysqli_fetch_assoc(mysqli_stmt_get_result($worker_pct_stmt));
         mysqli_stmt_close($worker_pct_stmt);
 
-        $existing_fee_sql = "SELECT IFNULL(SUM(amount), 0) AS total_fee FROM `AdditionalFee` WHERE orderid = ?";
+                $existing_fee_sql = "SELECT IFNULL(SUM(amount), 0) AS total_fee
+                                                         FROM `OrderConstDistri`
+                                                         WHERE orderid = ?
+                                                             AND entry_type = 'fee'
+                                                             AND is_active = 1";
         $existing_fee_stmt = mysqli_prepare($mysqli, $existing_fee_sql);
         mysqli_stmt_bind_param($existing_fee_stmt, "i", $order_id);
         mysqli_stmt_execute($existing_fee_stmt);
@@ -169,9 +237,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_fee'])) {
     }
 
     if (empty($error_message)) {
-        $insert_fee_sql = "INSERT INTO `AdditionalFee` (orderid, fee_name, amount, description) VALUES (?, ?, ?, ?)";
+        $fee_percent_value = $project_budget > 0 ? (($fee_amount / $project_budget) * 100) : 0;
+        $entry_type_fee = 'fee';
+        $insert_fee_sql = "INSERT INTO `OrderConstDistri`
+                           (`orderid`, `entry_type`, `worker_allocation_id`, `distribution_name`, `percentage`, `amount`, `description`, `is_active`)
+                           VALUES (?, ?, NULL, ?, ?, ?, ?, 1)";
         $insert_fee_stmt = mysqli_prepare($mysqli, $insert_fee_sql);
-        mysqli_stmt_bind_param($insert_fee_stmt, "isds", $order_id, $fee_name, $fee_amount, $fee_description);
+        mysqli_stmt_bind_param($insert_fee_stmt, "issdds", $order_id, $entry_type_fee, $fee_name, $fee_percent_value, $fee_amount, $fee_description);
         if (mysqli_stmt_execute($insert_fee_stmt)) {
             $success_message = "Custom fee '$fee_name' added successfully (" . number_format($fee_amount, 2) . ").";
         } else {
@@ -184,7 +256,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_fee'])) {
 // Handle DELETION of custom fee
 if (isset($_POST['delete_fee'])) {
     $fee_id = intval($_POST['fee_id']);
-    $delete_fee_sql = "DELETE FROM `AdditionalFee` WHERE fee_id = ? AND orderid = ?";
+        $delete_fee_sql = "DELETE FROM `OrderConstDistri`
+                                             WHERE distri_id = ?
+                                                 AND orderid = ?
+                                                 AND entry_type = 'fee'";
     $delete_fee_stmt = mysqli_prepare($mysqli, $delete_fee_sql);
     mysqli_stmt_bind_param($delete_fee_stmt, "ii", $fee_id, $order_id);
     if (mysqli_stmt_execute($delete_fee_stmt)) {
@@ -195,9 +270,10 @@ if (isset($_POST['delete_fee'])) {
 }
 
 // Get currently allocated workers
-$allocated_sql = "SELECT w.*, wa.allocation_id, wa.status as allocation_status, wa.percentage 
+$allocated_sql = "SELECT w.*, wa.allocation_id, wa.status as allocation_status, IFNULL(ocd.percentage, 0) AS percentage
                   FROM `Worker` w 
                   JOIN `workerallocation` wa ON w.workerid = wa.workerid 
+                  LEFT JOIN `OrderConstDistri` ocd ON ocd.worker_allocation_id = wa.allocation_id AND ocd.entry_type = 'worker'
                   WHERE wa.orderid = ? AND w.supplierid = ?
                   ORDER BY wa.created_at DESC";
 $allocated_stmt = mysqli_prepare($mysqli, $allocated_sql);
@@ -206,7 +282,16 @@ mysqli_stmt_execute($allocated_stmt);
 $allocated_workers = mysqli_fetch_all(mysqli_stmt_get_result($allocated_stmt), MYSQLI_ASSOC);
 
 // Get additional fees
-$fees_sql = "SELECT * FROM `AdditionalFee` WHERE orderid = ? ORDER BY created_at DESC";
+$fees_sql = "SELECT distri_id AS fee_id,
+                                        distribution_name AS fee_name,
+                                        amount,
+                                        description,
+                                        created_at
+                         FROM `OrderConstDistri`
+                         WHERE orderid = ?
+                             AND entry_type = 'fee'
+                             AND is_active = 1
+                         ORDER BY created_at DESC";
 $fees_stmt = mysqli_prepare($mysqli, $fees_sql);
 mysqli_stmt_bind_param($fees_stmt, "i", $order_id);
 mysqli_stmt_execute($fees_stmt);

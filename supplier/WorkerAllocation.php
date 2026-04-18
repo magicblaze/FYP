@@ -39,6 +39,60 @@ if (mysqli_num_rows($check_order_result) == 0) {
 }
 mysqli_stmt_close($check_order_stmt);
 
+function upsertWorkerDistributionRecord($mysqli, $allocation_id, $default_percentage)
+{
+    $select_sql = "SELECT wa.orderid,
+                          wa.workerid,
+                          wa.notes,
+                          IFNULL(wa.status, 'Assigned') AS allocation_status,
+                          IFNULL(o.budget, 0) AS order_budget,
+                          COALESCE(NULLIF(TRIM(w.name), ''), CONCAT('Worker #', wa.workerid)) AS worker_name
+                   FROM `workerallocation` wa
+                   LEFT JOIN `Order` o ON o.orderid = wa.orderid
+                   LEFT JOIN `Worker` w ON w.workerid = wa.workerid
+                   WHERE wa.allocation_id = ?
+                   LIMIT 1";
+    $select_stmt = mysqli_prepare($mysqli, $select_sql);
+    if (!$select_stmt) {
+        return false;
+    }
+    mysqli_stmt_bind_param($select_stmt, "i", $allocation_id);
+    mysqli_stmt_execute($select_stmt);
+    $row = mysqli_fetch_assoc(mysqli_stmt_get_result($select_stmt));
+    mysqli_stmt_close($select_stmt);
+
+    if (!$row) {
+        return false;
+    }
+
+    $orderid = intval($row['orderid']);
+    $percentage = floatval($default_percentage);
+    $amount = (floatval($row['order_budget']) * $percentage) / 100;
+    $description = trim((string)($row['notes'] ?? ''));
+    $is_active = strcasecmp(trim((string)($row['allocation_status'] ?? 'Assigned')), 'Cancelled') === 0 ? 0 : 1;
+    $entry_type = 'worker';
+    $worker_allocation_id = intval($allocation_id);
+    $distribution_name = (string)$row['worker_name'];
+
+    $upsert_sql = "INSERT INTO `OrderConstDistri`
+                   (`orderid`, `entry_type`, `worker_allocation_id`, `distribution_name`, `percentage`, `amount`, `description`, `is_active`)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                   ON DUPLICATE KEY UPDATE
+                   `distribution_name` = VALUES(`distribution_name`),
+                   `percentage` = VALUES(`percentage`),
+                   `amount` = VALUES(`amount`),
+                   `description` = VALUES(`description`),
+                   `is_active` = VALUES(`is_active`)";
+    $upsert_stmt = mysqli_prepare($mysqli, $upsert_sql);
+    if (!$upsert_stmt) {
+        return false;
+    }
+    mysqli_stmt_bind_param($upsert_stmt, "isisddsi", $orderid, $entry_type, $worker_allocation_id, $distribution_name, $percentage, $amount, $description, $is_active);
+    $ok = mysqli_stmt_execute($upsert_stmt);
+    mysqli_stmt_close($upsert_stmt);
+    return $ok;
+}
+
 // Initialize variables
 $error_message = '';
 $success_message = '';
@@ -69,15 +123,25 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['allocate_workers'])) {
                 mysqli_stmt_bind_param($check_stmt, "ii", $order_id, $worker_id);
                 mysqli_stmt_execute($check_stmt);
                 if (mysqli_num_rows(mysqli_stmt_get_result($check_stmt)) > 0) {
+                    mysqli_stmt_close($check_stmt);
                     continue;
                 }
+                mysqli_stmt_close($check_stmt);
                 
-                // Insert allocation with the supplier's default percentage
-                $insert_sql = "INSERT INTO `workerallocation` (orderid, workerid, managerid, percentage, status) 
-                               VALUES (?, ?, ?, ?, 'Assigned')";
+                // Distribution percentages are stored in OrderConstDistri, not workerallocation.
+                $insert_sql = "INSERT INTO `workerallocation` (orderid, workerid, managerid, status) 
+                               VALUES (?, ?, ?, 'Assigned')";
                 $insert_stmt = mysqli_prepare($mysqli, $insert_sql);
-                mysqli_stmt_bind_param($insert_stmt, "iiid", $order_id, $worker_id, $manager_id, $supplier_default_pay);
-                mysqli_stmt_execute($insert_stmt);
+                mysqli_stmt_bind_param($insert_stmt, "iii", $order_id, $worker_id, $manager_id);
+                if (!mysqli_stmt_execute($insert_stmt)) {
+                    throw new Exception(mysqli_error($mysqli));
+                }
+                $allocation_id = mysqli_insert_id($mysqli);
+                mysqli_stmt_close($insert_stmt);
+
+                if (!upsertWorkerDistributionRecord($mysqli, $allocation_id, $supplier_default_pay)) {
+                    throw new Exception('Failed to create worker distribution record.');
+                }
             }
             mysqli_commit($mysqli);
             $success_message = "Workers allocated successfully!";
