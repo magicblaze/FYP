@@ -18,7 +18,7 @@ $milestone = isset($_GET['milestone']) ? $_GET['milestone'] : '';
 $percentage = isset($_GET['percentage']) ? intval($_GET['percentage']) : 0;
 $record_id = isset($_GET['record_id']) ? intval($_GET['record_id']) : 0;
 
-if ($order_id <= 0 || $amount <= 0) {
+if ($order_id <= 0) {
     header('Location: order_history.php');
     exit;
 }
@@ -27,7 +27,7 @@ if ($order_id <= 0 || $amount <= 0) {
 $sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.cost, o.designid, o.deposit, o.final_payment,
                d.expect_price as design_price, d.tag,
                c.clientid, c.cname, c.payment_method, c.budget,
-           op.total_cost,
+           op.total_cost, op.construction_main_pct, op.construction_deposit_pct, op.materials_pct,
                o.payment_plan
         FROM `Order` o
         LEFT JOIN `Design` d ON o.designid = d.designid
@@ -44,7 +44,15 @@ if (!$order) {
 }
 
 $total_cost = floatval($order['total_cost'] ?? 0);
-$total_paid_sql = "SELECT IFNULL(SUM(amount), 0) AS total_paid FROM ConstructionPaymentRecord WHERE orderid = ? AND status = 'paid'";
+$total_paid_sql = "SELECT IFNULL(SUM(amount), 0) AS total_paid
+                         FROM ConstructionPaymentRecord
+                         WHERE orderid = ?
+                            AND status = 'paid'
+                            AND (
+                                LOWER(TRIM(IFNULL(milestone, ''))) LIKE '%construction deposit%'
+                                OR LOWER(TRIM(IFNULL(milestone, ''))) LIKE '%milestone%'
+                                OR LOWER(TRIM(IFNULL(milestone, ''))) LIKE '%installment%'
+                            )";
 $total_paid_stmt = mysqli_prepare($mysqli, $total_paid_sql);
 mysqli_stmt_bind_param($total_paid_stmt, "i", $order_id);
 mysqli_stmt_execute($total_paid_stmt);
@@ -54,6 +62,16 @@ $total_paid = floatval($total_paid_row['total_paid'] ?? 0);
 mysqli_stmt_close($total_paid_stmt);
 $payment_plan = $order['payment_plan'] ?? 'full';
 $current_budget = floatval($order['budget'] ?? 0);
+
+// Cost components used by installment formula
+$construction_main_pct = isset($order['construction_main_pct']) ? floatval($order['construction_main_pct']) : 0.0;
+$construction_deposit_pct = isset($order['construction_deposit_pct']) ? floatval($order['construction_deposit_pct']) : 0.0;
+$materials_pct = isset($order['materials_pct']) ? floatval($order['materials_pct']) : 0.0;
+
+$construction_main_cost = $total_cost * ($construction_main_pct / 100.0);
+$materials_allocated = $total_cost * ($materials_pct / 100.0);
+$construction_cost_excl_materials = max(0.0, $construction_main_cost - $materials_allocated);
+$construction_deposit_amount = $construction_main_cost * ($construction_deposit_pct / 100.0);
 
 // Calculate remaining amount after this payment
 $remaining_after = $total_cost - ($total_paid + $amount);
@@ -67,9 +85,9 @@ if (!empty($order['payment_method'])) {
 
 // Get the pending payment record
 $pending_sql = "SELECT * FROM ConstructionPaymentRecord 
-                WHERE record_id = ? AND status = 'pending'";
+                WHERE record_id = ? AND orderid = ? AND status = 'pending'";
 $pending_stmt = mysqli_prepare($mysqli, $pending_sql);
-mysqli_stmt_bind_param($pending_stmt, "i", $record_id);
+mysqli_stmt_bind_param($pending_stmt, "ii", $record_id, $order_id);
 mysqli_stmt_execute($pending_stmt);
 $pending_result = mysqli_stmt_get_result($pending_stmt);
 $pending_record = mysqli_fetch_assoc($pending_result);
@@ -92,11 +110,65 @@ if (!$pending_record) {
         exit;
     }
     $record_id = $pending_record['record_id'];
-    // Update percentage from database record if provided
-    if (isset($pending_record['percentage'])) {
-        $percentage = intval($pending_record['percentage']);
-    }
 }
+
+// Always use DB record as source of truth for payment details
+$amount = isset($pending_record['amount']) ? floatval($pending_record['amount']) : $amount;
+if (isset($pending_record['percentage'])) {
+    $percentage = intval($pending_record['percentage']);
+}
+if (!empty($pending_record['milestone'])) {
+    $milestone = (string)$pending_record['milestone'];
+}
+
+// Actual material costs from current order references
+$actual_materials_cost = 0.0;
+$hasRefQuantity = false;
+$quantity_column_result = mysqli_query($mysqli, "SHOW COLUMNS FROM `OrderReference` LIKE 'quantity'");
+if ($quantity_column_result) {
+    $hasRefQuantity = (mysqli_num_rows($quantity_column_result) > 0);
+    mysqli_free_result($quantity_column_result);
+}
+
+$quantity_expr = $hasRefQuantity
+    ? "CASE WHEN orr.quantity IS NULL OR orr.quantity <= 0 THEN 1 ELSE orr.quantity END"
+    : "1";
+
+$materials_sql = "SELECT IFNULL(SUM(COALESCE(orr.price, p.price, 0) * {$quantity_expr}), 0) AS material_total
+                  FROM `OrderReference` orr
+                  LEFT JOIN `Product` p ON orr.productid = p.productid
+                  WHERE orr.orderid = ?
+                    AND (orr.status IS NULL OR LOWER(TRIM(orr.status)) <> 'rejected')";
+$materials_stmt = mysqli_prepare($mysqli, $materials_sql);
+if ($materials_stmt) {
+    mysqli_stmt_bind_param($materials_stmt, "i", $order_id);
+    mysqli_stmt_execute($materials_stmt);
+    $materials_result = mysqli_stmt_get_result($materials_stmt);
+    $materials_row = mysqli_fetch_assoc($materials_result);
+    $actual_materials_cost = isset($materials_row['material_total']) ? (float) $materials_row['material_total'] : 0.0;
+    mysqli_stmt_close($materials_stmt);
+}
+
+// Requested formula:
+// Amount to Pay = (Construction Cost (Excl. Materials) + Material Cost - Already Paid) * Installment %
+$times_to_pay = max(0.0, ((float) $percentage) / 100.0);
+$base_payable = max(0.0, ($construction_cost_excl_materials + $actual_materials_cost) - $total_paid);
+$amount = round($base_payable * $times_to_pay, 2);
+
+// Keep pending record amount aligned with calculated amount
+$sync_amount_sql = "UPDATE ConstructionPaymentRecord
+                    SET amount = ?
+                    WHERE record_id = ? AND orderid = ? AND status = 'pending'";
+$sync_amount_stmt = mysqli_prepare($mysqli, $sync_amount_sql);
+if ($sync_amount_stmt) {
+    mysqli_stmt_bind_param($sync_amount_stmt, "dii", $amount, $record_id, $order_id);
+    mysqli_stmt_execute($sync_amount_stmt);
+    mysqli_stmt_close($sync_amount_stmt);
+}
+
+// Recalculate remaining amounts using validated amount
+$remaining_after = max(0.0, $base_payable - $amount);
+$remaining_budget = $current_budget - ($total_paid + $amount);
 
 // Payment success flag
 $payment_success = isset($_GET['success']) ? true : false;
@@ -470,30 +542,25 @@ $confirm_message = "Confirm payment HK$" . number_format($amount, 2) . " for " .
                         <!-- Show breakdown of fees -->
                         <div class="fee-breakdown">
                             <div class="d-flex justify-content-between mb-1">
-                                <span>Total Construction Cost:</span>
-                                <span>HK$<?php echo number_format($total_cost, 2); ?></span>
+                                <span>Construction Cost (Excl. Materials):</span>
+                                <span>HK$<?php echo number_format($construction_cost_excl_materials, 2); ?></span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-1">
+                                <span>Material Cost:</span>
+                                <span>HK$<?php echo number_format($actual_materials_cost, 2); ?></span>
                             </div>
                             <div class="d-flex justify-content-between mb-1 text-info">
                                 <span>Already Paid:</span>
                                 <span>- HK$<?php echo number_format($total_paid, 2); ?></span>
                             </div>
-                            <div class="d-flex justify-content-between mb-1 text-warning">
-                                <span>This Milestone Amount:</span>
-                                <span>HK$<?php echo number_format($amount, 2); ?></span>
-                            </div>
-                            <div class="d-flex justify-content-between">
-                                <span>Remaining After Payment:</span>
-                                <?php if ($remaining_after < 0): ?>
-                                    <span class="negative-amount">HK$<?php echo number_format($remaining_after, 2); ?></span>
-                                <?php else: ?>
-                                    <span>HK$<?php echo number_format($remaining_after, 2); ?></span>
-                                <?php endif; ?>
-                            </div>
                         </div>
                         
                         <div class="payment-detail-item" style="border-top: 2px solid #e67e22; margin-top: 0.5rem; padding-top: 1rem;">
                             <span class="fw-bold">Amount to Pay:</span>
-                            <span class="payment-amount fw-bold">HK$<?php echo number_format($amount, 2); ?></span>
+                            <span class="payment-amount fw-bold">
+                                HK$<?php echo number_format($amount, 2); ?>
+                                <small class="d-block text-muted fs-6 fw-normal">/ 25% of Total Amount to Pay during Construction: HK$<?php echo number_format($base_payable, 2); ?> </small>
+                            </span>
                         </div>
                     </div>
                     
