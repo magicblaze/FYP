@@ -116,8 +116,6 @@ CREATE TABLE `Worker` (
   `phone` varchar(32) DEFAULT NULL,
   `certificate` varchar(255) DEFAULT NULL,
   `image` varchar(255) DEFAULT NULL,
-  `work_hours_per_week` DECIMAL(5,1) DEFAULT 40.0,
-  `available_hours_this_week` DECIMAL(5,1) DEFAULT 40.0,
   `supplierid` int NOT NULL,
   PRIMARY KEY (`workerid`),
   KEY `supplierid_Worker_idx` (`supplierid`),
@@ -702,13 +700,6 @@ INSERT INTO `AIRecommendItem` (`item_type`, `item_id`, `name`, `description`, `p
 ALTER TABLE `Message`
   ADD CONSTRAINT `fk_message_fileid` FOREIGN KEY (`fileid`) REFERENCES `UploadedFiles` (`fileid`) ON DELETE SET NULL;
 
--- Work hours columns merged into `Worker` CREATE TABLE above; no ALTER needed here.
-DELIMITER $$
-CREATE PROCEDURE IF NOT EXISTS `ResetWeeklyHours`()
-BEGIN
-    UPDATE `worker` SET `available_hours_this_week` = `work_hours_per_week`;
-END$$
-DELIMITER ;
 
 -- Construction Schedule History Table
 CREATE TABLE IF NOT EXISTS `ConstructionScheduleHistory` (
