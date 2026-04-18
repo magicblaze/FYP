@@ -132,7 +132,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($updateStatusStmt->execute()) {
             if ($action === 'accept') {
-                $orderStatusSql = "UPDATE `Order` SET ostatus = 'waiting for start construction Pay' WHERE orderid = ?";
+                $orderStatusSql = "UPDATE `Order` SET ostatus = 'waiting for construction pay' WHERE orderid = ?";
                 $orderStatusStmt = $mysqli->prepare($orderStatusSql);
                 $orderStatusStmt->bind_param("i", $orderId);
                 $orderStatusStmt->execute();

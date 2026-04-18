@@ -247,7 +247,7 @@ CREATE TABLE `Order` (
   `deposit_amount` DECIMAL(10,2) DEFAULT 0.00,
   `final_payment` DECIMAL(10,2) DEFAULT 0.00,
   `designid` int NOT NULL,
-  `ostatus` ENUM('waiting confirm', 'designing', 'reviewing design proposal', 'waiting for review design', 'drafting 2nd proposal', 'waiting client review', 'waiting 2nd design phase payment', 'waiting final design phase payment' , 'waiting 1st construction phase payment', 'complete', 'rejected','Coordinating Contractors','preparing', 'waiting client reassignment', 'waiting client confirm construction date', 'In construction', 'waiting start construction Pay', 'waiting start construction',
+  `ostatus` ENUM('waiting confirm', 'designing', 'reviewing design proposal', 'waiting for review design', 'drafting 2nd proposal', 'waiting client review', 'waiting 2nd design phase payment', 'waiting final design phase payment' , 'waiting 1st construction phase payment', 'complete', 'rejected','Coordinating Contractors','preparing', 'waiting client reassignment', 'waiting client confirm construction date', 'In construction', 'waiting for construction pay', 'waiting for start construction',
     'Waiting for inspection', 'inspection_completed', 'inspection_failed') DEFAULT 'waiting confirm',
   `payment_plan` ENUM('full', 'installment_25', 'installment_50') DEFAULT 'full',
   `actual_completion_date` DATE DEFAULT NULL,
@@ -576,7 +576,6 @@ CREATE TABLE `workerallocation` (
     `workerid` INT NOT NULL,
     `managerid` INT NOT NULL,
     `notes` TEXT,
-    `percentage` DECIMAL(5,2) DEFAULT NULL,
     `status` ENUM('Assigned', 'In Progress', 'Completed', 'Cancelled') DEFAULT 'Assigned',
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (`orderid`) REFERENCES `Order`(`orderid`) ON DELETE CASCADE,
@@ -873,7 +872,7 @@ CREATE TABLE IF NOT EXISTS `InspectionConfirmation` (
     DECLARE v_schedule_confirmed INT DEFAULT 0;
     DECLARE v_initial_payment_paid INT DEFAULT 0;
     DECLARE v_worker_percentage_total DECIMAL(10,2) DEFAULT 0.00;
-    DECLARE v_additional_fee_total DECIMAL(12,2) DEFAULT 0.00;
+    DECLARE v_fee_percentage_total DECIMAL(10,2) DEFAULT 0.00;
     DECLARE v_distribution_total_pct DECIMAL(10,2) DEFAULT 0.00;
     DECLARE v_budget DECIMAL(12,2) DEFAULT 0.00;
 
@@ -904,8 +903,8 @@ CREATE TABLE IF NOT EXISTS `InspectionConfirmation` (
         AND `entry_type` = 'worker'
         AND `is_active` = 1;
 
-      SELECT IFNULL(SUM(IFNULL(`amount`, 0)), 0)
-        INTO v_additional_fee_total
+      SELECT IFNULL(SUM(IFNULL(`percentage`, 0)), 0)
+        INTO v_fee_percentage_total
       FROM `OrderConstDistri`
       WHERE `orderid` = NEW.`orderid`
         AND `entry_type` = 'fee'
@@ -913,7 +912,7 @@ CREATE TABLE IF NOT EXISTS `InspectionConfirmation` (
 
       SET v_budget = IFNULL(NEW.`budget`, 0);
       IF v_budget > 0 THEN
-        SET v_distribution_total_pct = v_worker_percentage_total + ((v_additional_fee_total / v_budget) * 100);
+        SET v_distribution_total_pct = v_worker_percentage_total + v_fee_percentage_total;
       END IF;
 
       SELECT COUNT(*)
@@ -940,9 +939,193 @@ CREATE TABLE IF NOT EXISTS `InspectionConfirmation` (
          AND v_initial_payment_paid > 0
          AND v_budget > 0
          AND ABS(v_distribution_total_pct - 100.00) <= 0.01 THEN
-        SET NEW.`ostatus` = 'waiting start construction';
+        SET NEW.`ostatus` = 'waiting for start construction';
       END IF;
     END IF;
+  END$$
+  DELIMITER ;
+
+  -- Helper: force re-evaluation of preparing orders when related tables change
+  DROP PROCEDURE IF EXISTS `sp_try_advance_waiting_start_construction`;
+  DELIMITER $$
+  CREATE PROCEDURE `sp_try_advance_waiting_start_construction`(IN p_orderid INT)
+  BEGIN
+    IF p_orderid IS NOT NULL THEN
+      UPDATE `Order`
+      SET `ostatus` = 'preparing'
+      WHERE `orderid` = p_orderid
+        AND `ostatus` = 'preparing';
+    END IF;
+  END$$
+  DELIMITER ;
+
+  -- Re-check when delivery rows are inserted/updated/deleted
+  DROP TRIGGER IF EXISTS `trg_recheck_on_orderdelivery_ai`;
+  DELIMITER $$
+  CREATE TRIGGER `trg_recheck_on_orderdelivery_ai`
+  AFTER INSERT ON `OrderDelivery`
+  FOR EACH ROW
+  BEGIN
+    CALL `sp_try_advance_waiting_start_construction`(NEW.`orderid`);
+  END$$
+  DELIMITER ;
+
+  DROP TRIGGER IF EXISTS `trg_recheck_on_orderdelivery_au`;
+  DELIMITER $$
+  CREATE TRIGGER `trg_recheck_on_orderdelivery_au`
+  AFTER UPDATE ON `OrderDelivery`
+  FOR EACH ROW
+  BEGIN
+    CALL `sp_try_advance_waiting_start_construction`(NEW.`orderid`);
+    IF NOT (OLD.`orderid` <=> NEW.`orderid`) THEN
+      CALL `sp_try_advance_waiting_start_construction`(OLD.`orderid`);
+    END IF;
+  END$$
+  DELIMITER ;
+
+  DROP TRIGGER IF EXISTS `trg_recheck_on_orderdelivery_ad`;
+  DELIMITER $$
+  CREATE TRIGGER `trg_recheck_on_orderdelivery_ad`
+  AFTER DELETE ON `OrderDelivery`
+  FOR EACH ROW
+  BEGIN
+    CALL `sp_try_advance_waiting_start_construction`(OLD.`orderid`);
+  END$$
+  DELIMITER ;
+
+  -- Re-check when worker assignment rows are inserted/updated/deleted
+  DROP TRIGGER IF EXISTS `trg_recheck_on_workerallocation_ai`;
+  DELIMITER $$
+  CREATE TRIGGER `trg_recheck_on_workerallocation_ai`
+  AFTER INSERT ON `workerallocation`
+  FOR EACH ROW
+  BEGIN
+    CALL `sp_try_advance_waiting_start_construction`(NEW.`orderid`);
+  END$$
+  DELIMITER ;
+
+  DROP TRIGGER IF EXISTS `trg_recheck_on_workerallocation_au`;
+  DELIMITER $$
+  CREATE TRIGGER `trg_recheck_on_workerallocation_au`
+  AFTER UPDATE ON `workerallocation`
+  FOR EACH ROW
+  BEGIN
+    CALL `sp_try_advance_waiting_start_construction`(NEW.`orderid`);
+    IF NOT (OLD.`orderid` <=> NEW.`orderid`) THEN
+      CALL `sp_try_advance_waiting_start_construction`(OLD.`orderid`);
+    END IF;
+  END$$
+  DELIMITER ;
+
+  DROP TRIGGER IF EXISTS `trg_recheck_on_workerallocation_ad`;
+  DELIMITER $$
+  CREATE TRIGGER `trg_recheck_on_workerallocation_ad`
+  AFTER DELETE ON `workerallocation`
+  FOR EACH ROW
+  BEGIN
+    CALL `sp_try_advance_waiting_start_construction`(OLD.`orderid`);
+  END$$
+  DELIMITER ;
+
+  -- Re-check when distribution rows are inserted/updated/deleted
+  DROP TRIGGER IF EXISTS `trg_recheck_on_orderconstdistri_ai`;
+  DELIMITER $$
+  CREATE TRIGGER `trg_recheck_on_orderconstdistri_ai`
+  AFTER INSERT ON `OrderConstDistri`
+  FOR EACH ROW
+  BEGIN
+    CALL `sp_try_advance_waiting_start_construction`(NEW.`orderid`);
+  END$$
+  DELIMITER ;
+
+  DROP TRIGGER IF EXISTS `trg_recheck_on_orderconstdistri_au`;
+  DELIMITER $$
+  CREATE TRIGGER `trg_recheck_on_orderconstdistri_au`
+  AFTER UPDATE ON `OrderConstDistri`
+  FOR EACH ROW
+  BEGIN
+    CALL `sp_try_advance_waiting_start_construction`(NEW.`orderid`);
+    IF NOT (OLD.`orderid` <=> NEW.`orderid`) THEN
+      CALL `sp_try_advance_waiting_start_construction`(OLD.`orderid`);
+    END IF;
+  END$$
+  DELIMITER ;
+
+  DROP TRIGGER IF EXISTS `trg_recheck_on_orderconstdistri_ad`;
+  DELIMITER $$
+  CREATE TRIGGER `trg_recheck_on_orderconstdistri_ad`
+  AFTER DELETE ON `OrderConstDistri`
+  FOR EACH ROW
+  BEGIN
+    CALL `sp_try_advance_waiting_start_construction`(OLD.`orderid`);
+  END$$
+  DELIMITER ;
+
+  -- Re-check when schedule rows are inserted/updated/deleted
+  DROP TRIGGER IF EXISTS `trg_recheck_on_schedule_ai`;
+  DELIMITER $$
+  CREATE TRIGGER `trg_recheck_on_schedule_ai`
+  AFTER INSERT ON `Schedule`
+  FOR EACH ROW
+  BEGIN
+    CALL `sp_try_advance_waiting_start_construction`(NEW.`orderid`);
+  END$$
+  DELIMITER ;
+
+  DROP TRIGGER IF EXISTS `trg_recheck_on_schedule_au`;
+  DELIMITER $$
+  CREATE TRIGGER `trg_recheck_on_schedule_au`
+  AFTER UPDATE ON `Schedule`
+  FOR EACH ROW
+  BEGIN
+    CALL `sp_try_advance_waiting_start_construction`(NEW.`orderid`);
+    IF NOT (OLD.`orderid` <=> NEW.`orderid`) THEN
+      CALL `sp_try_advance_waiting_start_construction`(OLD.`orderid`);
+    END IF;
+  END$$
+  DELIMITER ;
+
+  DROP TRIGGER IF EXISTS `trg_recheck_on_schedule_ad`;
+  DELIMITER $$
+  CREATE TRIGGER `trg_recheck_on_schedule_ad`
+  AFTER DELETE ON `Schedule`
+  FOR EACH ROW
+  BEGIN
+    CALL `sp_try_advance_waiting_start_construction`(OLD.`orderid`);
+  END$$
+  DELIMITER ;
+
+  -- Re-check when construction payment rows are inserted/updated/deleted
+  DROP TRIGGER IF EXISTS `trg_recheck_on_cpr_ai`;
+  DELIMITER $$
+  CREATE TRIGGER `trg_recheck_on_cpr_ai`
+  AFTER INSERT ON `ConstructionPaymentRecord`
+  FOR EACH ROW
+  BEGIN
+    CALL `sp_try_advance_waiting_start_construction`(NEW.`orderid`);
+  END$$
+  DELIMITER ;
+
+  DROP TRIGGER IF EXISTS `trg_recheck_on_cpr_au`;
+  DELIMITER $$
+  CREATE TRIGGER `trg_recheck_on_cpr_au`
+  AFTER UPDATE ON `ConstructionPaymentRecord`
+  FOR EACH ROW
+  BEGIN
+    CALL `sp_try_advance_waiting_start_construction`(NEW.`orderid`);
+    IF NOT (OLD.`orderid` <=> NEW.`orderid`) THEN
+      CALL `sp_try_advance_waiting_start_construction`(OLD.`orderid`);
+    END IF;
+  END$$
+  DELIMITER ;
+
+  DROP TRIGGER IF EXISTS `trg_recheck_on_cpr_ad`;
+  DELIMITER $$
+  CREATE TRIGGER `trg_recheck_on_cpr_ad`
+  AFTER DELETE ON `ConstructionPaymentRecord`
+  FOR EACH ROW
+  BEGIN
+    CALL `sp_try_advance_waiting_start_construction`(OLD.`orderid`);
   END$$
   DELIMITER ;
 
@@ -976,7 +1159,7 @@ CREATE TABLE IF NOT EXISTS `InspectionConfirmation` (
 
       IF v_chatroom_id IS NOT NULL THEN
         IF NEW.`ostatus` = 'preparing' THEN
-          SET v_message = 'Order status has been updated to preparing. Once product delivery is completed, workers are assigned, the schedule is confirmed, and the initial construction payment is paid, the next stage is waiting start construction.';
+          SET v_message = 'Order status has been updated to preparing. Once product delivery is completed, workers are assigned, the schedule is confirmed, and the initial construction payment is paid, the next stage is waiting for start construction.';
         ELSE
           SET v_message = CONCAT(
             'Order status has been updated to ', NEW.`ostatus`, '.'

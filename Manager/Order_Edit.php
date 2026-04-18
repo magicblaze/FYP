@@ -605,7 +605,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
     if (isset($_POST['start_construction'])) {
         $current_status = strtolower(trim((string)($order['ostatus'] ?? '')));
-        if (in_array($current_status, ['waiting for start construction', 'waiting start construction'], true)) {
+        if (in_array($current_status, ['waiting for start construction'], true)) {
             $start_sql = "UPDATE `Order` SET ostatus = 'In construction' WHERE orderid = ?";
             $start_stmt = mysqli_prepare($mysqli, $start_sql);
             mysqli_stmt_bind_param($start_stmt, "i", $orderid);
@@ -2658,8 +2658,8 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                             </script>
                         <?php endif; /* End of inspection section */ ?>
 
-                        <?php if ($status === 'preparing' || $status === 'waiting for start construction' || $status === 'waiting start construction'): ?>
-                            <?php if ($status === 'waiting for start construction' || $status === 'waiting start construction'): ?>
+                        <?php if ($status === 'preparing' || $status === 'waiting for start construction'): ?>
+                            <?php if ($status === 'waiting for start construction'): ?>
                                 <div class="col-12 mb-4">
                                     <div class="card border-success">
                                         <div class="card-header bg-success bg-opacity-10 d-flex justify-content-between align-items-center">

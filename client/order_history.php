@@ -543,7 +543,7 @@ if (!empty($_GET['msg'])) {
                         'waiting for inspection',
                         'inspection_completed',
                         'inspection_failed',
-                        'waiting for start construction pay',
+                        'waiting for construction pay',
                         'waiting for start construction',
                         'complete'
                     ];
@@ -653,10 +653,10 @@ if (!empty($_GET['msg'])) {
                                     onclick="event.stopPropagation();">
                                     <i class="fas fa-hard-hat me-1"></i>Proceed to Final Construction Payment
                                 </a>
-                            <?php elseif ( $statusLower === 'waiting for start construction pay'): ?>
+                            <?php elseif ( $statusLower === 'waiting for construction pay'): ?>
                                 <a href="payment_construction3.php?orderid=<?= (int) $order['orderid'] ?>" class="view-details-btn"
                                     onclick="event.stopPropagation();">
-                                    <i class="fas fa-hard-hat me-1"></i>Proceed to Start Construction Payment
+                                    <i class="fas fa-hard-hat me-1"></i>Proceed to construction payment
                                 </a>
                             <?php endif; ?>
                             
