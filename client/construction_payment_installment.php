@@ -44,22 +44,27 @@ if (!$order) {
 }
 
 $total_cost = floatval($order['total_cost'] ?? 0);
-$total_paid_sql = "SELECT IFNULL(SUM(amount), 0) AS total_paid
-                         FROM ConstructionPaymentRecord
-                         WHERE orderid = ?
-                            AND status = 'paid'
-                            AND (
-                                LOWER(TRIM(IFNULL(milestone, ''))) LIKE '%construction deposit%'
-                                OR LOWER(TRIM(IFNULL(milestone, ''))) LIKE '%milestone%'
-                                OR LOWER(TRIM(IFNULL(milestone, ''))) LIKE '%installment%'
-                            )";
-$total_paid_stmt = mysqli_prepare($mysqli, $total_paid_sql);
-mysqli_stmt_bind_param($total_paid_stmt, "i", $order_id);
-mysqli_stmt_execute($total_paid_stmt);
-$total_paid_result = mysqli_stmt_get_result($total_paid_stmt);
-$total_paid_row = mysqli_fetch_assoc($total_paid_result);
-$total_paid = floatval($total_paid_row['total_paid'] ?? 0);
-mysqli_stmt_close($total_paid_stmt);
+$paid_split_sql = "SELECT
+                        IFNULL(SUM(CASE
+                            WHEN LOWER(TRIM(IFNULL(milestone, ''))) LIKE '%construction deposit%'
+                            THEN amount ELSE 0 END), 0) AS paid_before_construction,
+                        IFNULL(SUM(CASE
+                            WHEN percentage IN (25, 50, 75, 100)
+                                 AND LOWER(TRIM(IFNULL(milestone, ''))) NOT LIKE '%design%'
+                                 AND LOWER(TRIM(IFNULL(milestone, ''))) NOT LIKE '%construction deposit%'
+                            THEN amount ELSE 0 END), 0) AS paid_while_construction
+                    FROM ConstructionPaymentRecord
+                    WHERE orderid = ?
+                      AND status = 'paid'";
+$paid_split_stmt = mysqli_prepare($mysqli, $paid_split_sql);
+mysqli_stmt_bind_param($paid_split_stmt, "i", $order_id);
+mysqli_stmt_execute($paid_split_stmt);
+$paid_split_result = mysqli_stmt_get_result($paid_split_stmt);
+$paid_split_row = mysqli_fetch_assoc($paid_split_result);
+$paid_before_construction = floatval($paid_split_row['paid_before_construction'] ?? 0);
+$paid_while_construction = floatval($paid_split_row['paid_while_construction'] ?? 0);
+$total_paid = $paid_before_construction + $paid_while_construction;
+mysqli_stmt_close($paid_split_stmt);
 $payment_plan = $order['payment_plan'] ?? 'full';
 $current_budget = floatval($order['budget'] ?? 0);
 
@@ -149,10 +154,33 @@ if ($materials_stmt) {
     mysqli_stmt_close($materials_stmt);
 }
 
-// Requested formula:
-// Amount to Pay = (Construction Cost (Excl. Materials) + Material Cost - Already Paid) * Installment %
-$times_to_pay = max(0.0, ((float) $percentage) / 100.0);
-$base_payable = max(0.0, ($construction_cost_excl_materials + $actual_materials_cost) - $total_paid);
+// Requested formula (incremental milestone %):
+// Total Amount to Pay during Construction = Construction Cost (Excl. Materials) + Material Cost - Already Paid (Before Construction)
+// Amount to Pay = Total Amount to Pay during Construction * Effective Installment %
+// Effective Installment % = current milestone % - highest paid construction milestone %
+$prev_paid_milestone_pct = 0;
+$prev_paid_pct_sql = "SELECT IFNULL(MAX(percentage), 0) AS prev_paid_milestone_pct
+                      FROM ConstructionPaymentRecord
+                      WHERE orderid = ?
+                        AND status = 'paid'
+                        AND percentage IN (25, 50, 75, 100)
+                        AND percentage < ?
+                        AND LOWER(TRIM(IFNULL(milestone, ''))) NOT LIKE '%design%'";
+$prev_paid_pct_stmt = mysqli_prepare($mysqli, $prev_paid_pct_sql);
+if ($prev_paid_pct_stmt) {
+    mysqli_stmt_bind_param($prev_paid_pct_stmt, "ii", $order_id, $percentage);
+    mysqli_stmt_execute($prev_paid_pct_stmt);
+    $prev_paid_pct_result = mysqli_stmt_get_result($prev_paid_pct_stmt);
+    $prev_paid_pct_row = mysqli_fetch_assoc($prev_paid_pct_result);
+    $prev_paid_milestone_pct = isset($prev_paid_pct_row['prev_paid_milestone_pct'])
+        ? (int) $prev_paid_pct_row['prev_paid_milestone_pct']
+        : 0;
+    mysqli_stmt_close($prev_paid_pct_stmt);
+}
+
+$effective_installment_pct = max(0, ((int) $percentage) - $prev_paid_milestone_pct);
+$times_to_pay = max(0.0, ((float) $effective_installment_pct) / 100.0);
+$base_payable = max(0.0, ($construction_cost_excl_materials + $actual_materials_cost) - $paid_before_construction);
 $amount = round($base_payable * $times_to_pay, 2);
 
 // Keep pending record amount aligned with calculated amount
@@ -550,7 +578,15 @@ $confirm_message = "Confirm payment HK$" . number_format($amount, 2) . " for " .
                                 <span>HK$<?php echo number_format($actual_materials_cost, 2); ?></span>
                             </div>
                             <div class="d-flex justify-content-between mb-1 text-info">
-                                <span>Already Paid:</span>
+                                <span>Already Paid (Before Construction):</span>
+                                <span>- HK$<?php echo number_format($paid_before_construction, 2); ?></span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-1 text-info">
+                                <span>Already Paid (During Construction):</span>
+                                <span>- HK$<?php echo number_format($paid_while_construction, 2); ?></span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-1 text-info fw-bold">
+                                <span>Already Paid (Total):</span>
                                 <span>- HK$<?php echo number_format($total_paid, 2); ?></span>
                             </div>
                         </div>
@@ -559,7 +595,7 @@ $confirm_message = "Confirm payment HK$" . number_format($amount, 2) . " for " .
                             <span class="fw-bold">Amount to Pay:</span>
                             <span class="payment-amount fw-bold">
                                 HK$<?php echo number_format($amount, 2); ?>
-                                <small class="d-block text-muted fs-6 fw-normal">/ 25% of Total Amount to Pay during Construction: HK$<?php echo number_format($base_payable, 2); ?> </small>
+                                <small class="d-block text-muted fs-6 fw-normal">/ <?php echo (int) $effective_installment_pct; ?>% of Total Amount to Pay during Construction: HK$<?php echo number_format($base_payable, 2); ?> </small>
                             </span>
                         </div>
                     </div>
