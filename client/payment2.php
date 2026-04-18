@@ -414,13 +414,6 @@ $stage_title = '2nd Payment';
                                 class="payment-amount fw-bold">HK$<?php echo number_format($total_design_fees, 2); ?></span>
                         </div>
                     </div>
-
-                    <?php if ($payment_success): ?>
-                        <div class="alert alert-success mt-3">
-                            <i class="fas fa-check-circle me-2"></i>
-                            Payment successful.
-                        </div>
-                    <?php endif; ?>
                 </div>
 
                 <hr>
@@ -446,7 +439,7 @@ $stage_title = '2nd Payment';
                             <button type="submit" name="proceed_pay" class="btn btn-success"
                                 onclick="return confirm('Confirm payment HK$<?php echo number_format($total_design_fees, 2); ?>?');">
                                 <i class="fas fa-credit-card me-1"></i>
-                                Pay HK$<?php echo number_format($total_design_fees, 2); ?>
+                                Proceed to Pay
                             </button>
                         <?php endif; ?>
                     <?php else: ?>

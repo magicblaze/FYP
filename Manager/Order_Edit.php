@@ -52,7 +52,7 @@ mysqli_stmt_execute($stmt);
 $result = mysqli_stmt_get_result($stmt);
 $order = mysqli_fetch_assoc($result);
 
-// --- 预算计算（简化版）---
+// --- ?��?���]?�ƪ��^---
 $design_price = isset($order["design_price"]) ? floatval($order["design_price"]) : 0;
 $original_budget = floatval($order['budget'] ?? 0);
 
@@ -68,14 +68,14 @@ $payment = [
 $commission_total = $payment['commission_1st'] + $payment['commission_final'];
 $construction_cost_ex_material = max(0, $payment['total_construction_payment'] - $payment['materials_cost']);
 
-// 只扣除设计定金
+// �u����??�w��
 $deducted_amount = $design_price;
 $remaining_budget = $original_budget - $deducted_amount;
 
-// 检查设计是否已确认
+// ?�d??�O�_�w��?
 $is_design_confirmed = in_array(strtolower($order['ostatus'] ?? ''), ['waiting payment', 'waiting design phase payment', 'waiting 2nd design phase payment', 'waiting final design phase payment', 'complete'], true);
 
-// 获取当前状态
+// ?��?�e??
 $current_status = strtolower($order['ostatus'] ?? '');
 
 // Fetch order references (schema-safe: supports DBs without color/quantity columns yet)
@@ -147,18 +147,19 @@ $latest_picture = mysqli_fetch_assoc($pic_result);
 $references_total = 0.0;
 if (!empty($references)) {
     foreach ($references as $r) {
-        $rprice = isset($r['price']) && $r['price'] !== null ? (float) $r['price'] : (float) ($r['product_price'] ?? 0);
-        $references_total += $rprice;
+        $unitPrice = isset($r['price']) && $r['price'] !== null ? (float) $r['price'] : (float) ($r['product_price'] ?? 0);
+        $qty = (isset($r['quantity']) && $r['quantity'] !== null && (int) $r['quantity'] > 0) ? (int) $r['quantity'] : 1;
+        $references_total += ($unitPrice * $qty);
     }
 }
+$material_cost_for_total = !empty($references) ? $references_total : $payment['materials_cost'];
 $Design_Fee1 = $order["design_price"] * 0.025;
 $Project_Deposit = 2000;
 
 $final_total_cost = $payment['total_design_payment']
     + $construction_cost_ex_material
-    + $payment['materials_cost']
+    + $material_cost_for_total
     + $commission_total
-    + $references_total
     + $total_fees;
 
 $order_status = $order['ostatus'] ?? 'waiting confirm';
@@ -173,15 +174,63 @@ $edit_cost = isset($_GET['edit']) && $_GET['edit'] == 'cost';
 $edit_reference = isset($_GET['edit']) && $_GET['edit'] == 'reference';
 $edit_delivery = isset($_GET['edit']) && $_GET['edit'] == 'delivery';
 
+function updateOrderReferenceRows($mysqli, $orderid, $refPayload, $hasRefColor, $hasRefQuantity, $markWaitingConfirm = false)
+{
+    if (!is_array($refPayload)) {
+        $refPayload = [];
+    }
+
+    if (empty($refPayload)) {
+        if ($markWaitingConfirm) {
+            $update_status_sql = "UPDATE `OrderReference` SET status = 'waiting confirm' WHERE orderid = ?";
+            $update_status_stmt = mysqli_prepare($mysqli, $update_status_sql);
+            mysqli_stmt_bind_param($update_status_stmt, "i", $orderid);
+            mysqli_stmt_execute($update_status_stmt);
+            mysqli_stmt_close($update_status_stmt);
+        }
+        return;
+    }
+
+    foreach ($refPayload as $refId => $payload) {
+        $rid = (int) $refId;
+        $newPrice = isset($payload['price']) ? (float) $payload['price'] : null;
+        $newColor = isset($payload['color']) ? trim((string) $payload['color']) : null;
+        $newQty = isset($payload['quantity']) && $payload['quantity'] !== '' ? (int) $payload['quantity'] : null;
+        $newNote = isset($payload['note']) ? trim((string) $payload['note']) : null;
+        $statusSql = $markWaitingConfirm ? ", status = 'waiting confirm'" : '';
+
+        if ($hasRefColor && $hasRefQuantity) {
+            $update_ref_sql = "UPDATE `OrderReference` SET price = ?, color = ?, quantity = ?, note = ?{$statusSql} WHERE id = ? AND orderid = ?";
+            $update_ref_stmt = mysqli_prepare($mysqli, $update_ref_sql);
+            mysqli_stmt_bind_param($update_ref_stmt, "dsisii", $newPrice, $newColor, $newQty, $newNote, $rid, $orderid);
+        } elseif ($hasRefColor) {
+            $update_ref_sql = "UPDATE `OrderReference` SET price = ?, color = ?, note = ?{$statusSql} WHERE id = ? AND orderid = ?";
+            $update_ref_stmt = mysqli_prepare($mysqli, $update_ref_sql);
+            mysqli_stmt_bind_param($update_ref_stmt, "dssii", $newPrice, $newColor, $newNote, $rid, $orderid);
+        } elseif ($hasRefQuantity) {
+            $update_ref_sql = "UPDATE `OrderReference` SET price = ?, quantity = ?, note = ?{$statusSql} WHERE id = ? AND orderid = ?";
+            $update_ref_stmt = mysqli_prepare($mysqli, $update_ref_sql);
+            mysqli_stmt_bind_param($update_ref_stmt, "disii", $newPrice, $newQty, $newNote, $rid, $orderid);
+        } else {
+            $update_ref_sql = "UPDATE `OrderReference` SET price = ?, note = ?{$statusSql} WHERE id = ? AND orderid = ?";
+            $update_ref_stmt = mysqli_prepare($mysqli, $update_ref_sql);
+            mysqli_stmt_bind_param($update_ref_stmt, "dsii", $newPrice, $newNote, $rid, $orderid);
+        }
+
+        mysqli_stmt_execute($update_ref_stmt);
+        mysqli_stmt_close($update_ref_stmt);
+    }
+}
+
 // ========== START: INSPECTION POST HANDLING ==========
 // Handle send inspection request
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_inspection_request'])) {
     $inspection_date_post = $_POST['inspection_date'] ?? '';
     $inspection_time_post = $_POST['inspection_time'] ?? '';
-    
+
     if (!empty($inspection_date_post) && !empty($inspection_time_post)) {
         $inspection_datetime = $inspection_date_post . ' ' . $inspection_time_post . ':00';
-        
+
         $update_sql = "UPDATE `Order` SET 
                        inspection_date = ?,
                        inspection_status = 'pending',
@@ -191,7 +240,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_inspection_reque
         mysqli_stmt_bind_param($update_stmt, "si", $inspection_datetime, $orderid);
         mysqli_stmt_execute($update_stmt);
         mysqli_stmt_close($update_stmt);
-        
+
         // Notify client
         $client_id = $order['clientid'];
         $notify_sql = "INSERT INTO Notification (user_type, user_id, orderid, message, type, created_at) 
@@ -200,7 +249,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_inspection_reque
         mysqli_stmt_bind_param($notify_stmt, "ii", $client_id, $orderid);
         mysqli_stmt_execute($notify_stmt);
         mysqli_stmt_close($notify_stmt);
-        
+
         if (ob_get_length()) ob_clean();
         header("Location: Order_Edit.php?id=" . $orderid . "&msg=inspection_sent");
         exit();
@@ -210,7 +259,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_inspection_reque
 // Handle accept client suggestion
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accept_client_suggestion'])) {
     $suggested_date = $_POST['client_suggested_date'] ?? '';
-    
+
     if (!empty($suggested_date)) {
         $update_sql = "UPDATE `Order` SET 
                        inspection_date = ?,
@@ -221,7 +270,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accept_client_suggest
         mysqli_stmt_bind_param($update_stmt, "si", $suggested_date, $orderid);
         mysqli_stmt_execute($update_stmt);
         mysqli_stmt_close($update_stmt);
-        
+
         // Notify client
         $client_id = $order['clientid'];
         $notify_sql = "INSERT INTO Notification (user_type, user_id, orderid, message, type, created_at) 
@@ -230,7 +279,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accept_client_suggest
         mysqli_stmt_bind_param($notify_stmt, "ii", $client_id, $orderid);
         mysqli_stmt_execute($notify_stmt);
         mysqli_stmt_close($notify_stmt);
-        
+
         if (ob_get_length()) ob_clean();
         header("Location: Order_Edit.php?id=" . $orderid . "&msg=inspection_accepted");
         exit();
@@ -240,7 +289,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accept_client_suggest
 // Handle reject client suggestion
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reject_client_suggestion'])) {
     $new_datetime = $_POST['new_inspection_datetime'] ?? '';
-    
+
     if (!empty($new_datetime)) {
         $update_sql = "UPDATE `Order` SET 
                        inspection_date = ?,
@@ -251,7 +300,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reject_client_suggest
         mysqli_stmt_bind_param($update_stmt, "si", $new_datetime, $orderid);
         mysqli_stmt_execute($update_stmt);
         mysqli_stmt_close($update_stmt);
-        
+
         // Notify client
         $client_id = $order['clientid'];
         $notify_sql = "INSERT INTO Notification (user_type, user_id, orderid, message, type, created_at) 
@@ -260,7 +309,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reject_client_suggest
         mysqli_stmt_bind_param($notify_stmt, "ii", $client_id, $orderid);
         mysqli_stmt_execute($notify_stmt);
         mysqli_stmt_close($notify_stmt);
-        
+
         if (ob_get_length()) ob_clean();
         header("Location: Order_Edit.php?id=" . $orderid . "&msg=inspection_rescheduled");
         exit();
@@ -281,7 +330,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_inspection_compl
         mysqli_stmt_bind_param($notify_stmt, "ii", $client_id, $orderid);
         mysqli_stmt_execute($notify_stmt);
         mysqli_stmt_close($notify_stmt);
-        
+
         if (ob_get_length()) ob_clean();
         header("Location: Order_Edit.php?id=" . $orderid . "&msg=inspection_marked_completed");
         exit();
@@ -295,7 +344,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fail_inspection'])) {
     $update_order_sql = "UPDATE `Order` SET ostatus = 'inspection_failed', inspection_status = NULL WHERE orderid = ?";
     $update_order_stmt = mysqli_prepare($mysqli, $update_order_sql);
     mysqli_stmt_bind_param($update_order_stmt, "i", $orderid);
-    
+
     if (mysqli_stmt_execute($update_order_stmt)) {
         // Notify client about inspection failure
         $client_id = $order['clientid'];
@@ -305,7 +354,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fail_inspection'])) {
         mysqli_stmt_bind_param($notify_stmt, "ii", $client_id, $orderid);
         mysqli_stmt_execute($notify_stmt);
         mysqli_stmt_close($notify_stmt);
-        
+
         if (ob_get_length()) ob_clean();
         header("Location: Order_Edit.php?id=" . $orderid . "&msg=inspection_failed_marked");
         exit();
@@ -316,15 +365,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fail_inspection'])) {
 // Handle submit inspection report (Step 2)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_inspection_report'])) {
     $report_content = $_POST['report_content'] ?? '';
-    $report_result = $_POST['report_result'] ?? 'pass'; // 获取 pass 或 fail
+    $report_result = $_POST['report_result'] ?? 'pass'; // ?�� pass �� fail
     $uploaded_files = [];
-    
+
     if (!empty($_FILES['report_files']['name'][0])) {
         $upload_dir = __DIR__ . '/../uploads/inspection_reports/';
         if (!file_exists($upload_dir)) {
             mkdir($upload_dir, 0777, true);
         }
-        
+
         foreach ($_FILES['report_files']['tmp_name'] as $key => $tmp_name) {
             if ($_FILES['report_files']['error'][$key] == 0) {
                 $filename = time() . '_' . $orderid . '_' . $key . '_' . basename($_FILES['report_files']['name'][$key]);
@@ -335,9 +384,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_inspection_rep
             }
         }
     }
-    
+
     $file_paths_str = !empty($uploaded_files) ? json_encode($uploaded_files) : null;
-    
+
     // Get inspection date
     $get_date_sql = "SELECT inspection_date FROM `Order` WHERE orderid = ?";
     $get_date_stmt = mysqli_prepare($mysqli, $get_date_sql);
@@ -347,7 +396,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_inspection_rep
     $date_row = mysqli_fetch_assoc($get_date_result);
     $inspection_date_val = $date_row['inspection_date'] ?? date('Y-m-d H:i:s');
     mysqli_stmt_close($get_date_stmt);
-    
+
     // Insert inspection report
     $insert_report_sql = "INSERT INTO InspectionReport 
                           (orderid, inspection_date, report_content, file_paths, submitted_by, submitted_by_type, submitted_at, result)
@@ -356,7 +405,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_inspection_rep
     mysqli_stmt_bind_param($insert_report_stmt, "isssss", $orderid, $inspection_date_val, $report_content, $file_paths_str, $user_id, $report_result);
     mysqli_stmt_execute($insert_report_stmt);
     mysqli_stmt_close($insert_report_stmt);
-    
+
     // Notify client
     $client_id = $order['clientid'];
     $result_text = ($report_result == 'pass') ? 'passed' : 'failed';
@@ -366,7 +415,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_inspection_rep
     mysqli_stmt_bind_param($notify_stmt, "ii", $client_id, $orderid);
     mysqli_stmt_execute($notify_stmt);
     mysqli_stmt_close($notify_stmt);
-    
+
     // Notify supplier if inspection failed
     if ($report_result == 'fail' && !empty($order['supplierid'])) {
         $supplier_id = $order['supplierid'];
@@ -377,7 +426,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_inspection_rep
         mysqli_stmt_execute($notify_supplier_stmt);
         mysqli_stmt_close($notify_supplier_stmt);
     }
-    
+
 
     if (ob_get_length()) ob_clean();
     $msg = ($report_result == 'pass') ? 'report_submitted' : 'fail_report_submitted';
@@ -604,7 +653,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         mysqli_stmt_execute($update_designer_stmt);
                         mysqli_stmt_close($update_designer_stmt);
 
-                        // REMOVED: 移除了预算扣除逻辑
+                        // REMOVED: �����F?�⦩��??
 
                         header("Location: Order_Edit.php?id=" . $orderid);
                         exit();
@@ -618,7 +667,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 mysqli_stmt_bind_param($update_order_stmt, "ii", $design['designid'], $orderid);
 
                 if (mysqli_stmt_execute($update_order_stmt)) {
-                    // REMOVED: 移除了预算扣除逻辑
+                    // REMOVED: �����F?�⦩��??
 
                     header("Location: Order_Edit.php?id=" . $orderid);
                     exit();
@@ -675,37 +724,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         exit();
     }
 
-    if (isset($_POST['update_reference_status'])) {
-        if (isset($_POST['ref']) && is_array($_POST['ref'])) {
-            foreach ($_POST['ref'] as $refId => $payload) {
-                $rid = (int) $refId;
-                $newPrice = isset($payload['price']) ? (float) $payload['price'] : null;
-                $newColor = isset($payload['color']) ? trim((string) $payload['color']) : null;
-                $newQty = isset($payload['quantity']) && $payload['quantity'] !== '' ? (int) $payload['quantity'] : null;
-                $newNote = isset($payload['note']) ? trim((string) $payload['note']) : null;
-
-                if ($hasRefColor && $hasRefQuantity) {
-                    $update_ref_sql = "UPDATE `OrderReference` SET price = ?, color = ?, quantity = ?, note = ?, status = 'waiting confirm' WHERE id = ? AND orderid = ?";
-                    $update_ref_stmt = mysqli_prepare($mysqli, $update_ref_sql);
-                    mysqli_stmt_bind_param($update_ref_stmt, "dsisii", $newPrice, $newColor, $newQty, $newNote, $rid, $orderid);
-                } elseif ($hasRefColor) {
-                    $update_ref_sql = "UPDATE `OrderReference` SET price = ?, color = ?, note = ?, status = 'waiting confirm' WHERE id = ? AND orderid = ?";
-                    $update_ref_stmt = mysqli_prepare($mysqli, $update_ref_sql);
-                    mysqli_stmt_bind_param($update_ref_stmt, "dssii", $newPrice, $newColor, $newNote, $rid, $orderid);
-                } elseif ($hasRefQuantity) {
-                    $update_ref_sql = "UPDATE `OrderReference` SET price = ?, quantity = ?, note = ?, status = 'waiting confirm' WHERE id = ? AND orderid = ?";
-                    $update_ref_stmt = mysqli_prepare($mysqli, $update_ref_sql);
-                    mysqli_stmt_bind_param($update_ref_stmt, "disii", $newPrice, $newQty, $newNote, $rid, $orderid);
-                } else {
-                    $update_ref_sql = "UPDATE `OrderReference` SET price = ?, note = ?, status = 'waiting confirm' WHERE id = ? AND orderid = ?";
-                    $update_ref_stmt = mysqli_prepare($mysqli, $update_ref_sql);
-                    mysqli_stmt_bind_param($update_ref_stmt, "dsii", $newPrice, $newNote, $rid, $orderid);
-                }
-
-                mysqli_stmt_execute($update_ref_stmt);
-                mysqli_stmt_close($update_ref_stmt);
-            }
-        }
+    if (isset($_POST['save_reference_changes']) || isset($_POST['request_reference_quotation'])) {
+        $markWaitingConfirm = isset($_POST['request_reference_quotation']);
+        updateOrderReferenceRows($mysqli, $orderid, $_POST['ref'] ?? [], $hasRefColor, $hasRefQuantity, $markWaitingConfirm);
         header("Location: Order_Edit.php?id=" . $orderid);
         exit();
     }
@@ -979,6 +1000,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
         }
 
         let feeIndex = 0;
+
         function addFeeToList() {
             const nameInput = document.getElementById('new_fee_name');
             const amountInput = document.getElementById('new_fee_amount');
@@ -1106,8 +1128,14 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
             const finalTotal = designPrice + currentTotalFees;
 
             // Update display
-            feesText.textContent = 'HK$' + currentTotalFees.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-            totalText.textContent = 'HK$' + finalTotal.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+            feesText.textContent = 'HK$' + currentTotalFees.toLocaleString('en-US', {
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 0
+            });
+            totalText.textContent = 'HK$' + finalTotal.toLocaleString('en-US', {
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 0
+            });
 
             // Update input if it exists
             if (totalInput) {
@@ -1120,7 +1148,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
             rejectModal.show();
         }
         // Initialize preview on load
-        document.addEventListener('DOMContentLoaded', function () {
+        document.addEventListener('DOMContentLoaded', function() {
             updatePricePreview();
         });
     </script>
@@ -1158,7 +1186,8 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                 'complete' => ['class' => 'alert-success', 'icon' => 'fa-check-circle', 'title' => 'Complete', 'text' => 'Project completed successfully.'],
                 'rejected' => ['class' => 'alert-danger', 'icon' => 'fa-times-circle', 'title' => 'Rejected', 'text' => 'Project has been rejected. See notes for reason.'],
                 'inspection_completed' => ['class' => 'alert-success', 'icon' => 'fa-clipboard-check', 'title' => 'Inspection Completed', 'text' => 'Inspection has been completed. Please submit the inspection report to the client.'],
-                'inspection_failed' => ['class' => 'alert-danger', 'icon' => 'fa-times-circle', 'title' => 'Inspection Failed', 'text' => 'Inspection has failed. Please submit the inspection report to the client and supplier.'],            ];
+                'inspection_failed' => ['class' => 'alert-danger', 'icon' => 'fa-times-circle', 'title' => 'Inspection Failed', 'text' => 'Inspection has failed. Please submit the inspection report to the client and supplier.'],
+            ];
 
             $banner = $status_map[$banner_status] ?? ['class' => 'alert-info', 'icon' => 'fa-info-circle', 'title' => ucwords($banner_status), 'text' => 'Status: ' . $banner_status];
             ?>
@@ -1188,8 +1217,8 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                 'inspection_failed' => ['class' => 'alert-danger', 'icon' => 'fa-times-circle', 'text' => 'Inspection marked as FAILED. The client has been notified.'],
                 'inspection_failed_marked' => ['class' => 'alert-danger', 'icon' => 'fa-times-circle', 'text' => 'Inspection marked as FAILED! You can now upload the inspection report. The supplier will also be notified.'],
                 'fail_report_submitted' => ['class' => 'alert-danger', 'icon' => 'fa-file-alt', 'text' => 'Inspection report submitted to client and supplier successfully!'],
-                ];
-            
+            ];
+
             if ($msg && isset($msg_map[$msg])) {
                 $msg_info = $msg_map[$msg];
                 echo '<div class="alert ' . $msg_info['class'] . ' mb-4" role="alert">';
@@ -1286,19 +1315,24 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                     $grouped_refs[$ref['category']][] = $ref;
                                 }
                                 foreach ($grouped_refs as $category => $items):
-                                    ?>
+                                ?>
                                     <div class="mb-3">
                                         <div class="mb-1"><span
                                                 class="badge bg-secondary"><?php echo htmlspecialchars($category); ?></span></div>
                                         <ul class="list-unstyled ps-2 mb-0 border-start border-2 border-light">
                                             <?php foreach ($items as $ref): ?>
+                                                <?php
+                                                $unitPrice = isset($ref['price']) && $ref['price'] !== null ? (float) $ref['price'] : (float) ($ref['product_price'] ?? 0);
+                                                $qty = (isset($ref['quantity']) && $ref['quantity'] !== null && (int) $ref['quantity'] > 0) ? (int) $ref['quantity'] : 1;
+                                                $lineTotal = $unitPrice * $qty;
+                                                ?>
                                                 <li class="d-flex justify-content-between align-items-center mb-1 ps-2">
                                                     <small class="text-truncate" style="max-width: 60%;"
                                                         title="<?php echo htmlspecialchars($ref['pname']); ?>">
-                                                        <?php echo htmlspecialchars($ref['pname']); ?>
+                                                        <?php echo htmlspecialchars($ref['pname']); ?><?php echo $qty > 1 ? ' x' . $qty : ''; ?>
                                                     </small>
                                                     <small
-                                                        class="text-success fw-bold">HK$<?php echo number_format($ref['product_price'], 0); ?></small>
+                                                        class="text-success fw-bold">HK$<?php echo number_format($lineTotal, 2); ?></small>
                                                 </li>
                                             <?php endforeach; ?>
                                         </ul>
@@ -1404,30 +1438,34 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                             <small class="text-muted">Design Cost</small>
                                             <strong>HK$<?php echo number_format($payment['total_design_payment'], 2); ?></strong>
                                         </li>
-                                        
+
                                         <li class="d-flex justify-content-between">
                                             <small class="text-muted">Construction Cost (Excl. Materials):</small>
                                             <strong>HK$<?php echo number_format($construction_cost_ex_material, 2); ?></strong>
                                         </li>
-                                        <li class="d-flex justify-content-between">
-                                            <small class="text-muted">   -Material Cost Allocated</small>
-                                            <strong>HK$<?php echo number_format($payment['materials_cost'], 2); ?></strong>
-                                        </li>
+                                        <?php if (!empty($references)): ?>
+                                            <li class="mt-2"><small class="text-muted">Actual Material Costs</small></li>
+                                            <?php foreach ($references as $r):
+                                                $unitPrice = isset($r['price']) && $r['price'] !== null ? (float) $r['price'] : (float) ($r['product_price'] ?? 0);
+                                                $qty = (isset($r['quantity']) && $r['quantity'] !== null && (int) $r['quantity'] > 0) ? (int) $r['quantity'] : 1;
+                                                $lineTotal = $unitPrice * $qty;
+                                            ?>
+                                                <li class="d-flex justify-content-between ps-3">
+                                                    <small><?php echo htmlspecialchars($r['pname'] ?? ('Product #' . $r['productid'])); ?><?php echo $qty > 1 ? ' x' . $qty : ''; ?></small>
+                                                    <small class="text-success">HK$<?php echo number_format($lineTotal, 2); ?></small>
+                                                </li>
+                                            <?php endforeach; ?>
+                                        <?php else: ?>
+                                            <li class="d-flex justify-content-between">
+                                                <small class="text-muted"> -Material Cost Allocated</small>
+                                                <strong>HK$<?php echo number_format($payment['materials_cost'], 2); ?></strong>
+                                            </li>
+                                        <?php endif; ?>
+
                                         <li class="d-flex justify-content-between">
                                             <small class="text-muted">Commission</small>
                                             <strong>HK$<?php echo number_format($commission_total, 2); ?></strong>
                                         </li>
-                                        <?php if (!empty($references)): ?>
-                                            <li class="mt-2"><small class="text-muted">Actual Material Costs</small></li>
-                                            <?php foreach ($references as $r):
-                                                $rprice = isset($r['price']) && $r['price'] !== null ? (float) $r['price'] : (float) ($r['product_price'] ?? 0);
-                                                ?>
-                                                <li class="d-flex justify-content-between ps-3">
-                                                    <small><?php echo htmlspecialchars($r['pname'] ?? ('Product #' . $r['productid'])); ?></small>
-                                                    <small class="text-success">HK$<?php echo number_format($rprice, 2); ?></small>
-                                                </li>
-                                            <?php endforeach; ?>
-                                        <?php endif; ?>
 
                                         <?php if (!empty($fees)): ?>
                                             <li class="mt-2"><small class="text-muted">Additional Fees</small></li>
@@ -1733,13 +1771,15 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                                     <tbody id="fee_list_body">
                                                         <?php if (!empty($references)): ?>
                                                             <?php foreach ($references as $ref):
-                                                                $refPrice = isset($ref['price']) && $ref['price'] !== null ? (float) $ref['price'] : (float) ($ref['product_price'] ?? 0);
-                                                                ?>
+                                                                $refUnitPrice = isset($ref['price']) && $ref['price'] !== null ? (float) $ref['price'] : (float) ($ref['product_price'] ?? 0);
+                                                                $refQty = (isset($ref['quantity']) && $ref['quantity'] !== null && (int) $ref['quantity'] > 0) ? (int) $ref['quantity'] : 1;
+                                                                $refLineTotal = $refUnitPrice * $refQty;
+                                                            ?>
                                                                 <tr>
                                                                     <td>
-                                                                        <small><?php echo htmlspecialchars($ref['pname'] ?? ('Product #' . $ref['productid'])); ?></small>
+                                                                        <small><?php echo htmlspecialchars($ref['pname'] ?? ('Product #' . $ref['productid'])); ?><?php echo $refQty > 1 ? ' x' . $refQty : ''; ?></small>
                                                                     </td>
-                                                                    <td><small><strong>HK$<?php echo number_format($refPrice, 0); ?></strong></small>
+                                                                    <td><small><strong>HK$<?php echo number_format($refLineTotal, 2); ?></strong></small>
                                                                     </td>
                                                                     <td></td>
                                                                 </tr>
@@ -1845,12 +1885,21 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                             <div class="card">
                                 <div class="card-header">
                                     <h5 class="card-title mb-0">
-                                        <i class="fas fa-tags me-2"></i>Product Reference Status
+                                        <i class="fas fa-tags me-2"></i>Product & Material
                                     </h5>
                                 </div>
                                 <div class="card-body">
                                     <!-- View Mode -->
                                     <div id="reference-view" class="<?php echo $edit_reference ? 'd-none' : ''; ?>">
+                                        <?php
+                                        $hasNullReferenceStatus = false;
+                                        foreach ($references as $refCheck) {
+                                            if (!isset($refCheck['status']) || trim((string) $refCheck['status']) === '') {
+                                                $hasNullReferenceStatus = true;
+                                                break;
+                                            }
+                                        }
+                                        ?>
                                         <div class="table-responsive">
                                             <table class="table table-sm align-middle">
                                                 <thead class="table">
@@ -1866,7 +1915,9 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                                 </thead>
                                                 <tbody>
                                                     <?php foreach ($references as $ref):
-                                                        $refStatus = strtolower(trim($ref['status'] ?? ''));
+                                                        $rawRefStatus = trim((string) ($ref['status'] ?? ''));
+                                                        $hasRefStatus = ($rawRefStatus !== '');
+                                                        $refStatus = strtolower($rawRefStatus);
                                                         $displayPrice = isset($ref['price']) && $ref['price'] !== null ? (float) $ref['price'] : (float) ($ref['product_price'] ?? 0);
                                                         $badgeClass = 'bg-secondary';
                                                         if (in_array($refStatus, ['waiting confirm', 'pending']))
@@ -1875,37 +1926,49 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                                             $badgeClass = 'bg-success';
                                                         if (in_array($refStatus, ['rejected', 'reject']))
                                                             $badgeClass = 'bg-danger';
-                                                        ?>
+                                                    ?>
                                                         <tr>
                                                             <td>
                                                                 <?php echo htmlspecialchars($ref['pname'] ?? ('Product #' . $ref['productid'])); ?>
                                                             </td>
                                                             <td>
-                                                                <?php echo htmlspecialchars($ref['category'] ?? '—'); ?>
+                                                                <?php echo htmlspecialchars($ref['category'] ?? '�X'); ?>
                                                             </td>
                                                             <td>
-                                                                <span class="badge <?php echo $badgeClass; ?>">
-                                                                    <?php echo $refStatus === 'waiting confirm' ? 'Request Confirm' : htmlspecialchars($refStatus); ?>
-                                                                </span>
+                                                                <?php if ($hasRefStatus): ?>
+                                                                    <span class="badge <?php echo $badgeClass; ?>">
+                                                                        <?php echo $refStatus === 'waiting confirm' ? 'Request Confirm' : htmlspecialchars($rawRefStatus); ?>
+                                                                    </span>
+                                                                <?php else: ?>
+                                                                    <span class="text-muted">-</span>
+                                                                <?php endif; ?>
                                                             </td>
                                                             <td>HK$
                                                                 <?php echo number_format($displayPrice, 2); ?>
                                                             </td>
                                                             <td>
-                                                                <?php echo htmlspecialchars($ref['color'] ?? '—'); ?>
+                                                                <?php echo htmlspecialchars($ref['color'] ?? '�X'); ?>
                                                             </td>
                                                             <td>
-                                                                <?php echo (isset($ref['quantity']) && $ref['quantity'] !== null && $ref['quantity'] !== '') ? (int) $ref['quantity'] : '—'; ?>
+                                                                <?php echo (isset($ref['quantity']) && $ref['quantity'] !== null && $ref['quantity'] !== '') ? (int) $ref['quantity'] : '�X'; ?>
                                                             </td>
                                                             <td>
-                                                                <?php echo htmlspecialchars($ref['note'] ?? '—'); ?>
+                                                                <?php echo htmlspecialchars($ref['note'] ?? '�X'); ?>
                                                             </td>
                                                         </tr>
                                                     <?php endforeach; ?>
                                                 </tbody>
                                             </table>
                                         </div>
-                                        <div class="mt-3">
+                                        <div class="mt-3 d-flex justify-content-center gap-2">
+                                            <?php if ($hasNullReferenceStatus): ?>
+                                                <form method="post" class="m-0">
+                                                    <button type="submit" name="request_reference_quotation" value="1" class="btn btn-success"
+                                                        onclick="return confirm('Send quotation request with current product/material values?');">
+                                                        <i class="fas fa-paper-plane me-2"></i>Request Quotation
+                                                    </button>
+                                                </form>
+                                            <?php endif; ?>
                                             <button type="button" class="btn btn-primary"
                                                 onclick="toggleEdit('reference', true)">
                                                 <i class="fas fa-edit me-2"></i>Edit
@@ -1916,7 +1979,6 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                     <!-- Edit Mode -->
                                     <div id="reference-edit" class="<?php echo $edit_reference ? '' : 'd-none'; ?>">
                                         <form method="post">
-                                            <input type="hidden" name="update_reference_status" value="1">
                                             <div class="table-responsive">
                                                 <table class="table table-sm align-middle">
                                                     <thead class="table">
@@ -1931,7 +1993,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                                     <tbody>
                                                         <?php foreach ($references as $ref):
                                                             $displayPrice = isset($ref['price']) && $ref['price'] !== null ? (float) $ref['price'] : (float) ($ref['product_price'] ?? 0);
-                                                            ?>
+                                                        ?>
                                                             <tr>
                                                                 <td>
                                                                     <?php echo htmlspecialchars($ref['pname'] ?? ('Product #' . $ref['productid'])); ?>
@@ -1969,8 +2031,12 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                                 </table>
                                             </div>
                                             <div class="d-flex gap-2">
-                                                <button type="submit" class="btn btn-success flex-grow-1">
-                                                    <i class="fas fa-save me-2"></i>Request Quotation
+                                                <button type="submit" name="save_reference_changes" value="1" class="btn btn-primary flex-grow-1">
+                                                    <i class="fas fa-save me-2"></i>Save
+                                                </button>
+                                                <button type="submit" name="request_reference_quotation" value="1" class="btn btn-success flex-grow-1"
+                                                    onclick="return confirm('Send quotation request with current product/material values?');">
+                                                    <i class="fas fa-paper-plane me-2"></i>Request Quotation
                                                 </button>
                                                 <button type="button" class="btn btn-secondary"
                                                     onclick="toggleEdit('reference', false)">
@@ -2018,8 +2084,9 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                 </div>
                             </div>
                         </div>
-                    <?php endif; // end of drafting 2nd proposal section ?>
-                    
+                    <?php endif; // end of drafting 2nd proposal section 
+                    ?>
+
                     <?php if ($status === 'coordinating contractors'): ?>
                         <!-- Assign Constructor for Worker Allocation -->
                         <div class="col-lg-6 mb-4">
@@ -2030,7 +2097,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                     </h5>
                                 </div>
                                 <div class="card-body">
-                                    <?php if (!empty($order['supplierid'])): 
+                                    <?php if (!empty($order['supplierid'])):
                                         $assigned_supplier_sql = "SELECT sname, stel, semail FROM Supplier WHERE supplierid = ?";
                                         $assigned_supplier_stmt = mysqli_prepare($mysqli, $assigned_supplier_sql);
                                         mysqli_stmt_bind_param($assigned_supplier_stmt, "i", $order['supplierid']);
@@ -2038,7 +2105,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                         $assigned_supplier_res = mysqli_stmt_get_result($assigned_supplier_stmt);
                                         $assigned_supplier = mysqli_fetch_assoc($assigned_supplier_res);
                                         mysqli_stmt_close($assigned_supplier_stmt);
-                                        
+
                                         $status_badge = 'bg-warning';
                                         $is_accepted = ($order['supplier_status'] === 'Accepted');
                                         if ($is_accepted) $status_badge = 'bg-success';
@@ -2047,7 +2114,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                         <div class="alert alert-info mb-3">
                                             <strong>Assigned Constructor:</strong> <?php echo htmlspecialchars($assigned_supplier['sname']); ?>
                                             <br><small>Status: <span class="badge <?php echo $status_badge; ?>"><?php echo htmlspecialchars($order['supplier_status'] ?? 'Pending'); ?></span></small>
-                                            <br><small>Contact: <?php echo htmlspecialchars($assigned_supplier['stel'] ?? '—'); ?> | <?php echo htmlspecialchars($assigned_supplier['semail'] ?? '—'); ?></small>
+                                            <br><small>Contact: <?php echo htmlspecialchars($assigned_supplier['stel'] ?? '�X'); ?> | <?php echo htmlspecialchars($assigned_supplier['semail'] ?? '�X'); ?></small>
                                         </div>
                                         <?php if (($order['supplier_status'] ?? '') === 'Pending'): ?>
                                             <div class="alert alert-warning py-2 px-3 small mb-3">
@@ -2064,7 +2131,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                                 </form>
                                             </div>
                                         <?php endif; ?>
-                                        
+
                                         <?php if (!$is_accepted): ?>
                                             <button type="button" class="btn btn-outline-primary btn-sm w-100" onclick="document.getElementById('supplier-assign-form').classList.toggle('d-none')">
                                                 <i class="fas fa-exchange-alt me-2"></i>Change Constructor
@@ -2114,737 +2181,738 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                         </div>
                     <?php endif; ?>
 
-<!-- ========== INSPECTION APPOINTMENT SECTION (UPDATED) ========== -->
-<?php if ($status == 'waiting for inspection' || $status == 'inspection_completed' || $status == 'inspection_failed'): ?>
-<div class="row mt-4">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header bg-info text-white">
-                <h5 class="card-title mb-0">
-                    <i class="fas fa-calendar-check me-2"></i>Inspection Appointment
-                </h5>
-            </div>
-            <div class="card-body">
-                <?php
-                // Get current inspection data
-                $inspection_sql = "SELECT inspection_date, inspection_status, client_suggested_date, ostatus 
+                    <!-- ========== INSPECTION APPOINTMENT SECTION (UPDATED) ========== -->
+                    <?php if ($status == 'waiting for inspection' || $status == 'inspection_completed' || $status == 'inspection_failed'): ?>
+                        <div class="row mt-4">
+                            <div class="col-12">
+                                <div class="card">
+                                    <div class="card-header bg-info text-white">
+                                        <h5 class="card-title mb-0">
+                                            <i class="fas fa-calendar-check me-2"></i>Inspection Appointment
+                                        </h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <?php
+                                        // Get current inspection data
+                                        $inspection_sql = "SELECT inspection_date, inspection_status, client_suggested_date, ostatus 
                                    FROM `Order` WHERE orderid = ?";
-                $inspection_stmt = mysqli_prepare($mysqli, $inspection_sql);
-                mysqli_stmt_bind_param($inspection_stmt, "i", $orderid);
-                mysqli_stmt_execute($inspection_stmt);
-                $inspection_result = mysqli_stmt_get_result($inspection_stmt);
-                $inspection_data = mysqli_fetch_assoc($inspection_result);
-                mysqli_stmt_close($inspection_stmt);
-                
-                $inspection_date = $inspection_data['inspection_date'] ?? null;
-                $inspection_status = $inspection_data['inspection_status'] ?? null;
-                $client_suggested_date = $inspection_data['client_suggested_date'] ?? null;
-                $current_ostatus = $inspection_data['ostatus'] ?? '';
-                
-                // Check if inspection is already passed (inspection_completed)
-                $is_inspection_completed = ($current_ostatus == 'inspection_completed');
-                $has_report_submitted = false;
-                
-// Check if report already submitted for THIS inspection date only
-$has_report_submitted = false;
-if ($is_inspection_completed || $current_ostatus == 'inspection_failed') {
-    $current_inspection_date = $inspection_date ?? null;
-    
-    if ($current_inspection_date) {
-        $check_report_sql = "SELECT COUNT(*) as cnt FROM InspectionReport 
+                                        $inspection_stmt = mysqli_prepare($mysqli, $inspection_sql);
+                                        mysqli_stmt_bind_param($inspection_stmt, "i", $orderid);
+                                        mysqli_stmt_execute($inspection_stmt);
+                                        $inspection_result = mysqli_stmt_get_result($inspection_stmt);
+                                        $inspection_data = mysqli_fetch_assoc($inspection_result);
+                                        mysqli_stmt_close($inspection_stmt);
+
+                                        $inspection_date = $inspection_data['inspection_date'] ?? null;
+                                        $inspection_status = $inspection_data['inspection_status'] ?? null;
+                                        $client_suggested_date = $inspection_data['client_suggested_date'] ?? null;
+                                        $current_ostatus = $inspection_data['ostatus'] ?? '';
+
+                                        // Check if inspection is already passed (inspection_completed)
+                                        $is_inspection_completed = ($current_ostatus == 'inspection_completed');
+                                        $has_report_submitted = false;
+
+                                        // Check if report already submitted for THIS inspection date only
+                                        $has_report_submitted = false;
+                                        if ($is_inspection_completed || $current_ostatus == 'inspection_failed') {
+                                            $current_inspection_date = $inspection_date ?? null;
+
+                                            if ($current_inspection_date) {
+                                                $check_report_sql = "SELECT COUNT(*) as cnt FROM InspectionReport 
                              WHERE orderid = ? 
                              AND DATE(inspection_date) = DATE(?)
                              AND result IN ('pass', 'fail')";
-        $check_report_stmt = mysqli_prepare($mysqli, $check_report_sql);
-        mysqli_stmt_bind_param($check_report_stmt, "is", $orderid, $current_inspection_date);
-        mysqli_stmt_execute($check_report_stmt);
-        $check_report_result = mysqli_stmt_get_result($check_report_stmt);
-        $check_report_row = mysqli_fetch_assoc($check_report_result);
-        $has_report_submitted = ($check_report_row['cnt'] > 0);
-        mysqli_stmt_close($check_report_stmt);
-    }
-}
-                ?>
-                
-                <!-- Show message if inspection is marked completed -->
-                <?php if ($is_inspection_completed && !$has_report_submitted): ?>
-                    <div class="alert alert-success mb-4">
-                        <i class="fas fa-check-circle me-2 fa-lg"></i>
-                        <strong>Inspection Completed!</strong> The inspection has been marked as completed. 
-                        Please submit the inspection report below.
-                    </div>
-                <?php endif; ?>
-                
-                <!-- Show message if report already submitted -->
-                <?php if ($has_report_submitted): ?>
-                    <div class="text-center p-4">
-                        <i class="fas fa-check-circle fa-4x text-success mb-3"></i>
-                        <h4 class="text-success">Inspection Report Submitted</h4>
-                        <p>The inspection report has been submitted to the client.</p>
-                        <p class="text-muted">Waiting for client to review and confirm completion.</p>
-                    </div>
-                <?php else: ?>
-                
-                <!-- Status Row -->
-                <div class="row mb-4">
-                    <div class="col-md-6">
-                        <div class="p-3 bg-light rounded">
-                            <i class="fas fa-info-circle me-2 text-info"></i>
-                            <strong>Inspection Status:</strong><br>
-                            <?php
-                            $status_badge = '';
-                            $status_text = '';
-                            $status_icon = '';
-                            
-                            if ($is_inspection_completed) {
-                                $status_badge = 'bg-success';
-                                $status_text = 'Inspection Completed - Report Pending';
-                                $status_icon = 'fa-check-circle';
-                            } else {
-                                switch ($inspection_status) {
-                                    case 'pending':
-                                        $status_badge = 'bg-warning';
-                                        $status_text = 'Waiting for Client Response';
-                                        $status_icon = 'fa-hourglass-half';
-                                        break;
-                                    case 'accepted':
-                                        $status_badge = 'bg-success';
-                                        $status_text = 'Accepted - Inspection Scheduled';
-                                        $status_icon = 'fa-check-circle';
-                                        break;
-                                    case 'rejected':
-                                        $status_badge = 'bg-danger';
-                                        $status_text = 'Rejected - Please Reschedule';
-                                        $status_icon = 'fa-times-circle';
-                                        break;
-                                    case 'client_suggested':
-                                        $status_badge = 'bg-info';
-                                        $status_text = 'Client Suggested New Time';
-                                        $status_icon = 'fa-calendar-alt';
-                                        break;
-                                    default:
-                                        $status_badge = 'bg-secondary';
-                                        $status_text = 'Not Scheduled';
-                                        $status_icon = 'fa-clock';
-                                }
-                            }
-                            ?>
-                            <span class="badge <?php echo $status_badge; ?> mt-1">
-                                <i class="fas <?php echo $status_icon; ?> me-1"></i><?php echo $status_text; ?>
-                            </span>
-                        </div>
-                    </div>
-                    <?php if ($inspection_date && $inspection_status != 'rejected' && !$is_inspection_completed): ?>
-                        <div class="col-md-6">
-                            <div class="p-3 bg-light rounded">
-                                <i class="fas fa-calendar-alt me-2 text-primary"></i>
-                                <strong>Proposed Inspection Date:</strong><br>
-                                <span class="text-primary">
-                                    <i class="fas fa-calendar-day me-1"></i>
-                                    <?php echo date('F d, Y', strtotime($inspection_date)); ?>
-                                    <i class="fas fa-clock ms-2 me-1"></i>
-                                    <?php echo date('h:i A', strtotime($inspection_date)); ?>
-                                </span>
-                            </div>
-                        </div>
-                    <?php elseif ($inspection_date && $inspection_status == 'accepted' && !$is_inspection_completed): ?>
-                        <div class="col-md-6">
-                            <div class="p-3 bg-success text-white rounded">
-                                <i class="fas fa-calendar-check me-2"></i>
-                                <strong>Confirmed Inspection Date:</strong><br>
-                                <span>
-                                    <i class="fas fa-calendar-day me-1"></i>
-                                    <?php echo date('F d, Y', strtotime($inspection_date)); ?>
-                                    <i class="fas fa-clock ms-2 me-1"></i>
-                                    <?php echo date('h:i A', strtotime($inspection_date)); ?>
-                                </span>
-                            </div>
-                        </div>
-                    <?php endif; ?>
-                </div>
-                
-                <!-- Client Suggested Date Display -->
-                <?php if ($inspection_status == 'client_suggested' && $client_suggested_date && !$is_inspection_completed): ?>
-                <div class="alert alert-info mb-3">
-                    <div class="d-flex justify-content-between align-items-center flex-wrap">
-                        <div>
-                            <i class="fas fa-calendar-alt me-2 fa-lg"></i>
-                            <strong>Client Suggested Time:</strong>
-                            <?php echo date('F d, Y h:i A', strtotime($client_suggested_date)); ?>
-                        </div>
-                        <div class="mt-2 mt-sm-0">
-                            <button type="button" class="btn btn-sm btn-success me-2" onclick="acceptSuggestion()">
-                                <i class="fas fa-check me-1"></i>Accept
-                            </button>
-                            <button type="button" class="btn btn-sm btn-danger" onclick="rejectSuggestion()">
-                                <i class="fas fa-times me-1"></i>Reject & Propose New
-                            </button>
-                        </div>
-                    </div>
-                </div>
-                <?php endif; ?>
-                
-                <!-- Send Inspection Request Form (only when not inspection completed and not pending/accepted) -->
-                <?php if (!$is_inspection_completed && (!$inspection_date || $inspection_status == 'rejected') && $inspection_status != 'pending' && $inspection_status != 'accepted' && $inspection_status != 'client_suggested'): ?>
-                    <div class="mt-3">
-                        <div class="card border-info">
-                            <div class="card-header bg-light">
-                                <h6 class="mb-0">
-                                    <i class="fas fa-calendar-plus me-2 text-info"></i>
-                                    <?php echo ($inspection_status == 'rejected') ? 'Reschedule Inspection' : 'Request Inspection'; ?>
-                                </h6>
-                            </div>
-                            <div class="card-body">
-                                <form method="post" class="row g-3 align-items-end">
-                                    <div class="col-md-5">
-                                        <label class="form-label fw-bold">
-                                            <i class="fas fa-calendar-alt me-1 text-info"></i>Date
-                                        </label>
-                                        <input type="date" name="inspection_date" class="form-control" 
-                                               min="<?php echo date('Y-m-d', strtotime('+1 day')); ?>"
-                                               value="<?php echo ($inspection_date && $inspection_status == 'rejected') ? date('Y-m-d', strtotime($inspection_date)) : ''; ?>"
-                                               required>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <label class="form-label fw-bold">
-                                            <i class="fas fa-clock me-1 text-info"></i>Time
-                                        </label>
-                                        <select name="inspection_time" class="form-select" required>
-                                            <option value="">-- Select Time --</option>
-                                            <option value="09:00">09:00 AM</option>
-                                            <option value="10:00">10:00 AM</option>
-                                            <option value="11:00">11:00 AM</option>
-                                            <option value="12:00">12:00 PM</option>
-                                            <option value="13:00">01:00 PM</option>
-                                            <option value="14:00">02:00 PM</option>
-                                            <option value="15:00">03:00 PM</option>
-                                            <option value="16:00">04:00 PM</option>
-                                            <option value="17:00">05:00 PM</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-3">
-                                        <button type="submit" name="send_inspection_request" class="btn btn-primary w-100">
-                                            <i class="fas fa-paper-plane me-2"></i>Send Request
-                                        </button>
-                                    </div>
-                                </form>
-                            </div>
-                        </div>
-                    </div>
-                <?php elseif ($inspection_status == 'pending' && $inspection_date && !$is_inspection_completed): ?>
-                    <div class="text-center mt-3 p-4 bg-light rounded border">
-                        <i class="fas fa-clock fa-3x text-warning mb-3"></i>
-                        <h5 class="text-warning mb-2">Waiting for Client Response</h5>
-                        <p class="mb-1">Inspection request has been sent to the client.</p>
-                        <p class="mb-0 text-muted small">Proposed date: <?php echo date('F d, Y h:i A', strtotime($inspection_date)); ?></p>
-                    </div>
-                <?php elseif ($inspection_status == 'rejected' && !$inspection_date && !$is_inspection_completed): ?>
-                    <div class="text-center mt-3 p-4 bg-light rounded border border-danger">
-                        <i class="fas fa-times-circle fa-3x text-danger mb-3"></i>
-                        <h5 class="text-danger mb-2">Inspection Request Rejected</h5>
-                        <p class="mb-0">Please propose a new inspection date using the form above.</p>
-                    </div>
-                <?php endif; ?>
-                
-<!-- Step 1: Complete Inspection (with Pass/Fail options) -->
-<?php if ($inspection_status == 'accepted' && !$is_inspection_completed && $current_ostatus != 'inspection_failed' && !$has_report_submitted): ?>
-    <div class="mt-4 pt-3 border-top">
-        <div class="card border-success">
-            <div class="card-header bg-success text-white">
-                <h6 class="mb-0">
-                    <i class="fas fa-clipboard-check me-2"></i>Step 1: Complete Inspection
-                </h6>
-            </div>
-            <div class="card-body text-center">
-                <p class="mb-3">Click the button below to mark the inspection as completed. 
-                After this, you will be able to upload the inspection report.</p>
-                <div class="row g-3">
-<div class="row g-3">
-    <div class="col-md-6">
-        <form method="post" id="passInspectionForm" onsubmit="return confirmPassInspection();">
-            <input type="hidden" name="mark_inspection_completed" value="1">
-            <button type="submit" class="btn btn-success btn-lg w-100">
-                <i class="fas fa-check-circle me-2"></i>Pass Inspection
-            </button>
-        </form>
-    </div>
-    <div class="col-md-6">
-        <form method="post" id="failInspectionForm" onsubmit="return confirmFailInspection();">
-            <input type="hidden" name="fail_inspection" value="1">
-            <button type="submit" class="btn btn-danger btn-lg w-100">
-                <i class="fas fa-times-circle me-2"></i>Fail Inspection
-            </button>
-        </form>
-    </div>
-</div>
-            </div>
-        </div>
-    </div>
-<?php endif; ?>
-                
-<!-- Step 2: Submit Report (when inspection is completed OR inspection_failed, and report not yet submitted) -->
-<?php if (($is_inspection_completed || $current_ostatus == 'inspection_failed') && !$has_report_submitted): ?>
-    <div class="mt-4 pt-3 border-top">
-        <div class="card border-primary">
-            <div class="card-header bg-primary text-white">
-                <h6 class="mb-0">
-                    <i class="fas fa-file-upload me-2"></i>Step 2: Submit Inspection Report
-                </h6>
-            </div>
-            <div class="card-body">
-                <form method="POST" enctype="multipart/form-data">
-                    <div class="mb-3">
-                        <label class="form-label fw-bold">Inspection Report <span class="text-danger">*</span></label>
-                        <textarea name="report_content" class="form-control" rows="5" 
-                                  placeholder="Enter inspection findings, notes, and conclusions..." required></textarea>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-bold">Attach Files (Images, PDFs, etc.)</label>
-                        <input type="file" name="report_files[]" class="form-control" multiple 
-                               accept="image/*,.pdf,.doc,.docx" id="reportFiles">
-                        <small class="text-muted">You can upload multiple files (images, PDFs, documents)</small>
-                    </div>
-                    <div id="filePreview" class="mt-2"></div>
-                    
-                    <!-- Hidden input to determine pass/fail -->
-                    <input type="hidden" name="report_result" value="<?php echo ($current_ostatus == 'inspection_failed') ? 'fail' : 'pass'; ?>">
-                    
-                    <div class="alert alert-info mt-3">
-                        <i class="fas fa-info-circle me-2"></i>
-                        This report will be sent to the client.
-                        <?php if ($current_ostatus == 'inspection_failed'): ?>
-                            <strong>The contractor will also be notified.</strong>
-                        <?php endif; ?>
-                    </div>
-                    <button type="submit" name="submit_inspection_report" class="btn btn-primary btn-lg w-100" 
-                            onclick="return confirm('Submit inspection report to client<?php echo ($current_ostatus == 'inspection_failed') ? ' and supplier' : ''; ?>? The client will need to confirm completion.');">
-                        <i class="fas fa-paper-plane me-2"></i>Submit Report to Client<?php echo ($current_ostatus == 'inspection_failed') ? ' & Supplier' : ''; ?>
-                    </button>
-                </form>
-            </div>
-        </div>
-    </div>
-<?php endif; ?>
+                                                $check_report_stmt = mysqli_prepare($mysqli, $check_report_sql);
+                                                mysqli_stmt_bind_param($check_report_stmt, "is", $orderid, $current_inspection_date);
+                                                mysqli_stmt_execute($check_report_stmt);
+                                                $check_report_result = mysqli_stmt_get_result($check_report_stmt);
+                                                $check_report_row = mysqli_fetch_assoc($check_report_result);
+                                                $has_report_submitted = ($check_report_row['cnt'] > 0);
+                                                mysqli_stmt_close($check_report_stmt);
+                                            }
+                                        }
+                                        ?>
 
-                <!-- Fail Inspection Modal -->
-<div class="modal fade" id="failInspectionModal" tabindex="-1" aria-labelledby="failInspectionModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header bg-danger text-white">
-                <h5 class="modal-title" id="failInspectionModalLabel">
-                    <i class="fas fa-times-circle me-2"></i>Fail Inspection
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <form method="post" onsubmit="return confirm('Are you sure you want to mark this inspection as FAILED? This will reject the order.');">
-                <div class="modal-body">
-                    <input type="hidden" name="fail_inspection" value="1">
-                    <div class="mb-3">
-                        <label for="fail_reason" class="form-label fw-bold">Reason for Failure <span class="text-danger">*</span></label>
-                        <textarea id="fail_reason" name="fail_reason" class="form-control" rows="4" 
-                                  placeholder="Please provide detailed reasons why the inspection failed..." required></textarea>
-                    </div>
-                    <div class="alert alert-warning">
-                        <i class="fas fa-exclamation-triangle me-2"></i>
-                        <strong>Note:</strong> Failing the inspection will reject this order. The client will be notified.
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-danger">
-                        <i class="fas fa-times-circle me-2"></i>Confirm Fail
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-                <?php endif; /* end of !has_report_submitted */ ?>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- File Preview Script for Inspection -->
-<script>
-function acceptSuggestion() {
-    var suggestedDate = '<?php echo $client_suggested_date; ?>';
-    if (confirm('Accept the suggested inspection time?\n\nSuggested Time: ' + new Date(suggestedDate).toLocaleString())) {
-        var form = document.createElement('form');
-        form.method = 'POST';
-        form.action = '';
-        var input1 = document.createElement('input');
-        input1.type = 'hidden';
-        input1.name = 'accept_client_suggestion';
-        input1.value = '1';
-        var input2 = document.createElement('input');
-        input2.type = 'hidden';
-        input2.name = 'client_suggested_date';
-        input2.value = suggestedDate;
-        form.appendChild(input1);
-        form.appendChild(input2);
-        document.body.appendChild(form);
-        form.submit();
-    }
-
-}
-function confirmPassInspection() {
-    return confirm('Mark inspection as PASSED? This will change the order status to inspection_completed.');
-}
-
-function confirmFailInspection() {
-    return confirm('Mark inspection as FAIL? This will change the order status to inspection_failed.');
-}
-
-function rejectSuggestion() {
-    var newDateTime = prompt('Propose a new inspection date and time (YYYY-MM-DD HH:MM):\n\nExample: 2026-05-01 14:30', '<?php echo date('Y-m-d H:i', strtotime('+2 days')); ?>');
-    if (newDateTime && newDateTime.trim() !== '') {
-        var datetimeRegex = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/;
-        if (!datetimeRegex.test(newDateTime.trim())) {
-            alert('Please use format: YYYY-MM-DD HH:MM (e.g., 2026-05-01 14:30)');
-            return;
-        }
-        var form = document.createElement('form');
-        form.method = 'POST';
-        form.action = '';
-        var input1 = document.createElement('input');
-        input1.type = 'hidden';
-        input1.name = 'reject_client_suggestion';
-        input1.value = '1';
-        var input2 = document.createElement('input');
-        input2.type = 'hidden';
-        input2.name = 'new_inspection_datetime';
-        input2.value = newDateTime.trim();
-        form.appendChild(input1);
-        form.appendChild(input2);
-        document.body.appendChild(form);
-        form.submit();
-    }
-}
-
-// File preview for report files
-var reportFileInput = document.getElementById('reportFiles');
-if (reportFileInput) {
-    reportFileInput.addEventListener('change', function(e) {
-        var preview = document.getElementById('filePreview');
-        if (preview) {
-            preview.innerHTML = '';
-            var files = e.target.files;
-            for (var i = 0; i < files.length; i++) {
-                var file = files[i];
-                var fileDiv = document.createElement('div');
-                fileDiv.className = 'd-inline-block me-2 mb-2 p-2 border rounded';
-                fileDiv.innerHTML = '<i class="fas fa-file me-1"></i> ' + file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
-                preview.appendChild(fileDiv);
-            }
-        }
-    });
-}
-</script>
-<?php endif; /* End of inspection section */ ?>
-
-                    <?php if ($status === 'preparing'): ?>
-                         <!-- Assign Constructor for Worker Allocation -->
-                        <div class="col-lg-6 mb-4">
-                            <div class="card h-100">
-                                <div class="card-header bg-light">
-                                    <h5 class="card-title mb-0">
-                                        <i class="fas fa-hard-hat me-2"></i>Assign Constructor for Worker Allocation
-                                    </h5>
-                                </div>
-                                <div class="card-body">
-                                    <?php if (!empty($order['supplierid'])): 
-                                        $assigned_supplier_sql = "SELECT sname, stel, semail FROM Supplier WHERE supplierid = ?";
-                                        $assigned_supplier_stmt = mysqli_prepare($mysqli, $assigned_supplier_sql);
-                                        mysqli_stmt_bind_param($assigned_supplier_stmt, "i", $order['supplierid']);
-                                        mysqli_stmt_execute($assigned_supplier_stmt);
-                                        $assigned_supplier_res = mysqli_stmt_get_result($assigned_supplier_stmt);
-                                        $assigned_supplier = mysqli_fetch_assoc($assigned_supplier_res);
-                                        mysqli_stmt_close($assigned_supplier_stmt);
-                                        
-                                        $status_badge = 'bg-warning';
-                                        $is_accepted = ($order['supplier_status'] === 'Accepted');
-                                        if ($is_accepted) $status_badge = 'bg-success';
-                                        if ($order['supplier_status'] === 'Rejected') $status_badge = 'bg-danger';
-                                    ?>
-                                        <div class="alert alert-info mb-3">
-                                            <strong>Assigned Constructor:</strong> <?php echo htmlspecialchars($assigned_supplier['sname']); ?>
-                                            <br><small>Status: <span class="badge <?php echo $status_badge; ?>"><?php echo htmlspecialchars($order['supplier_status'] ?? 'Pending'); ?></span></small>
-                                            <br><small>Contact: <?php echo htmlspecialchars($assigned_supplier['stel'] ?? '—'); ?> | <?php echo htmlspecialchars($assigned_supplier['semail'] ?? '—'); ?></small>
-                                        </div>
-                                        
-                                        <?php if (!$is_accepted): ?>
-                                            <button type="button" class="btn btn-outline-primary btn-sm w-100" onclick="document.getElementById('supplier-assign-form').classList.toggle('d-none')">
-                                                <i class="fas fa-exchange-alt me-2"></i>Change Constructor
-                                            </button>
-                                        <?php else: ?>
-                                            <div class="alert alert-success py-2 px-3 small mb-0">
-                                                <i class="fas fa-lock me-2"></i>Constructor has accepted.
+                                        <!-- Show message if inspection is marked completed -->
+                                        <?php if ($is_inspection_completed && !$has_report_submitted): ?>
+                                            <div class="alert alert-success mb-4">
+                                                <i class="fas fa-check-circle me-2 fa-lg"></i>
+                                                <strong>Inspection Completed!</strong> The inspection has been marked as completed.
+                                                Please submit the inspection report below.
                                             </div>
                                         <?php endif; ?>
-                                    <?php endif; ?>
 
-                                    <?php if (empty($order['supplierid']) || ($order['supplier_status'] !== 'Accepted')): ?>
-                                        <div id="supplier-assign-form" class="<?php echo !empty($order['supplierid']) ? 'd-none' : ''; ?> mt-3">
-                                            <form method="post">
-                                                <div class="mb-3">
-                                                    <label class="form-label small text-muted">Select Constructor</label>
-                                                    <select name="supplier_id" class="form-select" required>
-                                                        <option value="">-- Choose Constructor --</option>
+                                        <!-- Show message if report already submitted -->
+                                        <?php if ($has_report_submitted): ?>
+                                            <div class="text-center p-4">
+                                                <i class="fas fa-check-circle fa-4x text-success mb-3"></i>
+                                                <h4 class="text-success">Inspection Report Submitted</h4>
+                                                <p>The inspection report has been submitted to the client.</p>
+                                                <p class="text-muted">Waiting for client to review and confirm completion.</p>
+                                            </div>
+                                        <?php else: ?>
+
+                                            <!-- Status Row -->
+                                            <div class="row mb-4">
+                                                <div class="col-md-6">
+                                                    <div class="p-3 bg-light rounded">
+                                                        <i class="fas fa-info-circle me-2 text-info"></i>
+                                                        <strong>Inspection Status:</strong><br>
                                                         <?php
-                                                        $suppliers_sql = "SELECT supplierid, sname FROM Supplier ORDER BY sname ASC";
-                                                        $suppliers_res = mysqli_query($mysqli, $suppliers_sql);
-                                                        while ($s = mysqli_fetch_assoc($suppliers_res)) {
-                                                            $is_selected = false;
-                                                            if (!empty($order['supplierid'])) {
-                                                                $is_selected = ($s['supplierid'] == $order['supplierid']);
-                                                            } else {
-                                                                $is_selected = ($s['supplierid'] == $order['design_supplierid']);
+                                                        $status_badge = '';
+                                                        $status_text = '';
+                                                        $status_icon = '';
+
+                                                        if ($is_inspection_completed) {
+                                                            $status_badge = 'bg-success';
+                                                            $status_text = 'Inspection Completed - Report Pending';
+                                                            $status_icon = 'fa-check-circle';
+                                                        } else {
+                                                            switch ($inspection_status) {
+                                                                case 'pending':
+                                                                    $status_badge = 'bg-warning';
+                                                                    $status_text = 'Waiting for Client Response';
+                                                                    $status_icon = 'fa-hourglass-half';
+                                                                    break;
+                                                                case 'accepted':
+                                                                    $status_badge = 'bg-success';
+                                                                    $status_text = 'Accepted - Inspection Scheduled';
+                                                                    $status_icon = 'fa-check-circle';
+                                                                    break;
+                                                                case 'rejected':
+                                                                    $status_badge = 'bg-danger';
+                                                                    $status_text = 'Rejected - Please Reschedule';
+                                                                    $status_icon = 'fa-times-circle';
+                                                                    break;
+                                                                case 'client_suggested':
+                                                                    $status_badge = 'bg-info';
+                                                                    $status_text = 'Client Suggested New Time';
+                                                                    $status_icon = 'fa-calendar-alt';
+                                                                    break;
+                                                                default:
+                                                                    $status_badge = 'bg-secondary';
+                                                                    $status_text = 'Not Scheduled';
+                                                                    $status_icon = 'fa-clock';
                                                             }
-                                                            $sel = $is_selected ? 'selected' : '';
-                                                            $label = htmlspecialchars($s['sname']);
-                                                            if ($s['supplierid'] == $order['design_supplierid']) {
-                                                                $label .= " (Linked to Design)";
-                                                            }
-                                                            echo "<option value='{$s['supplierid']}' $sel>$label</option>";
                                                         }
                                                         ?>
-                                                    </select>
+                                                        <span class="badge <?php echo $status_badge; ?> mt-1">
+                                                            <i class="fas <?php echo $status_icon; ?> me-1"></i><?php echo $status_text; ?>
+                                                        </span>
+                                                    </div>
                                                 </div>
-                                                <button type="submit" name="assign_supplier" class="btn btn-primary w-100">
-                                                    <i class="fas fa-check me-2"></i>Assign Constructor
-                                                </button>
-                                            </form>
-                                        </div>
-                                    <?php endif; ?>
+                                                <?php if ($inspection_date && $inspection_status != 'rejected' && !$is_inspection_completed): ?>
+                                                    <div class="col-md-6">
+                                                        <div class="p-3 bg-light rounded">
+                                                            <i class="fas fa-calendar-alt me-2 text-primary"></i>
+                                                            <strong>Proposed Inspection Date:</strong><br>
+                                                            <span class="text-primary">
+                                                                <i class="fas fa-calendar-day me-1"></i>
+                                                                <?php echo date('F d, Y', strtotime($inspection_date)); ?>
+                                                                <i class="fas fa-clock ms-2 me-1"></i>
+                                                                <?php echo date('h:i A', strtotime($inspection_date)); ?>
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                <?php elseif ($inspection_date && $inspection_status == 'accepted' && !$is_inspection_completed): ?>
+                                                    <div class="col-md-6">
+                                                        <div class="p-3 bg-success text-white rounded">
+                                                            <i class="fas fa-calendar-check me-2"></i>
+                                                            <strong>Confirmed Inspection Date:</strong><br>
+                                                            <span>
+                                                                <i class="fas fa-calendar-day me-1"></i>
+                                                                <?php echo date('F d, Y', strtotime($inspection_date)); ?>
+                                                                <i class="fas fa-clock ms-2 me-1"></i>
+                                                                <?php echo date('h:i A', strtotime($inspection_date)); ?>
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                <?php endif; ?>
+                                            </div>
+
+                                            <!-- Client Suggested Date Display -->
+                                            <?php if ($inspection_status == 'client_suggested' && $client_suggested_date && !$is_inspection_completed): ?>
+                                                <div class="alert alert-info mb-3">
+                                                    <div class="d-flex justify-content-between align-items-center flex-wrap">
+                                                        <div>
+                                                            <i class="fas fa-calendar-alt me-2 fa-lg"></i>
+                                                            <strong>Client Suggested Time:</strong>
+                                                            <?php echo date('F d, Y h:i A', strtotime($client_suggested_date)); ?>
+                                                        </div>
+                                                        <div class="mt-2 mt-sm-0">
+                                                            <button type="button" class="btn btn-sm btn-success me-2" onclick="acceptSuggestion()">
+                                                                <i class="fas fa-check me-1"></i>Accept
+                                                            </button>
+                                                            <button type="button" class="btn btn-sm btn-danger" onclick="rejectSuggestion()">
+                                                                <i class="fas fa-times me-1"></i>Reject & Propose New
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            <?php endif; ?>
+
+                                            <!-- Send Inspection Request Form (only when not inspection completed and not pending/accepted) -->
+                                            <?php if (!$is_inspection_completed && (!$inspection_date || $inspection_status == 'rejected') && $inspection_status != 'pending' && $inspection_status != 'accepted' && $inspection_status != 'client_suggested'): ?>
+                                                <div class="mt-3">
+                                                    <div class="card border-info">
+                                                        <div class="card-header bg-light">
+                                                            <h6 class="mb-0">
+                                                                <i class="fas fa-calendar-plus me-2 text-info"></i>
+                                                                <?php echo ($inspection_status == 'rejected') ? 'Reschedule Inspection' : 'Request Inspection'; ?>
+                                                            </h6>
+                                                        </div>
+                                                        <div class="card-body">
+                                                            <form method="post" class="row g-3 align-items-end">
+                                                                <div class="col-md-5">
+                                                                    <label class="form-label fw-bold">
+                                                                        <i class="fas fa-calendar-alt me-1 text-info"></i>Date
+                                                                    </label>
+                                                                    <input type="date" name="inspection_date" class="form-control"
+                                                                        min="<?php echo date('Y-m-d', strtotime('+1 day')); ?>"
+                                                                        value="<?php echo ($inspection_date && $inspection_status == 'rejected') ? date('Y-m-d', strtotime($inspection_date)) : ''; ?>"
+                                                                        required>
+                                                                </div>
+                                                                <div class="col-md-4">
+                                                                    <label class="form-label fw-bold">
+                                                                        <i class="fas fa-clock me-1 text-info"></i>Time
+                                                                    </label>
+                                                                    <select name="inspection_time" class="form-select" required>
+                                                                        <option value="">-- Select Time --</option>
+                                                                        <option value="09:00">09:00 AM</option>
+                                                                        <option value="10:00">10:00 AM</option>
+                                                                        <option value="11:00">11:00 AM</option>
+                                                                        <option value="12:00">12:00 PM</option>
+                                                                        <option value="13:00">01:00 PM</option>
+                                                                        <option value="14:00">02:00 PM</option>
+                                                                        <option value="15:00">03:00 PM</option>
+                                                                        <option value="16:00">04:00 PM</option>
+                                                                        <option value="17:00">05:00 PM</option>
+                                                                    </select>
+                                                                </div>
+                                                                <div class="col-md-3">
+                                                                    <button type="submit" name="send_inspection_request" class="btn btn-primary w-100">
+                                                                        <i class="fas fa-paper-plane me-2"></i>Send Request
+                                                                    </button>
+                                                                </div>
+                                                            </form>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            <?php elseif ($inspection_status == 'pending' && $inspection_date && !$is_inspection_completed): ?>
+                                                <div class="text-center mt-3 p-4 bg-light rounded border">
+                                                    <i class="fas fa-clock fa-3x text-warning mb-3"></i>
+                                                    <h5 class="text-warning mb-2">Waiting for Client Response</h5>
+                                                    <p class="mb-1">Inspection request has been sent to the client.</p>
+                                                    <p class="mb-0 text-muted small">Proposed date: <?php echo date('F d, Y h:i A', strtotime($inspection_date)); ?></p>
+                                                </div>
+                                            <?php elseif ($inspection_status == 'rejected' && !$inspection_date && !$is_inspection_completed): ?>
+                                                <div class="text-center mt-3 p-4 bg-light rounded border border-danger">
+                                                    <i class="fas fa-times-circle fa-3x text-danger mb-3"></i>
+                                                    <h5 class="text-danger mb-2">Inspection Request Rejected</h5>
+                                                    <p class="mb-0">Please propose a new inspection date using the form above.</p>
+                                                </div>
+                                            <?php endif; ?>
+
+                                            <!-- Step 1: Complete Inspection (with Pass/Fail options) -->
+                                            <?php if ($inspection_status == 'accepted' && !$is_inspection_completed && $current_ostatus != 'inspection_failed' && !$has_report_submitted): ?>
+                                                <div class="mt-4 pt-3 border-top">
+                                                    <div class="card border-success">
+                                                        <div class="card-header bg-success text-white">
+                                                            <h6 class="mb-0">
+                                                                <i class="fas fa-clipboard-check me-2"></i>Step 1: Complete Inspection
+                                                            </h6>
+                                                        </div>
+                                                        <div class="card-body text-center">
+                                                            <p class="mb-3">Click the button below to mark the inspection as completed.
+                                                                After this, you will be able to upload the inspection report.</p>
+                                                            <div class="row g-3">
+                                                                <div class="row g-3">
+                                                                    <div class="col-md-6">
+                                                                        <form method="post" id="passInspectionForm" onsubmit="return confirmPassInspection();">
+                                                                            <input type="hidden" name="mark_inspection_completed" value="1">
+                                                                            <button type="submit" class="btn btn-success btn-lg w-100">
+                                                                                <i class="fas fa-check-circle me-2"></i>Pass Inspection
+                                                                            </button>
+                                                                        </form>
+                                                                    </div>
+                                                                    <div class="col-md-6">
+                                                                        <form method="post" id="failInspectionForm" onsubmit="return confirmFailInspection();">
+                                                                            <input type="hidden" name="fail_inspection" value="1">
+                                                                            <button type="submit" class="btn btn-danger btn-lg w-100">
+                                                                                <i class="fas fa-times-circle me-2"></i>Fail Inspection
+                                                                            </button>
+                                                                        </form>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                <?php endif; ?>
+
+                                                <!-- Step 2: Submit Report (when inspection is completed OR inspection_failed, and report not yet submitted) -->
+                                                <?php if (($is_inspection_completed || $current_ostatus == 'inspection_failed') && !$has_report_submitted): ?>
+                                                    <div class="mt-4 pt-3 border-top">
+                                                        <div class="card border-primary">
+                                                            <div class="card-header bg-primary text-white">
+                                                                <h6 class="mb-0">
+                                                                    <i class="fas fa-file-upload me-2"></i>Step 2: Submit Inspection Report
+                                                                </h6>
+                                                            </div>
+                                                            <div class="card-body">
+                                                                <form method="POST" enctype="multipart/form-data">
+                                                                    <div class="mb-3">
+                                                                        <label class="form-label fw-bold">Inspection Report <span class="text-danger">*</span></label>
+                                                                        <textarea name="report_content" class="form-control" rows="5"
+                                                                            placeholder="Enter inspection findings, notes, and conclusions..." required></textarea>
+                                                                    </div>
+                                                                    <div class="mb-3">
+                                                                        <label class="form-label fw-bold">Attach Files (Images, PDFs, etc.)</label>
+                                                                        <input type="file" name="report_files[]" class="form-control" multiple
+                                                                            accept="image/*,.pdf,.doc,.docx" id="reportFiles">
+                                                                        <small class="text-muted">You can upload multiple files (images, PDFs, documents)</small>
+                                                                    </div>
+                                                                    <div id="filePreview" class="mt-2"></div>
+
+                                                                    <!-- Hidden input to determine pass/fail -->
+                                                                    <input type="hidden" name="report_result" value="<?php echo ($current_ostatus == 'inspection_failed') ? 'fail' : 'pass'; ?>">
+
+                                                                    <div class="alert alert-info mt-3">
+                                                                        <i class="fas fa-info-circle me-2"></i>
+                                                                        This report will be sent to the client.
+                                                                        <?php if ($current_ostatus == 'inspection_failed'): ?>
+                                                                            <strong>The contractor will also be notified.</strong>
+                                                                        <?php endif; ?>
+                                                                    </div>
+                                                                    <button type="submit" name="submit_inspection_report" class="btn btn-primary btn-lg w-100"
+                                                                        onclick="return confirm('Submit inspection report to client<?php echo ($current_ostatus == 'inspection_failed') ? ' and supplier' : ''; ?>? The client will need to confirm completion.');">
+                                                                        <i class="fas fa-paper-plane me-2"></i>Submit Report to Client<?php echo ($current_ostatus == 'inspection_failed') ? ' & Supplier' : ''; ?>
+                                                                    </button>
+                                                                </form>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                <?php endif; ?>
+
+                                                <!-- Fail Inspection Modal -->
+                                                <div class="modal fade" id="failInspectionModal" tabindex="-1" aria-labelledby="failInspectionModalLabel" aria-hidden="true">
+                                                    <div class="modal-dialog">
+                                                        <div class="modal-content">
+                                                            <div class="modal-header bg-danger text-white">
+                                                                <h5 class="modal-title" id="failInspectionModalLabel">
+                                                                    <i class="fas fa-times-circle me-2"></i>Fail Inspection
+                                                                </h5>
+                                                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                                                            </div>
+                                                            <form method="post" onsubmit="return confirm('Are you sure you want to mark this inspection as FAILED? This will reject the order.');">
+                                                                <div class="modal-body">
+                                                                    <input type="hidden" name="fail_inspection" value="1">
+                                                                    <div class="mb-3">
+                                                                        <label for="fail_reason" class="form-label fw-bold">Reason for Failure <span class="text-danger">*</span></label>
+                                                                        <textarea id="fail_reason" name="fail_reason" class="form-control" rows="4"
+                                                                            placeholder="Please provide detailed reasons why the inspection failed..." required></textarea>
+                                                                    </div>
+                                                                    <div class="alert alert-warning">
+                                                                        <i class="fas fa-exclamation-triangle me-2"></i>
+                                                                        <strong>Note:</strong> Failing the inspection will reject this order. The client will be notified.
+                                                                    </div>
+                                                                </div>
+                                                                <div class="modal-footer">
+                                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                                    <button type="submit" class="btn btn-danger">
+                                                                        <i class="fas fa-times-circle me-2"></i>Confirm Fail
+                                                                    </button>
+                                                                </div>
+                                                            </form>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            <?php endif; /* end of !has_report_submitted */ ?>
+                                                </div>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
 
-                        <!-- Worker Allocation Status Card -->
-                        <div class="col-lg-6 mb-4">
-                            <div class="card h-100">
-                                <div class="card-header bg-light">
-                                    <h5 class="card-title mb-0">
-                                        <i class="fas fa-user-hard-hat me-2"></i>Worker Allocation Status
-                                    </h5>
+                            <!-- File Preview Script for Inspection -->
+                            <script>
+                                function acceptSuggestion() {
+                                    var suggestedDate = '<?php echo $client_suggested_date; ?>';
+                                    if (confirm('Accept the suggested inspection time?\n\nSuggested Time: ' + new Date(suggestedDate).toLocaleString())) {
+                                        var form = document.createElement('form');
+                                        form.method = 'POST';
+                                        form.action = '';
+                                        var input1 = document.createElement('input');
+                                        input1.type = 'hidden';
+                                        input1.name = 'accept_client_suggestion';
+                                        input1.value = '1';
+                                        var input2 = document.createElement('input');
+                                        input2.type = 'hidden';
+                                        input2.name = 'client_suggested_date';
+                                        input2.value = suggestedDate;
+                                        form.appendChild(input1);
+                                        form.appendChild(input2);
+                                        document.body.appendChild(form);
+                                        form.submit();
+                                    }
+
+                                }
+
+                                function confirmPassInspection() {
+                                    return confirm('Mark inspection as PASSED? This will change the order status to inspection_completed.');
+                                }
+
+                                function confirmFailInspection() {
+                                    return confirm('Mark inspection as FAIL? This will change the order status to inspection_failed.');
+                                }
+
+                                function rejectSuggestion() {
+                                    var newDateTime = prompt('Propose a new inspection date and time (YYYY-MM-DD HH:MM):\n\nExample: 2026-05-01 14:30', '<?php echo date('Y-m-d H:i', strtotime('+2 days')); ?>');
+                                    if (newDateTime && newDateTime.trim() !== '') {
+                                        var datetimeRegex = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/;
+                                        if (!datetimeRegex.test(newDateTime.trim())) {
+                                            alert('Please use format: YYYY-MM-DD HH:MM (e.g., 2026-05-01 14:30)');
+                                            return;
+                                        }
+                                        var form = document.createElement('form');
+                                        form.method = 'POST';
+                                        form.action = '';
+                                        var input1 = document.createElement('input');
+                                        input1.type = 'hidden';
+                                        input1.name = 'reject_client_suggestion';
+                                        input1.value = '1';
+                                        var input2 = document.createElement('input');
+                                        input2.type = 'hidden';
+                                        input2.name = 'new_inspection_datetime';
+                                        input2.value = newDateTime.trim();
+                                        form.appendChild(input1);
+                                        form.appendChild(input2);
+                                        document.body.appendChild(form);
+                                        form.submit();
+                                    }
+                                }
+
+                                // File preview for report files
+                                var reportFileInput = document.getElementById('reportFiles');
+                                if (reportFileInput) {
+                                    reportFileInput.addEventListener('change', function(e) {
+                                        var preview = document.getElementById('filePreview');
+                                        if (preview) {
+                                            preview.innerHTML = '';
+                                            var files = e.target.files;
+                                            for (var i = 0; i < files.length; i++) {
+                                                var file = files[i];
+                                                var fileDiv = document.createElement('div');
+                                                fileDiv.className = 'd-inline-block me-2 mb-2 p-2 border rounded';
+                                                fileDiv.innerHTML = '<i class="fas fa-file me-1"></i> ' + file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
+                                                preview.appendChild(fileDiv);
+                                            }
+                                        }
+                                    });
+                                }
+                            </script>
+                        <?php endif; /* End of inspection section */ ?>
+
+                        <?php if ($status === 'preparing'): ?>
+                            <!-- Assign Constructor for Worker Allocation -->
+                            <div class="col-lg-6 mb-4">
+                                <div class="card h-100">
+                                    <div class="card-header bg-light">
+                                        <h5 class="card-title mb-0">
+                                            <i class="fas fa-hard-hat me-2"></i>Assign Constructor for Worker Allocation
+                                        </h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <?php if (!empty($order['supplierid'])):
+                                            $assigned_supplier_sql = "SELECT sname, stel, semail FROM Supplier WHERE supplierid = ?";
+                                            $assigned_supplier_stmt = mysqli_prepare($mysqli, $assigned_supplier_sql);
+                                            mysqli_stmt_bind_param($assigned_supplier_stmt, "i", $order['supplierid']);
+                                            mysqli_stmt_execute($assigned_supplier_stmt);
+                                            $assigned_supplier_res = mysqli_stmt_get_result($assigned_supplier_stmt);
+                                            $assigned_supplier = mysqli_fetch_assoc($assigned_supplier_res);
+                                            mysqli_stmt_close($assigned_supplier_stmt);
+
+                                            $status_badge = 'bg-warning';
+                                            $is_accepted = ($order['supplier_status'] === 'Accepted');
+                                            if ($is_accepted) $status_badge = 'bg-success';
+                                            if ($order['supplier_status'] === 'Rejected') $status_badge = 'bg-danger';
+                                        ?>
+                                            <div class="alert alert-info mb-3">
+                                                <strong>Assigned Constructor:</strong> <?php echo htmlspecialchars($assigned_supplier['sname']); ?>
+                                                <br><small>Status: <span class="badge <?php echo $status_badge; ?>"><?php echo htmlspecialchars($order['supplier_status'] ?? 'Pending'); ?></span></small>
+                                                <br><small>Contact: <?php echo htmlspecialchars($assigned_supplier['stel'] ?? '�X'); ?> | <?php echo htmlspecialchars($assigned_supplier['semail'] ?? '�X'); ?></small>
+                                            </div>
+
+                                            <?php if (!$is_accepted): ?>
+                                                <button type="button" class="btn btn-outline-primary btn-sm w-100" onclick="document.getElementById('supplier-assign-form').classList.toggle('d-none')">
+                                                    <i class="fas fa-exchange-alt me-2"></i>Change Constructor
+                                                </button>
+                                            <?php else: ?>
+                                                <div class="alert alert-success py-2 px-3 small mb-0">
+                                                    <i class="fas fa-lock me-2"></i>Constructor has accepted.
+                                                </div>
+                                            <?php endif; ?>
+                                        <?php endif; ?>
+
+                                        <?php if (empty($order['supplierid']) || ($order['supplier_status'] !== 'Accepted')): ?>
+                                            <div id="supplier-assign-form" class="<?php echo !empty($order['supplierid']) ? 'd-none' : ''; ?> mt-3">
+                                                <form method="post">
+                                                    <div class="mb-3">
+                                                        <label class="form-label small text-muted">Select Constructor</label>
+                                                        <select name="supplier_id" class="form-select" required>
+                                                            <option value="">-- Choose Constructor --</option>
+                                                            <?php
+                                                            $suppliers_sql = "SELECT supplierid, sname FROM Supplier ORDER BY sname ASC";
+                                                            $suppliers_res = mysqli_query($mysqli, $suppliers_sql);
+                                                            while ($s = mysqli_fetch_assoc($suppliers_res)) {
+                                                                $is_selected = false;
+                                                                if (!empty($order['supplierid'])) {
+                                                                    $is_selected = ($s['supplierid'] == $order['supplierid']);
+                                                                } else {
+                                                                    $is_selected = ($s['supplierid'] == $order['design_supplierid']);
+                                                                }
+                                                                $sel = $is_selected ? 'selected' : '';
+                                                                $label = htmlspecialchars($s['sname']);
+                                                                if ($s['supplierid'] == $order['design_supplierid']) {
+                                                                    $label .= " (Linked to Design)";
+                                                                }
+                                                                echo "<option value='{$s['supplierid']}' $sel>$label</option>";
+                                                            }
+                                                            ?>
+                                                        </select>
+                                                    </div>
+                                                    <button type="submit" name="assign_supplier" class="btn btn-primary w-100">
+                                                        <i class="fas fa-check me-2"></i>Assign Constructor
+                                                    </button>
+                                                </form>
+                                            </div>
+                                        <?php endif; ?>
+                                    </div>
                                 </div>
-                                <div class="card-body">
-                                    <?php
-                                    // Check for all workers assigned to this order
-                                    $workers_sql = "SELECT w.name, wa.status, wa.created_at 
+                            </div>
+
+                            <!-- Worker Allocation Status Card -->
+                            <div class="col-lg-6 mb-4">
+                                <div class="card h-100">
+                                    <div class="card-header bg-light">
+                                        <h5 class="card-title mb-0">
+                                            <i class="fas fa-user-hard-hat me-2"></i>Worker Allocation Status
+                                        </h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <?php
+                                        // Check for all workers assigned to this order
+                                        $workers_sql = "SELECT w.name, wa.status, wa.created_at 
                                                    FROM workerallocation wa 
                                                    JOIN Worker w ON wa.workerid = w.workerid 
                                                    WHERE wa.orderid = ? AND wa.status != 'Cancelled' 
                                                    ORDER BY wa.created_at DESC";
-                                    $workers_stmt = mysqli_prepare($mysqli, $workers_sql);
-                                    mysqli_stmt_bind_param($workers_stmt, "i", $orderid);
-                                    mysqli_stmt_execute($workers_stmt);
-                                    $workers_result = mysqli_stmt_get_result($workers_stmt);
-                                    $assigned_workers = mysqli_fetch_all($workers_result, MYSQLI_ASSOC);
-                                    mysqli_stmt_close($workers_stmt);
+                                        $workers_stmt = mysqli_prepare($mysqli, $workers_sql);
+                                        mysqli_stmt_bind_param($workers_stmt, "i", $orderid);
+                                        mysqli_stmt_execute($workers_stmt);
+                                        $workers_result = mysqli_stmt_get_result($workers_stmt);
+                                        $assigned_workers = mysqli_fetch_all($workers_result, MYSQLI_ASSOC);
+                                        mysqli_stmt_close($workers_stmt);
 
-                                    if (!empty($assigned_workers)): ?>
+                                        if (!empty($assigned_workers)): ?>
+                                            <div class="table-responsive">
+                                                <table class="table table-sm">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>Worker Name</th>
+                                                            <th>Status</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        <?php foreach ($assigned_workers as $w): ?>
+                                                            <tr>
+                                                                <td><?php echo htmlspecialchars($w['name']); ?></td>
+                                                                <td><span class="badge bg-info"><?php echo htmlspecialchars($w['status']); ?></span></td>
+                                                            </tr>
+                                                        <?php endforeach; ?>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        <?php else: ?>
+                                            <div class="alert alert-warning mb-0">
+                                                <i class="fas fa-clock me-2"></i>Waiting for contractor to allocate workers.
+                                            </div>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Order Reference Table for Placing Order -->
+                            <div class="col-12 mb-4">
+                                <div class="card h-100">
+                                    <div class="card-header bg-light">
+                                        <h5 class="card-title mb-0">
+                                            <i class="fas fa-list me-2"></i>Reference Items
+                                        </h5>
+                                    </div>
+                                    <div class="card-body">
                                         <div class="table-responsive">
-                                            <table class="table table-sm">
+                                            <table class="table table-sm table-hover">
                                                 <thead>
                                                     <tr>
-                                                        <th>Worker Name</th>
+                                                        <th>Product</th>
+                                                        <th>Category</th>
+                                                        <th>Requested Price</th>
                                                         <th>Status</th>
+                                                        <th>Color</th>
+                                                        <th>Quantity</th>
+                                                        <th>Note</th>
+                                                        <th>Action</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    <?php foreach ($assigned_workers as $w): ?>
+                                                    <?php foreach ($references as $ref): ?>
                                                         <tr>
-                                                            <td><?php echo htmlspecialchars($w['name']); ?></td>
-                                                            <td><span class="badge bg-info"><?php echo htmlspecialchars($w['status']); ?></span></td>
+                                                            <td><?php echo htmlspecialchars($ref['pname'] ?? ('Product #' . $ref['productid'])); ?>
+                                                            </td>
+                                                            <td><?php echo htmlspecialchars($ref['category'] ?? '�X'); ?></td>
+                                                            <td>HK$<?php echo number_format(isset($ref['price']) ? $ref['price'] : (isset($ref['product_price']) ? $ref['product_price'] : 0), 2); ?>
+                                                            </td>
+                                                            <td><?php echo htmlspecialchars(!empty(trim((string) ($ref['status'] ?? ''))) ? $ref['status'] : 'Pending'); ?></td>
+                                                            <td><?php echo htmlspecialchars($ref['color'] ?? '�X'); ?></td>
+                                                            <td><?php echo (isset($ref['quantity']) && $ref['quantity'] !== null && $ref['quantity'] !== '') ? (int) $ref['quantity'] : '�X'; ?></td>
+                                                            <td><?php echo htmlspecialchars($ref['note'] ?? '�X'); ?></td>
+                                                            <td>
+                                                                <?php
+                                                                // One-time placement per reference (rid)
+                                                                $pending_sql = "SELECT COUNT(*) AS cnt FROM OrderDelivery WHERE orderid = ? AND rid = ?";
+                                                                $pending_stmt = mysqli_prepare($mysqli, $pending_sql);
+                                                                mysqli_stmt_bind_param($pending_stmt, "ii", $orderid, $ref['id']);
+                                                                mysqli_stmt_execute($pending_stmt);
+                                                                $pending_res = mysqli_stmt_get_result($pending_stmt);
+                                                                $pending_row = mysqli_fetch_assoc($pending_res);
+                                                                mysqli_stmt_close($pending_stmt);
+                                                                if ($pending_row['cnt'] == 0):
+                                                                ?>
+                                                                    <form method="post" style="display:inline-block" onsubmit="this.querySelector('button[type=submit]').disabled=true; this.querySelector('button[type=submit]').textContent='Placing...';">
+                                                                        <input type="hidden" name="place_order_reference" value="1">
+                                                                        <input type="hidden" name="reference_id"
+                                                                            value="<?php echo (int) $ref['id']; ?>">
+                                                                        <button type="submit" class="btn btn-sm btn-primary">Place
+                                                                            Order</button>
+                                                                    </form>
+                                                                <?php else: ?>
+                                                                    <span class="text-muted small">Order Placed</span>
+                                                                <?php endif; ?>
+                                                            </td>
                                                         </tr>
                                                     <?php endforeach; ?>
                                                 </tbody>
                                             </table>
                                         </div>
-                                    <?php else: ?>
-                                        <div class="alert alert-warning mb-0">
-                                            <i class="fas fa-clock me-2"></i>Waiting for contractor to allocate workers.
-                                        </div>
-                                    <?php endif; ?>
-                                </div>
-                            </div>
-                        </div>
-                        <!-- Order Reference Table for Placing Order -->
-                        <div class="col-12 mb-4">
-                            <div class="card h-100">
-                                <div class="card-header bg-light">
-                                    <h5 class="card-title mb-0">
-                                        <i class="fas fa-list me-2"></i>Reference Items
-                                    </h5>
-                                </div>
-                                <div class="card-body">
-                                    <div class="table-responsive">
-                                        <table class="table table-sm table-hover">
-                                            <thead>
-                                                <tr>
-                                                    <th>Product</th>
-                                                    <th>Category</th>
-                                                    <th>Requested Price</th>
-                                                    <th>Status</th>
-                                                    <th>Color</th>
-                                                    <th>Quantity</th>
-                                                    <th>Note</th>
-                                                    <th>Action</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <?php foreach ($references as $ref): ?>
-                                                    <tr>
-                                                        <td><?php echo htmlspecialchars($ref['pname'] ?? ('Product #' . $ref['productid'])); ?>
-                                                        </td>
-                                                        <td><?php echo htmlspecialchars($ref['category'] ?? '—'); ?></td>
-                                                        <td>HK$<?php echo number_format(isset($ref['price']) ? $ref['price'] : (isset($ref['product_price']) ? $ref['product_price'] : 0), 2); ?>
-                                                        </td>
-                                                        <td><?php echo htmlspecialchars(!empty(trim((string) ($ref['status'] ?? ''))) ? $ref['status'] : 'Pending'); ?></td>
-                                                        <td><?php echo htmlspecialchars($ref['color'] ?? '—'); ?></td>
-                                                        <td><?php echo (isset($ref['quantity']) && $ref['quantity'] !== null && $ref['quantity'] !== '') ? (int) $ref['quantity'] : '—'; ?></td>
-                                                        <td><?php echo htmlspecialchars($ref['note'] ?? '—'); ?></td>
-                                                        <td>
-                                                            <?php
-                                                            // One-time placement per reference (rid)
-                                                            $pending_sql = "SELECT COUNT(*) AS cnt FROM OrderDelivery WHERE orderid = ? AND rid = ?";
-                                                            $pending_stmt = mysqli_prepare($mysqli, $pending_sql);
-                                                            mysqli_stmt_bind_param($pending_stmt, "ii", $orderid, $ref['id']);
-                                                            mysqli_stmt_execute($pending_stmt);
-                                                            $pending_res = mysqli_stmt_get_result($pending_stmt);
-                                                            $pending_row = mysqli_fetch_assoc($pending_res);
-                                                            mysqli_stmt_close($pending_stmt);
-                                                            if ($pending_row['cnt'] == 0):
-                                                                ?>
-                                                                <form method="post" style="display:inline-block" onsubmit="this.querySelector('button[type=submit]').disabled=true; this.querySelector('button[type=submit]').textContent='Placing...';">
-                                                                    <input type="hidden" name="place_order_reference" value="1">
-                                                                    <input type="hidden" name="reference_id"
-                                                                        value="<?php echo (int) $ref['id']; ?>">
-                                                                    <button type="submit" class="btn btn-sm btn-primary">Place
-                                                                        Order</button>
-                                                                </form>
-                                                            <?php else: ?>
-                                                                <span class="text-muted small">Order Placed</span>
-                                                            <?php endif; ?>
-                                                        </td>
-                                                    </tr>
-                                                <?php endforeach; ?>
-                                            </tbody>
-                                        </table>
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                        <!-- Order Delivery Section (New Box) -->
-                        <div class="col-lg-6 mb-4">
-                            <div class="card h-100">
-                                <div class="card-header bg-light">
-                                    <h5 class="card-title mb-0">
-                                        <i class="fas fa-truck me-2"></i>Product Delivery
-                                    </h5>
-                                </div>
-                                <div class="card-body">
-                                    <!-- View Mode -->
-                                    <div id="delivery-view" class="<?php echo $edit_delivery ? 'd-none' : ''; ?>">
-                                        <?php
-                                        $od_sql = "SELECT od.*, p.pname FROM OrderDelivery od JOIN Product p ON od.productid = p.productid WHERE od.orderid = ?";
-                                        $od_stmt = mysqli_prepare($mysqli, $od_sql);
-                                        mysqli_stmt_bind_param($od_stmt, "i", $orderid);
-                                        mysqli_stmt_execute($od_stmt);
-                                        $od_res = mysqli_stmt_get_result($od_stmt);
-                                        if ($od_res->num_rows > 0): ?>
-                                            <div class="table-responsive mb-3">
-                                                <table class="table table-sm table-hover">
-                                                    <thead>
-                                                        <tr>
-                                                            <th>Product</th>
-                                                            <th>Status</th>
-                                                            <th>Date</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        <?php while ($od = mysqli_fetch_assoc($od_res)): ?>
+                            <!-- Order Delivery Section (New Box) -->
+                            <div class="col-lg-6 mb-4">
+                                <div class="card h-100">
+                                    <div class="card-header bg-light">
+                                        <h5 class="card-title mb-0">
+                                            <i class="fas fa-truck me-2"></i>Product Delivery
+                                        </h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <!-- View Mode -->
+                                        <div id="delivery-view" class="<?php echo $edit_delivery ? 'd-none' : ''; ?>">
+                                            <?php
+                                            $od_sql = "SELECT od.*, p.pname FROM OrderDelivery od JOIN Product p ON od.productid = p.productid WHERE od.orderid = ?";
+                                            $od_stmt = mysqli_prepare($mysqli, $od_sql);
+                                            mysqli_stmt_bind_param($od_stmt, "i", $orderid);
+                                            mysqli_stmt_execute($od_stmt);
+                                            $od_res = mysqli_stmt_get_result($od_stmt);
+                                            if ($od_res->num_rows > 0): ?>
+                                                <div class="table-responsive mb-3">
+                                                    <table class="table table-sm table-hover">
+                                                        <thead>
                                                             <tr>
-                                                                <td><small><?php echo htmlspecialchars($od['pname']); ?>
-                                                                        (<?php echo $od['quantity']; ?>)</small></td>
-                                                                <td><span
-                                                                        class="badge bg-info"><?php echo htmlspecialchars($od['status']); ?></span>
-                                                                </td>
-                                                                <td><small><?php echo $od['deliverydate']; ?></small></td>
+                                                                <th>Product</th>
+                                                                <th>Status</th>
+                                                                <th>Date</th>
                                                             </tr>
-                                                        <?php endwhile; ?>
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        <?php else: ?>
-                                            <p class="text-muted small text-center">No delivery info yet.</p>
-                                        <?php endif; ?>
+                                                        </thead>
+                                                        <tbody>
+                                                            <?php while ($od = mysqli_fetch_assoc($od_res)): ?>
+                                                                <tr>
+                                                                    <td><small><?php echo htmlspecialchars($od['pname']); ?>
+                                                                            (<?php echo $od['quantity']; ?>)</small></td>
+                                                                    <td><span
+                                                                            class="badge bg-info"><?php echo htmlspecialchars($od['status']); ?></span>
+                                                                    </td>
+                                                                    <td><small><?php echo $od['deliverydate']; ?></small></td>
+                                                                </tr>
+                                                            <?php endwhile; ?>
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            <?php else: ?>
+                                                <p class="text-muted small text-center">No delivery info yet.</p>
+                                            <?php endif; ?>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
+                        <?php endif; ?>
+                        <!-- Proposal Preview Modal -->
+                        <div class="modal fade" id="proposalPreviewModal" tabindex="-1" aria-hidden="true">
+                            <div class="modal-dialog modal-xl modal-dialog-centered">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title"><i class="fas fa-file-alt me-2"></i>Design Proposal Preview</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal"
+                                            aria-label="Close"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <div id="proposalPreviewImageWrap" class="text-center" style="display:none;">
+                                            <img id="proposalPreviewImage" src="" alt="Design Proposal"
+                                                style="max-width:100%;max-height:70vh;border-radius:8px;" />
+                                        </div>
+                                        <div id="proposalPreviewPdfWrap" style="display:none;">
+                                            <iframe id="proposalPreviewPdf" src=""
+                                                style="width:100%;height:70vh;border:0;"></iframe>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer d-flex justify-content-between">
+                                        <div class="text-muted small">Confirm or reject after reviewing the proposal.</div>
+                                        <div class="d-flex gap-2">
+                                            <form method="post" class="m-0">
+                                                <input type="hidden" name="confirm_proposal" value="1">
+                                                <button type="submit" class="btn btn-success">
+                                                    <i class="fas fa-check me-1"></i>Accept Proposal
+                                                </button>
+                                            </form>
+                                            <form method="post" class="m-0">
+                                                <input type="hidden" name="reject_proposal" value="1">
+                                                <button type="submit" class="btn btn-danger">
+                                                    <i class="fas fa-times me-1"></i>Reject Proposal
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    <?php else: ?>
+                        <div class="alert alert-danger" role="alert">
+                            <i class="fas fa-exclamation-circle me-2"></i>
+                            <strong>Project not found.</strong>
+                            <p class="mb-0">The requested project does not exist or has been removed.</p>
                         </div>
                     <?php endif; ?>
-                    <!-- Proposal Preview Modal -->
-                    <div class="modal fade" id="proposalPreviewModal" tabindex="-1" aria-hidden="true">
-                        <div class="modal-dialog modal-xl modal-dialog-centered">
-                            <div class="modal-content">
-                                <div class="modal-header">
-                                    <h5 class="modal-title"><i class="fas fa-file-alt me-2"></i>Design Proposal Preview</h5>
-                                    <button type="button" class="btn-close" data-bs-dismiss="modal"
-                                        aria-label="Close"></button>
-                                </div>
-                                <div class="modal-body">
-                                    <div id="proposalPreviewImageWrap" class="text-center" style="display:none;">
-                                        <img id="proposalPreviewImage" src="" alt="Design Proposal"
-                                            style="max-width:100%;max-height:70vh;border-radius:8px;" />
-                                    </div>
-                                    <div id="proposalPreviewPdfWrap" style="display:none;">
-                                        <iframe id="proposalPreviewPdf" src=""
-                                            style="width:100%;height:70vh;border:0;"></iframe>
-                                    </div>
-                                </div>
-                                <div class="modal-footer d-flex justify-content-between">
-                                    <div class="text-muted small">Confirm or reject after reviewing the proposal.</div>
-                                    <div class="d-flex gap-2">
-                                        <form method="post" class="m-0">
-                                            <input type="hidden" name="confirm_proposal" value="1">
-                                            <button type="submit" class="btn btn-success">
-                                                <i class="fas fa-check me-1"></i>Accept Proposal
-                                            </button>
-                                        </form>
-                                        <form method="post" class="m-0">
-                                            <input type="hidden" name="reject_proposal" value="1">
-                                            <button type="submit" class="btn btn-danger">
-                                                <i class="fas fa-times me-1"></i>Reject Proposal
-                                            </button>
-                                        </form>
-                                    </div>
-                                </div>
-                            </div>
+
+                    <!-- Action Buttons -->
+                    <div class="d-flex justify-content-between align-items-center mt-4">
+                        <a href="Order_Management.php" class="btn btn-secondary">
+                            <i class="fas fa-arrow-left me-2"></i>Back to Project List
+                        </a>
+                    </div>
                         </div>
-                    </div>
-                <?php else: ?>
-                    <div class="alert alert-danger" role="alert">
-                        <i class="fas fa-exclamation-circle me-2"></i>
-                        <strong>Project not found.</strong>
-                        <p class="mb-0">The requested project does not exist or has been removed.</p>
-                    </div>
-                <?php endif; ?>
 
-                <!-- Action Buttons -->
-                <div class="d-flex justify-content-between align-items-center mt-4">
-                    <a href="Order_Management.php" class="btn btn-secondary">
-                        <i class="fas fa-arrow-left me-2"></i>Back to Project List
-                    </a>
-                </div>
-            </div>
+                        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
 
-            <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
-
-            <!-- Include chat widget -->
-            <?php include __DIR__ . '/../Public/chat_widget.php'; ?>
+                        <!-- Include chat widget -->
+                        <?php include __DIR__ . '/../Public/chat_widget.php'; ?>
 </body>
 
 </html>

@@ -664,7 +664,7 @@ if (isset($_POST['confirm_inspection_report'])) {
                     <div class="card">
                         <div class="card-header">
                             <h5 class="card-title mb-0">
-                                <i class="fas fa-tags me-2"></i>Product Reference Status
+                                <i class="fas fa-tags me-2"></i>Material & Product Status
                             </h5>
                         </div>
                         <div class="card-body">

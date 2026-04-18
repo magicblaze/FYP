@@ -337,8 +337,8 @@ CREATE TABLE `OrderReference` (
 INSERT INTO `OrderReference` (`orderid`, `productid`, `added_by_type`, `added_by_id`, `status`, `price`) VALUES
 (1, 1, 'client', 1, 'waiting confirm', 2000.00), 
 (1, 2, 'client', 1, 'confirmed', 800.00), 
-(2, 3, 'client', 2, 'waiting delivery', 200.00), 
-(2, 4, 'client', 2, 'completed', 800.00);
+(2, 3, 'client', 2, 'waiting confirm', 200.00), 
+(2, 4, 'client', 2, 'confirmed', 800.00);
 
 -- Table to store additional fees for each order
 CREATE TABLE `AdditionalFee` (
@@ -521,7 +521,7 @@ INSERT INTO `ChatRoomMember` (`ChatRoomMemberid`, `ChatRoomid`, `member_type`, `
 -- Message table
 CREATE TABLE `Message` (
   `messageid` int NOT NULL AUTO_INCREMENT,
-  `sender_type` ENUM('client', 'designer','manager','Contractors','supplier') NOT NULL,
+  `sender_type` ENUM('client', 'designer','manager','Contractors','supplier','system') NOT NULL,
   `sender_id` int NOT NULL,
   `content` text  NOT NULL,
   `message_type` ENUM('text', 'image', 'file', 'design', 'order') DEFAULT 'text',
@@ -834,6 +834,50 @@ CREATE TABLE IF NOT EXISTS `InspectionConfirmation` (
     FOREIGN KEY (`orderid`) REFERENCES `Order` (`orderid`) ON DELETE CASCADE,
     FOREIGN KEY (`clientid`) REFERENCES `Client` (`clientid`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+  -- Trigger: notify project chat room when order status changes
+  ALTER TABLE `Message`
+  MODIFY COLUMN `sender_type` ENUM('client', 'designer','manager','Contractors','supplier','system') NOT NULL;
+
+  DROP TRIGGER IF EXISTS `trg_order_status_chat_notify`;
+  DELIMITER $$
+  CREATE TRIGGER `trg_order_status_chat_notify`
+  AFTER UPDATE ON `Order`
+  FOR EACH ROW
+  BEGIN
+    DECLARE v_chatroom_id INT DEFAULT NULL;
+    DECLARE v_message TEXT;
+
+    IF NOT (OLD.ostatus <=> NEW.ostatus) THEN
+      -- Preferred order room name used by client flow
+      SELECT `ChatRoomid`
+        INTO v_chatroom_id
+      FROM `ChatRoom`
+      WHERE `roomname` = CONCAT('Meeting Room - Project-', NEW.`orderid`)
+      ORDER BY `ChatRoomid` DESC
+      LIMIT 1;
+
+      -- Backward-compatible room name used by manager flow
+      IF v_chatroom_id IS NULL THEN
+        SELECT `ChatRoomid`
+          INTO v_chatroom_id
+        FROM `ChatRoom`
+        WHERE `roomname` = CONCAT('order-', NEW.`orderid`)
+        ORDER BY `ChatRoomid` DESC
+        LIMIT 1;
+      END IF;
+
+      IF v_chatroom_id IS NOT NULL THEN
+        SET v_message = CONCAT(
+          ' Status has updated to ', NEW.`ostatus`
+        );
+
+        INSERT INTO `Message` (`sender_type`, `sender_id`, `content`, `message_type`, `ChatRoomid`)
+        VALUES ('system', 0, v_message, 'text', v_chatroom_id);
+      END IF;
+    END IF;
+  END$$
+  DELIMITER ;
 
 SET FOREIGN_KEY_CHECKS = 0;
 

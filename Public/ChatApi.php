@@ -254,7 +254,15 @@ try {
         default:
           $n = null; break;
       }
-      if ($n) $r['sender_name'] = $n; else $r['sender_name'] = ($r['sender_type'] ?? '') . ' ' . ($r['sender_id'] ?? '');
+      if ($n) {
+        $r['sender_name'] = $n;
+      } else {
+        $displayType = (string) ($r['sender_type'] ?? '');
+        $displayId = isset($r['sender_id']) ? (int) $r['sender_id'] : 0;
+        $r['sender_name'] = ($displayId > 0 && strtolower($displayType) !== 'system')
+          ? ($displayType . ' ' . $displayId)
+          : $displayType;
+      }
       // If messages reference an uploaded file via `fileid`, fetch its metadata and expose a compat `attachment` path
       if (!empty($r['fileid'])) {
         try {
@@ -686,8 +694,21 @@ try {
         case 'supplier': $q = $pdo->prepare('SELECT sname AS name FROM Supplier WHERE supplierid=? LIMIT 1'); break;
         default: $q = null; break;
       }
-      if ($q) { $q->execute([$sid]); $n = $q->fetchColumn(); $row['sender_name'] = $n ?: (($row['sender_type'] ?? '') . ' ' . ($row['sender_id'] ?? '')); }
-      else { $row['sender_name'] = ($row['sender_type'] ?? '') . ' ' . ($row['sender_id'] ?? ''); }
+      if ($q) {
+        $q->execute([$sid]);
+        $n = $q->fetchColumn();
+      } else {
+        $n = null;
+      }
+      if ($n) {
+        $row['sender_name'] = $n;
+      } else {
+        $displayType = (string) ($row['sender_type'] ?? '');
+        $displayId = isset($row['sender_id']) ? (int) $row['sender_id'] : 0;
+        $row['sender_name'] = ($displayId > 0 && strtolower($displayType) !== 'system')
+          ? ($displayType . ' ' . $displayId)
+          : $displayType;
+      }
     }
     // If we recorded an uploaded file id earlier, attach its id and metadata to response
     if (isset($uploadedFileId) && $uploadedFileId) {

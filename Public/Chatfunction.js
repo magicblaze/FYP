@@ -1015,7 +1015,12 @@ function initApp(config = {}) {
         if (elements.messages.querySelector('[data-mid="' + existingId + '"]')) return;
       } catch (e) {}
     }
-    const senderName = msgObj.sender_name || msgObj.sender || (msgObj.share && (msgObj.share.owner_name || msgObj.share.sender_name || msgObj.share.owner)) || (msgObj.sender_type ? (msgObj.sender_type + ' ' + (msgObj.sender_id||'')) : '');
+    const fallbackSenderName = msgObj.sender_type
+      ? (((String(msgObj.sender_type).toLowerCase() === 'system') || Number(msgObj.sender_id || 0) === 0)
+        ? String(msgObj.sender_type)
+        : (msgObj.sender_type + ' ' + (msgObj.sender_id || '')))
+      : '';
+    const senderName = msgObj.sender_name || msgObj.sender || (msgObj.share && (msgObj.share.owner_name || msgObj.share.sender_name || msgObj.share.owner)) || fallbackSenderName;
     let roomNameCandidate = '';
     let isGroup = false;
     try {

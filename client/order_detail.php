@@ -35,7 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         mysqli_stmt_bind_param($update_stmt, "ii", $orderId, $clientId);
         mysqli_stmt_execute($update_stmt);
         mysqli_stmt_close($update_stmt);
-        
+
         // Notify manager
         $notify_sql = "INSERT INTO Notification (user_type, user_id, orderid, message, type, created_at) 
                        VALUES ('manager', (SELECT managerid FROM Schedule WHERE orderid = ? LIMIT 1), ?, 'Client has accepted the inspection for Order #$orderId.', 'inspection_accepted', NOW())";
@@ -43,16 +43,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         mysqli_stmt_bind_param($notify_stmt, "ii", $orderId, $orderId);
         mysqli_stmt_execute($notify_stmt);
         mysqli_stmt_close($notify_stmt);
-        
+
         header("Location: order_detail.php?orderid=" . $orderId . "&msg=inspection_accepted");
         exit;
     }
-    
+
     // Reject inspection with suggested time
     if (isset($_POST['reject_inspection'])) {
         $suggested_date = $_POST['suggested_date'] ?? '';
         $suggested_time = $_POST['suggested_time'] ?? '';
-        
+
         if (!empty($suggested_date) && !empty($suggested_time)) {
             $suggested_datetime = $suggested_date . ' ' . $suggested_time . ':00';
             $update_sql = "UPDATE `Order` SET 
@@ -63,7 +63,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             mysqli_stmt_bind_param($update_stmt, "sii", $suggested_datetime, $orderId, $clientId);
             mysqli_stmt_execute($update_stmt);
             mysqli_stmt_close($update_stmt);
-            
+
             // Notify manager
             $notify_sql = "INSERT INTO Notification (user_type, user_id, orderid, message, type, created_at) 
                            VALUES ('manager', (SELECT managerid FROM Schedule WHERE orderid = ? LIMIT 1), ?, 'Client has suggested a new inspection time for Order #$orderId: " . date('Y-m-d H:i', strtotime($suggested_datetime)) . "', 'inspection_suggested', NOW())";
@@ -71,12 +71,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             mysqli_stmt_bind_param($notify_stmt, "ii", $orderId, $orderId);
             mysqli_stmt_execute($notify_stmt);
             mysqli_stmt_close($notify_stmt);
-            
+
             header("Location: order_detail.php?orderid=" . $orderId . "&msg=inspection_suggested");
             exit;
         }
     }
-    
+
     // REMOVED: confirm_inspection_report and confirm_project_completion - moved to Order_View.php
 }
 // ========== End Inspection Handling ==========
@@ -209,6 +209,7 @@ $scheduleStmt->execute();
 $schedules = $scheduleStmt->get_result();
 
 $referencesSql = "SELECT r.id AS orderreferenceid, r.productid, r.designid, r.added_by_type, r.added_by_id, r.created_at,
+               r.price AS reference_price, r.quantity AS reference_quantity,
                p.pname, IFNULL(p.price, 0) as product_price,
                d.designName as design_name, IFNULL(d.expect_price, 0) as design_price,
                pci.product_image, di.design_image
@@ -282,6 +283,30 @@ $products->data_seek(0);
 
 $design_cost = (float) $order['expect_price'];
 $design_total = $payment['total_design_payment'];
+$constructionCostExMaterialDisplay = max(0.0, (float) $payment['total_construction_payment'] - (float) $payment['materials_cost']);
+
+$materialCostDisplay = (float) $payment['materials_cost'];
+if ($references instanceof mysqli_result && $references->num_rows > 0) {
+    $materialFromReferences = 0.0;
+    while ($refCostRow = $references->fetch_assoc()) {
+        if (!empty($refCostRow['productid']) && !empty($refCostRow['pname'])) {
+            $unitPrice = isset($refCostRow['reference_price']) && $refCostRow['reference_price'] !== null
+                ? (float) $refCostRow['reference_price']
+                : (float) ($refCostRow['product_price'] ?? 0);
+            $qty = (isset($refCostRow['reference_quantity']) && (int) $refCostRow['reference_quantity'] > 0)
+                ? (int) $refCostRow['reference_quantity']
+                : 1;
+            $materialFromReferences += ($unitPrice * $qty);
+        }
+    }
+    if ($materialFromReferences > 0) {
+        $materialCostDisplay = $materialFromReferences;
+    }
+    $references->data_seek(0);
+}
+
+$additionalFeesDisplay = (float) ($payment['additional_fees'] ?? 0.0);
+$totalCostDisplay = $design_total + $constructionCostExMaterialDisplay + $materialCostDisplay + $commissionTotal + $additionalFeesDisplay;
 
 // Format display variables
 $budgetDisplay = $order['budget'] ?? 0;
@@ -687,16 +712,26 @@ $current_ostatus = $inspection_data['ostatus'] ?? '';
                         <span class="info-value price-highlight">$<?= number_format($design_total, 2) ?></span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label">Construction Cost:</span>
-                        <span class="info-value price-highlight">$<?= number_format($payment['total_construction_payment'], 2) ?></span>
+                        <span class="info-label">Construction Cost (Excl. Materials):</span>
+                        <span class="info-value price-highlight">$<?= number_format($constructionCostExMaterialDisplay, 2) ?></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Material Cost:</span>
+                        <span class="info-value price-highlight">$<?= number_format($materialCostDisplay, 2) ?></span>
                     </div>
                     <div class="info-row">
                         <span class="info-label">Commission:</span>
                         <span class="info-value price-highlight">$<?= number_format($commissionTotal, 2) ?></span>
                     </div>
+                    <?php if ($additionalFeesDisplay > 0): ?>
+                        <div class="info-row">
+                            <span class="info-label">Additional Fees:</span>
+                            <span class="info-value price-highlight">$<?= number_format($additionalFeesDisplay, 2) ?></span>
+                        </div>
+                    <?php endif; ?>
                     <div class="info-row" style="border-top: 2px solid #3498db; margin-top: 0.5rem; padding-top: 0.75rem;">
                         <span class="info-label">Total Cost:</span>
-                        <span class="info-value price-highlight">$<?= number_format($payment['total_amount_due'], 2) ?></span>
+                        <span class="info-value price-highlight">$<?= number_format($totalCostDisplay, 2) ?></span>
                     </div>
                 </div>
             </div>
@@ -736,7 +771,7 @@ $current_ostatus = $inspection_data['ostatus'] ?? '';
                         your payment method in your profile, then proceed.</div>
                 </div>
             <?php endif; ?>
-            
+
             <!-- Requirements Section -->
             <?php if (!empty($order['Requirements'])): ?>
                 <div class="section-title">
@@ -746,7 +781,7 @@ $current_ostatus = $inspection_data['ostatus'] ?? '';
                     <p class="mb-0"><?= htmlspecialchars($order['Requirements']) ?></p>
                 </div>
             <?php endif; ?>
-            
+
             <!-- Inspection Confirmation Section for Client (Time display only) -->
             <?php if ($msg == 'inspection_accepted'): ?>
                 <div class="alert alert-success mb-3"><i class="fas fa-check-circle me-2"></i>Inspection accepted successfully!</div>
@@ -758,138 +793,138 @@ $current_ostatus = $inspection_data['ostatus'] ?? '';
 
             <!-- Inspection Status Display - Only for time/date, not report -->
             <?php if ($inspection_status == 'pending' && $inspection_date): ?>
-            <div class="section-title">
-                <i class="fas fa-calendar-check me-2"></i>Inspection Appointment
-            </div>
-            <div class="info-card">
-                <div class="text-center mb-4">
-                    <h5>Proposed Inspection Date & Time:</h5>
-                    <h3 class="text-primary">
-                        <?php echo date('F d, Y h:i A', strtotime($inspection_date)); ?>
-                    </h3>
+                <div class="section-title">
+                    <i class="fas fa-calendar-check me-2"></i>Inspection Appointment
                 </div>
-                
-                <div class="d-flex gap-3">
-                    <form method="POST" style="flex:1">
-                        <button type="submit" name="accept_inspection" class="btn btn-success w-100" 
-                                onclick="return confirm('Accept this inspection date and time?');">
-                            <i class="fas fa-check-circle me-2"></i>Accept
-                        </button>
-                    </form>
-                    <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#suggestTimeModal">
-                        <i class="fas fa-calendar-alt me-2"></i>Suggest New Time
-                    </button>
-                </div>
-            </div>
+                <div class="info-card">
+                    <div class="text-center mb-4">
+                        <h5>Proposed Inspection Date & Time:</h5>
+                        <h3 class="text-primary">
+                            <?php echo date('F d, Y h:i A', strtotime($inspection_date)); ?>
+                        </h3>
+                    </div>
 
-            <!-- Suggest Time Modal -->
-            <div class="modal fade" id="suggestTimeModal" tabindex="-1">
-                <div class="modal-dialog">
-                    <div class="modal-content">
-                        <form method="POST">
-                            <div class="modal-header bg-warning">
-                                <h5 class="modal-title"><i class="fas fa-calendar-alt me-2"></i>Suggest New Inspection Time</h5>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                            </div>
-                            <div class="modal-body">
-                                <input type="hidden" name="reject_inspection" value="1">
-                                <div class="mb-3">
-                                    <label class="form-label fw-bold">Proposed Date</label>
-                                    <input type="date" name="suggested_date" class="form-control" 
-                                           min="<?php echo date('Y-m-d', strtotime('+1 day')); ?>" required>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label fw-bold">Proposed Time</label>
-                                    <select name="suggested_time" class="form-select" required>
-                                        <option value="">-- Select Time --</option>
-                                        <option value="09:00:00">09:00 AM</option>
-                                        <option value="10:00:00">10:00 AM</option>
-                                        <option value="11:00:00">11:00 AM</option>
-                                        <option value="12:00:00">12:00 PM</option>
-                                        <option value="13:00:00">01:00 PM</option>
-                                        <option value="14:00:00">02:00 PM</option>
-                                        <option value="15:00:00">03:00 PM</option>
-                                        <option value="16:00:00">04:00 PM</option>
-                                        <option value="17:00:00">05:00 PM</option>
-                                    </select>
-                                </div>
-                                <p class="text-muted small">The manager will review your suggestion and confirm.</p>
-                            </div>
-                            <div class="modal-footer">
-                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                                <button type="submit" class="btn btn-warning">Send Suggestion</button>
-                            </div>
+                    <div class="d-flex gap-3">
+                        <form method="POST" style="flex:1">
+                            <button type="submit" name="accept_inspection" class="btn btn-success w-100"
+                                onclick="return confirm('Accept this inspection date and time?');">
+                                <i class="fas fa-check-circle me-2"></i>Accept
+                            </button>
                         </form>
+                        <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#suggestTimeModal">
+                            <i class="fas fa-calendar-alt me-2"></i>Suggest New Time
+                        </button>
                     </div>
                 </div>
-            </div>
-            
+
+                <!-- Suggest Time Modal -->
+                <div class="modal fade" id="suggestTimeModal" tabindex="-1">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <form method="POST">
+                                <div class="modal-header bg-warning">
+                                    <h5 class="modal-title"><i class="fas fa-calendar-alt me-2"></i>Suggest New Inspection Time</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <input type="hidden" name="reject_inspection" value="1">
+                                    <div class="mb-3">
+                                        <label class="form-label fw-bold">Proposed Date</label>
+                                        <input type="date" name="suggested_date" class="form-control"
+                                            min="<?php echo date('Y-m-d', strtotime('+1 day')); ?>" required>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label fw-bold">Proposed Time</label>
+                                        <select name="suggested_time" class="form-select" required>
+                                            <option value="">-- Select Time --</option>
+                                            <option value="09:00:00">09:00 AM</option>
+                                            <option value="10:00:00">10:00 AM</option>
+                                            <option value="11:00:00">11:00 AM</option>
+                                            <option value="12:00:00">12:00 PM</option>
+                                            <option value="13:00:00">01:00 PM</option>
+                                            <option value="14:00:00">02:00 PM</option>
+                                            <option value="15:00:00">03:00 PM</option>
+                                            <option value="16:00:00">04:00 PM</option>
+                                            <option value="17:00:00">05:00 PM</option>
+                                        </select>
+                                    </div>
+                                    <p class="text-muted small">The manager will review your suggestion and confirm.</p>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                    <button type="submit" class="btn btn-warning">Send Suggestion</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
             <?php elseif ($inspection_status == 'client_suggested'): ?>
-            <div class="section-title">
-                <i class="fas fa-clock me-2"></i>Inspection Status
-            </div>
-            <div class="info-card">
-                <div class="alert alert-info mb-0">
-                    <i class="fas fa-info-circle me-2"></i>
-                    Your suggested time has been sent to the manager. Waiting for confirmation.
-                    <?php if ($client_suggested_date): ?>
-                        <br><small>Suggested: <?php echo date('F d, Y h:i A', strtotime($client_suggested_date)); ?></small>
-                    <?php endif; ?>
+                <div class="section-title">
+                    <i class="fas fa-clock me-2"></i>Inspection Status
                 </div>
-            </div>
-            
+                <div class="info-card">
+                    <div class="alert alert-info mb-0">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Your suggested time has been sent to the manager. Waiting for confirmation.
+                        <?php if ($client_suggested_date): ?>
+                            <br><small>Suggested: <?php echo date('F d, Y h:i A', strtotime($client_suggested_date)); ?></small>
+                        <?php endif; ?>
+                    </div>
+                </div>
+
             <?php elseif ($inspection_status == 'accepted' && $inspection_date): ?>
-            <div class="section-title">
-                <i class="fas fa-check-circle me-2"></i>Inspection Confirmed
-            </div>
-            <div class="info-card">
-                <div class="alert alert-success mb-0">
-                    <i class="fas fa-check-circle me-2"></i>
-                    Inspection scheduled for: <strong><?php echo date('F d, Y h:i A', strtotime($inspection_date)); ?></strong>
+                <div class="section-title">
+                    <i class="fas fa-check-circle me-2"></i>Inspection Confirmed
                 </div>
-            </div>
-            
+                <div class="info-card">
+                    <div class="alert alert-success mb-0">
+                        <i class="fas fa-check-circle me-2"></i>
+                        Inspection scheduled for: <strong><?php echo date('F d, Y h:i A', strtotime($inspection_date)); ?></strong>
+                    </div>
+                </div>
+
             <?php elseif ($inspection_status == 'rejected' && $inspection_date): ?>
-            <div class="section-title">
-                <i class="fas fa-calendar-alt me-2"></i>Inspection Rescheduled
-            </div>
-            <div class="info-card">
-                <div class="text-center mb-4">
-                    <h5>Manager Proposed New Inspection Date & Time:</h5>
-                    <h3 class="text-warning">
-                        <?php echo date('F d, Y h:i A', strtotime($inspection_date)); ?>
-                    </h3>
+                <div class="section-title">
+                    <i class="fas fa-calendar-alt me-2"></i>Inspection Rescheduled
                 </div>
-                
-                <div class="d-flex gap-3">
-                    <form method="POST" style="flex:1">
-                        <button type="submit" name="accept_inspection" class="btn btn-success w-100" 
+                <div class="info-card">
+                    <div class="text-center mb-4">
+                        <h5>Manager Proposed New Inspection Date & Time:</h5>
+                        <h3 class="text-warning">
+                            <?php echo date('F d, Y h:i A', strtotime($inspection_date)); ?>
+                        </h3>
+                    </div>
+
+                    <div class="d-flex gap-3">
+                        <form method="POST" style="flex:1">
+                            <button type="submit" name="accept_inspection" class="btn btn-success w-100"
                                 onclick="return confirm('Accept this inspection date and time?');">
-                            <i class="fas fa-check-circle me-2"></i>Accept
+                                <i class="fas fa-check-circle me-2"></i>Accept
+                            </button>
+                        </form>
+                        <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#suggestTimeModal">
+                            <i class="fas fa-calendar-alt me-2"></i>Suggest New Time
                         </button>
-                    </form>
-                    <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#suggestTimeModal">
-                        <i class="fas fa-calendar-alt me-2"></i>Suggest New Time
-                    </button>
+                    </div>
                 </div>
-            </div>
             <?php endif; ?>
-            
+
             <!-- REMOVED: Inspection Report Section - Moved to Order_View.php -->
 
             <!-- References Section -->
             <?php if ($references->num_rows > 0): ?>
                 <div class="section-title">
-                    <i class="fas fa-link me-2"></i>Product References 
+                    <i class="fas fa-link me-2"></i>Product & Material 
                 </div>
                 <div class="info-card">
                     <?php
-                    $referencesTotal = 0;
                     while ($ref = $references->fetch_assoc()):
                         if (!empty($ref['productid']) && !empty($ref['pname'])):
-                            $price = (float) ($ref['product_price'] ?? 0);
-                            $referencesTotal += $price;
-                            ?>
+                            $qty = (isset($ref['reference_quantity']) && (int) $ref['reference_quantity'] > 0)
+                                ? (int) $ref['reference_quantity']
+                                : 1;
+                    ?>
                             <div class="info-row">
                                 <div class="info-label" style="display:flex;align-items:center;gap:8px;">
                                     <?php
@@ -904,17 +939,12 @@ $current_ostatus = $inspection_data['ostatus'] ?? '';
                                         echo '<div style="width:36px;height:36px;border-radius:6px;background:#f1f3f5;border:1px solid #ddd;display:flex;align-items:center;justify-content:center;font-size:0.7rem;color:#888;">IMG</div>';
                                     }
                                     ?>
-                                    <span><i class="fas fa-box me-2"></i><?= htmlspecialchars($ref['pname']) ?></span>
-                                </div>
-                                <div class="info-value">
-                                    <span class="price-highlight">$<?= number_format($price, 2) ?></span>
+                                    <span><i class="fas fa-box me-2"></i><?= htmlspecialchars($ref['pname']) ?><?= $qty > 1 ? ' x' . $qty : '' ?></span>
                                 </div>
                             </div>
-                            <?php
+                        <?php
                         elseif (!empty($ref['designid']) && !empty($ref['design_name'])):
-                            $dprice = (float) ($ref['design_price'] ?? 0);
-                            $referencesTotal += $dprice;
-                            ?>
+                        ?>
                             <div class="info-row">
                                 <div class="info-label" style="display:flex;align-items:center;gap:8px;">
                                     <?php
@@ -931,113 +961,11 @@ $current_ostatus = $inspection_data['ostatus'] ?? '';
                                     ?>
                                     <span><i class="fas fa-image me-2"></i><?= htmlspecialchars($ref['design_name']) ?> (Design Reference)</span>
                                 </div>
-                                <div class="info-value">
-                                    <span class="price-highlight">$<?= number_format($dprice, 2) ?></span>
-                                </div>
                             </div>
-                            <?php
+                    <?php
                         endif;
                     endwhile;
                     ?>
-                    <?php if ($referencesTotal > 0): ?>
-                        <div class="info-row" style="border-top: 2px solid #3498db; margin-top: 0.5rem; padding-top: 0.75rem;">
-                            <span class="info-label"><strong>References Total:</strong></span>
-                            <span class="info-value price-highlight"><strong>$<?= number_format($referencesTotal, 2) ?></strong></span>
-                        </div>
-                    <?php endif; ?>
-                </div>
-            <?php endif; ?>
-
-            <!-- Products/Materials Section -->
-            <div class="section-title">
-                <i class="fas fa-box me-2"></i>References products & materials
-            </div>
-            <?php if ($products->num_rows > 0): ?>
-                <table class="product-table">
-                    <thead>
-                        <tr>
-                            <th>Product Name</th>
-                            <th>Color</th>
-                            <th>Category</th>
-                            <th>Unit Price</th>
-                            <th>Quantity</th>
-                            <th>Total</th>
-                            <th>Status</th>
-                            <th>Assigned Manager</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php while ($product = $products->fetch_assoc()): ?>
-                            <tr>
-                                <td>
-                                    <strong><?= htmlspecialchars($product['pname']) ?></strong>
-                                    <?php if (!empty($product['description'])): ?>
-                                        <br><small class="text-muted"><?= htmlspecialchars(substr($product['description'], 0, 60)) ?></small>
-                                    <?php endif; ?>
-                                </td>
-                                <td>
-                                    <?php
-                                    $colorName = $product['color'] ?? 'N/A';
-                                    $colorHex = match (strtolower($colorName)) {
-                                        'red' => '#FF0000',
-                                        'blue' => '#0000FF',
-                                        'green' => '#008000',
-                                        'yellow' => '#FFFF00',
-                                        'black' => '#000000',
-                                        'white' => '#FFFFFF',
-                                        'grey' => '#808080',
-                                        'gray' => '#808080',
-                                        'orange' => '#FFA500',
-                                        'purple' => '#800080',
-                                        'pink' => '#FFC0CB',
-                                        'brown' => '#A52A2A',
-                                        'beige' => '#F5F5DC',
-                                        'navy' => '#000080',
-                                        'silver' => '#C0C0C0',
-                                        'gold' => '#FFD700',
-                                        'cyan' => '#00FFFF',
-                                        'magenta' => '#FF00FF',
-                                        default => '#CCCCCC'
-                                    };
-                                    ?>
-                                    <div style="display: inline-block; width: 30px; height: 30px; background-color: <?= $colorHex ?>; border: 1px solid #999; border-radius: 4px;" title="<?= htmlspecialchars($colorName) ?>"></div>
-                                </td>
-                                <td><?= htmlspecialchars($product['category']) ?></td>
-                                <td class="price-highlight">$<?= number_format((float) $product['price'], 2) ?></td>
-                                <td><?= (int) $product['quantity'] ?></td>
-                                <td class="price-highlight">$<?= number_format((float) $product['price'] * $product['quantity'], 2) ?></td>
-                                <td>
-                                    <?php
-                                    $status = $product['status'] ?? 'Pending';
-                                    $statusClass = match ($status) {
-                                        'Completed' => 'badge bg-success',
-                                        'In Progress' => 'badge bg-info',
-                                        'Pending' => 'badge bg-warning',
-                                        'Cancelled' => 'badge bg-danger',
-                                        default => 'badge bg-secondary'
-                                    };
-                                    ?>
-                                    <span class="<?= $statusClass ?>"><?= htmlspecialchars($status) ?></span>
-                                </td>
-                                <td>
-                                    <span class="manager-badge">
-                                        <i class="fas fa-user-tie me-1"></i><?= htmlspecialchars($product['manager_name']) ?>
-                                    </span>
-                                </td>
-                            </tr>
-                        <?php endwhile; ?>
-                    </tbody>
-                </table>
-                <div class="info-card">
-                    <div class="info-row">
-                        <span class="info-label">Products Total:</span>
-                        <span class="info-value price-highlight">$<?= number_format($productTotal, 2) ?></span>
-                    </div>
-                </div>
-            <?php else: ?>
-                <div class="empty-message">
-                    <i class="fas fa-box"></i>
-                    <p>No products or materials assigned yet.</p>
                 </div>
             <?php endif; ?>
 
@@ -1054,16 +982,20 @@ $current_ostatus = $inspection_data['ostatus'] ?? '';
                         </button>
                     </form>
                     <script>
-                        (function(){
+                        (function() {
                             const rejectBtn = document.getElementById('reject_btn');
                             const form = document.getElementById('client_action_form');
                             const reasonInput = document.getElementById('reject_reason_input');
                             if (rejectBtn && form && reasonInput) {
-                                rejectBtn.addEventListener('click', function(){
+                                rejectBtn.addEventListener('click', function() {
                                     const r = prompt('Please enter a reason for rejection (optional):');
                                     if (r === null) return;
                                     reasonInput.value = r || 'Client rejected the proposal';
-                                    const hidden = document.createElement('input'); hidden.type='hidden'; hidden.name='reject_design'; hidden.value='1'; form.appendChild(hidden);
+                                    const hidden = document.createElement('input');
+                                    hidden.type = 'hidden';
+                                    hidden.name = 'reject_design';
+                                    hidden.value = '1';
+                                    form.appendChild(hidden);
                                     form.submit();
                                 });
                             }
@@ -1084,12 +1016,14 @@ $current_ostatus = $inspection_data['ostatus'] ?? '';
             modal.innerHTML = '<div style="max-width:90%;max-height:90%;"><img src="../uploads/designed_Picture/' + filename + '" style="max-width:100%;max-height:100%;border-radius:8px;" onclick="this.parentElement.parentElement.remove();"><p style="color:white;text-align:center;margin-top:1rem;cursor:pointer;" onclick="this.parentElement.parentElement.remove();">Click to close</p></div>';
             document.body.appendChild(modal);
         }
-        
+
         function viewImage(imageUrl) {
             const modal = document.createElement('div');
             modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.9);display:flex;align-items:center;justify-content:center;z-index:9999;cursor:pointer;';
             modal.innerHTML = '<div style="max-width:90%;max-height:90%;"><img src="' + imageUrl + '" style="max-width:100%;max-height:100%;border-radius:8px;"><p style="color:white;text-align:center;margin-top:1rem;">Click anywhere to close</p></div>';
-            modal.onclick = function() { this.remove(); };
+            modal.onclick = function() {
+                this.remove();
+            };
             document.body.appendChild(modal);
         }
     </script>
