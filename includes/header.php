@@ -113,6 +113,7 @@ $baseUrl = $scheme . '://' . $host . $appRoot;
         <?php if ($role === 'client'): ?>
           <li class=""><a class="nav-link" href="<?= $baseUrl ?>/client/order_history.php">Project History</a></li>
         <?php endif; ?>
+        <li class=""><a class="nav-link" href="<?= $baseUrl ?>/public/payment_history.php">Payment History</a></li>
         <li class=""><a class="nav-link" href="<?= $baseUrl ?>/logout.php">Logout</a></li>
           <li class=""><a class="nav-link" href="<?= $baseUrl ?>/my_likes.php">Liked</a></li>
           <li class="nav-item">
