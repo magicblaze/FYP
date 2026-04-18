@@ -16,10 +16,18 @@ $supplier_id = $user['supplierid'];
 
 // Handle Accept/Reject Assignment
 if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["handle_assignment"])) {
-    $order_id = intval($_POST["order_id"]);
-    $action = $_POST["action"]; // 'Accepted' or 'Rejected'
+    $order_id = intval($_POST["order_id"] ?? 0);
+    $action_raw = trim((string)($_POST["action"] ?? ''));
+    $action_lower = strtolower($action_raw);
+    $action = '';
+    if ($action_lower === 'accepted') {
+        $action = 'Accepted';
+    } elseif ($action_lower === 'rejected') {
+        $action = 'Rejected';
+    }
 
-    if (in_array($action, ['Accepted', 'Rejected'])) {
+    if ($order_id > 0 && $action !== '') {
+        $exec_ok = false;
         if ($action === 'Accepted') {
             $update_sql = "UPDATE `Order` 
                            SET supplier_status = ?,
@@ -29,19 +37,29 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["handle_assignment"]))
                                END
                            WHERE orderid = ? AND supplierid = ?";
             $update_stmt = mysqli_prepare($mysqli, $update_sql);
-            mysqli_stmt_bind_param($update_stmt, "sii", $action, $order_id, $supplier_id);
-            mysqli_stmt_execute($update_stmt);
-            mysqli_stmt_close($update_stmt);
+            if ($update_stmt) {
+                mysqli_stmt_bind_param($update_stmt, "sii", $action, $order_id, $supplier_id);
+                $exec_ok = mysqli_stmt_execute($update_stmt);
+                mysqli_stmt_close($update_stmt);
+            }
         } else {
             $update_sql = "UPDATE `Order` SET supplier_status = ? WHERE orderid = ? AND supplierid = ?";
             $update_stmt = mysqli_prepare($mysqli, $update_sql);
-            mysqli_stmt_bind_param($update_stmt, "sii", $action, $order_id, $supplier_id);
-            mysqli_stmt_execute($update_stmt);
-            mysqli_stmt_close($update_stmt);
+            if ($update_stmt) {
+                mysqli_stmt_bind_param($update_stmt, "sii", $action, $order_id, $supplier_id);
+                $exec_ok = mysqli_stmt_execute($update_stmt);
+                mysqli_stmt_close($update_stmt);
+            }
         }
-        header("Location: ProjectWorkerManagement.php");
-        exit();
+
+        if ($exec_ok) {
+            header("Location: ProjectWorkerManagement.php?msg=assignment_updated");
+            exit();
+        }
     }
+
+    header("Location: ProjectWorkerManagement.php?msg=assignment_failed");
+    exit();
 }
 
 // Handle inspection recovery (inspection_failed -> Construction begins)
@@ -467,6 +485,20 @@ mysqli_stmt_close($workers_stmt);
                 Failed to update project status. Please try again.
             </div>
         <?php endif; ?>
+
+        <?php if (isset($_GET['msg']) && $_GET['msg'] == 'assignment_updated'): ?>
+            <div class="alert alert-success mb-4">
+                <i class="fas fa-check-circle me-2"></i>
+                Assignment status updated successfully.
+            </div>
+        <?php endif; ?>
+
+        <?php if (isset($_GET['msg']) && $_GET['msg'] == 'assignment_failed'): ?>
+            <div class="alert alert-danger mb-4">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                Unable to update assignment status. Please try again.
+            </div>
+        <?php endif; ?>
         <!-- Statistics Section -->
         <div class="row mb-4">
             <div class="col-md-3">
@@ -715,19 +747,27 @@ mysqli_stmt_close($workers_stmt);
                             </div>
                             <div class="modal-footer bg-white">
                                 <?php if ($project['supplier_status'] === 'Pending'): ?>
-                                    <form method="POST" class="w-100 d-flex justify-content-between align-items-center">
+                                    <div class="w-100 d-flex justify-content-between align-items-center">
                                         <div class="text-muted small"><i class="fas fa-info-circle me-1"></i> Please review all details before making a decision.</div>
-                                        <div>
-                                            <input type="hidden" name="handle_assignment" value="1">
-                                            <input type="hidden" name="order_id" value="<?= $project['orderid'] ?>">
-                                            <button type="submit" name="action" value="Rejected" class="btn btn-outline-danger me-2 px-4">
-                                                <i class="fas fa-times me-1"></i> Reject
-                                            </button>
-                                            <button type="submit" name="action" value="Accepted" class="btn btn-success px-4">
-                                                <i class="fas fa-check me-1"></i> Accept
-                                            </button>
+                                        <div class="d-flex">
+                                            <form method="POST" action="ProjectWorkerManagement.php" class="me-2">
+                                                <input type="hidden" name="handle_assignment" value="1">
+                                                <input type="hidden" name="order_id" value="<?= $project['orderid'] ?>">
+                                                <input type="hidden" name="action" value="Rejected">
+                                                <button type="submit" class="btn btn-outline-danger px-4">
+                                                    <i class="fas fa-times me-1"></i> Reject
+                                                </button>
+                                            </form>
+                                            <form method="POST" action="ProjectWorkerManagement.php">
+                                                <input type="hidden" name="handle_assignment" value="1">
+                                                <input type="hidden" name="order_id" value="<?= $project['orderid'] ?>">
+                                                <input type="hidden" name="action" value="Accepted">
+                                                <button type="submit" class="btn btn-success px-4">
+                                                    <i class="fas fa-check me-1"></i> Accept
+                                                </button>
+                                            </form>
                                         </div>
-                                    </form>
+                                    </div>
                                 <?php else: ?>
                                     <button type="button" class="btn btn-secondary px-4" data-bs-dismiss="modal">Close</button>
                                     <?php if ($project['supplier_status'] === 'Accepted'): ?>

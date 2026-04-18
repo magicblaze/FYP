@@ -197,24 +197,85 @@ function updateOrderReferenceRows($mysqli, $orderid, $refPayload, $hasRefColor, 
         $newColor = isset($payload['color']) ? trim((string) $payload['color']) : null;
         $newQty = isset($payload['quantity']) && $payload['quantity'] !== '' ? (int) $payload['quantity'] : null;
         $newNote = isset($payload['note']) ? trim((string) $payload['note']) : null;
-        $statusSql = $markWaitingConfirm ? ", status = 'waiting confirm'" : '';
+
+        // Fetch existing row to detect value changes and derive status transitions.
+        $existingCols = "price, note, status";
+        if ($hasRefColor) {
+            $existingCols .= ", color";
+        }
+        if ($hasRefQuantity) {
+            $existingCols .= ", quantity";
+        }
+
+        $existingRef = null;
+        $existing_ref_sql = "SELECT {$existingCols} FROM `OrderReference` WHERE id = ? AND orderid = ? LIMIT 1";
+        $existing_ref_stmt = mysqli_prepare($mysqli, $existing_ref_sql);
+        if ($existing_ref_stmt) {
+            mysqli_stmt_bind_param($existing_ref_stmt, "ii", $rid, $orderid);
+            mysqli_stmt_execute($existing_ref_stmt);
+            $existing_ref_result = mysqli_stmt_get_result($existing_ref_stmt);
+            $existingRef = $existing_ref_result ? mysqli_fetch_assoc($existing_ref_result) : null;
+            mysqli_stmt_close($existing_ref_stmt);
+        }
+        if (!$existingRef) {
+            continue;
+        }
+
+        $oldPrice = isset($existingRef['price']) && $existingRef['price'] !== null ? (float) $existingRef['price'] : null;
+        $oldNote = isset($existingRef['note']) ? trim((string) $existingRef['note']) : null;
+        $oldColor = $hasRefColor ? (isset($existingRef['color']) ? trim((string) $existingRef['color']) : null) : null;
+        $oldQty = $hasRefQuantity && isset($existingRef['quantity']) && $existingRef['quantity'] !== null ? (int) $existingRef['quantity'] : null;
+
+        $priceChanged = ($newPrice === null && $oldPrice !== null)
+            || ($newPrice !== null && $oldPrice === null)
+            || ($newPrice !== null && $oldPrice !== null && abs($newPrice - $oldPrice) > 0.00001);
+        $noteChanged = ((string) ($newNote ?? '')) !== ((string) ($oldNote ?? ''));
+        $colorChanged = $hasRefColor ? (((string) ($newColor ?? '')) !== ((string) ($oldColor ?? ''))) : false;
+        $qtyChanged = $hasRefQuantity ? ((int) ($newQty ?? 0) !== (int) ($oldQty ?? 0)) : false;
+        $hasValueChanged = $priceChanged || $noteChanged || $colorChanged || $qtyChanged;
+
+        $currentStatus = strtolower(trim((string) ($existingRef['status'] ?? '')));
+        $statusToSet = null;
+        if ($markWaitingConfirm) {
+            $statusToSet = 'waiting confirm';
+        } elseif ($hasValueChanged && in_array($currentStatus, ['confirmed', 'approved'], true)) {
+            $statusToSet = 'edited';
+        }
+
+        $statusSql = $statusToSet !== null ? ", status = ?" : '';
 
         if ($hasRefColor && $hasRefQuantity) {
             $update_ref_sql = "UPDATE `OrderReference` SET price = ?, color = ?, quantity = ?, note = ?{$statusSql} WHERE id = ? AND orderid = ?";
             $update_ref_stmt = mysqli_prepare($mysqli, $update_ref_sql);
-            mysqli_stmt_bind_param($update_ref_stmt, "dsisii", $newPrice, $newColor, $newQty, $newNote, $rid, $orderid);
+            if ($statusToSet !== null) {
+                mysqli_stmt_bind_param($update_ref_stmt, "dsissii", $newPrice, $newColor, $newQty, $newNote, $statusToSet, $rid, $orderid);
+            } else {
+                mysqli_stmt_bind_param($update_ref_stmt, "dsisii", $newPrice, $newColor, $newQty, $newNote, $rid, $orderid);
+            }
         } elseif ($hasRefColor) {
             $update_ref_sql = "UPDATE `OrderReference` SET price = ?, color = ?, note = ?{$statusSql} WHERE id = ? AND orderid = ?";
             $update_ref_stmt = mysqli_prepare($mysqli, $update_ref_sql);
-            mysqli_stmt_bind_param($update_ref_stmt, "dssii", $newPrice, $newColor, $newNote, $rid, $orderid);
+            if ($statusToSet !== null) {
+                mysqli_stmt_bind_param($update_ref_stmt, "dsssii", $newPrice, $newColor, $newNote, $statusToSet, $rid, $orderid);
+            } else {
+                mysqli_stmt_bind_param($update_ref_stmt, "dssii", $newPrice, $newColor, $newNote, $rid, $orderid);
+            }
         } elseif ($hasRefQuantity) {
             $update_ref_sql = "UPDATE `OrderReference` SET price = ?, quantity = ?, note = ?{$statusSql} WHERE id = ? AND orderid = ?";
             $update_ref_stmt = mysqli_prepare($mysqli, $update_ref_sql);
-            mysqli_stmt_bind_param($update_ref_stmt, "disii", $newPrice, $newQty, $newNote, $rid, $orderid);
+            if ($statusToSet !== null) {
+                mysqli_stmt_bind_param($update_ref_stmt, "dissii", $newPrice, $newQty, $newNote, $statusToSet, $rid, $orderid);
+            } else {
+                mysqli_stmt_bind_param($update_ref_stmt, "disii", $newPrice, $newQty, $newNote, $rid, $orderid);
+            }
         } else {
             $update_ref_sql = "UPDATE `OrderReference` SET price = ?, note = ?{$statusSql} WHERE id = ? AND orderid = ?";
             $update_ref_stmt = mysqli_prepare($mysqli, $update_ref_sql);
-            mysqli_stmt_bind_param($update_ref_stmt, "dsii", $newPrice, $newNote, $rid, $orderid);
+            if ($statusToSet !== null) {
+                mysqli_stmt_bind_param($update_ref_stmt, "dssii", $newPrice, $newNote, $statusToSet, $rid, $orderid);
+            } else {
+                mysqli_stmt_bind_param($update_ref_stmt, "dsii", $newPrice, $newNote, $rid, $orderid);
+            }
         }
 
         mysqli_stmt_execute($update_ref_stmt);

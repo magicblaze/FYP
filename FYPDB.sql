@@ -895,7 +895,8 @@ CREATE TABLE IF NOT EXISTS `InspectionConfirmation` (
         INTO v_chatroom_id
       FROM `Message`
       WHERE `message_type` = 'order'
-        AND TRIM(`content`) = CAST(NEW.`orderid` AS CHAR)
+        AND TRIM(`content`) REGEXP '^[0-9]+$'
+        AND CAST(TRIM(`content`) AS UNSIGNED) = NEW.`orderid`
       ORDER BY `messageid` DESC
       LIMIT 1;
 
