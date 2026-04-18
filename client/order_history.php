@@ -90,12 +90,19 @@ $clientData = $clientStmt->get_result()->fetch_assoc();
 
 // Fetch orders for the logged-in client
 $sql = "SELECT o.orderid, o.odate, o.Requirements, o.ostatus, o.deposit, o.final_payment,
-         d.designid, d.expect_price, d.tag, dz.dname,
-         c.budget
+     d.designid, d.expect_price, d.tag, dz.dname,
+     c.budget,
+     IFNULL(op.total_cost, 0) * ((IFNULL(op.design_fee_designer_1st_pct, 0) + IFNULL(op.design_fee_designer_2nd_pct, 0) + IFNULL(op.design_fee_manager_1st_pct, 0) + IFNULL(op.design_fee_manager_2nd_pct, 0)) / 100) AS total_design_payment,
+     IFNULL(op.total_cost, 0) * (IFNULL(op.construction_main_pct, 0) / 100) AS total_construction_payment,
+     IFNULL(op.total_cost, 0) * (IFNULL(op.materials_pct, 0) / 100) AS materials_cost,
+     IFNULL(op.total_cost, 0) * (IFNULL(op.commission_1st_pct, 0) / 100) AS commission_1st,
+     IFNULL(op.total_cost, 0) * (IFNULL(op.commission_final_pct, 0) / 100) AS commission_final,
+     (SELECT IFNULL(SUM(af.amount), 0) FROM AdditionalFee af WHERE af.orderid = o.orderid) AS additional_fees
         FROM `Order` o
         JOIN Design d ON o.designid = d.designid
         JOIN Designer dz ON d.designerid = dz.designerid
         JOIN Client c ON o.clientid = c.clientid
+    LEFT JOIN OrderPayment op ON o.payment_id = op.payment_id
         WHERE o.clientid = ?
         ORDER BY o.odate DESC";
 $stmt = $mysqli->prepare($sql);
@@ -483,22 +490,10 @@ if (!empty($_GET['msg'])) {
                     $img_result = $img_stmt->get_result()->fetch_assoc();
                     $img_filename = $img_result ? $img_result['image_filename'] : 'placeholder.jpg';
 
-                    // Compute aggregated cost: design price + references + additional fees
+                    // Compute display costs, aligned with order_detail.php
                     $orderId = (int) $order['orderid'];
                     $design_price = isset($order['expect_price']) ? (float) $order['expect_price'] : 0.0;
                     $final_payment = isset($order['final_payment']) ? (float) $order['final_payment'] : 0.0;
-
-                    // Sum additional fees
-                    $fees_total = 0.0;
-                    $fees_sql = "SELECT IFNULL(SUM(amount),0) as sum_fees FROM AdditionalFee WHERE orderid = ?";
-                    $fees_stmt = $mysqli->prepare($fees_sql);
-                    if ($fees_stmt) {
-                        $fees_stmt->bind_param("i", $orderId);
-                        $fees_stmt->execute();
-                        $fees_row = $fees_stmt->get_result()->fetch_assoc();
-                        $fees_total = isset($fees_row['sum_fees']) ? (float) $fees_row['sum_fees'] : 0.0;
-                        $fees_stmt->close();
-                    }
 
                     // Sum product references (use reference price if set, otherwise product.price), quantity-aware
                     $refs_total = 0.0;
@@ -509,6 +504,7 @@ if (!empty($_GET['msg'])) {
                                  FROM OrderReference orr
                                  LEFT JOIN Product p ON orr.productid = p.productid
                                  WHERE orr.orderid = ?
+                                                                     AND orr.productid IS NOT NULL
                                    AND (orr.status IS NULL OR LOWER(TRIM(orr.status)) <> 'rejected')";
                     $refs_stmt = $mysqli->prepare($refs_sql);
                     if ($refs_stmt) {
@@ -520,7 +516,17 @@ if (!empty($_GET['msg'])) {
                     }
 
                     $deposit = isset($order['deposit']) ? (float) $order['deposit'] : 0.0;
-                    $expected_cost = $design_price + $fees_total;
+                    $additionalFeesDisplay = isset($order['additional_fees']) ? (float) $order['additional_fees'] : 0.0;
+                    $expected_cost = $design_price + $additionalFeesDisplay;
+
+                    $design_total = isset($order['total_design_payment']) ? (float) $order['total_design_payment'] : $design_price;
+                    $totalConstructionPayment = isset($order['total_construction_payment']) ? (float) $order['total_construction_payment'] : 0.0;
+                    $materialsAllocated = isset($order['materials_cost']) ? (float) $order['materials_cost'] : 0.0;
+                    $constructionCostExMaterial = max(0.0, $totalConstructionPayment - $materialsAllocated);
+                    $materialCostDisplay = ($refs_total > 0) ? $refs_total : $materialsAllocated;
+                    $commissionTotal = (isset($order['commission_1st']) ? (float) $order['commission_1st'] : 0.0)
+                        + (isset($order['commission_final']) ? (float) $order['commission_final'] : 0.0);
+                    $actual_cost = $design_total + $constructionCostExMaterial + $materialCostDisplay + $commissionTotal + $additionalFeesDisplay;
 
                     $proposalSubmittedStatuses = [
                         'reviewing design proposal',
@@ -543,7 +549,7 @@ if (!empty($_GET['msg'])) {
                     ];
                     $showActualPrice = in_array($statusLower, $proposalSubmittedStatuses, true);
                     $display_price_label = $showActualPrice ? 'Actual price' : 'Expected cost';
-                    $display_price_value = $showActualPrice ? ($expected_cost + $refs_total) : $expected_cost;
+                    $display_price_value = $showActualPrice ? $actual_cost : $expected_cost;
                     
                     // Calculate final payment amount (final payment + references)
                     $final_payment_amount = $final_payment + $refs_total;

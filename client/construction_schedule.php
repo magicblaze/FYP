@@ -90,14 +90,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                 mysqli_stmt_close($construction_stmt);
 
                 if ($construction_paid) {
-                    $message = "Construction schedule has been updated and accepted. Construction has been scheduled on " . date('F d, Y', strtotime($pending_version['construction_start_date'])) . ".";
-                    
-                    // Update order status to 'In construction'
-                    $order_update = "UPDATE `Order` SET ostatus = 'In construction' WHERE orderid = ?";
-                    $order_stmt = mysqli_prepare($mysqli, $order_update);
-                    mysqli_stmt_bind_param($order_stmt, "i", $order_id);
-                    mysqli_stmt_execute($order_stmt);
-                    mysqli_stmt_close($order_stmt);
+                    $message = "Construction schedule has been updated and accepted. Start date is " . date('F d, Y', strtotime($pending_version['construction_start_date'])) . ".";
                     
                     // Regenerate CSRF token and redirect to prevent resubmission
                     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));

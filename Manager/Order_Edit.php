@@ -602,6 +602,20 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         header("Location: Order_Edit.php?id=" . $orderid);
         exit();
     }
+
+    if (isset($_POST['start_construction'])) {
+        $current_status = strtolower(trim((string)($order['ostatus'] ?? '')));
+        if (in_array($current_status, ['waiting for start construction', 'waiting start construction'], true)) {
+            $start_sql = "UPDATE `Order` SET ostatus = 'In construction' WHERE orderid = ?";
+            $start_stmt = mysqli_prepare($mysqli, $start_sql);
+            mysqli_stmt_bind_param($start_stmt, "i", $orderid);
+            mysqli_stmt_execute($start_stmt);
+            mysqli_stmt_close($start_stmt);
+        }
+        header("Location: Order_Edit.php?id=" . $orderid);
+        exit();
+    }
+
     if (isset($_POST['update_status'])) {
         $new_status = mysqli_real_escape_string($mysqli, $_POST['ostatus'] ?? '');
         $order_finish_date = mysqli_real_escape_string($mysqli, $_POST['OrderFinishDate'] ?? '');
@@ -2644,7 +2658,24 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                             </script>
                         <?php endif; /* End of inspection section */ ?>
 
-                        <?php if ($status === 'preparing' || $status === 'waiting for start construction'): ?>
+                        <?php if ($status === 'preparing' || $status === 'waiting for start construction' || $status === 'waiting start construction'): ?>
+                            <?php if ($status === 'waiting for start construction' || $status === 'waiting start construction'): ?>
+                                <div class="col-12 mb-4">
+                                    <div class="card border-success">
+                                        <div class="card-header bg-success bg-opacity-10 d-flex justify-content-between align-items-center">
+                                            <h5 class="card-title mb-0"><i class="fas fa-play me-2"></i>Construction Start</h5>
+                                        </div>
+                                        <div class="card-body">
+                                            <p class="text-muted mb-3">All pre-construction checks are done. You can start construction now.</p>
+                                            <form method="post" onsubmit="return confirm('Start construction now?');">
+                                                <button type="submit" name="start_construction" class="btn btn-success">
+                                                    <i class="fas fa-play-circle me-2"></i>Start Construction
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                            <?php endif; ?>
                             <!-- Assign Constructor for Worker Allocation -->
                             <div class="col-lg-6 mb-4">
                                 <div class="card h-100">
