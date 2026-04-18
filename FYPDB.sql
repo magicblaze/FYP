@@ -87,7 +87,7 @@ INSERT INTO `Manager` (`managerid`,`mname`,`mtel`,`memail`,`mpassword`,`remember
 (1, 'Jeff Wong', 12312312, 'abcdef123@gmail.com', 'manager12345',NULL),
 (2, 'Apple Chan', 12301230, '1234567@gmail.com', '12345678',NULL);
 
--- Contractors table
+-- this table is not using anymore, but we keep it for preventing error
 CREATE TABLE `Contractors` (
   `contractorid` int NOT NULL AUTO_INCREMENT,
   `cname` varchar(255) NOT NULL,
@@ -259,8 +259,8 @@ CREATE TABLE `Order` (
   `supplierid` int DEFAULT NULL,
   `supplier_status` ENUM('Pending', 'Accepted', 'Rejected') DEFAULT 'Pending',
   `reassignment_status` ENUM('Accepted', 'Pending', 'Rejected') DEFAULT Null,
-   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`orderid`),
   KEY `clientid_pk_idx` (`clientid`),
   KEY `designid_pk_idx` (`designid`),
@@ -293,7 +293,6 @@ CREATE TABLE `OrderPayment` (
   `inspection_pct` DECIMAL(5,2) NOT NULL DEFAULT 5.00,
   `contractor_pct` DECIMAL(5,2) NOT NULL DEFAULT 30.00,
   `commission_final_pct` DECIMAL(5,2) NOT NULL DEFAULT 5.00,
-  
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   
@@ -374,7 +373,7 @@ CREATE TABLE `UserLike` (
   `user_id` INT NOT NULL,
   `item_type` VARCHAR(16) NOT NULL,
   `item_id` INT NOT NULL,
-   `note` TEXT DEFAULT NULL,
+  `note` TEXT DEFAULT NULL,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY `ux_user_item` (`user_type`, `user_id`, `item_type`, `item_id`),
   KEY `item_idx` (`item_type`, `item_id`)
@@ -444,7 +443,7 @@ INSERT INTO `OrderDelivery`
 (1, 1, 10, 1, '2026-01-13', 'Pending', 1, 'Grey',1),
 (2, 2, 20, 1, '2026-01-23', 'Shipped', 1, 'Brown',2);
 
--- Order_Contractors table
+-- this table is not using anymore, but we keep it for preventing error
 CREATE TABLE `Order_Contractors` (
   `order_Contractorid` int NOT NULL AUTO_INCREMENT,
   `contractorid` int NOT NULL,

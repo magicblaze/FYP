@@ -222,20 +222,6 @@ $designer_stats = mysqli_fetch_assoc($designer_stats_result);
                 </div>
             </div>
         </div>
-
-
-        <!-- Quick Action Links -->
-        <div class="col-md-4">
-            <div class="card text-center">
-                <div class="card-body">
-                    <i class="fas fa-calendar-alt fa-2x text-info mb-2"></i>
-                    <h6 class="card-title">Schedule</h6>
-                    <a href="/FYP/project_management.php" class="btn btn-sm btn-info">
-                        <i class="fas fa-arrow-right me-1"></i>View Schedule
-                    </a>
-                </div>
-            </div>
-        </div>
         </div>
     </main>
 
