@@ -39,6 +39,20 @@ if (mysqli_num_rows($check_order_result) == 0) {
 }
 mysqli_stmt_close($check_order_stmt);
 
+// Get order details once so calculations and validations can use the same budget value
+$order_sql = "SELECT o.*, c.cname as client_name FROM `Order` o JOIN `Client` c ON o.clientid = c.clientid WHERE o.orderid = ?";
+$order_stmt = mysqli_prepare($mysqli, $order_sql);
+mysqli_stmt_bind_param($order_stmt, "i", $order_id);
+mysqli_stmt_execute($order_stmt);
+$order_info = mysqli_fetch_assoc(mysqli_stmt_get_result($order_stmt));
+mysqli_stmt_close($order_stmt);
+
+if (!$order_info) {
+    die("Order not found");
+}
+
+$project_budget = floatval($order_info['budget'] ?? 0);
+
 // Initialize variables
 $error_message = '';
 $success_message = '';
@@ -51,8 +65,21 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['batch_update'])) {
         $total += floatval($p);
     }
 
-    if ($total > 100.01) {
-        $error_message = "Error: Total percentage cannot exceed 100%. Current total: " . number_format($total, 1) . "%";
+    $fee_total_for_validation = 0.0;
+    $fee_total_sql = "SELECT IFNULL(SUM(amount), 0) AS total_fee FROM `AdditionalFee` WHERE orderid = ?";
+    $fee_total_stmt = mysqli_prepare($mysqli, $fee_total_sql);
+    mysqli_stmt_bind_param($fee_total_stmt, "i", $order_id);
+    mysqli_stmt_execute($fee_total_stmt);
+    $fee_total_row = mysqli_fetch_assoc(mysqli_stmt_get_result($fee_total_stmt));
+    mysqli_stmt_close($fee_total_stmt);
+    $fee_total_for_validation = floatval($fee_total_row['total_fee'] ?? 0);
+
+    $fee_percent_for_validation = $project_budget > 0 ? (($fee_total_for_validation / $project_budget) * 100) : 0;
+    $max_worker_percent = max(0, 100 - $fee_percent_for_validation);
+
+    if ($total > $max_worker_percent + 0.01) {
+        $error_message = "Error: Worker percentage cannot exceed " . number_format($max_worker_percent, 1) . "%. " .
+            "Current worker total: " . number_format($total, 1) . "%, fee portion: " . number_format($fee_percent_for_validation, 1) . "%.";
     } else {
         mysqli_begin_transaction($mysqli);
         try {
@@ -91,18 +118,62 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['batch_update'])) {
 
 // Handle ADDITION of custom commission/fee
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_fee'])) {
-    $fee_name = mysqli_real_escape_string($mysqli, $_POST['fee_name']);
-    $fee_amount = floatval($_POST['fee_amount']);
-    $fee_description = mysqli_real_escape_string($mysqli, $_POST['fee_description']);
+    $fee_name = trim($_POST['fee_name'] ?? '');
+    $fee_input_type = $_POST['fee_input_type'] ?? 'amount';
+    $fee_amount = floatval($_POST['fee_amount'] ?? 0);
+    $fee_percent = floatval($_POST['fee_percent'] ?? 0);
+    $fee_description = trim($_POST['fee_description'] ?? '');
 
-    if (empty($fee_name) || $fee_amount <= 0) {
+    if ($fee_input_type === 'percent') {
+        if ($project_budget <= 0) {
+            $error_message = "Cannot use percentage fee because project budget is 0.";
+        } elseif ($fee_percent <= 0 || $fee_percent > 100) {
+            $error_message = "Please provide a valid fee percentage between 0 and 100.";
+        } else {
+            $fee_amount = ($project_budget * $fee_percent) / 100;
+            $percent_note = "Rate: " . number_format($fee_percent, 2) . "% of budget";
+            $fee_description = $fee_description === '' ? $percent_note : ($percent_note . " | " . $fee_description);
+        }
+    }
+
+    if (empty($error_message) && (empty($fee_name) || $fee_amount <= 0)) {
         $error_message = "Please provide a valid fee name and amount.";
-    } else {
+    }
+
+    if (empty($error_message)) {
+        // Remaining budget for new fee = budget - worker allocation amount - existing fees
+        $worker_pct_sql = "SELECT IFNULL(SUM(percentage), 0) AS total_pct FROM `workerallocation` WHERE orderid = ?";
+        $worker_pct_stmt = mysqli_prepare($mysqli, $worker_pct_sql);
+        mysqli_stmt_bind_param($worker_pct_stmt, "i", $order_id);
+        mysqli_stmt_execute($worker_pct_stmt);
+        $worker_pct_row = mysqli_fetch_assoc(mysqli_stmt_get_result($worker_pct_stmt));
+        mysqli_stmt_close($worker_pct_stmt);
+
+        $existing_fee_sql = "SELECT IFNULL(SUM(amount), 0) AS total_fee FROM `AdditionalFee` WHERE orderid = ?";
+        $existing_fee_stmt = mysqli_prepare($mysqli, $existing_fee_sql);
+        mysqli_stmt_bind_param($existing_fee_stmt, "i", $order_id);
+        mysqli_stmt_execute($existing_fee_stmt);
+        $existing_fee_row = mysqli_fetch_assoc(mysqli_stmt_get_result($existing_fee_stmt));
+        mysqli_stmt_close($existing_fee_stmt);
+
+        $allocated_worker_percent = floatval($worker_pct_row['total_pct'] ?? 0);
+        $allocated_worker_budget = ($project_budget * $allocated_worker_percent) / 100;
+        $existing_fee_total = floatval($existing_fee_row['total_fee'] ?? 0);
+        $remaining_for_new_fee = $project_budget - $allocated_worker_budget - $existing_fee_total;
+
+        if ($remaining_for_new_fee <= 0) {
+            $error_message = "Cannot add fee. Remaining Budget is $0.00.";
+        } elseif ($fee_amount > ($remaining_for_new_fee + 0.00001)) {
+            $error_message = "Fee amount exceeds Remaining Budget. Max allowed: $" . number_format($remaining_for_new_fee, 2) . ".";
+        }
+    }
+
+    if (empty($error_message)) {
         $insert_fee_sql = "INSERT INTO `AdditionalFee` (orderid, fee_name, amount, description) VALUES (?, ?, ?, ?)";
         $insert_fee_stmt = mysqli_prepare($mysqli, $insert_fee_sql);
         mysqli_stmt_bind_param($insert_fee_stmt, "isds", $order_id, $fee_name, $fee_amount, $fee_description);
         if (mysqli_stmt_execute($insert_fee_stmt)) {
-            $success_message = "Custom fee '$fee_name' added successfully!";
+            $success_message = "Custom fee '$fee_name' added successfully (" . number_format($fee_amount, 2) . ").";
         } else {
             $error_message = "Failed to add custom fee.";
         }
@@ -122,13 +193,6 @@ if (isset($_POST['delete_fee'])) {
         $error_message = "Failed to remove fee.";
     }
 }
-
-// Get order details
-$order_sql = "SELECT o.*, c.cname as client_name FROM `Order` o JOIN `Client` c ON o.clientid = c.clientid WHERE o.orderid = ?";
-$order_stmt = mysqli_prepare($mysqli, $order_sql);
-mysqli_stmt_bind_param($order_stmt, "i", $order_id);
-mysqli_stmt_execute($order_stmt);
-$order_info = mysqli_fetch_assoc(mysqli_stmt_get_result($order_stmt));
 
 // Get currently allocated workers
 $allocated_sql = "SELECT w.*, wa.allocation_id, wa.status as allocation_status, wa.percentage 
@@ -157,6 +221,11 @@ $total_extra_fees = 0;
 foreach ($additional_fees as $fee) {
     $total_extra_fees += $fee['amount'];
 }
+
+$total_extra_fee_percent = $project_budget > 0 ? (($total_extra_fees / $project_budget) * 100) : 0;
+$max_worker_percent = max(0, 100 - $total_extra_fee_percent);
+$remaining_percent = max(0, 100 - $total_allocated_percent - $total_extra_fee_percent);
+$remaining_budget = max(0, $project_budget - (($project_budget * $total_allocated_percent) / 100) - $total_extra_fees);
 ?>
 
 <!DOCTYPE html>
@@ -211,8 +280,9 @@ foreach ($additional_fees as $fee) {
 
         .chart-container {
             position: relative;
-            height: 280px;
+            height: 340px;
             width: 100%;
+            padding: 22px 8px;
         }
 
         .percent-input {
@@ -263,6 +333,53 @@ foreach ($additional_fees as $fee) {
         .table thead th {
             color: #000 !important;
         }
+
+        .summary-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+            margin-bottom: 6px;
+        }
+
+        .summary-label {
+            font-size: 0.875rem;
+            color: #212529;
+            white-space: nowrap;
+        }
+
+        .summary-value {
+            font-size: 0.875rem;
+            font-weight: 700;
+            text-align: right;
+            min-width: 110px;
+        }
+
+        .summary-fee-names {
+            white-space: normal;
+            word-break: break-word;
+            line-height: 1.35;
+            max-width: 62%;
+        }
+
+        .summary-fee-label {
+            color: #6c757d;
+            font-size: 0.82rem;
+            padding-left: 10px;
+        }
+
+        .summary-value-stack {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            min-width: 120px;
+            line-height: 1.2;
+        }
+
+        .summary-subvalue {
+            font-size: 0.8rem;
+            color: #6c757d;
+        }
     </style>
 </head>
 
@@ -299,23 +416,46 @@ foreach ($additional_fees as $fee) {
                     </div>
                     <div class="card bg-light border-0 p-3 mt-3">
                         <h6 class="small text-muted mb-2">Summary Info</h6>
-                        <div class="d-flex justify-content-between mb-1">
-                            <span class="small">Total Budget:</span>
-                            <span
-                                class="small fw-bold text-success">$<?= number_format(floatval($order_info['budget'] ?? 0), 2) ?></span>
+                        <div class="summary-row">
+                            <span class="summary-label">Total Budget:</span>
+                            <span class="summary-value text-success">$<?= number_format(floatval($order_info['budget'] ?? 0), 2) ?></span>
                         </div>
-                        <div class="d-flex justify-content-between mb-1">
-                            <span class="small">Total Workers:</span>
-                            <span class="small fw-bold"><?= count($allocated_workers) ?></span>
+                        <div class="summary-row">
+                            <span class="summary-label">Total Workers:</span>
+                            <span class="summary-value"><?= count($allocated_workers) ?></span>
                         </div>
-                        <div class="d-flex justify-content-between mb-1">
-                            <span class="small">Remaining Budget:</span>
-                            <span class="small fw-bold" id="remainingPercent" class="mb-0 text-primary">0.0%</span>
-                            <small id="remainingBudget" class="text-muted">$0.00</small>
+                        <div class="summary-row">
+                            <span class="summary-label">Remaining Budget:</span>
+                            <span class="summary-value-stack">
+                                <span class="summary-value text-primary"
+                                    id="remainingPercent"><?= number_format($remaining_percent, 1) ?>%</span>
+                                <small id="remainingBudget" class="summary-subvalue"><?= '$' . number_format($remaining_budget, 2) ?></small>
+                            </span>
                         </div>
-                        <div class="d-flex justify-content-between mb-1">
-                            <span class="small">Extra Fees:</span>
-                            <span class="small fw-bold text-warning">$<?= number_format($total_extra_fees, 2) ?></span>
+                        <div class="summary-row">
+                            <span class="summary-label">Fee Items:</span>
+                            <span class="summary-value text-warning"><?= !empty($additional_fees) ? count($additional_fees) : 0 ?></span>
+                        </div>
+                        <?php if (!empty($additional_fees)): ?>
+                            <?php foreach ($additional_fees as $fee): ?>
+                                <div class="summary-row">
+                                    <span class="summary-label summary-fee-label"><?= htmlspecialchars((string)($fee['fee_name'] ?? 'Fee')) ?>:</span>
+                                    <span class="summary-value text-warning">$<?= number_format((float)($fee['amount'] ?? 0), 2) ?></span>
+                                </div>
+                            <?php endforeach; ?>
+                        <?php else: ?>
+                            <div class="summary-row">
+                                <span class="summary-label summary-fee-label">None</span>
+                                <span class="summary-value text-warning">$0.00</span>
+                            </div>
+                        <?php endif; ?>
+                        <div class="summary-row">
+                            <span class="summary-label">Fees Total:</span>
+                            <span class="summary-value text-warning">$<?= number_format($total_extra_fees, 2) ?></span>
+                        </div>
+                        <div class="summary-row">
+                            <span class="summary-label">Fee Share %:</span>
+                            <span class="summary-value text-warning"><?= number_format($total_extra_fee_percent, 1) ?>%</span>
                         </div>
                     </div>
                 </div>
@@ -410,20 +550,38 @@ foreach ($additional_fees as $fee) {
                     <div class="row">
                         <!-- Left side of section: Form -->
                         <div class="col-md-4 border-end">
-                            <form method="POST" class="bg-light p-3 rounded">
+                            <form method="POST" id="addFeeForm" class="bg-light p-3 rounded" onsubmit="return validateFeeForm()">
                                 <div class="mb-2">
                                     <label class="small fw-bold text-muted">Fee Name</label>
                                     <input type="text" name="fee_name" class="form-control form-control-sm"
                                         placeholder="e.g. Special Bonus" required>
                                 </div>
                                 <div class="mb-2">
+                                    <label class="small fw-bold text-muted">Input Type</label>
+                                    <select name="fee_input_type" id="feeInputType" class="form-select form-select-sm"
+                                        onchange="updateFeeInputMode()">
+                                        <option value="amount" selected>Amount ($)</option>
+                                        <option value="percent">Percentage (%)</option>
+                                    </select>
+                                </div>
+                                <div class="mb-2" id="feeAmountGroup">
                                     <label class="small fw-bold text-muted">Amount ($)</label>
                                     <div class="input-group input-group-sm">
                                         <span class="input-group-text">$</span>
-                                        <input type="number" name="fee_amount" class="form-control" placeholder="0.00"
-                                            step="0.01" required>
+                                        <input type="number" id="feeAmountInput" name="fee_amount" class="form-control"
+                                            placeholder="0.00" step="0.01" min="0.01" required>
                                     </div>
                                 </div>
+                                <div class="mb-2" id="feePercentGroup" style="display: none;">
+                                    <label class="small fw-bold text-muted">Percentage (%)</label>
+                                    <div class="input-group input-group-sm">
+                                        <input type="number" id="feePercentInput" name="fee_percent" class="form-control"
+                                            placeholder="0.0" step="0.1" min="0.1" max="100" oninput="updateFeePreview()">
+                                        <span class="input-group-text">%</span>
+                                    </div>
+                                </div>
+                                <div id="feePreviewText" class="small text-muted mb-2"></div>
+                                <div class="small text-muted mb-2">Remaining Budget for new fee: <strong><?= '$' . number_format($remaining_budget, 2) ?></strong></div>
                                 <div class="mb-3">
                                     <label class="small fw-bold text-muted">Description</label>
                                     <textarea name="fee_description" class="form-control form-control-sm" rows="2"
@@ -445,8 +603,12 @@ foreach ($additional_fees as $fee) {
                                                         <div class="d-flex justify-content-between align-items-center mb-1">
                                                             <span class="fw-bold small text-truncate"
                                                                 title="<?= htmlspecialchars($fee['fee_name']) ?>"><?= htmlspecialchars($fee['fee_name']) ?></span>
-                                                            <span
-                                                                class="text-primary small fw-bold">$<?= number_format($fee['amount'], 2) ?></span>
+                                                            <span class="text-primary small fw-bold">
+                                                                $<?= number_format($fee['amount'], 2) ?>
+                                                                <?php if ($project_budget > 0): ?>
+                                                                    <small class="text-muted">(<?= number_format(($fee['amount'] / $project_budget) * 100, 1) ?>%)</small>
+                                                                <?php endif; ?>
+                                                            </span>
                                                         </div>
                                                         <?php if (!empty($fee['description'])): ?>
                                                             <div class="fee-desc"><?= htmlspecialchars($fee['description']) ?></div>
@@ -464,7 +626,7 @@ foreach ($additional_fees as $fee) {
                                         <?php endforeach; ?>
                                     </div>
                                 <?php else: ?>
-                                    <p class="text-center text-muted py-5 small">No extra fees added yet. Use the form on
+                                    <p class="text-center text-muted py-5 small">No custom fees added yet. Use the form on
                                         the left to add commissions or other costs.</p>
                                 <?php endif; ?>
                             </div>
@@ -477,8 +639,17 @@ foreach ($additional_fees as $fee) {
 
     <script>
         const workers = <?= json_encode($allocated_workers) ?>;
+        const feeItems = <?= json_encode(array_map(function($fee) {
+            return [
+                'name' => (string)($fee['fee_name'] ?? 'Fee'),
+                'amount' => (float)($fee['amount'] ?? 0)
+            ];
+        }, $additional_fees)) ?>;
         const projectBudget = <?= floatval($order_info['budget'] ?? 0) ?>;
         const additionalFeesTotal = <?= floatval($total_extra_fees) ?>;
+        const additionalFeesPercent = projectBudget > 0 ? (additionalFeesTotal / projectBudget) * 100 : 0;
+        const maxWorkerPercent = Math.max(0, 100 - additionalFeesPercent);
+        const remainingBudgetForNewFee = <?= floatval($remaining_budget) ?>;
         const additionalFeesCount = <?= count($additional_fees) ?>;
         const hasAdditionalFees = additionalFeesCount > 0;
         let chart;
@@ -492,18 +663,18 @@ foreach ($additional_fees as $fee) {
             const workerPercentages = workers.map(w => parseFloat(w.percentage) || 0);
             const workerTotalPercent = workerPercentages.reduce((a, b) => a + b, 0);
             const workerBudgetData = workerPercentages.map(p => (projectBudget * p) / 100);
+            const feeLabels = feeItems.map(f => (f.name || 'Fee'));
+            const feeData = feeItems.map(f => parseFloat(f.amount) || 0);
             const allocatedBudget = workerBudgetData.reduce((a, b) => a + b, 0);
-            const chartLabels = workers.map(w => w.name).concat(['Unallocated']);
-            const chartData = workerBudgetData.concat([Math.max(0, projectBudget - allocatedBudget)]);
+            const unallocatedBudget = Math.max(0, projectBudget - allocatedBudget - additionalFeesTotal);
+            const chartLabels = workers.map(w => w.name).concat(['Unallocated']).concat(feeLabels);
+            const chartData = workerBudgetData.concat([unallocatedBudget]).concat(feeData);
             const chartColors = [
                 '#3498db', '#2ecc71', '#f1c40f', '#e74c3c', '#9b59b6', '#1abc9c', '#f39c12', '#d35400', '#7f8c8d'
             ].slice(0, workers.length).concat(['#ecf0f1']);
 
-            if (hasAdditionalFees && additionalFeesTotal > 0) {
-                chartLabels.push('Additional Fees');
-                chartData.push(additionalFeesTotal);
-                chartColors.push('#e67e22');
-            }
+            const feePalette = ['#e67e22', '#d35400', '#f39c12', '#c0392b', '#16a085', '#8e44ad'];
+            feeLabels.forEach((_, i) => chartColors.push(feePalette[i % feePalette.length]));
 
             const data = {
                 labels: chartLabels,
@@ -520,13 +691,21 @@ foreach ($additional_fees as $fee) {
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    layout: {
+                        padding: {
+                            left: 56,
+                            right: 56,
+                            top: 24,
+                            bottom: 24
+                        }
+                    },
                     plugins: {
                         legend: { display: false },
                         datalabels: {
                             color: '#2c3e50',
                             anchor: 'end',
                             align: 'end',
-                            offset: 6,
+                            offset: 3,
                             clamp: true,
                             font: { weight: '600', size: 10 },
                             formatter: (value, context) => {
@@ -555,8 +734,8 @@ foreach ($additional_fees as $fee) {
                     let finalVal = defaultValue;
 
                     // Cap to remaining percentage
-                    if (otherTotal + finalVal > 100) {
-                        finalVal = Math.max(0, 100 - otherTotal);
+                    if (otherTotal + finalVal > maxWorkerPercent) {
+                        finalVal = Math.max(0, maxWorkerPercent - otherTotal);
                     }
 
                     input.value = finalVal.toFixed(1);
@@ -571,8 +750,8 @@ foreach ($additional_fees as $fee) {
             const currentTotal = calculateOtherTotal(id);
             let newVal = parseFloat(val);
 
-            if (currentTotal + newVal > 100) {
-                newVal = 100 - currentTotal;
+            if (currentTotal + newVal > maxWorkerPercent) {
+                newVal = maxWorkerPercent - currentTotal;
                 if (newVal < 0) newVal = 0;
                 document.querySelector(`.worker-slider[data-id="${id}"]`).value = newVal;
             }
@@ -586,8 +765,8 @@ foreach ($additional_fees as $fee) {
             const currentTotal = calculateOtherTotal(id);
             let newVal = parseFloat(val) || 0;
 
-            if (currentTotal + newVal > 100) {
-                newVal = 100 - currentTotal;
+            if (currentTotal + newVal > maxWorkerPercent) {
+                newVal = maxWorkerPercent - currentTotal;
                 if (newVal < 0) newVal = 0;
                 document.querySelector(`.percent-input[data-id="${id}"]`).value = newVal.toFixed(1);
             }
@@ -620,7 +799,7 @@ foreach ($additional_fees as $fee) {
             const remainingDisplay = document.getElementById('remainingPercent');
             const saveBtn = document.getElementById('saveBtn');
 
-            if (total > 100.01) {
+            if (total > maxWorkerPercent + 0.01) {
                 remainingDisplay.classList.add('limit-reached');
                 saveBtn.disabled = true;
             } else {
@@ -629,10 +808,9 @@ foreach ($additional_fees as $fee) {
             }
 
             const allocatedBudget = workerBudgetData.reduce((a, b) => a + b, 0);
-            workerBudgetData.push(Math.max(0, projectBudget - allocatedBudget));
-            if (hasAdditionalFees && additionalFeesTotal > 0) {
-                workerBudgetData.push(additionalFeesTotal);
-            }
+            workerBudgetData.push(Math.max(0, projectBudget - allocatedBudget - additionalFeesTotal));
+            const feeData = feeItems.map(f => parseFloat(f.amount) || 0);
+            workerBudgetData.push(...feeData);
             chart.data.datasets[0].data = workerBudgetData;
             chart.update();
             updateRemaining(total);
@@ -642,13 +820,71 @@ foreach ($additional_fees as $fee) {
             if (total === undefined) {
                 total = Array.from(document.querySelectorAll('.percent-input')).reduce((a, b) => a + (parseFloat(b.value) || 0), 0);
             }
-            const remaining = (100 - total).toFixed(1);
+            const remaining = (100 - total - additionalFeesPercent).toFixed(1);
             document.getElementById('remainingPercent').innerText = remaining + '%';
-            const remainingBudgetValue = Math.max(0, (projectBudget * (100 - total)) / 100);
+            const remainingBudgetValue = Math.max(0, projectBudget - ((projectBudget * total) / 100) - additionalFeesTotal);
             document.getElementById('remainingBudget').innerText = formatCurrency(remainingBudgetValue);
         }
 
-        window.onload = initChart;
+        function updateFeeInputMode() {
+            const type = document.getElementById('feeInputType').value;
+            const amountGroup = document.getElementById('feeAmountGroup');
+            const amountInput = document.getElementById('feeAmountInput');
+            const percentInput = document.getElementById('feePercentInput');
+            const percentGroup = document.getElementById('feePercentGroup');
+
+            if (type === 'percent') {
+                amountGroup.style.display = 'none';
+                percentGroup.style.display = '';
+                percentInput.required = true;
+                amountInput.required = false;
+                amountInput.value = '';
+            } else {
+                amountGroup.style.display = '';
+                percentGroup.style.display = 'none';
+                percentInput.required = false;
+                percentInput.value = '';
+                amountInput.required = true;
+            }
+            updateFeePreview();
+        }
+
+        function updateFeePreview() {
+            const preview = document.getElementById('feePreviewText');
+            const type = document.getElementById('feeInputType').value;
+            if (type !== 'percent') {
+                preview.innerText = '';
+                return;
+            }
+            const percent = parseFloat(document.getElementById('feePercentInput').value) || 0;
+            const amount = (projectBudget * percent) / 100;
+            preview.innerText = 'Preview: ' + percent.toFixed(1) + '% of budget = ' + formatCurrency(amount);
+        }
+
+        function validateFeeForm() {
+            const type = document.getElementById('feeInputType').value;
+            const amountInput = document.getElementById('feeAmountInput');
+            const percentInput = document.getElementById('feePercentInput');
+
+            let feeAmount = 0;
+            if (type === 'percent') {
+                const percent = parseFloat(percentInput.value) || 0;
+                feeAmount = (projectBudget * percent) / 100;
+            } else {
+                feeAmount = parseFloat(amountInput.value) || 0;
+            }
+
+            if (feeAmount > (remainingBudgetForNewFee + 0.00001)) {
+                alert('Fee amount exceeds Remaining Budget. Max allowed: ' + formatCurrency(remainingBudgetForNewFee));
+                return false;
+            }
+            return true;
+        }
+
+        window.onload = function() {
+            initChart();
+            updateFeeInputMode();
+        };
     </script>
 </body>
 
