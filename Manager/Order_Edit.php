@@ -774,98 +774,68 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         mysqli_stmt_bind_param($confirm_stmt, "si", $confirm_status, $orderid);
 
         if (mysqli_stmt_execute($confirm_stmt)) {
-            // Create or reuse order-specific chat room and post an order notification message
+            // Reuse an existing project room and post an order notification message.
             try {
                 $roomId = 0;
-                $roomname = sprintf('order-%d', $orderid);
-                $chkRoom = $mysqli->prepare("SELECT ChatRoomid FROM ChatRoom WHERE roomname = ? LIMIT 1");
-                if ($chkRoom) {
-                    $chkRoom->bind_param('s', $roomname);
-                    $chkRoom->execute();
-                    $rr = $chkRoom->get_result();
-                    $existing = $rr ? $rr->fetch_assoc() : null;
-                    $chkRoom->close();
-                    if ($existing && !empty($existing['ChatRoomid'])) {
-                        $roomId = (int) $existing['ChatRoomid'];
+                $orderContent = (string) $orderid;
+
+                // 1) Prefer room mapped by existing order message.
+                $roomByOrderMsg = $mysqli->prepare("SELECT m.ChatRoomid FROM Message m INNER JOIN ChatRoom cr ON cr.ChatRoomid = m.ChatRoomid WHERE m.message_type = 'order' AND TRIM(m.content) = ? ORDER BY m.messageid DESC LIMIT 1");
+                if ($roomByOrderMsg) {
+                    $roomByOrderMsg->bind_param('s', $orderContent);
+                    $roomByOrderMsg->execute();
+                    $mapped = $roomByOrderMsg->get_result()->fetch_assoc();
+                    $roomByOrderMsg->close();
+                    if ($mapped && !empty($mapped['ChatRoomid'])) {
+                        $roomId = (int) $mapped['ChatRoomid'];
                     }
                 }
+
+                // 2) Fallback to project meeting room name.
                 if (!$roomId) {
-                    $insRoom = $mysqli->prepare("INSERT INTO ChatRoom (roomname,description,room_type,created_by_type,created_by_id) VALUES (?,?,?,?,?)");
-                    if ($insRoom) {
-                        $desc = 'Order room for order #' . $orderid;
-                        $room_type = 'group';
-                        $created_by_type = 'manager';
-                        $insRoom->bind_param('ssssi', $roomname, $desc, $room_type, $created_by_type, $user_id);
-                        $insRoom->execute();
-                        $roomId = $insRoom->insert_id;
-                        $insRoom->close();
+                    $meetingRoomName = sprintf('Meeting Room - Project-%d', $orderid);
+                    $chkMeetingRoom = $mysqli->prepare("SELECT ChatRoomid FROM ChatRoom WHERE roomname = ? ORDER BY ChatRoomid DESC LIMIT 1");
+                    if ($chkMeetingRoom) {
+                        $chkMeetingRoom->bind_param('s', $meetingRoomName);
+                        $chkMeetingRoom->execute();
+                        $meeting = $chkMeetingRoom->get_result()->fetch_assoc();
+                        $chkMeetingRoom->close();
+                        if ($meeting && !empty($meeting['ChatRoomid'])) {
+                            $roomId = (int) $meeting['ChatRoomid'];
+                        }
+                    }
+                }
+
+                // 3) Legacy fallback: old order room if it already exists (do not create).
+                if (!$roomId) {
+                    $legacyRoomName = sprintf('order-%d', $orderid);
+                    $chkLegacyRoom = $mysqli->prepare("SELECT ChatRoomid FROM ChatRoom WHERE roomname = ? ORDER BY ChatRoomid DESC LIMIT 1");
+                    if ($chkLegacyRoom) {
+                        $chkLegacyRoom->bind_param('s', $legacyRoomName);
+                        $chkLegacyRoom->execute();
+                        $legacy = $chkLegacyRoom->get_result()->fetch_assoc();
+                        $chkLegacyRoom->close();
+                        if ($legacy && !empty($legacy['ChatRoomid'])) {
+                            $roomId = (int) $legacy['ChatRoomid'];
+                        }
                     }
                 }
 
                 if ($roomId) {
-                    // ensure client and manager are members; also try to add designer if we can find one
-                    $clientMemberId = isset($order['clientid']) ? (int) $order['clientid'] : 0;
-                    $designerMemberId = null;
-                    // attempt to fetch designer id from Design if order has designid
-                    if (!empty($order['designid'])) {
-                        $dstmt = $mysqli->prepare('SELECT designerid FROM Design WHERE designid = ? LIMIT 1');
-                        if ($dstmt) {
-                            $dstmt->bind_param('i', $order['designid']);
-                            $dstmt->execute();
-                            $dr = $dstmt->get_result()->fetch_assoc();
-                            $dstmt->close();
-                            if ($dr && !empty($dr['designerid']))
-                                $designerMemberId = (int) $dr['designerid'];
-                        }
-                    }
-                    $chkM = $mysqli->prepare("SELECT COUNT(*) FROM ChatRoomMember WHERE ChatRoomid=? AND member_type=? AND memberid=?");
-                    $insM = $mysqli->prepare("INSERT INTO ChatRoomMember (ChatRoomid, member_type, memberid) VALUES (?,?,?)");
-                    if ($chkM && $insM) {
-                        // client
-                        if ($clientMemberId) {
-                            $mt = 'client';
-                            $mid = $clientMemberId;
-                            $chkM->bind_param('isi', $roomId, $mt, $mid);
-                            $chkM->execute();
-                            $cnt = $chkM->get_result()->fetch_row()[0] ?? 0;
-                            if ((int) $cnt === 0) {
-                                $insM->bind_param('isi', $roomId, $mt, $mid);
-                                $insM->execute();
-                            }
-                        }
-                        // manager (current user)
-                        $mt = 'manager';
-                        $mid = $user_id;
-                        $chkM->bind_param('isi', $roomId, $mt, $mid);
-                        $chkM->execute();
-                        $cnt = $chkM->get_result()->fetch_row()[0] ?? 0;
-                        if ((int) $cnt === 0) {
-                            $insM->bind_param('isi', $roomId, $mt, $mid);
-                            $insM->execute();
-                        }
-                        // designer
-                        if (!empty($designerMemberId)) {
-                            $mt = 'designer';
-                            $mid = $designerMemberId;
-                            $chkM->bind_param('isi', $roomId, $mt, $mid);
-                            $chkM->execute();
-                            $cnt = $chkM->get_result()->fetch_row()[0] ?? 0;
-                            if ((int) $cnt === 0) {
-                                $insM->bind_param('isi', $roomId, $mt, $mid);
-                                $insM->execute();
-                            }
-                        }
-                        $chkM->close();
-                        $insM->close();
+                    // Ensure manager can read/post in the room.
+                    $ensureManagerMember = $mysqli->prepare("INSERT IGNORE INTO ChatRoomMember (ChatRoomid, member_type, memberid) VALUES (?, 'manager', ?)");
+                    if ($ensureManagerMember) {
+                        $ensureManagerMember->bind_param('ii', $roomId, $user_id);
+                        $ensureManagerMember->execute();
+                        $ensureManagerMember->close();
                     }
 
-                    // Insert message announcing the manager-confirmed order
+                    // Insert message announcing the manager-confirmed order.
                     $insMsg = $mysqli->prepare("INSERT INTO Message (sender_type, sender_id, content, message_type, ChatRoomid) VALUES (?,?,?,?,?)");
                     if ($insMsg) {
                         $stype = 'manager';
                         $sId = $user_id;
                         $mtype = 'order';
-                        $orderContent = (string) $orderid;
                         $insMsg->bind_param('sissi', $stype, $sId, $orderContent, $mtype, $roomId);
                         $insMsg->execute();
                         $msgId = $insMsg->insert_id;
@@ -899,10 +869,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                             }
                         }
                     }
+                } else {
+                    error_log('[Order_Edit] no chat room found for order #' . $orderid);
                 }
             } catch (Throwable $e) {
-                // non-fatal: continue even if chat creation fails
-                error_log('[Order_Edit] failed to create order chat message: ' . $e->getMessage());
+                // non-fatal: continue even if chat message creation fails
+                error_log('[Order_Edit] failed to post order chat message: ' . $e->getMessage());
             }
             header("Location: Order_Edit.php?id=" . $orderid . "&msg=confirmed");
             exit();

@@ -104,6 +104,25 @@ try {
       $stmt = $pdo->prepare("SELECT cr.* FROM ChatRoom cr JOIN ChatRoomMember m ON m.ChatRoomid=cr.ChatRoomid WHERE m.member_type=? AND m.memberid=? ORDER BY cr.ChatRoomid DESC");
       $stmt->execute([$user_type, $user_id]);
       $rooms = $stmt->fetchAll();
+
+      // Hide legacy order-* rooms when a project meeting room for the same order exists.
+      $meetingProjectIds = [];
+      foreach ($rooms as $rm) {
+        $rname = (string)($rm['roomname'] ?? '');
+        if (preg_match('/^Meeting Room - Project-(\d+)$/i', $rname, $mm) || preg_match('/^Project-(\d+)$/i', $rname, $mm)) {
+          $meetingProjectIds[(int)$mm[1]] = true;
+        }
+      }
+      if (!empty($meetingProjectIds)) {
+        $rooms = array_values(array_filter($rooms, function($rm) use ($meetingProjectIds) {
+          $rname = (string)($rm['roomname'] ?? '');
+          if (preg_match('/^order-(\d+)$/i', $rname, $mo)) {
+            return empty($meetingProjectIds[(int)$mo[1]]);
+          }
+          return true;
+        }));
+      }
+
       // Enrich each room with the other participant's display name when possible
       foreach ($rooms as &$r) {
         $roomId = $r['ChatRoomid'] ?? ($r['ChatRoomId'] ?? ($r['id'] ?? null));

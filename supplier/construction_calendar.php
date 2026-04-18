@@ -1478,19 +1478,11 @@ $month_name = date('F', mktime(0, 0, 0, $current_month, 1));
         </div>
         
         <!-- Action Buttons -->
-        <?php if ($can_mark_complete || $can_request_extension): ?>
+        <?php if ( $can_request_extension): ?>
         <div class="card mt-4">
             <div class="card-header bg-dark text-white"><h5 class="mb-0"><i class="fas fa-tools me-2"></i>Actions</h5></div>
             <div class="card-body">
                 <div class="row">
-                    <?php if ($can_mark_complete): ?>
-                    <div class="col-md-6 mb-3">
-                        <form method="POST" onsubmit="return confirm('Mark construction as complete? Status will change to Waiting for inspection.');">
-                            <input type="hidden" name="mark_complete" value="1">
-                            <button type="submit" class="btn btn-success btn-lg w-100"><i class="fas fa-check-circle me-2"></i>Mark as Complete</button>
-                        </form>
-                    </div>
-                    <?php endif; ?>
                     <?php if ($can_request_extension): ?>
                     <div class="col-md-6 mb-3">
                         <button type="button" class="btn btn-warning btn-lg w-100" data-bs-toggle="modal" data-bs-target="#extensionModal"><i class="fas fa-clock me-2"></i>Request Extension</button>

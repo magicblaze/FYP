@@ -546,18 +546,18 @@ mysqli_stmt_close($workers_stmt);
                         </button>
 
                         <?php if ($project['supplier_status'] === 'Accepted'): ?>
-                            <a href="WorkerAllocation.php?orderid=<?= $project['orderid'] ?>" class="btn-allocate">
-                                <i class="fas fa-users"></i>Manage Workers
-                            </a>
-                            <a href="distribution.php?orderid=<?= $project['orderid'] ?>" class="btn-payment ms-2">
-                                <i class="fas fa-file-invoice-dollar me-1"></i>Distribution
-                            </a>
-                            <?php
-                            $constructionStatuses = ['preparing', 'PREPARING', 'Construction begins', 'construction begins'];
-                            if (in_array($project['ostatus'], $constructionStatuses)): ?>
+                            <?php $projectStatusLower = strtolower(trim((string) ($project['ostatus'] ?? ''))); ?>
+                            <?php if ($projectStatusLower === 'preparing'): ?>
+                                <a href="WorkerAllocation.php?orderid=<?= $project['orderid'] ?>" class="btn-allocate">
+                                    <i class="fas fa-users"></i>Manage Workers
+                                </a>
+                                <a href="distribution.php?orderid=<?= $project['orderid'] ?>" class="btn-payment ms-2">
+                                    <i class="fas fa-file-invoice-dollar me-1"></i>Distribution
+                                </a>
                                 <a href="construction_stage.php?orderid=<?= $project['orderid'] ?>" class="btn-payment ms-2" style="background: #2c3e50;">
                                     <i class="fas fa-hard-hat me-1"></i>Set schedule
                                 </a>
+                            <?php elseif ($projectStatusLower === 'construction begins'): ?>
                                 <a href="construction_calendar.php?orderid=<?= $project['orderid'] ?>" class="btn btn-info me-2">
                                     <i class="fas fa-calendar-alt me-2"></i>View Construction Schedule
                                 </a>
