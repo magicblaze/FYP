@@ -91,6 +91,34 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["confirm_inspection_re
     mysqli_stmt_close($update_stmt);
 }
 
+// Handle manual start construction action (waiting for start construction -> In construction)
+if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["start_construction"])) {
+    $order_id = intval($_POST["order_id"] ?? 0);
+
+    if ($order_id > 0) {
+        $start_sql = "UPDATE `Order`
+                      SET ostatus = 'In construction'
+                      WHERE orderid = ?
+                        AND supplierid = ?
+                        AND LOWER(TRIM(ostatus)) = 'waiting for start construction'";
+        $start_stmt = mysqli_prepare($mysqli, $start_sql);
+        if ($start_stmt) {
+            mysqli_stmt_bind_param($start_stmt, "ii", $order_id, $supplier_id);
+            $ok = mysqli_stmt_execute($start_stmt);
+            $affected = mysqli_stmt_affected_rows($start_stmt);
+            mysqli_stmt_close($start_stmt);
+
+            if ($ok && $affected > 0) {
+                header("Location: ProjectWorkerManagement.php?msg=construction_started");
+                exit();
+            }
+        }
+    }
+
+    header("Location: ProjectWorkerManagement.php?msg=start_construction_failed");
+    exit();
+}
+
 // Fetch all projects (orders) that contain this supplier's products
 $projects_sql = "
     SELECT DISTINCT 
@@ -499,6 +527,13 @@ mysqli_stmt_close($workers_stmt);
                 Unable to update assignment status. Please try again.
             </div>
         <?php endif; ?>
+
+        <?php if (isset($_GET['msg']) && $_GET['msg'] == 'start_construction_failed'): ?>
+            <div class="alert alert-danger mb-4">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                Unable to start construction. Please refresh and try again.
+            </div>
+        <?php endif; ?>
         <!-- Statistics Section -->
         <div class="row mb-4">
             <div class="col-md-3">
@@ -579,7 +614,7 @@ mysqli_stmt_close($workers_stmt);
 
                         <?php if ($project['supplier_status'] === 'Accepted'): ?>
                             <?php $projectStatusLower = strtolower(trim((string) ($project['ostatus'] ?? ''))); ?>
-                            <?php if ($projectStatusLower === 'preparing'): ?>
+                            <?php if ($projectStatusLower === 'preparing' || $projectStatusLower === 'waiting for start construction'): ?>
                                 <a href="WorkerAllocation.php?orderid=<?= $project['orderid'] ?>" class="btn-allocate">
                                     <i class="fas fa-users"></i>Manage Workers
                                 </a>
@@ -589,7 +624,17 @@ mysqli_stmt_close($workers_stmt);
                                 <a href="construction_stage.php?orderid=<?= $project['orderid'] ?>" class="btn-payment ms-2" style="background: #2c3e50;">
                                     <i class="fas fa-hard-hat me-1"></i>Set schedule
                                 </a>
-                            <?php elseif ($projectStatusLower === 'in construction'): ?>
+                                <?php if ($projectStatusLower === 'waiting for start construction'): ?>
+                                    <form method="POST" action="ProjectWorkerManagement.php" class="d-inline ms-2" onsubmit="return confirm('Start construction now? This will move the project to In construction.');">
+                                        <input type="hidden" name="start_construction" value="1">
+                                        <input type="hidden" name="order_id" value="<?= $project['orderid'] ?>">
+                                        <button type="submit" class="btn-payment" style="background: #2c3e50;">
+                                            <i class="fas fa-hard-hat me-1"></i>Start Construction
+                                        </button>
+                                    </form>
+                                <?php endif; ?>
+                            <?php endif; ?>
+                            <?php if ($projectStatusLower === 'in construction'): ?>
                                 <a href="construction_calendar.php?orderid=<?= $project['orderid'] ?>" class="btn btn-info me-2">
                                     <i class="fas fa-calendar-alt me-2"></i>View Construction Schedule
                                 </a>

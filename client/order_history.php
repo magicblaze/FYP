@@ -661,7 +661,7 @@ if (!empty($_GET['msg'])) {
                             <?php endif; ?>
                             
                             <!-- Construction Schedule Button - appears when supplier has set dates and order is in appropriate status -->
-                            <?php if ($schedule_data && $schedule_data['construction_start_date'] && in_array($statusLower, ['preparing', 'in construction'])): ?>
+                            <?php if ($schedule_data && $schedule_data['construction_start_date'] && in_array($statusLower, ['preparing', 'waiting for start construction', 'in construction'])): ?>
                                 <a href="construction_schedule.php?orderid=<?= (int) $order['orderid'] ?>" class="view-details-btn btn-schedule"
                                     onclick="event.stopPropagation();">
                                     <i class="fas fa-calendar-alt me-1"></i>Construction Schedule

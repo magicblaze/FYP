@@ -1068,7 +1068,9 @@ CREATE TABLE IF NOT EXISTS `InspectionConfirmation` (
   AFTER INSERT ON `Schedule`
   FOR EACH ROW
   BEGIN
-    CALL `sp_try_advance_waiting_start_construction`(NEW.`orderid`);
+    IF IFNULL(@skip_order_recheck, 0) = 0 THEN
+      CALL `sp_try_advance_waiting_start_construction`(NEW.`orderid`);
+    END IF;
   END$$
   DELIMITER ;
 
@@ -1078,9 +1080,11 @@ CREATE TABLE IF NOT EXISTS `InspectionConfirmation` (
   AFTER UPDATE ON `Schedule`
   FOR EACH ROW
   BEGIN
-    CALL `sp_try_advance_waiting_start_construction`(NEW.`orderid`);
-    IF NOT (OLD.`orderid` <=> NEW.`orderid`) THEN
-      CALL `sp_try_advance_waiting_start_construction`(OLD.`orderid`);
+    IF IFNULL(@skip_order_recheck, 0) = 0 THEN
+      CALL `sp_try_advance_waiting_start_construction`(NEW.`orderid`);
+      IF NOT (OLD.`orderid` <=> NEW.`orderid`) THEN
+        CALL `sp_try_advance_waiting_start_construction`(OLD.`orderid`);
+      END IF;
     END IF;
   END$$
   DELIMITER ;
@@ -1091,7 +1095,9 @@ CREATE TABLE IF NOT EXISTS `InspectionConfirmation` (
   AFTER DELETE ON `Schedule`
   FOR EACH ROW
   BEGIN
-    CALL `sp_try_advance_waiting_start_construction`(OLD.`orderid`);
+    IF IFNULL(@skip_order_recheck, 0) = 0 THEN
+      CALL `sp_try_advance_waiting_start_construction`(OLD.`orderid`);
+    END IF;
   END$$
   DELIMITER ;
 
@@ -1238,6 +1244,32 @@ CREATE TABLE IF NOT EXISTS `InspectionConfirmation` (
         INSERT INTO `Message` (`sender_type`, `sender_id`, `content`, `message_type`, `ChatRoomid`)
         VALUES ('system', 0, v_message, 'text', v_chatroom_id);
       END IF;
+    END IF;
+  END$$
+  DELIMITER ;
+
+  -- Trigger: if construction starts earlier than planned, set start date to today
+  DROP TRIGGER IF EXISTS `trg_order_start_early_set_construction_now`;
+  DELIMITER $$
+  CREATE TRIGGER `trg_order_start_early_set_construction_now`
+  AFTER UPDATE ON `Order`
+  FOR EACH ROW
+  BEGIN
+    IF NOT (OLD.`ostatus` <=> NEW.`ostatus`)
+       AND NEW.`ostatus` = 'In construction' THEN
+      SET @skip_order_recheck = 1;
+      UPDATE `Schedule` s
+      JOIN (
+        SELECT `scheduleid`
+        FROM `Schedule`
+        WHERE `orderid` = NEW.`orderid`
+        ORDER BY `current_version` DESC, `scheduleid` DESC
+        LIMIT 1
+      ) latest ON latest.`scheduleid` = s.`scheduleid`
+      SET s.`construction_start_date` = CURDATE()
+      WHERE s.`construction_start_date` IS NULL
+         OR s.`construction_start_date` > CURDATE();
+      SET @skip_order_recheck = NULL;
     END IF;
   END$$
   DELIMITER ;
