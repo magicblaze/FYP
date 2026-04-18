@@ -404,7 +404,7 @@ mysqli_stmt_close($order_stmt);
                                 break;
                             case 'accepted':
                                 $statusClass = 'status-accepted';
-                                $statusText = 'Accepted - Construction Ready';
+                                $statusText = 'Accepted';
                                 break;
                             case 'rejected':
                                 $statusClass = 'status-rejected';

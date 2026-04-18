@@ -101,13 +101,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['proceed_pay'])) {
                 mysqli_stmt_close($installment_stmt);
             }
             
-            // Update order status
-            $order_update = "UPDATE `Order` SET ostatus = 'Construction begins' WHERE orderid = ?";
-            $order_stmt = mysqli_prepare($mysqli, $order_update);
-            mysqli_stmt_bind_param($order_stmt, "i", $order_id);
-            mysqli_stmt_execute($order_stmt);
-            mysqli_stmt_close($order_stmt);
-            
             mysqli_commit($mysqli);
             
             // Check if this was the last installment
@@ -117,7 +110,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['proceed_pay'])) {
                 // Clear session
                 unset($_SESSION['construction_payment']);
                 $payment_success = true;
-                $message = "Payment successful! Your construction will begin as scheduled.";
+                $message = "Payment successful!";
             } else {
                 // Update session for next installment
                 $_SESSION['construction_payment']['installment_index'] = $installment_index + 1;

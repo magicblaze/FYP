@@ -31,13 +31,13 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         header("Location: payment_construction2.php?orderid=" . $order_id);
         exit;
     } elseif ($order_id > 0 && $action === 'fail') {
-        // Fail inspection - change status back to 'Construction begins'
-        $update_sql = "UPDATE `Order` SET ostatus = 'Construction begins' WHERE orderid = ? AND ostatus = 'Waiting for inspection'";
+        // Fail inspection - change status back to 'In construction'
+        $update_sql = "UPDATE `Order` SET ostatus = 'In construction' WHERE orderid = ? AND ostatus = 'Waiting for inspection'";
         $update_stmt = mysqli_prepare($mysqli, $update_sql);
         mysqli_stmt_bind_param($update_stmt, "i", $order_id);
         
         if (mysqli_stmt_execute($update_stmt)) {
-            $inspection_message = "Inspection failed. Status has been changed back to 'Construction begins'. Please contact your supplier to address the issues.";
+            $inspection_message = "Inspection failed. Status has been changed back to 'In construction'. Please contact your supplier to address the issues.";
             
             // Notify supplier
             $supplier_sql = "SELECT supplierid FROM `Order` WHERE orderid = ?";
@@ -68,7 +68,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             if ($manager_row) {
                 $manager_id = $manager_row['managerid'];
                 $notify_manager_sql = "INSERT INTO Notification (user_type, user_id, orderid, message, type, created_at) 
-                                       VALUES ('manager', ?, ?, 'Client inspection failed for Order #" . $order_id . ". Construction status reverted to Construction begins.', 'inspection_failed', NOW())";
+                                       VALUES ('manager', ?, ?, 'Client inspection failed for Order #" . $order_id . ". Construction status reverted to In construction.', 'inspection_failed', NOW())";
                 $notify_manager_stmt = mysqli_prepare($mysqli, $notify_manager_sql);
                 mysqli_stmt_bind_param($notify_manager_stmt, "ii", $manager_id, $order_id);
                 mysqli_stmt_execute($notify_manager_stmt);
@@ -225,7 +225,7 @@ if (!empty($_GET['msg'])) {
             background-color: #e1f5fe;
             color: #046291;
         }
-        .status-construction_begins {
+        .status-in_construction {
             background-color: #d4edda;
             color: #155724;
         }
@@ -469,8 +469,8 @@ if (!empty($_GET['msg'])) {
                         $statusClass = 'status-preparing';
                     } elseif ($statusLower === 'coordinating contractors') {
                         $statusClass = 'status-Coordinating_Contractors';
-                    } elseif ($statusLower === 'construction begins') {
-                        $statusClass = 'status-construction_begins';
+                    } elseif ($statusLower === 'in construction') {
+                        $statusClass = 'status-in_construction';
                     } elseif ($statusLower === 'waiting for inspection') {
                         $statusClass = 'status-waiting_inspection';
                     }
@@ -538,7 +538,7 @@ if (!empty($_GET['msg'])) {
                         'inspection_completed',
                         'inspection_failed',
                         'waiting start construction pay',
-                        'construction begins',
+                        'waiting start construction',
                         'complete'
                     ];
                     $showActualPrice = in_array($statusLower, $proposalSubmittedStatuses, true);
@@ -609,7 +609,7 @@ if (!empty($_GET['msg'])) {
                                 'waiting client confirm construction date', 
                                 'in construction',
                                 'waiting client reassignment',
-                                'construction begins',
+                                'waiting start construction',
                                 'inspection_completed', 
                                 'inspection_failed'
                             ];
@@ -655,7 +655,7 @@ if (!empty($_GET['msg'])) {
                             <?php endif; ?>
                             
                             <!-- Construction Schedule Button - appears when supplier has set dates and order is in appropriate status -->
-                            <?php if ($schedule_data && $schedule_data['construction_start_date'] && in_array($statusLower, ['preparing', 'construction begins'])): ?>
+                            <?php if ($schedule_data && $schedule_data['construction_start_date'] && in_array($statusLower, ['preparing', 'in construction'])): ?>
                                 <a href="construction_schedule.php?orderid=<?= (int) $order['orderid'] ?>" class="view-details-btn btn-schedule"
                                     onclick="event.stopPropagation();">
                                     <i class="fas fa-calendar-alt me-1"></i>Construction Schedule
@@ -663,7 +663,7 @@ if (!empty($_GET['msg'])) {
                             <?php endif; ?>
 
 <?php 
-$view_report_statuses = ['construction begins', 'waiting for inspection','inspection_completed', 'complete'];
+$view_report_statuses = ['in construction', 'waiting for inspection','inspection_completed', 'complete'];
 if (in_array($statusLower, $view_report_statuses)):
     // Check if any submitted reports exist for this order
     $report_check_sql = "SELECT COUNT(*) as report_count FROM WeeklyConstructionReport WHERE orderid = ? AND status = 'submitted'";

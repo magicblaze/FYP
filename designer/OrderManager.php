@@ -56,7 +56,7 @@ $order_ids_for_check = [];
 foreach ($orders_list as $order) {
   $statusLower = strtolower($order['ostatus'] ?? '');
   // Eligible statuses for showing reports button
-  $eligible_statuses = ['construction begins', 'waiting for inspection', 'complete'];
+  $eligible_statuses = ['in construction', 'waiting for inspection', 'complete'];
   if (in_array($statusLower, $eligible_statuses)) {
     $order_ids_for_check[] = $order['orderid'];
   }
@@ -136,7 +136,7 @@ if (!empty($order_ids_for_check)) {
                 foreach ($orders_list as $row): 
                   $statusLower = strtolower($row['ostatus'] ?? '');
                   // Eligible statuses for showing reports button
-                  $eligible_statuses = ['construction begins', 'waiting for inspection', 'complete'];
+                  $eligible_statuses = ['in construction', 'waiting for inspection', 'complete'];
                   $is_eligible = in_array($statusLower, $eligible_statuses);
                   // Show reports button only if eligible AND reports exist
                   $show_report_btn = ($is_eligible && isset($orders_with_reports[$row['orderid']]));

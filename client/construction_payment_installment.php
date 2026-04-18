@@ -140,7 +140,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 // Update order status based on remaining payments
                 if (!$has_more_pending) {
-                    $order_update_sql = "UPDATE `Order` SET ostatus = 'Construction begins' WHERE orderid = ?";
+                    $order_update_sql = "UPDATE `Order` SET ostatus = 'In construction' WHERE orderid = ?";
                 } else {
                     $order_update_sql = "UPDATE `Order` SET ostatus = 'Waiting for construction payment' WHERE orderid = ?";
                 }

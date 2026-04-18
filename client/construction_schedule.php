@@ -90,10 +90,10 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                 mysqli_stmt_close($construction_stmt);
 
                 if ($construction_paid) {
-                    $message = "Construction schedule has been updated and accepted. Construction will begin on " . date('F d, Y', strtotime($pending_version['construction_start_date'])) . ".";
+                    $message = "Construction schedule has been updated and accepted. Construction has been scheduled on " . date('F d, Y', strtotime($pending_version['construction_start_date'])) . ".";
                     
-                    // Update order status to 'Construction begins'
-                    $order_update = "UPDATE `Order` SET ostatus = 'Construction begins' WHERE orderid = ?";
+                    // Update order status to 'In construction'
+                    $order_update = "UPDATE `Order` SET ostatus = 'In construction' WHERE orderid = ?";
                     $order_stmt = mysqli_prepare($mysqli, $order_update);
                     mysqli_stmt_bind_param($order_stmt, "i", $order_id);
                     mysqli_stmt_execute($order_stmt);
@@ -338,7 +338,7 @@ if ($is_pending) {
                             $statusText = '';
                             if ($is_accepted):
                                 $statusClass = 'status-accepted';
-                                $statusText = 'Accepted - Construction Ready';
+                                $statusText = 'Accepted';
                             elseif ($is_pending):
                                 $statusClass = 'status-pending';
                                 $statusText = 'Pending Your Response';
@@ -378,7 +378,7 @@ if ($is_pending) {
                         <div class="alert alert-success text-center">
                             <i class="fas fa-check-circle fa-2x mb-2 d-block"></i>
                             <strong>Construction schedule confirmed!</strong><br>
-                            Construction will begin on <?= date('F d, Y', strtotime($schedule['construction_start_date'])) ?>.
+                             <?= date('F d, Y', strtotime($schedule['construction_start_date'])) ?>.
                         </div>
                     <?php endif; ?>
                     

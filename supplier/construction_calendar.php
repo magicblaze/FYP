@@ -695,7 +695,7 @@ if ($start_date && $end_date) {
     }
 }
 
-$is_construction_ongoing = ($order_info['ostatus'] == 'Construction begins' || $order_info['ostatus'] == 'preparing');
+$is_construction_ongoing = ($order_info['ostatus'] == 'In construction' || $order_info['ostatus'] == 'preparing');
 $is_waiting_inspection = ($order_info['ostatus'] == 'Waiting for inspection');
 $is_complete = ($order_info['ostatus'] == 'complete');
 $can_mark_complete = $is_construction_ongoing && !$is_complete && !$is_waiting_inspection;

@@ -346,7 +346,7 @@ mysqli_stmt_close($order_detail_stmt);
                     </div>
                     <div class="col-md-6">
                         <strong>Status:</strong> 
-                        <span class="badge-status <?= $order_status == 'Construction begins' ? 'bg-primary text-white' : (($order_status == 'Waiting for construction payment' ? 'bg-warning' : (($order_status == 'Construction begins' || $order_status == 'preparing') ? 'bg-primary' : ($order_status == 'Waiting for inspection' ? 'bg-info' : 'bg-secondary')))) ?>">
+                        <span class="badge-status <?= $order_status == 'In construction' ? 'bg-primary text-white' : (($order_status == 'Waiting for construction payment' ? 'bg-warning' : (($order_status == 'In construction' || $order_status == 'preparing') ? 'bg-primary' : ($order_status == 'Waiting for inspection' ? 'bg-info' : 'bg-secondary')))) ?>">
                             <?= htmlspecialchars($order_status) ?>
                         </span>
                     </div>
@@ -370,7 +370,7 @@ mysqli_stmt_close($order_detail_stmt);
                     <div class="alert alert-info text-center">
                         <i class="fas fa-info-circle fa-2x mb-2 d-block"></i>
                         <strong>No reports available yet.</strong><br>
-                        The contractor will submit weekly construction reports once construction begins.
+                        The contractor will submit weekly construction reports once construction is in progress.
                     </div>
                 <?php else: ?>
                     <?php foreach ($reports as $report): ?>

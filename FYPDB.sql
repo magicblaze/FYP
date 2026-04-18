@@ -246,7 +246,7 @@ CREATE TABLE `Order` (
   `deposit_amount` DECIMAL(10,2) DEFAULT 0.00,
   `final_payment` DECIMAL(10,2) DEFAULT 0.00,
   `designid` int NOT NULL,
-  `ostatus` ENUM('waiting confirm', 'designing', 'reviewing design proposal', 'waiting for review design', 'drafting 2nd proposal', 'waiting client review', 'waiting 2nd design phase payment', 'waiting final design phase payment' , 'waiting 1st construction phase payment', 'complete', 'rejected','Coordinating Contractors','preparing', 'waiting client reassignment', 'waiting client confirm construction date', 'In construction', 'waiting start construction Pay','Construction begins',
+  `ostatus` ENUM('waiting confirm', 'designing', 'reviewing design proposal', 'waiting for review design', 'drafting 2nd proposal', 'waiting client review', 'waiting 2nd design phase payment', 'waiting final design phase payment' , 'waiting 1st construction phase payment', 'complete', 'rejected','Coordinating Contractors','preparing', 'waiting client reassignment', 'waiting client confirm construction date', 'In construction', 'waiting start construction Pay', 'waiting start construction',
     'Waiting for inspection', 'inspection_completed', 'inspection_failed') DEFAULT 'waiting confirm',
   `payment_plan` ENUM('full', 'installment_25', 'installment_50') DEFAULT 'full',
   `actual_completion_date` DATE DEFAULT NULL,
@@ -839,6 +839,66 @@ CREATE TABLE IF NOT EXISTS `InspectionConfirmation` (
   ALTER TABLE `Message`
   MODIFY COLUMN `sender_type` ENUM('client', 'designer','manager','Contractors','supplier','system') NOT NULL;
 
+  DROP TRIGGER IF EXISTS `trg_order_progress_to_waiting_start_construction`;
+  DELIMITER $$
+  CREATE TRIGGER `trg_order_progress_to_waiting_start_construction`
+  BEFORE UPDATE ON `Order`
+  FOR EACH ROW
+  BEGIN
+    DECLARE v_total_delivery INT DEFAULT 0;
+    DECLARE v_incomplete_delivery INT DEFAULT 0;
+    DECLARE v_worker_assigned INT DEFAULT 0;
+    DECLARE v_schedule_confirmed INT DEFAULT 0;
+    DECLARE v_initial_payment_paid INT DEFAULT 0;
+
+    IF NEW.`ostatus` = 'preparing' THEN
+      SELECT COUNT(*)
+        INTO v_total_delivery
+      FROM `OrderDelivery`
+      WHERE `orderid` = NEW.`orderid`;
+
+      IF v_total_delivery > 0 THEN
+        SELECT COUNT(*)
+          INTO v_incomplete_delivery
+        FROM `OrderDelivery`
+        WHERE `orderid` = NEW.`orderid`
+          AND LOWER(TRIM(IFNULL(`status`, ''))) NOT IN ('completed', 'delivered', 'shipped');
+      END IF;
+
+      SELECT COUNT(*)
+        INTO v_worker_assigned
+      FROM `workerallocation`
+      WHERE `orderid` = NEW.`orderid`
+        AND IFNULL(`status`, 'Assigned') <> 'Cancelled';
+
+      SELECT COUNT(*)
+        INTO v_schedule_confirmed
+      FROM `Schedule`
+      WHERE `orderid` = NEW.`orderid`
+        AND `construction_date_status` = 'accepted';
+
+      SELECT COUNT(*)
+        INTO v_initial_payment_paid
+      FROM `ConstructionPaymentRecord`
+      WHERE `orderid` = NEW.`orderid`
+        AND LOWER(TRIM(IFNULL(`status`, ''))) = 'paid'
+        AND (
+          `installment_number` IN (1, 4)
+          OR LOWER(TRIM(IFNULL(`milestone`, ''))) LIKE 'installment 1%'
+          OR LOWER(TRIM(IFNULL(`milestone`, ''))) LIKE '%construction deposit%'
+        );
+
+      IF v_total_delivery > 0
+         AND v_incomplete_delivery = 0
+         AND v_worker_assigned > 0
+         AND v_schedule_confirmed > 0
+         AND v_initial_payment_paid > 0 THEN
+        SET NEW.`ostatus` = 'waiting start construction';
+      END IF;
+    END IF;
+  END$$
+  DELIMITER ;
+
   DROP TRIGGER IF EXISTS `trg_order_status_chat_notify`;
   DELIMITER $$
   CREATE TRIGGER `trg_order_status_chat_notify`
@@ -868,9 +928,13 @@ CREATE TABLE IF NOT EXISTS `InspectionConfirmation` (
       END IF;
 
       IF v_chatroom_id IS NOT NULL THEN
-        SET v_message = CONCAT(
-          ' Status has updated to ', NEW.`ostatus`
-        );
+        IF NEW.`ostatus` = 'preparing' THEN
+          SET v_message = 'Order status has been updated to preparing. Once product delivery is completed, workers are assigned, the schedule is confirmed, and the initial construction payment is paid, the next stage is waiting start construction.';
+        ELSE
+          SET v_message = CONCAT(
+            'Order status has been updated to ', NEW.`ostatus`, '.'
+          );
+        END IF;
 
         INSERT INTO `Message` (`sender_type`, `sender_id`, `content`, `message_type`, `ChatRoomid`)
         VALUES ('system', 0, v_message, 'text', v_chatroom_id);

@@ -62,13 +62,13 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["handle_assignment"]))
     exit();
 }
 
-// Handle inspection recovery (inspection_failed -> Construction begins)
+// Handle inspection recovery (inspection_failed -> In construction)
 if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["confirm_inspection_recovery"])) {
     $order_id = intval($_POST["order_id"]);
 
-    // Update order status to Construction begins AND clear inspection fields
+    // Update order status to In construction AND clear inspection fields
     $update_sql = "UPDATE `Order` SET 
-                   ostatus = 'Construction begins',
+                   ostatus = 'In construction',
                    inspection_date = NULL,
                    inspection_status = NULL,
                    client_suggested_date = NULL
@@ -589,7 +589,7 @@ mysqli_stmt_close($workers_stmt);
                                 <a href="construction_stage.php?orderid=<?= $project['orderid'] ?>" class="btn-payment ms-2" style="background: #2c3e50;">
                                     <i class="fas fa-hard-hat me-1"></i>Set schedule
                                 </a>
-                            <?php elseif ($projectStatusLower === 'construction begins'): ?>
+                            <?php elseif ($projectStatusLower === 'in construction'): ?>
                                 <a href="construction_calendar.php?orderid=<?= $project['orderid'] ?>" class="btn btn-info me-2">
                                     <i class="fas fa-calendar-alt me-2"></i>View Construction Schedule
                                 </a>
@@ -863,7 +863,7 @@ mysqli_stmt_close($workers_stmt);
 
                                     <div class="alert alert-warning mt-3">
                                         <i class="fas fa-info-circle me-2"></i>
-                                        <strong>Note:</strong> After confirming, the project status will change to "Construction begins".
+                                        <strong>Note:</strong> After confirming, the project status will change to "In construction".
                                     </div>
 
                                     <form method="POST" class="mt-3" onsubmit="return confirm('Have you reviewed the inspection report? Confirm to proceed to construction stage.');">
