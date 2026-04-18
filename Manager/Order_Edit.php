@@ -2644,7 +2644,7 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                             </script>
                         <?php endif; /* End of inspection section */ ?>
 
-                        <?php if ($status === 'preparing'): ?>
+                        <?php if ($status === 'preparing' || $status === 'waiting for start construction'): ?>
                             <!-- Assign Constructor for Worker Allocation -->
                             <div class="col-lg-6 mb-4">
                                 <div class="card h-100">

@@ -850,6 +850,10 @@ CREATE TABLE IF NOT EXISTS `InspectionConfirmation` (
     DECLARE v_worker_assigned INT DEFAULT 0;
     DECLARE v_schedule_confirmed INT DEFAULT 0;
     DECLARE v_initial_payment_paid INT DEFAULT 0;
+    DECLARE v_worker_percentage_total DECIMAL(10,2) DEFAULT 0.00;
+    DECLARE v_additional_fee_total DECIMAL(12,2) DEFAULT 0.00;
+    DECLARE v_distribution_total_pct DECIMAL(10,2) DEFAULT 0.00;
+    DECLARE v_budget DECIMAL(12,2) DEFAULT 0.00;
 
     IF NEW.`ostatus` = 'preparing' THEN
       SELECT COUNT(*)
@@ -870,6 +874,22 @@ CREATE TABLE IF NOT EXISTS `InspectionConfirmation` (
       FROM `workerallocation`
       WHERE `orderid` = NEW.`orderid`
         AND IFNULL(`status`, 'Assigned') <> 'Cancelled';
+
+      SELECT IFNULL(SUM(IFNULL(`percentage`, 0)), 0)
+        INTO v_worker_percentage_total
+      FROM `workerallocation`
+      WHERE `orderid` = NEW.`orderid`
+        AND IFNULL(`status`, 'Assigned') <> 'Cancelled';
+
+      SELECT IFNULL(SUM(IFNULL(`amount`, 0)), 0)
+        INTO v_additional_fee_total
+      FROM `AdditionalFee`
+      WHERE `orderid` = NEW.`orderid`;
+
+      SET v_budget = IFNULL(NEW.`budget`, 0);
+      IF v_budget > 0 THEN
+        SET v_distribution_total_pct = v_worker_percentage_total + ((v_additional_fee_total / v_budget) * 100);
+      END IF;
 
       SELECT COUNT(*)
         INTO v_schedule_confirmed
@@ -892,7 +912,9 @@ CREATE TABLE IF NOT EXISTS `InspectionConfirmation` (
          AND v_incomplete_delivery = 0
          AND v_worker_assigned > 0
          AND v_schedule_confirmed > 0
-         AND v_initial_payment_paid > 0 THEN
+         AND v_initial_payment_paid > 0
+         AND v_budget > 0
+         AND ABS(v_distribution_total_pct - 100.00) <= 0.01 THEN
         SET NEW.`ostatus` = 'waiting start construction';
       END IF;
     END IF;
