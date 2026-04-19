@@ -1165,10 +1165,10 @@ CREATE TABLE IF NOT EXISTS `InspectionConfirmation` (
 
       IF v_chatroom_id IS NOT NULL THEN
         IF NEW.`ostatus` = 'preparing' THEN
-          SET v_message = 'Order status has been updated to preparing. Once product delivery is completed, workers are assigned, the schedule is confirmed, and the initial construction payment is paid, the next stage is waiting for start construction.';
+          SET v_message = 'Status has been updated to preparing. Once product delivery is completed, workers are assigned, the schedule is confirmed, and the initial construction payment is paid, the next stage will be proceeded.';
         ELSE
           SET v_message = CONCAT(
-            'Order status has been updated to ', NEW.`ostatus`, '.'
+            'Status has been updated to ', NEW.`ostatus`, '.'
           );
         END IF;
 
