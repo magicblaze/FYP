@@ -1613,16 +1613,20 @@ function initApp(config = {}) {
 
   // Resolve currently selected room id from `currentAgent` or DOM fallback
   function getSelectedRoomId() {
-    let roomId = currentAgent?.ChatRoomid || currentAgent?.id || currentAgent?.roomId;
-    if (roomId) return roomId;
-    // fallback to polling state
-    if (currentRoomId) return currentRoomId;
-    if (roomId) return roomId;
-    // try active element in main list
+    // Prefer explicit active selection in UI to avoid stale in-memory room state.
     const sel = document.querySelector('#agentsList .list-group-item.active') || document.querySelector('#agentsListOffcanvas .list-group-item.active');
     if (sel && sel.dataset && sel.dataset.roomId) return sel.dataset.roomId;
+    // If messages are already loaded for a room, trust that room id.
+    const renderedRoomId = elements.messages && elements.messages.dataset ? elements.messages.dataset.roomId : null;
+    if (renderedRoomId) return renderedRoomId;
+    // fallback to polling/runtime state
+    if (currentRoomId) return currentRoomId;
+    // fallback to current in-memory selected agent
+    let roomId = currentAgent?.ChatRoomid || currentAgent?.id || currentAgent?.roomId;
+    if (roomId) return roomId;
     // fallback to first available room in list
-    const first = document.querySelector('#agentsList .list-group-item') || document.querySelector('#agentsListOffcanvas .list-group-item');
+    let first = document.querySelector('#agentsList .list-group-item:not([data-room-id="local-ai"])') || document.querySelector('#agentsListOffcanvas .list-group-item:not([data-room-id="local-ai"])');
+    if (!first) first = document.querySelector('#agentsList .list-group-item') || document.querySelector('#agentsListOffcanvas .list-group-item');
     if (first && first.dataset && first.dataset.roomId) return first.dataset.roomId;
     // Additional fallback: scan children of agentsList for hrefs or text containing an id
     try {
@@ -1695,7 +1699,10 @@ function initApp(config = {}) {
     // determine room: prefer currentAgent, fall back to active DOM selection or first room
     let roomId = getSelectedRoomId();
     if (!roomId) { alert('Please select a person to chat with.'); return; }
-    if (isLocalRoomId(roomId) || isLocalAgent(currentAgent)) {
+    const currentAgentRoomId = currentAgent ? (currentAgent.ChatRoomid || currentAgent.id || currentAgent.roomId || currentAgent.room_id || currentAgent.room) : null;
+    const isLocalSelectedRoom = isLocalRoomId(roomId);
+    const isLocalCurrentAgentSameRoom = !!currentAgentRoomId && String(currentAgentRoomId) === String(roomId) && isLocalAgent(currentAgent);
+    if (isLocalSelectedRoom || isLocalCurrentAgentSameRoom) {
       const text = (elements.input && elements.input.value || '').trim();
       if (pendingFile || widgetPendingFile) {
         try { alert('Attachments are not supported in My Customer Service.'); } catch (e) {}
