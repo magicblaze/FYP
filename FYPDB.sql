@@ -1164,13 +1164,52 @@ CREATE TABLE IF NOT EXISTS `InspectionConfirmation` (
       END IF;
 
       IF v_chatroom_id IS NOT NULL THEN
-        IF NEW.`ostatus` = 'preparing' THEN
-          SET v_message = 'Status has been updated to preparing. Once product delivery is completed, workers are assigned, the schedule is confirmed, and the initial construction payment is paid, the next stage will be proceeded.';
-        ELSE
-          SET v_message = CONCAT(
-            'Status has been updated to ', NEW.`ostatus`, '.'
-          );
-        END IF;
+        CASE NEW.`ostatus`
+          WHEN 'waiting confirm' THEN
+            SET v_message = 'Status updated to waiting confirm. The order is awaiting confirmation from all parties before proceeding to the design phase.';
+          WHEN 'designing' THEN
+            SET v_message = 'Status updated to designing. Design work is now in progress. Once the design is completed and approved, it will move to the review phase.';
+          WHEN 'reviewing design proposal' THEN
+            SET v_message = 'Status updated to reviewing design proposal. The design proposal is currently under review by the team. Once approved, client review will follow.';
+          WHEN 'waiting for review design' THEN
+            SET v_message = 'Status updated to waiting for review design. We are awaiting the client to review the design proposal. Please provide your feedback so we can proceed to the next phase.';
+          WHEN 'drafting 2nd proposal' THEN
+            SET v_message = 'Status updated to drafting 2nd proposal. A revised design proposal is being drafted based on feedback. Once completed, it will be submitted for review.';
+          WHEN 'waiting client review' THEN
+            SET v_message = 'Status updated to waiting client review. We are awaiting your review of the updated design proposal. Please provide feedback to help us finalize the design.';
+          WHEN 'waiting 2nd design phase payment' THEN
+            SET v_message = 'Status updated to waiting 2nd design phase payment. The second design phase payment is due before we can proceed to finalize the design. Once payment is received, we will continue.';
+          WHEN 'waiting final design phase payment' THEN
+            SET v_message = 'Status updated to waiting final design phase payment. The final design phase payment is required before we can complete the design and move to the construction planning phase.';
+          WHEN 'waiting 1st construction phase payment' THEN
+            SET v_message = 'Status updated to waiting 1st construction phase payment. The initial construction phase payment is due. Once received, construction preparations will begin.';
+          WHEN 'complete' THEN
+            SET v_message = 'Status updated to complete. Congratulations! Your project has been completed successfully!';
+          WHEN 'rejected' THEN
+            SET v_message = 'Status updated to rejected. This order has been rejected. Please contact our team for more information and next steps.';
+          WHEN 'Coordinating Contractors' THEN
+            SET v_message = 'Status updated to coordinating contractors. We are currently coordinating with contractors to assign them to your project. Once confirmed, we will proceed to the preparation phase.';
+          WHEN 'preparing' THEN
+            SET v_message = 'Status updated to preparing. Once product delivery is completed, workers are assigned, the schedule is confirmed, and the initial construction payment is paid, the next stage will be proceeded.';
+          WHEN 'waiting client reassignment' THEN
+            SET v_message = 'Status updated to waiting client reassignment. We are awaiting client decision on resource reassignment or confirmation of changes. Please provide your instructions to proceed.';
+          WHEN 'waiting client confirm construction date' THEN
+            SET v_message = 'Status updated to waiting client confirm construction date. Please confirm your preferred construction start and end dates so we can finalize the schedule and begin construction.';
+          WHEN 'In construction' THEN
+            SET v_message = 'Status updated to in construction. Construction work has started! The team is actively working on your project. Weekly updates will be provided to track progress.';
+          WHEN 'waiting for construction pay' THEN
+            SET v_message = 'Status updated to waiting for construction pay. A construction payment is due to continue the work. Once received, construction will resume immediately.';
+          WHEN 'waiting for start construction' THEN
+            SET v_message = 'Status updated to waiting for start construction. All preparations are complete - deliveries finished, workers assigned, schedule confirmed, and initial payment received. Construction is ready to begin.';
+          WHEN 'Waiting for inspection' THEN
+            SET v_message = 'Status updated to waiting for inspection. Construction is complete and awaiting inspection. The inspection will verify that all work meets quality standards before project completion.';
+          WHEN 'inspection_completed' THEN
+            SET v_message = 'Status updated to inspection_completed. The inspection has been completed successfully. Your project has passed quality verification and is ready for handover.';
+          WHEN 'inspection_failed' THEN
+            SET v_message = 'Status updated to inspection_failed. The inspection has identified issues that need correction. Our team will address these concerns and schedule a re-inspection.';
+          ELSE
+            SET v_message = CONCAT('Status has been updated to ', NEW.`ostatus`, '.');
+        END CASE;
 
         INSERT INTO `Message` (`sender_type`, `sender_id`, `content`, `message_type`, `ChatRoomid`)
         VALUES ('system', 0, v_message, 'text', v_chatroom_id);
