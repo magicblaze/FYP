@@ -669,7 +669,7 @@ if (!empty($_GET['msg'])) {
                             <?php endif; ?>
 
 <?php 
-$view_report_statuses = ['preparing', 'in construction', 'waiting for inspection','inspection_completed', 'complete'];
+$view_report_statuses = ['in construction', 'waiting for inspection','inspection_completed', 'complete'];
 if (in_array($statusLower, $view_report_statuses)):
     // Check if any submitted reports exist for this order
     $report_check_sql = "SELECT COUNT(*) as report_count FROM WeeklyConstructionReport WHERE orderid = ? AND status = 'submitted'";
