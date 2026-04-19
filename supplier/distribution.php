@@ -79,21 +79,37 @@ mysqli_stmt_bind_param($sync_insert_stmt, "dddii", $supplier_default_pay, $proje
 mysqli_stmt_execute($sync_insert_stmt);
 mysqli_stmt_close($sync_insert_stmt);
 
+
 $sync_update_sql = "UPDATE `OrderConstDistri` ocd
-                                        JOIN `workerallocation` wa ON wa.`allocation_id` = ocd.`worker_allocation_id`
-                                        JOIN `Worker` w ON w.`workerid` = wa.`workerid`
-                                        JOIN `Order` o ON o.`orderid` = wa.`orderid`
-                                        SET ocd.`distribution_name` = COALESCE(NULLIF(TRIM(w.`name`), ''), CONCAT('Worker #', wa.`workerid`)),
-                                                ocd.`description` = wa.`notes`,
-                                                ocd.`is_active` = CASE WHEN IFNULL(wa.`status`, 'Assigned') = 'Cancelled' THEN 0 ELSE 1 END,
-                                                ocd.`amount` = (IFNULL(o.`budget`, 0) * IFNULL(ocd.`percentage`, 0) / 100)
-                                        WHERE ocd.`orderid` = ?
-                                            AND ocd.`entry_type` = 'worker'
-                                            AND w.`supplierid` = ?";
+    JOIN `workerallocation` wa ON wa.`allocation_id` = ocd.`worker_allocation_id`
+    JOIN `Worker` w ON w.`workerid` = wa.`workerid`
+    SET ocd.`distribution_name` = COALESCE(NULLIF(TRIM(w.`name`), ''), CONCAT('Worker #', wa.`workerid`)),
+        ocd.`description` = wa.`notes`,
+        ocd.`is_active` = CASE WHEN IFNULL(wa.`status`, 'Assigned') = 'Cancelled' THEN 0 ELSE 1 END
+    WHERE ocd.`orderid` = ?
+        AND ocd.`entry_type` = 'worker'
+        AND w.`supplierid` = ?";
 $sync_update_stmt = mysqli_prepare($mysqli, $sync_update_sql);
 mysqli_stmt_bind_param($sync_update_stmt, "ii", $order_id, $supplier_id);
 mysqli_stmt_execute($sync_update_stmt);
 mysqli_stmt_close($sync_update_stmt);
+
+$get_worker_distri_sql = "SELECT distri_id, percentage FROM `OrderConstDistri` WHERE orderid = ? AND entry_type = 'worker'";
+$get_worker_distri_stmt = mysqli_prepare($mysqli, $get_worker_distri_sql);
+mysqli_stmt_bind_param($get_worker_distri_stmt, "i", $order_id);
+mysqli_stmt_execute($get_worker_distri_stmt);
+$result = mysqli_stmt_get_result($get_worker_distri_stmt);
+while ($row = mysqli_fetch_assoc($result)) {
+    $distri_id = $row['distri_id'];
+    $percentage = floatval($row['percentage']);
+    $amount = ($project_budget * $percentage) / 100;
+    $update_amount_sql = "UPDATE `OrderConstDistri` SET amount = ? WHERE distri_id = ?";
+    $update_amount_stmt = mysqli_prepare($mysqli, $update_amount_sql);
+    mysqli_stmt_bind_param($update_amount_stmt, "di", $amount, $distri_id);
+    mysqli_stmt_execute($update_amount_stmt);
+    mysqli_stmt_close($update_amount_stmt);
+}
+mysqli_stmt_close($get_worker_distri_stmt);
 
 $sync_delete_sql = "DELETE ocd
                                         FROM `OrderConstDistri` ocd
