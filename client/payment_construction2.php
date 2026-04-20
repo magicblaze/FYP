@@ -66,9 +66,8 @@ mysqli_stmt_close($paid_total_stmt);
 $design_price = isset($order['design_price']) ? floatval($order['design_price']) : 0;
 $current_budget = isset($order['budget']) ? floatval($order['budget']) : 0;
 
-// Calculate final construction payment = (construction_main_price - construction_deposit) + commission_final
-$remaining_construction = $construction_main_price - $construction_deposit;
-$total_to_pay = $remaining_construction + $commission_final;
+// This page only charges the inspection fee.
+$total_to_pay = max(0.0, $inspection_fee);
 
 // Parse saved payment method
 $paymentMethodData = [];
@@ -76,8 +75,11 @@ if (!empty($order['payment_method'])) {
     $paymentMethodData = json_decode($order['payment_method'], true) ?? [];
 }
 
-// Payment status - from session or URL (使用独立的session key)
-$payment_success = isset($_GET['success']) ? true : (isset($_SESSION['payment_final_construction_success_' . $orderid]) ? $_SESSION['payment_final_construction_success_' . $orderid] : false);
+// Payment status - from session or URL (keep backward compatibility with legacy key)
+$payment_success = isset($_GET['success']) ? true : (
+    (isset($_SESSION['payment_inspection_success_' . $orderid]) ? $_SESSION['payment_inspection_success_' . $orderid] : false)
+    || (isset($_SESSION['payment_final_construction_success_' . $orderid]) ? $_SESSION['payment_final_construction_success_' . $orderid] : false)
+);
 $payment_rejected = isset($_GET['rejected']) ? true : (isset($_SESSION['payment_rejected_' . $orderid]) ? $_SESSION['payment_rejected_' . $orderid] : false);
 
 // Handle payment actions
@@ -94,9 +96,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         mysqli_begin_transaction($mysqli);
         
         try {
-            $milestone = 'Final Construction Payment';
-            $installment_number = 5;
-            $percentage = intval(round(($construction_main_pct * (1 - ($construction_deposit_pct / 100))) + $commission_final_pct));
+            $milestone = 'Inspection Payment';
+            $installment_number = 6;
+            $percentage = intval(round($inspection_pct));
             $pay_record_sql = "INSERT INTO ConstructionPaymentRecord (orderid, installment_number, percentage, amount, milestone, paid_at, status) VALUES (?, ?, ?, ?, ?, NOW(), 'paid')";
             $pay_record_stmt = mysqli_prepare($mysqli, $pay_record_sql);
             mysqli_stmt_bind_param($pay_record_stmt, "iiids", $orderid, $installment_number, $percentage, $total_to_pay, $milestone);
@@ -112,8 +114,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             mysqli_commit($mysqli);
             
-            // Set session flag for successful payment (使用独立的session key)
-            $_SESSION['payment_final_construction_success_' . $orderid] = true;
+            // Set session flag for successful payment
+            $_SESSION['payment_inspection_success_' . $orderid] = true;
             
             // Redirect to same page with success parameter
             header('Location: payment_construction2.php?orderid=' . $orderid . '&amount=' . $total_to_pay . '&success=1');
@@ -127,14 +129,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$stage_title = 'Final Construction Payment';
+$stage_title = 'Inspection Payment';
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>Final Construction Payment - Project #<?php echo $orderid; ?></title>
+    <title>Inspection Payment - Project #<?php echo $orderid; ?></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="../css/styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -292,7 +294,7 @@ $stage_title = 'Final Construction Payment';
         <div class="card">
             <div class="card-body">
                 <div class="payment-type-badge">
-                    <i class="fas fa-check-circle me-1"></i> Final Construction Payment
+                    <i class="fas fa-clipboard-check me-1"></i> Inspection Payment
                 </div>
                 
                 <h4>Payment for Project #<?php echo $orderid; ?></h4>
@@ -353,7 +355,7 @@ $stage_title = 'Final Construction Payment';
                     </div>
                     <div class="step-connector completed"></div>
                     
-                    <!-- Stage 5: Final Const. - Current (Yellow) -->
+                    <!-- Stage 5: Inspection - Current (Yellow) -->
                     <div class="step <?php 
                         if ($payment_rejected) echo 'rejected';
                         elseif ($payment_success) echo 'completed';
@@ -368,7 +370,7 @@ $stage_title = 'Final Construction Payment';
                                 5
                             <?php endif; ?>
                         </div>
-                        <span class="step-label">Final Const.</span>
+                        <span class="step-label">Inspection</span>
                     </div>
                     <div class="step-connector <?php echo ($payment_success) ? 'completed' : ''; ?>"></div>
                     
@@ -381,7 +383,7 @@ $stage_title = 'Final Construction Payment';
 
                 <!-- Payment Section -->
                 <div class="payment-section">
-                    <h5 class="mb-3"><i class="fas fa-hard-hat me-2"></i>Final Construction Payment</h5>
+                    <h5 class="mb-3"><i class="fas fa-clipboard-check me-2"></i>Inspection Payment</h5>
                     
                     <div class="payment-detail">
                         <div class="payment-detail-item">
@@ -392,25 +394,13 @@ $stage_title = 'Final Construction Payment';
                         <!-- Show breakdown of fees -->
                         <div class="fee-breakdown">
                             <div class="d-flex justify-content-between mb-1">
-                                <span>Construction Main Price:</span>
-                                <span>HK$<?php echo number_format($construction_main_price, 2); ?></span>
-                            </div>
-                            <div class="d-flex justify-content-between mb-1 text-info">
-                                <span>Less: Construction Deposit (paid):</span>
-                                <span>- HK$<?php echo number_format($construction_deposit, 2); ?></span>
-                            </div>
-                            <div class="d-flex justify-content-between mb-1">
-                                <span>Remaining Construction:</span>
-                                <span>HK$<?php echo number_format($remaining_construction, 2); ?></span>
-                            </div>
-                            <div class="d-flex justify-content-between">
-                                <span>Final Commission:</span>
-                                <span>HK$<?php echo number_format($commission_final, 2); ?></span>
+                                <span>Inspection Fee (<?php echo number_format($inspection_pct, 0); ?>%):</span>
+                                <span>HK$<?php echo number_format($inspection_fee, 2); ?></span>
                             </div>
                         </div>
                         
                         <div class="payment-detail-item" style="border-top: 2px solid #27ae60; margin-top: 0.5rem; padding-top: 1rem;">
-                            <span class="fw-bold">Total Final Construction Payment:</span>
+                            <span class="fw-bold">Total Inspection Payment:</span>
                             <span class="fw-bold">HK$<?php echo number_format($total_to_pay, 2); ?></span>
                         </div>
                         
