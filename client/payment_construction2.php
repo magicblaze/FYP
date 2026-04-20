@@ -98,7 +98,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
     
-    if (isset($_POST['proceed_pay'])) {
+    if (!isset($_POST['proceed_pay'])) {
         if (!$can_pay_inspection) {
             header('Location: order_history.php');
             exit;
