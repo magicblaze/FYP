@@ -247,7 +247,7 @@ CREATE TABLE `Order` (
   `deposit_amount` DECIMAL(10,2) DEFAULT 0.00,
   `final_payment` DECIMAL(10,2) DEFAULT 0.00,
   `designid` int NOT NULL,
-  `ostatus` ENUM('waiting confirm', 'designing', 'reviewing design proposal', 'waiting for review design', 'drafting 2nd proposal', 'waiting client review', 'waiting 2nd design phase payment', 'waiting final design phase payment' , 'waiting 1st construction phase payment', 'complete', 'rejected','Coordinating Contractors','preparing', 'waiting client reassignment', 'waiting client confirm construction date', 'In construction', 'waiting for construction pay', 'waiting for start construction',
+  `ostatus` ENUM('waiting confirm', 'designing', 'reviewing design proposal', 'waiting for review design', 'drafting 2nd proposal', 'waiting client review', 'waiting 2nd design phase payment', 'waiting final design phase payment' , 'waiting 1st construction phase payment', 'complete', 'rejected','Coordinating Contractors','preparing', 'waiting client reassignment', 'waiting client confirm construction date', 'In construction', 'waiting for construction payment', 'waiting for start construction',
     'Waiting for inspection', 'inspection_completed', 'inspection_failed') DEFAULT 'waiting confirm',
   `payment_plan` ENUM('full', 'installment_25', 'installment_50') DEFAULT 'full',
   `actual_completion_date` DATE DEFAULT NULL,
