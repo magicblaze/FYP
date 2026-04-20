@@ -78,11 +78,21 @@ if (!empty($order['payment_method'])) {
     $paymentMethodData = json_decode($order['payment_method'], true) ?? [];
 }
 
-// Payment status - from session or URL (keep backward compatibility with legacy key)
-$payment_success = isset($_GET['success']) ? true : (
-    (isset($_SESSION['payment_inspection_success_' . $orderid]) ? $_SESSION['payment_inspection_success_' . $orderid] : false)
-    || (isset($_SESSION['payment_final_construction_success_' . $orderid]) ? $_SESSION['payment_final_construction_success_' . $orderid] : false)
-);
+// Payment status - from URL or persisted paid record for inspection payment.
+$payment_success = false;
+if (isset($_GET['success'])) {
+    $payment_success = true;
+} else {
+    $paid_inspection_sql = "SELECT 1 FROM ConstructionPaymentRecord WHERE orderid = ? AND status = 'paid' AND milestone = 'Inspection Payment' LIMIT 1";
+    $paid_inspection_stmt = mysqli_prepare($mysqli, $paid_inspection_sql);
+    if ($paid_inspection_stmt) {
+        mysqli_stmt_bind_param($paid_inspection_stmt, "i", $orderid);
+        mysqli_stmt_execute($paid_inspection_stmt);
+        $paid_inspection_result = mysqli_stmt_get_result($paid_inspection_stmt);
+        $payment_success = (bool) mysqli_fetch_assoc($paid_inspection_result);
+        mysqli_stmt_close($paid_inspection_stmt);
+    }
+}
 $payment_rejected = isset($_GET['rejected']) ? true : (isset($_SESSION['payment_rejected_' . $orderid]) ? $_SESSION['payment_rejected_' . $orderid] : false);
 
 // Handle payment actions
@@ -98,7 +108,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
     
-    if (!isset($_POST['proceed_pay'])) {
+    if (isset($_POST['proceed_pay'])) {
         if (!$can_pay_inspection) {
             header('Location: order_history.php');
             exit;
