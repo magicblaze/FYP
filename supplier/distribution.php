@@ -79,19 +79,20 @@ mysqli_stmt_bind_param($sync_insert_stmt, "dddii", $supplier_default_pay, $proje
 mysqli_stmt_execute($sync_insert_stmt);
 mysqli_stmt_close($sync_insert_stmt);
 
+
+// Update without joining Order table, use PHP variable for budget
 $sync_update_sql = "UPDATE `OrderConstDistri` ocd
-                                        JOIN `workerallocation` wa ON wa.`allocation_id` = ocd.`worker_allocation_id`
-                                        JOIN `Worker` w ON w.`workerid` = wa.`workerid`
-                                        JOIN `Order` o ON o.`orderid` = wa.`orderid`
-                                        SET ocd.`distribution_name` = COALESCE(NULLIF(TRIM(w.`name`), ''), CONCAT('Worker #', wa.`workerid`)),
-                                                ocd.`description` = wa.`notes`,
-                                                ocd.`is_active` = CASE WHEN IFNULL(wa.`status`, 'Assigned') = 'Cancelled' THEN 0 ELSE 1 END,
-                                                ocd.`amount` = (IFNULL(o.`budget`, 0) * IFNULL(ocd.`percentage`, 0) / 100)
-                                        WHERE ocd.`orderid` = ?
-                                            AND ocd.`entry_type` = 'worker'
-                                            AND w.`supplierid` = ?";
+    JOIN `workerallocation` wa ON wa.`allocation_id` = ocd.`worker_allocation_id`
+    JOIN `Worker` w ON w.`workerid` = wa.`workerid`
+    SET ocd.`distribution_name` = COALESCE(NULLIF(TRIM(w.`name`), ''), CONCAT('Worker #', wa.`workerid`)),
+        ocd.`description` = wa.`notes`,
+        ocd.`is_active` = CASE WHEN IFNULL(wa.`status`, 'Assigned') = 'Cancelled' THEN 0 ELSE 1 END,
+        ocd.`amount` = (? * IFNULL(ocd.`percentage`, 0) / 100)
+    WHERE ocd.`orderid` = ?
+        AND ocd.`entry_type` = 'worker'
+        AND w.`supplierid` = ?";
 $sync_update_stmt = mysqli_prepare($mysqli, $sync_update_sql);
-mysqli_stmt_bind_param($sync_update_stmt, "ii", $order_id, $supplier_id);
+mysqli_stmt_bind_param($sync_update_stmt, "dii", $project_budget, $order_id, $supplier_id);
 mysqli_stmt_execute($sync_update_stmt);
 mysqli_stmt_close($sync_update_stmt);
 
