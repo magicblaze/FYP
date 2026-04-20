@@ -778,7 +778,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 $amount = floatval($fee['amount'] ?? 0);
                 $description = mysqli_real_escape_string($mysqli, $fee['description'] ?? '');
 
-                if (!empty($fee_name) && $amount > 0) {
+                if (!empty($fee_name) && abs($amount) > 0.00001) {
                     mysqli_stmt_bind_param($add_fee_stmt, "isds", $orderid, $fee_name, $amount, $description);
                     mysqli_stmt_execute($add_fee_stmt);
                 }
@@ -1056,8 +1056,8 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
             const amount = parseFloat(amountInput.value);
             const desc = descInput.value.trim();
 
-            if (!name || isNaN(amount) || amount <= 0) {
-                alert('Please enter a valid name and amount.');
+            if (!name || isNaN(amount) || amount === 0) {
+                alert('Please enter a valid name and a non-zero amount. Use a negative amount for discount.');
                 return;
             }
 
@@ -1887,7 +1887,8 @@ $hideEditCards = in_array($status, ['waiting confirm', 'designing', 'reviewing d
                                                                 <label class="small text-muted">Amount</label>
                                                                 <input type="number" id="new_fee_amount"
                                                                     class="form-control form-control-sm" placeholder="0.00"
-                                                                    min="0" step="0.01">
+                                                                    step="0.01">
+                                                                <small class="text-muted">Use minus value for discount.</small>
                                                             </div>
                                                             <div class="col-md-3">
                                                                 <label class="small text-muted">Description</label>
