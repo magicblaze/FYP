@@ -266,6 +266,8 @@ mysqli_stmt_bind_param($order_stmt, "i", $order_id);
 mysqli_stmt_execute($order_stmt);
 $order_info = mysqli_fetch_assoc(mysqli_stmt_get_result($order_stmt));
 mysqli_stmt_close($order_stmt);
+$order_status_normalized = strtolower(trim((string)($order_info['ostatus'] ?? '')));
+$show_schedule_button = ($order_status_normalized === 'in construction');
 ?>
 
 <!DOCTYPE html>
@@ -374,9 +376,11 @@ mysqli_stmt_close($order_stmt);
                     </div>
                     
                     <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-                        <a href="construction_calendar.php?orderid=<?= $order_id ?>" class="btn btn-info px-4 me-2">
-                            <i class="fas fa-calendar-alt me-2"></i>View Construction Schedule
-                        </a>
+                        <?php if ($show_schedule_button): ?>
+                            <a href="construction_calendar.php?orderid=<?= $order_id ?>" class="btn btn-info px-4 me-2">
+                                <i class="fas fa-calendar-alt me-2"></i>View Construction Schedule
+                            </a>
+                        <?php endif; ?>
                         <button type="submit" id="submitBtn" class="btn btn-primary px-4">
                             <i class="fas fa-paper-plane me-2"></i>
                             <?= ($pending_version && $schedule && $schedule['construction_date_status'] == 'pending') ? 'Resend Schedule' : 'Send for Client Confirmation' ?>

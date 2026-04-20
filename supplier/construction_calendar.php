@@ -101,51 +101,105 @@ $early_complete_message = '';
 $early_complete_error = '';
 
 if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["mark_complete"])) {
-    $actual_end_date = date('Y-m-d');
-    
-    $update_sql = "UPDATE `Order` SET ostatus = 'Waiting for inspection', actual_completion_date = ? WHERE orderid = ?";
-    $update_stmt = mysqli_prepare($mysqli, $update_sql);
-    mysqli_stmt_bind_param($update_stmt, "si", $actual_end_date, $order_id);
-    
-    if (mysqli_stmt_execute($update_stmt)) {
-        $early_complete_message = "Construction marked as completed! Status changed to 'Waiting for inspection'. Client has been notified.";
-        
-        $client_sql = "SELECT clientid FROM `Order` WHERE orderid = ?";
-        $client_stmt = mysqli_prepare($mysqli, $client_sql);
-        mysqli_stmt_bind_param($client_stmt, "i", $order_id);
-        mysqli_stmt_execute($client_stmt);
-        $client_result = mysqli_stmt_get_result($client_stmt);
-        $client_row = mysqli_fetch_assoc($client_result);
-        $client_id = $client_row['clientid'];
-        mysqli_stmt_close($client_stmt);
-        
-        $notify_sql = "INSERT INTO Notification (user_type, user_id, orderid, message, type, created_at) 
-                       VALUES ('client', ?, ?, 'Construction work has been completed for Order #" . $order_id . ". Please conduct inspection and approve the completion.', 'construction_complete', NOW())";
-        $notify_stmt = mysqli_prepare($mysqli, $notify_sql);
-        mysqli_stmt_bind_param($notify_stmt, "ii", $client_id, $order_id);
-        mysqli_stmt_execute($notify_stmt);
-        mysqli_stmt_close($notify_stmt);
-        
-        $manager_sql = "SELECT managerid FROM `Schedule` WHERE orderid = ? LIMIT 1";
-        $manager_stmt = mysqli_prepare($mysqli, $manager_sql);
-        mysqli_stmt_bind_param($manager_stmt, "i", $order_id);
-        mysqli_stmt_execute($manager_stmt);
-        $manager_result = mysqli_stmt_get_result($manager_stmt);
-        $manager_row = mysqli_fetch_assoc($manager_result);
-        if ($manager_row) {
-            $manager_id = $manager_row['managerid'];
-            $notify_manager_sql = "INSERT INTO Notification (user_type, user_id, orderid, message, type, created_at) 
-                                   VALUES ('manager', ?, ?, 'Construction completed for Order #" . $order_id . ". Waiting for client inspection.', 'construction_complete', NOW())";
-            $notify_manager_stmt = mysqli_prepare($mysqli, $notify_manager_sql);
-            mysqli_stmt_bind_param($notify_manager_stmt, "ii", $manager_id, $order_id);
-            mysqli_stmt_execute($notify_manager_stmt);
-            mysqli_stmt_close($notify_manager_stmt);
-        }
-        mysqli_stmt_close($manager_stmt);
+    $eligibility_sql = "SELECT o.ostatus, o.payment_plan,
+                               IFNULL(op.total_cost, 0) AS total_amount_due,
+                               (SELECT IFNULL(SUM(cpr.amount), 0)
+                                FROM ConstructionPaymentRecord cpr
+                                WHERE cpr.orderid = o.orderid AND cpr.status = 'paid') AS total_amount_paid
+                        FROM `Order` o
+                        LEFT JOIN OrderPayment op ON o.payment_id = op.payment_id
+                        WHERE o.orderid = ?
+                        LIMIT 1";
+    $eligibility_stmt = mysqli_prepare($mysqli, $eligibility_sql);
+    mysqli_stmt_bind_param($eligibility_stmt, "i", $order_id);
+    mysqli_stmt_execute($eligibility_stmt);
+    $eligibility_result = mysqli_stmt_get_result($eligibility_stmt);
+    $eligibility_row = mysqli_fetch_assoc($eligibility_result);
+    mysqli_stmt_close($eligibility_stmt);
+
+    $order_status_normalized = strtolower(trim((string)($eligibility_row['ostatus'] ?? '')));
+    $payment_plan_current = strtolower(trim((string)($eligibility_row['payment_plan'] ?? 'full')));
+    $is_construction_ongoing_now = ($order_status_normalized === 'in construction' || $order_status_normalized === 'preparing');
+
+    $max_progress_sql = "SELECT IFNULL(MAX(progress_percentage), 0) AS max_progress
+                         FROM WeeklyConstructionReport
+                         WHERE orderid = ? AND status = 'submitted'";
+    $max_progress_stmt = mysqli_prepare($mysqli, $max_progress_sql);
+    mysqli_stmt_bind_param($max_progress_stmt, "i", $order_id);
+    mysqli_stmt_execute($max_progress_stmt);
+    $max_progress_result = mysqli_stmt_get_result($max_progress_stmt);
+    $max_progress_row = mysqli_fetch_assoc($max_progress_result);
+    mysqli_stmt_close($max_progress_stmt);
+    $max_submitted_progress = isset($max_progress_row['max_progress']) ? (int)$max_progress_row['max_progress'] : 0;
+    $has_full_progress_now = ($max_submitted_progress >= 100);
+
+    $total_amount_due_now = floatval($eligibility_row['total_amount_due'] ?? 0);
+    $total_amount_paid_now = floatval($eligibility_row['total_amount_paid'] ?? 0);
+    $has_paid_last_payment_now = false;
+    if ($payment_plan_current === 'installment_25' || $payment_plan_current === 'installment_50') {
+        $final_payment_sql = "SELECT COUNT(*) AS final_paid_count
+                              FROM ConstructionPaymentRecord
+                              WHERE orderid = ? AND status = 'paid' AND percentage = 100";
+        $final_payment_stmt = mysqli_prepare($mysqli, $final_payment_sql);
+        mysqli_stmt_bind_param($final_payment_stmt, "i", $order_id);
+        mysqli_stmt_execute($final_payment_stmt);
+        $final_payment_result = mysqli_stmt_get_result($final_payment_stmt);
+        $final_payment_row = mysqli_fetch_assoc($final_payment_result);
+        mysqli_stmt_close($final_payment_stmt);
+        $has_paid_last_payment_now = (!empty($final_payment_row['final_paid_count']) && (int)$final_payment_row['final_paid_count'] > 0);
     } else {
-        $early_complete_error = "Failed to update status.";
+        $has_paid_last_payment_now = ($total_amount_due_now <= 0) ? true : (($total_amount_paid_now + 0.009) >= $total_amount_due_now);
     }
-    mysqli_stmt_close($update_stmt);
+
+    if (!$is_construction_ongoing_now || !$has_full_progress_now || !$has_paid_last_payment_now) {
+        $early_complete_error = "Cannot mark complete until progress reaches 100% and the final payment is paid.";
+    } else {
+        $actual_end_date = date('Y-m-d');
+
+        $update_sql = "UPDATE `Order` SET ostatus = 'Waiting for inspection', actual_completion_date = ? WHERE orderid = ?";
+        $update_stmt = mysqli_prepare($mysqli, $update_sql);
+        mysqli_stmt_bind_param($update_stmt, "si", $actual_end_date, $order_id);
+
+        if (mysqli_stmt_execute($update_stmt)) {
+            $early_complete_message = "Construction marked as completed! Status changed to 'Waiting for inspection'. Client has been notified.";
+
+            $client_sql = "SELECT clientid FROM `Order` WHERE orderid = ?";
+            $client_stmt = mysqli_prepare($mysqli, $client_sql);
+            mysqli_stmt_bind_param($client_stmt, "i", $order_id);
+            mysqli_stmt_execute($client_stmt);
+            $client_result = mysqli_stmt_get_result($client_stmt);
+            $client_row = mysqli_fetch_assoc($client_result);
+            $client_id = $client_row['clientid'];
+            mysqli_stmt_close($client_stmt);
+
+            $notify_sql = "INSERT INTO Notification (user_type, user_id, orderid, message, type, created_at)
+                           VALUES ('client', ?, ?, 'Construction work has been completed for Order #" . $order_id . ". Please conduct inspection and approve the completion.', 'construction_complete', NOW())";
+            $notify_stmt = mysqli_prepare($mysqli, $notify_sql);
+            mysqli_stmt_bind_param($notify_stmt, "ii", $client_id, $order_id);
+            mysqli_stmt_execute($notify_stmt);
+            mysqli_stmt_close($notify_stmt);
+
+            $manager_sql = "SELECT managerid FROM `Schedule` WHERE orderid = ? LIMIT 1";
+            $manager_stmt = mysqli_prepare($mysqli, $manager_sql);
+            mysqli_stmt_bind_param($manager_stmt, "i", $order_id);
+            mysqli_stmt_execute($manager_stmt);
+            $manager_result = mysqli_stmt_get_result($manager_stmt);
+            $manager_row = mysqli_fetch_assoc($manager_result);
+            if ($manager_row) {
+                $manager_id = $manager_row['managerid'];
+                $notify_manager_sql = "INSERT INTO Notification (user_type, user_id, orderid, message, type, created_at)
+                                       VALUES ('manager', ?, ?, 'Construction completed for Order #" . $order_id . ". Waiting for client inspection.', 'construction_complete', NOW())";
+                $notify_manager_stmt = mysqli_prepare($mysqli, $notify_manager_sql);
+                mysqli_stmt_bind_param($notify_manager_stmt, "ii", $manager_id, $order_id);
+                mysqli_stmt_execute($notify_manager_stmt);
+                mysqli_stmt_close($notify_manager_stmt);
+            }
+            mysqli_stmt_close($manager_stmt);
+        } else {
+            $early_complete_error = "Failed to update status.";
+        }
+        mysqli_stmt_close($update_stmt);
+    }
 }
 
 // Handle Extension Request
@@ -603,6 +657,7 @@ mysqli_stmt_close($pending_stmt);
 
 // Fetch order info
 $order_sql = "SELECT o.orderid, o.ostatus, o.odate, o.actual_completion_date, o.Requirements,
+                     o.payment_plan,
                      c.cname as client_name, c.clientid,
                      IFNULL(op.total_cost, 0) AS total_amount_due,
                      (SELECT IFNULL(SUM(cpr.amount), 0) FROM ConstructionPaymentRecord cpr WHERE cpr.orderid = o.orderid AND cpr.status = 'paid') AS total_amount_paid,
@@ -698,7 +753,46 @@ if ($start_date && $end_date) {
 $is_construction_ongoing = ($order_info['ostatus'] == 'In construction' || $order_info['ostatus'] == 'preparing');
 $is_waiting_inspection = ($order_info['ostatus'] == 'Waiting for inspection');
 $is_complete = ($order_info['ostatus'] == 'complete');
-$can_mark_complete = $is_construction_ongoing && !$is_complete && !$is_waiting_inspection;
+$max_progress_for_completion_sql = "SELECT IFNULL(MAX(progress_percentage), 0) AS max_progress
+                                    FROM WeeklyConstructionReport
+                                    WHERE orderid = ? AND status = 'submitted'";
+$max_progress_for_completion_stmt = mysqli_prepare($mysqli, $max_progress_for_completion_sql);
+mysqli_stmt_bind_param($max_progress_for_completion_stmt, "i", $order_id);
+mysqli_stmt_execute($max_progress_for_completion_stmt);
+$max_progress_for_completion_result = mysqli_stmt_get_result($max_progress_for_completion_stmt);
+$max_progress_for_completion_row = mysqli_fetch_assoc($max_progress_for_completion_result);
+mysqli_stmt_close($max_progress_for_completion_stmt);
+$max_submitted_progress_for_completion = isset($max_progress_for_completion_row['max_progress'])
+    ? (int)$max_progress_for_completion_row['max_progress']
+    : 0;
+$has_full_progress_for_completion = ($max_submitted_progress_for_completion >= 100);
+
+$payment_plan_for_completion = strtolower(trim((string)($order_info['payment_plan'] ?? 'full')));
+$total_amount_due_for_completion = floatval($order_info['total_amount_due'] ?? 0);
+$total_amount_paid_for_completion = floatval($order_info['total_amount_paid'] ?? 0);
+$has_paid_last_payment_for_completion = false;
+if ($payment_plan_for_completion === 'installment_25' || $payment_plan_for_completion === 'installment_50') {
+    $final_paid_for_completion_sql = "SELECT COUNT(*) AS final_paid_count
+                                      FROM ConstructionPaymentRecord
+                                      WHERE orderid = ? AND status = 'paid' AND percentage = 100";
+    $final_paid_for_completion_stmt = mysqli_prepare($mysqli, $final_paid_for_completion_sql);
+    mysqli_stmt_bind_param($final_paid_for_completion_stmt, "i", $order_id);
+    mysqli_stmt_execute($final_paid_for_completion_stmt);
+    $final_paid_for_completion_result = mysqli_stmt_get_result($final_paid_for_completion_stmt);
+    $final_paid_for_completion_row = mysqli_fetch_assoc($final_paid_for_completion_result);
+    mysqli_stmt_close($final_paid_for_completion_stmt);
+    $has_paid_last_payment_for_completion = (!empty($final_paid_for_completion_row['final_paid_count']) && (int)$final_paid_for_completion_row['final_paid_count'] > 0);
+} else {
+    $has_paid_last_payment_for_completion = ($total_amount_due_for_completion <= 0)
+        ? true
+        : (($total_amount_paid_for_completion + 0.009) >= $total_amount_due_for_completion);
+}
+
+$can_mark_complete = $is_construction_ongoing
+    && !$is_complete
+    && !$is_waiting_inspection
+    && $has_full_progress_for_completion
+    && $has_paid_last_payment_for_completion;
 $can_request_extension = $end_date && $today > $end_date && !$pending_extension && $is_construction_ongoing;
 
 // Calendar generation

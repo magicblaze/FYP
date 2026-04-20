@@ -65,6 +65,22 @@ $paid_before_construction = floatval($paid_split_row['paid_before_construction']
 $paid_while_construction = floatval($paid_split_row['paid_while_construction'] ?? 0);
 $total_paid = $paid_before_construction + $paid_while_construction;
 mysqli_stmt_close($paid_split_stmt);
+
+$paid_deposit_material_sql = "SELECT IFNULL(SUM(amount), 0) AS paid_deposit_material
+                                                            FROM ConstructionPaymentRecord
+                                                            WHERE orderid = ?
+                                                                AND status = 'paid'
+                                                                AND (
+                                                                        LOWER(TRIM(IFNULL(milestone, ''))) LIKE '%deposit%'
+                                                                        OR LOWER(TRIM(IFNULL(milestone, ''))) LIKE '%material%'
+                                                                )";
+$paid_deposit_material_stmt = mysqli_prepare($mysqli, $paid_deposit_material_sql);
+mysqli_stmt_bind_param($paid_deposit_material_stmt, "i", $order_id);
+mysqli_stmt_execute($paid_deposit_material_stmt);
+$paid_deposit_material_result = mysqli_stmt_get_result($paid_deposit_material_stmt);
+$paid_deposit_material_row = mysqli_fetch_assoc($paid_deposit_material_result);
+$paid_deposit_material = floatval($paid_deposit_material_row['paid_deposit_material'] ?? 0);
+mysqli_stmt_close($paid_deposit_material_stmt);
 $payment_plan = $order['payment_plan'] ?? 'full';
 $current_budget = floatval($order['budget'] ?? 0);
 
@@ -124,6 +140,30 @@ if (isset($pending_record['percentage'])) {
 }
 if (!empty($pending_record['milestone'])) {
     $milestone = (string)$pending_record['milestone'];
+}
+$selected_installment_number = isset($pending_record['installment_number']) ? (int) $pending_record['installment_number'] : 0;
+$selected_installment_percentage = $percentage;
+if ($selected_installment_number <= 0) {
+    if ($payment_plan === 'installment_25') {
+        if ($selected_installment_percentage === 25) {
+            $selected_installment_number = 1;
+        } elseif ($selected_installment_percentage === 50) {
+            $selected_installment_number = 2;
+        } elseif ($selected_installment_percentage === 75) {
+            $selected_installment_number = 3;
+        } elseif ($selected_installment_percentage === 100) {
+            $selected_installment_number = 4;
+        }
+    } elseif ($payment_plan === 'installment_50') {
+        if ($selected_installment_percentage === 50) {
+            $selected_installment_number = 1;
+        } elseif ($selected_installment_percentage === 100) {
+            $selected_installment_number = 2;
+        }
+    }
+}
+if ($selected_installment_number <= 0) {
+    $selected_installment_number = 1;
 }
 
 // Actual material costs from current order references
@@ -220,7 +260,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             try {
                 // Re-resolve the target pending payment record at submit time.
                 $target_record_id = 0;
-                $target_pending_sql = "SELECT record_id FROM ConstructionPaymentRecord
+                $target_installment_number = $selected_installment_number;
+                $target_percentage = $selected_installment_percentage;
+                $target_milestone = $milestone;
+
+                $target_pending_sql = "SELECT record_id, installment_number, percentage, milestone FROM ConstructionPaymentRecord
                                        WHERE record_id = ? AND orderid = ? AND status = 'pending'
                                        LIMIT 1";
                 $target_pending_stmt = mysqli_prepare($mysqli, $target_pending_sql);
@@ -238,9 +282,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 if ($target_pending_row && !empty($target_pending_row['record_id'])) {
                     $target_record_id = (int) $target_pending_row['record_id'];
+                    $target_installment_number = isset($target_pending_row['installment_number']) ? (int) $target_pending_row['installment_number'] : $target_installment_number;
+                    $target_percentage = isset($target_pending_row['percentage']) ? (int) $target_pending_row['percentage'] : $target_percentage;
+                    if (!empty($target_pending_row['milestone'])) {
+                        $target_milestone = (string) $target_pending_row['milestone'];
+                    }
                 } else {
                     // Fallback to first pending record for this milestone percentage.
-                    $fallback_pending_sql = "SELECT record_id FROM ConstructionPaymentRecord
+                    $fallback_pending_sql = "SELECT record_id, installment_number, percentage, milestone FROM ConstructionPaymentRecord
                                              WHERE orderid = ? AND percentage = ? AND status = 'pending'
                                              ORDER BY record_id ASC LIMIT 1";
                     $fallback_pending_stmt = mysqli_prepare($mysqli, $fallback_pending_sql);
@@ -258,6 +307,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     if ($fallback_pending_row && !empty($fallback_pending_row['record_id'])) {
                         $target_record_id = (int) $fallback_pending_row['record_id'];
+                        $target_installment_number = isset($fallback_pending_row['installment_number']) ? (int) $fallback_pending_row['installment_number'] : $target_installment_number;
+                        $target_percentage = isset($fallback_pending_row['percentage']) ? (int) $fallback_pending_row['percentage'] : $target_percentage;
+                        if (!empty($fallback_pending_row['milestone'])) {
+                            $target_milestone = (string) $fallback_pending_row['milestone'];
+                        }
                     }
                 }
 
@@ -267,13 +321,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 // Update payment record status to paid
                 $update_record_sql = "UPDATE ConstructionPaymentRecord 
-                                      SET paid_at = NOW(), status = 'paid'
+                                      SET installment_number = ?, percentage = ?, amount = ?, milestone = ?, paid_at = NOW(), status = 'paid'
                                       WHERE record_id = ? AND orderid = ? AND status = 'pending'";
                 $update_record_stmt = mysqli_prepare($mysqli, $update_record_sql);
                 if (!$update_record_stmt) {
                     throw new Exception('Failed to prepare payment record update.');
                 }
-                mysqli_stmt_bind_param($update_record_stmt, "ii", $target_record_id, $order_id);
+                mysqli_stmt_bind_param($update_record_stmt, "iidsii", $target_installment_number, $target_percentage, $amount, $target_milestone, $target_record_id, $order_id);
                 if (!mysqli_stmt_execute($update_record_stmt)) {
                     mysqli_stmt_close($update_record_stmt);
                     throw new Exception('Failed to update payment record status.');
@@ -287,29 +341,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 // Keep current page context aligned with the actual paid record.
                 $record_id = $target_record_id;
-                
-                // Check if there are more pending payments for other milestones
-                $check_pending_sql = "SELECT COUNT(*) as pending_count FROM ConstructionPaymentRecord 
+                $selected_installment_number = $target_installment_number;
+                $selected_installment_percentage = $target_percentage;
+                $percentage = $target_percentage;
+                $milestone = $target_milestone;
+
+                $pending_count_sql = "SELECT COUNT(*) AS pending_count
+                                      FROM ConstructionPaymentRecord
                                       WHERE orderid = ? AND status = 'pending'";
-                $check_pending_stmt = mysqli_prepare($mysqli, $check_pending_sql);
-                mysqli_stmt_bind_param($check_pending_stmt, "i", $order_id);
-                mysqli_stmt_execute($check_pending_stmt);
-                $check_pending_result = mysqli_stmt_get_result($check_pending_stmt);
-                $check_pending_row = mysqli_fetch_assoc($check_pending_result);
-                $has_more_pending = ($check_pending_row['pending_count'] > 0);
-                mysqli_stmt_close($check_pending_stmt);
-                
-                // Update order status based on remaining payments
-                if (!$has_more_pending) {
-                    $order_update_sql = "UPDATE `Order` SET ostatus = 'In construction' WHERE orderid = ?";
-                } else {
-                    $order_update_sql = "UPDATE `Order` SET ostatus = 'waiting for construction payment' WHERE orderid = ?";
+                $pending_count_stmt = mysqli_prepare($mysqli, $pending_count_sql);
+                if (!$pending_count_stmt) {
+                    throw new Exception('Failed to prepare pending payment count check.');
                 }
+                mysqli_stmt_bind_param($pending_count_stmt, "i", $order_id);
+                if (!mysqli_stmt_execute($pending_count_stmt)) {
+                    mysqli_stmt_close($pending_count_stmt);
+                    throw new Exception('Failed to check pending payment count.');
+                }
+                $pending_count_result = mysqli_stmt_get_result($pending_count_stmt);
+                $pending_count_row = $pending_count_result ? mysqli_fetch_assoc($pending_count_result) : null;
+                mysqli_stmt_close($pending_count_stmt);
+
+                $pending_count = isset($pending_count_row['pending_count']) ? (int) $pending_count_row['pending_count'] : 0;
+                $is_installment_plan = ($payment_plan === 'installment_25' || $payment_plan === 'installment_50');
+                $is_last_installment_paid = ($is_installment_plan && (int) $target_percentage === 100 && $pending_count <= 0);
+                $next_order_status = $is_last_installment_paid ? 'waiting for inspection' : 'In construction';
+
+                $order_update_sql = "UPDATE `Order` SET ostatus = ? WHERE orderid = ?";
                 $order_update_stmt = mysqli_prepare($mysqli, $order_update_sql);
                 if (!$order_update_stmt) {
                     throw new Exception('Failed to prepare order status update.');
                 }
-                mysqli_stmt_bind_param($order_update_stmt, "i", $order_id);
+                mysqli_stmt_bind_param($order_update_stmt, "si", $next_order_status, $order_id);
                 if (!mysqli_stmt_execute($order_update_stmt)) {
                     mysqli_stmt_close($order_update_stmt);
                     throw new Exception('Failed to update order status after payment.');
@@ -345,11 +408,19 @@ if ($percentage > 0) {
     if ($percentage == 25) {
         $milestone_display = '25% Milestone Payment (0-25% Completion)';
     } elseif ($percentage == 50) {
-        $milestone_display = '50% Milestone Payment (25-50% Completion)';
+        if ($payment_plan == 'installment_50') {
+            $milestone_display = 'Start Construction Payment (50%)';
+        } else {
+            $milestone_display = '50% Milestone Payment (25-50% Completion)';
+        }
     } elseif ($percentage == 75) {
         $milestone_display = '75% Milestone Payment (50-75% Completion)';
     } elseif ($percentage == 100) {
-        $milestone_display = '100% Final Payment (75-100% Completion)';
+        if ($payment_plan == 'installment_50') {
+            $milestone_display = 'End Construction Payment (100%)';
+        } else {
+            $milestone_display = '100% Final Payment (75-100% Completion)';
+        }
     } else {
         // Fallback to milestone string if percentage is not standard
         $milestone_display = $milestone;
@@ -373,10 +444,12 @@ if (empty($milestone_display)) {
             $milestone_display = 'Final Payment';
         }
     } elseif ($payment_plan == 'installment_50') {
-        if ($amount == $total_cost * 0.5) {
-            $milestone_display = '50% Milestone Payment';
+        if ($percentage == 50 || $amount == $total_cost * 0.5) {
+            $milestone_display = 'Start Construction Payment (50%)';
+        } elseif ($percentage == 100) {
+            $milestone_display = 'End Construction Payment (100%)';
         } else {
-            $milestone_display = 'Final Payment';
+            $milestone_display = 'Construction Payment';
         }
     } else {
         $milestone_display = 'Full Payment';
@@ -399,7 +472,7 @@ if ($payment_plan == 'installment_25') {
     elseif ($percentage == 100) $current_step = 2;
     else $current_step = 1;
     
-    $step_labels = ['50% Payment', 'Final Payment'];
+    $step_labels = ['Start Construction (50%)', 'End Construction (100%)'];
 } else {
     $total_installments = 1;
     $current_step = 1;
@@ -644,17 +717,13 @@ $confirm_message = "Confirm payment HK$" . number_format($amount, 2) . " for " .
                                 <span>Material Cost:</span>
                                 <span>HK$<?php echo number_format($actual_materials_cost, 2); ?></span>
                             </div>
-                            <div class="d-flex justify-content-between mb-1 text-info">
-                                <span>Already Paid (Before Construction):</span>
-                                <span>- HK$<?php echo number_format($paid_before_construction, 2); ?></span>
-                            </div>
-                            <div class="d-flex justify-content-between mb-1 text-info">
-                                <span>Already Paid (During Construction):</span>
-                                <span>- HK$<?php echo number_format($paid_while_construction, 2); ?></span>
-                            </div>
                             <div class="d-flex justify-content-between mb-1 text-info fw-bold">
-                                <span>Already Paid (Total):</span>
-                                <span>- HK$<?php echo number_format($total_paid, 2); ?></span>
+                                <span>Already Paid (Deposit + Material):</span>
+                                <span>- HK$<?php echo number_format($paid_deposit_material, 2); ?></span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-1 fw-bold" style="border-top: 2px solid #e67e22; padding-top: 0.5rem;">
+                                <span>Total Amount to Pay during Construction:</span>
+                                <span>HK$<?php echo number_format($base_payable, 2); ?></span>
                             </div>
                         </div>
                         
@@ -666,18 +735,6 @@ $confirm_message = "Confirm payment HK$" . number_format($amount, 2) . " for " .
                             </span>
                         </div>
                     </div>
-                    
-                    <?php if ($remaining_budget >= 0): ?>
-                        <div class="budget-info">
-                            <i class="fas fa-wallet me-2"></i>
-                            Remaining Budget after this payment: <strong>HK$<?php echo number_format($remaining_budget, 2); ?></strong>
-                        </div>
-                    <?php else: ?>
-                        <div class="budget-info" style="background: #fff3cd; border-left-color: #ffc107;">
-                            <i class="fas fa-exclamation-triangle me-2"></i>
-                            <strong>Budget Alert:</strong> This payment exceeds your remaining budget by <strong>HK$<?php echo number_format(abs($remaining_budget), 2); ?></strong>
-                        </div>
-                    <?php endif; ?>
                 </div>
 
                 <hr>

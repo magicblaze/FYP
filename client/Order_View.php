@@ -779,6 +779,7 @@ $inspection_date = $inspection_data['inspection_date'] ?? null;
 $inspection_status = $inspection_data['inspection_status'] ?? null;
 $client_suggested_date = $inspection_data['client_suggested_date'] ?? null;
 $current_ostatus = $inspection_data['ostatus'] ?? '';
+$current_ostatus_lower = strtolower(trim((string) $current_ostatus));
 
 // Check if inspection report exists (both pass and fail)
 $has_report_sql = "SELECT COUNT(*) as cnt FROM InspectionReport WHERE orderid = ? AND result IN ('pass', 'fail')";
@@ -790,8 +791,11 @@ $has_report_row = $has_report_result->fetch_assoc();
 $has_inspection_report = ($has_report_row['cnt'] > 0);
 mysqli_stmt_close($has_report_stmt);
 
-// Show inspection report if report exists OR status is inspection_completed OR inspection_failed
-$show_inspection_report = ($has_inspection_report || $current_ostatus == 'inspection_completed' || $current_ostatus == 'inspection_failed');
+// Show inspection report if report exists OR status indicates post-inspection flow (including completed orders).
+$show_inspection_report = (
+    $has_inspection_report
+    || in_array($current_ostatus_lower, ['inspection_completed', 'inspection_failed', 'complete'], true)
+);
 
 // Check if client has already confirmed (for pass reports)
 $has_confirmed = false;

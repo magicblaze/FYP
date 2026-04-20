@@ -52,13 +52,13 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $payment_plan = $_POST['payment_plan'] ?? '';
     $total_cost = floatval($order['total_cost']);
 
-     // Save payment plan to database
-      $update_plan_sql = "UPDATE `Order` SET payment_plan = ? WHERE orderid = ?";
-      $update_plan_stmt = mysqli_prepare($mysqli, $update_plan_sql);
-      mysqli_stmt_bind_param($update_plan_stmt, "si", $payment_plan, $order_id);
-      mysqli_stmt_execute($update_plan_stmt);
-      mysqli_stmt_close($update_plan_stmt);
-    
+    // Save payment plan to database
+    $update_plan_sql = "UPDATE `Order` SET payment_plan = ? WHERE orderid = ?";
+    $update_plan_stmt = mysqli_prepare($mysqli, $update_plan_sql);
+    mysqli_stmt_bind_param($update_plan_stmt, "si", $payment_plan, $order_id);
+    mysqli_stmt_execute($update_plan_stmt);
+    mysqli_stmt_close($update_plan_stmt);
+
     if ($payment_plan === 'full') {
         $_SESSION['construction_payment'] = [
             'order_id' => $order_id,
@@ -69,7 +69,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         ];
         header('Location: process_construction_payment.php');
         exit;
-        
     } elseif ($payment_plan === 'installment_25') {
         $installment_amount = $total_cost * 0.25;
         $_SESSION['construction_payment'] = [
@@ -78,15 +77,14 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             'plan' => 'installment_25',
             'installment_index' => 0,
             'installments' => [
-                ['percentage' => 25, 'amount' => $installment_amount, 'milestone' => 'Initial Payment (0%)'],
-                ['percentage' => 25, 'amount' => $installment_amount, 'milestone' => '25% Completion'],
-                ['percentage' => 25, 'amount' => $installment_amount, 'milestone' => '50% Completion'],
-                ['percentage' => 25, 'amount' => $installment_amount, 'milestone' => '75% Completion']
+                ['percentage' => 25, 'amount' => $installment_amount, 'milestone' => '0-25% Completion'],
+                ['percentage' => 50, 'amount' => $installment_amount, 'milestone' => '25-50% Completion'],
+                ['percentage' => 75, 'amount' => $installment_amount, 'milestone' => '50-75% Completion'],
+                ['percentage' => 100, 'amount' => $installment_amount, 'milestone' => '75-100% Completion']
             ]
         ];
         header('Location: process_construction_payment.php');
         exit;
-        
     } elseif ($payment_plan === 'installment_50') {
         $first_payment = $total_cost * 0.5;
         $_SESSION['construction_payment'] = [
@@ -95,8 +93,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             'plan' => 'installment_50',
             'installment_index' => 0,
             'installments' => [
-                ['percentage' => 50, 'amount' => $first_payment, 'milestone' => 'Initial Payment (0%)'],
-                ['percentage' => 50, 'amount' => $total_cost * 0.5, 'milestone' => '50% Completion']
+                ['percentage' => 50, 'amount' => $first_payment, 'milestone' => 'Start Construction (50%)'],
+                ['percentage' => 100, 'amount' => $total_cost * 0.5, 'milestone' => 'End Construction (100%)']
             ]
         ];
         header('Location: process_construction_payment.php');
@@ -109,15 +107,17 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <title>Choose Payment Plan - Project #<?= $order_id ?></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="../css/styles.css">
 </head>
+
 <body>
     <?php include_once __DIR__ . '/../includes/header.php'; ?>
-    
+
     <div class="container mt-4">
         <div class="row justify-content-center">
             <div class="col-md-8">
@@ -127,51 +127,48 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                     </div>
                     <div class="card-body">
                         <div class="alert alert-info">
-                            <strong>Total Construction Cost:</strong> $<?= number_format($order['total_cost'], 2) ?>
+                            <strong>Total Construction Cost:</strong> HK$<?= number_format($order['total_cost'], 2) ?>
                         </div>
-                        
+
                         <?php if ($error): ?>
                             <div class="alert alert-danger"><?= $error ?></div>
                         <?php endif; ?>
-                        
+
                         <form method="POST" id="paymentForm">
                             <h5>Select Payment Plan:</h5>
-                            
+
                             <div class="mb-3">
                                 <div class="form-check border p-3 rounded mb-2">
                                     <input class="form-check-input" type="radio" name="payment_plan" value="full" id="plan_full" required>
                                     <label class="form-check-label" for="plan_full">
                                         <strong>Full Payment</strong>
-                                        <span class="badge bg-secondary ms-2">100% upfront</span>
-                                        <div class="text-muted small">Pay $<?= number_format($order['total_cost'], 2) ?> now</div>
                                     </label>
                                 </div>
-                                
+
                                 <div class="form-check border p-3 rounded mb-2">
                                     <input class="form-check-input" type="radio" name="payment_plan" value="installment_25" id="plan_25">
                                     <label class="form-check-label" for="plan_25">
                                         <strong>4 Installments (25% each)</strong>
-                                        <span class="badge bg-primary ms-2">Pay as you go</span>
+                                        <span class="badge bg-primary ms-2">Recommended</span>
                                         <div class="text-muted small">
-                                            Pay $<?= number_format($order['total_cost'] * 0.25, 2) ?> now<br>
-                                            Then pay at 25%, 50%, and 75% construction completion
+                                            Pay 25% at construction start<br>
+                                            Then pay at 50%, 75%, and 100% construction completion
                                         </div>
                                     </label>
                                 </div>
-                                
+
                                 <div class="form-check border p-3 rounded mb-2">
                                     <input class="form-check-input" type="radio" name="payment_plan" value="installment_50" id="plan_50">
                                     <label class="form-check-label" for="plan_50">
                                         <strong>2 Installments (50% each)</strong>
-                                        <span class="badge bg-primary ms-2">Half now, half later</span>
                                         <div class="text-muted small">
-                                            Pay $<?= number_format($order['total_cost'] * 0.5, 2) ?> now<br>
-                                            Then pay $<?= number_format($order['total_cost'] * 0.5, 2) ?> at 50% completion
+                                            Pay half at construction start<br>
+                                            Pay the rest at 50% completion
                                         </div>
                                     </label>
                                 </div>
                             </div>
-                            
+
                             <button type="submit" class="btn btn-success btn-lg w-100">Continue to Payment</button>
                         </form>
                     </div>
@@ -179,7 +176,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             </div>
         </div>
     </div>
-    
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
+
 </html>
