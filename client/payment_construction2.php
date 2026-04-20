@@ -38,6 +38,9 @@ if (!$order) {
     die('Project not found or access denied.');
 }
 
+$order_status_lower = strtolower(trim((string) ($order['ostatus'] ?? '')));
+$can_pay_inspection = ($order_status_lower === 'inspection_completed');
+
 // Get payment values from percentage configuration
 $total_cost = isset($order['total_cost']) ? floatval($order['total_cost']) : 0;
 $commission_final_pct = isset($order['commission_final_pct']) ? floatval($order['commission_final_pct']) : 0;
@@ -85,6 +88,10 @@ $payment_rejected = isset($_GET['rejected']) ? true : (isset($_SESSION['payment_
 // Handle payment actions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['reject_payment'])) {
+        if (!$can_pay_inspection) {
+            header('Location: order_history.php');
+            exit;
+        }
         $_SESSION['payment_rejected_' . $orderid] = true;
         $payment_rejected = true;
         header('Location: payment_construction2.php?orderid=' . $orderid . '&rejected=1');
@@ -92,6 +99,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     
     if (isset($_POST['proceed_pay'])) {
+        if (!$can_pay_inspection) {
+            header('Location: order_history.php');
+            exit;
+        }
         // Begin transaction
         mysqli_begin_transaction($mysqli);
         
@@ -298,6 +309,13 @@ $stage_title = 'Inspection Payment';
                 </div>
                 
                 <h4>Payment for Project #<?php echo $orderid; ?></h4>
+
+                <?php if (!$can_pay_inspection && !$payment_success): ?>
+                    <div class="alert alert-warning alert-message">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Inspection payment is available only after inspection status is <strong>inspection_completed</strong>.
+                    </div>
+                <?php endif; ?>
                 
                 <!-- Budget check removed for this payment stage -->
                 
@@ -430,6 +448,7 @@ $stage_title = 'Inspection Payment';
                                 <a href="order_history.php" class="btn btn-secondary">Back to Project History</a>
                             <?php else: ?>
                                 <button type="submit" name="proceed_pay" class="btn btn-success" 
+                                        <?php echo $can_pay_inspection ? '' : 'disabled'; ?>
                                         onclick="return confirm('Confirm payment HK$<?php echo number_format($total_to_pay, 2); ?>?');">
                                     <i class="fas fa-credit-card me-1"></i>
                                     Pay HK$<?php echo number_format($total_to_pay, 2); ?>

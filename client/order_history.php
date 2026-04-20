@@ -648,10 +648,10 @@ if (!empty($_GET['msg'])) {
                                     onclick="event.stopPropagation();">
                                     <i class="fas fa-hard-hat me-1"></i>Proceed to Construction Payment
                                 </a>
-                            <?php elseif ($statusLower === 'finish_inspection'): ?>
+                            <?php elseif ($statusLower === 'inspection_completed'): ?>
                                 <a href="payment_construction2.php?orderid=<?= (int) $order['orderid'] ?>" class="view-details-btn"
                                     onclick="event.stopPropagation();">
-                                    <i class="fas fa-hard-hat me-1"></i>Proceed to Final Construction Payment
+                                    <i class="fas fa-credit-card me-1"></i>Proceed to Inspection Payment
                                 </a>
                             <?php elseif ( $statusLower === 'waiting for construction pay'): ?>
                                 <a href="payment_construction3.php?orderid=<?= (int) $order['orderid'] ?>" class="view-details-btn"
