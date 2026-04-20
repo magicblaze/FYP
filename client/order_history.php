@@ -702,15 +702,14 @@ endif;
         $pending_payment_result = $pending_payment_stmt->get_result();
         $pending_payment = $pending_payment_result->fetch_assoc();
         $pending_payment_stmt->close();
+        if ($pending_payment):
         ?>
         <a href="construction_payment_installment.php?orderid=<?= (int) $order['orderid'] ?>&amount=<?= $pending_payment['amount'] ?>&milestone=<?= urlencode($pending_payment['milestone']) ?>" 
            class="view-details-btn" style="background-color: #e67e22;" onclick="event.stopPropagation();">
             <i class="fas fa-credit-card me-1"></i>Pay Construction Installment
         </a>
-</div>
-</div> 
-
-<?php endif; ?>
+    <?php endif; ?>
+    <?php endif; ?>
                         </div>
                     </div>
                 <?php endwhile; ?>
