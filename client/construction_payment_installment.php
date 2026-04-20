@@ -218,14 +218,75 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             mysqli_begin_transaction($mysqli);
             
             try {
+                // Re-resolve the target pending payment record at submit time.
+                $target_record_id = 0;
+                $target_pending_sql = "SELECT record_id FROM ConstructionPaymentRecord
+                                       WHERE record_id = ? AND orderid = ? AND status = 'pending'
+                                       LIMIT 1";
+                $target_pending_stmt = mysqli_prepare($mysqli, $target_pending_sql);
+                if (!$target_pending_stmt) {
+                    throw new Exception('Failed to prepare pending record check.');
+                }
+                mysqli_stmt_bind_param($target_pending_stmt, "ii", $record_id, $order_id);
+                if (!mysqli_stmt_execute($target_pending_stmt)) {
+                    mysqli_stmt_close($target_pending_stmt);
+                    throw new Exception('Failed to check pending payment record.');
+                }
+                $target_pending_result = mysqli_stmt_get_result($target_pending_stmt);
+                $target_pending_row = $target_pending_result ? mysqli_fetch_assoc($target_pending_result) : null;
+                mysqli_stmt_close($target_pending_stmt);
+
+                if ($target_pending_row && !empty($target_pending_row['record_id'])) {
+                    $target_record_id = (int) $target_pending_row['record_id'];
+                } else {
+                    // Fallback to first pending record for this milestone percentage.
+                    $fallback_pending_sql = "SELECT record_id FROM ConstructionPaymentRecord
+                                             WHERE orderid = ? AND percentage = ? AND status = 'pending'
+                                             ORDER BY record_id ASC LIMIT 1";
+                    $fallback_pending_stmt = mysqli_prepare($mysqli, $fallback_pending_sql);
+                    if (!$fallback_pending_stmt) {
+                        throw new Exception('Failed to prepare fallback pending record check.');
+                    }
+                    mysqli_stmt_bind_param($fallback_pending_stmt, "ii", $order_id, $percentage);
+                    if (!mysqli_stmt_execute($fallback_pending_stmt)) {
+                        mysqli_stmt_close($fallback_pending_stmt);
+                        throw new Exception('Failed to check fallback pending payment record.');
+                    }
+                    $fallback_pending_result = mysqli_stmt_get_result($fallback_pending_stmt);
+                    $fallback_pending_row = $fallback_pending_result ? mysqli_fetch_assoc($fallback_pending_result) : null;
+                    mysqli_stmt_close($fallback_pending_stmt);
+
+                    if ($fallback_pending_row && !empty($fallback_pending_row['record_id'])) {
+                        $target_record_id = (int) $fallback_pending_row['record_id'];
+                    }
+                }
+
+                if ($target_record_id <= 0) {
+                    throw new Exception('No pending payment record found to mark as paid.');
+                }
+
                 // Update payment record status to paid
                 $update_record_sql = "UPDATE ConstructionPaymentRecord 
                                       SET paid_at = NOW(), status = 'paid'
-                                      WHERE record_id = ?";
+                                      WHERE record_id = ? AND orderid = ? AND status = 'pending'";
                 $update_record_stmt = mysqli_prepare($mysqli, $update_record_sql);
-                mysqli_stmt_bind_param($update_record_stmt, "i", $record_id);
-                mysqli_stmt_execute($update_record_stmt);
+                if (!$update_record_stmt) {
+                    throw new Exception('Failed to prepare payment record update.');
+                }
+                mysqli_stmt_bind_param($update_record_stmt, "ii", $target_record_id, $order_id);
+                if (!mysqli_stmt_execute($update_record_stmt)) {
+                    mysqli_stmt_close($update_record_stmt);
+                    throw new Exception('Failed to update payment record status.');
+                }
+                $updated_rows = mysqli_stmt_affected_rows($update_record_stmt);
                 mysqli_stmt_close($update_record_stmt);
+
+                if ($updated_rows <= 0) {
+                    throw new Exception('Pending payment record was not updated.');
+                }
+
+                // Keep current page context aligned with the actual paid record.
+                $record_id = $target_record_id;
                 
                 // Check if there are more pending payments for other milestones
                 $check_pending_sql = "SELECT COUNT(*) as pending_count FROM ConstructionPaymentRecord 
@@ -242,11 +303,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (!$has_more_pending) {
                     $order_update_sql = "UPDATE `Order` SET ostatus = 'In construction' WHERE orderid = ?";
                 } else {
-                    $order_update_sql = "UPDATE `Order` SET ostatus = 'Waiting for construction payment' WHERE orderid = ?";
+                    $order_update_sql = "UPDATE `Order` SET ostatus = 'waiting for construction payment' WHERE orderid = ?";
                 }
                 $order_update_stmt = mysqli_prepare($mysqli, $order_update_sql);
+                if (!$order_update_stmt) {
+                    throw new Exception('Failed to prepare order status update.');
+                }
                 mysqli_stmt_bind_param($order_update_stmt, "i", $order_id);
-                mysqli_stmt_execute($order_update_stmt);
+                if (!mysqli_stmt_execute($order_update_stmt)) {
+                    mysqli_stmt_close($order_update_stmt);
+                    throw new Exception('Failed to update order status after payment.');
+                }
                 mysqli_stmt_close($order_update_stmt);
                 
                 mysqli_commit($mysqli);
